@@ -47,7 +47,7 @@ def unpin_account(account_id: int, store: CampaignStore = Depends(get_store)):
 def list_picks(status: Optional[Literal["new", "downloaded", "in_production", "posted",
                                        "skipped"]] = None,
                store: CampaignStore = Depends(get_store)):
-    return dm_picks.list_picks(store, status)
+    return dm_picks.list_picks(store, status, newest=True)  # the owner's list: newest first
 
 
 @router.post("/dm-picks/{pick_id}/skip")

@@ -78,12 +78,12 @@ describe('DmPicksSection', () => {
     expect(calls.map((c) => c.key)).toContain('DELETE /api/pinned-accounts/3')
   })
 
-  it('lists picks newest first and skips a new one with a reason', async () => {
+  it('lists picks as the API orders them (newest first) and skips a new one with a reason', async () => {
     const older = pick({ id: 1, sender_note: 'so funny', received_at: '2026-11-15T10:00:00Z' })
     const skipped = pick({ id: 2, status: 'skipped', skip_reason: 'not a Reel', received_at: '2026-11-16T10:00:00Z' })
     const calls = stubApi({
       'GET /api/pinned-accounts': [200, [ACCOUNT]],
-      'GET /api/dm-picks': [[200, [older, skipped]], [200, [{ ...older, status: 'skipped', skip_reason: 'too long' }, skipped]]],
+      'GET /api/dm-picks': [[200, [skipped, older]], [200, [skipped, { ...older, status: 'skipped', skip_reason: 'too long' }]]],
       'POST /api/dm-picks/1/skip': [200, { ...older, status: 'skipped' }],
     })
     render(<DmPicksSection />)

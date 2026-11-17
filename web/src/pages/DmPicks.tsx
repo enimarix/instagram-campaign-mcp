@@ -57,7 +57,7 @@ export default function DmPicksSection() {
 
   const reload = useCallback(() => Promise.all([listPinnedAccounts(), listDmPicks()]).then(([a, p]) => {
     setPinned(a)
-    setPicks([...p].reverse()) // the API lists oldest first
+    setPicks(p)
   }, setLoadError), [])
   useEffect(() => { void reload() }, [reload])
 

@@ -502,7 +502,7 @@ export const getAb = (campaign: string) =>
 /** A row of GET /api/pinned-accounts: username normalised (lowercase, no @). */
 export type PinnedAccount = { id: number; username: string; ig_user_id: string | null; note: string | null; created_at: string }
 export type DmPickStatus = 'new' | 'downloaded' | 'in_production' | 'posted' | 'skipped'
-/** A row of GET /api/dm-picks: a Reel a pinned account sent by DM; sender_note is their text (untrusted). */
+/** A row of GET /api/dm-picks (newest first): a Reel a pinned account sent by DM; sender_note is their text (untrusted). */
 export type DmPick = {
   id: number
   pinned_account_id: number | null
