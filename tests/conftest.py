@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 import httpx
 import pytest
@@ -7,6 +8,8 @@ import pytest
 os.environ.setdefault("INSTAGRAM_ACCESS_TOKEN", "test_token")
 os.environ.setdefault("INSTAGRAM_BUSINESS_ACCOUNT_ID", "1789")
 os.environ["IG_MCP_ENV_FILE"] = "/nonexistent.env"
+# The worker's daily backup (render loop) must never write into the checkout's data/.
+os.environ.setdefault("BACKUP_DIR", tempfile.mkdtemp(prefix="ig-test-backups-"))
 
 from src.config import InstagramMCPSettings  # noqa: E402
 from src.instagram_client import InstagramClient  # noqa: E402
