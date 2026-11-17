@@ -72,3 +72,4 @@ jobs:
       - run: npm run still
       - run: npm run still:preview
       - run: npm run still:timeline
+      - run: npm run still:factquest

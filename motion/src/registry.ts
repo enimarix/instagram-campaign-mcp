@@ -1,5 +1,7 @@
 import type { ComponentType } from "react";
 import type { z } from "zod";
+import { FactQuest, timelineOf as factQuestTimeline } from "./templates/FactQuest/FactQuest";
+import { factQuestSchema } from "./templates/FactQuest/schema";
 import { Hello, helloSchema } from "./templates/Hello";
 import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
 import { TimelineDemo, timelineDemoSchema, timelineOf } from "./templates/TimelineDemo";
@@ -59,5 +61,21 @@ export const templates = {
     },
     durationInFrames: (p) => timelineOf(p, FPS).totalFrames,
     coverFrame: (p) => timelineOf(p, FPS).hookFrame,
+  }),  FactQuest: template({
+    component: FactQuest,
+    schema: factQuestSchema,
+    defaultProps: {
+      hook: "Your heart beats 100,000 times a day?",
+      facts: [
+        { title: "Heart", text: "It beats about 100,000 times a day, without a break." },
+        { title: "Bones", text: "An adult has 206 bones; a newborn has nearly 300." },
+        { title: "Skin", text: "Skin is the largest organ of the human body." },
+      ],
+      outro: "Follow for level 2",
+      citations: [],
+      loop: true,
+    },
+    durationInFrames: (p) => factQuestTimeline(p, FPS).totalFrames,
+    coverFrame: (p) => factQuestTimeline(p, FPS).hookFrame,
   }),
 };

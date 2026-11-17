@@ -1,0 +1,19 @@
+{
+  "hook": "Ton cœur bat plus de 100 000 fois par jour ?",
+  "facts": [
+    { "title": "Le cœur", "text": "Il bat environ 100 000 fois par jour, sans jamais prendre de pause." },
+    { "title": "Les os", "text": "Un adulte a 206 os ; un bébé en a près de 300, qui se soudent en grandissant." },
+    { "title": "L'estomac", "text": "Sa muqueuse se renouvelle en quelques jours pour ne pas se digérer elle-même." },
+    { "title": "La peau", "text": "C'est l'organe le plus étendu du corps : près de 2 m² chez un adulte." }
+  ],
+  "outro": "Abonne-toi pour le niveau 2 !",
+  "citations": [
+    { "url": "https://en.wikipedia.org/wiki/Heart", "title": "Heart" },
+    { "url": "https://en.wikipedia.org/wiki/Human_skeleton", "title": "Human skeleton" },
+    { "url": "https://en.wikipedia.org/wiki/Gastric_mucosa", "title": "Gastric mucosa" },
+    { "url": "https://en.wikipedia.org/wiki/Human_skin", "title": "Human skin" }
+  ],
+  "sourcesNote": "Sources dans la légende",
+  "loop": true,
+  "safeZone": false
+}

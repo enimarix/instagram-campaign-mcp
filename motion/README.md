@@ -18,6 +18,13 @@
   (the hook, whole from frame 0, in the top half of the safe area; cover frame `HOOK_FRAME`),
   shows the other lines with `Captions` (band below it), and with `loop` fades the hook back in
   over the outro so the last frame matches frame 0. Its registry entry sets `coverFrame`.
+- `FactQuest` (`src/templates/FactQuest/`): hook card, 3–5 facts as "LEVEL n" scenes (HUD level
+  bar n/N, a hopping sprite, the fact typed into the caption band), wipes between them, end card
+  with the outro. Props schema in `schema.ts` (example `props/factquest.json`): `hook`, `facts`
+  [{title?, text}], `outro`, `citations` [{url, title?}] (required, may be empty; not shown, kept
+  with the asset; `sourcesNote` shows on the end card when there are some), `voice` {audioSrc?,
+  lines?: one timing per line: hook, each fact, outro}, `loop` (default true), `palette`,
+  `safeZone`. Length = script timeline. Still: `npm run still:factquest` (mid level 1).
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
 - 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading,
   game maths in `game.ts`, code-drawn sprites in `sprites.ts`), `src/components/` (`PixelText`,
