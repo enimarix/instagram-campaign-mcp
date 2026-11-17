@@ -199,8 +199,10 @@ def update_learning(store: CampaignStore, learning_id: int, *,
         _check_caps(fields.get("kind", current["kind"]),
                     fields.get("confidence", current["confidence"]),
                     fields.get("evidence", current["evidence"]))
+    recheck = ((evaluate or fields.keys() & {"statement", "kind", "scope"})
+               and predicate(fields.get("scope", current["scope"])))  # ValueError before writing
     row = store.update_learning(learning_id, **fields)
-    if (evaluate or fields.keys() & {"statement", "kind", "scope"}) and predicate(row["scope"]):
+    if recheck:
         row = evaluate_learning(store, settings or get_settings(), row, now=now or utcnow())
     return row
 

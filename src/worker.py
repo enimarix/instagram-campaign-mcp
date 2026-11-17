@@ -4,9 +4,9 @@ The publishing worker (GOAL.md §3.3): `ig-campaign worker` (alias `daemon`) and
 Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late-slot and
 gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
 (data_jobs: publish-check reconcile, insight age schedule, DM picks, daily account
-snapshot, followers online, the daily facts and the learnings refresh), and snapshots live Stories hourly. On Windows it
-keeps one one-shot Task Scheduler task that wakes the PC a few minutes before the next
-pending slot (its action, `run-due --wait-until-next`, holds the PC awake and publishes
+snapshot, followers online, the daily facts, then the learnings refresh), and snapshots
+live Stories hourly. On Windows it keeps one one-shot Task Scheduler task that wakes the PC
+a few minutes before the next pending slot (its action, `run-due --wait-until-next`, holds the PC awake and publishes
 even when no worker runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the
 run handled it; elsewhere that part does nothing.
 

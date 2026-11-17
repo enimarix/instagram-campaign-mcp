@@ -132,6 +132,11 @@ def test_update_learning_re_evaluates_after_a_kind_change(seeded, settings):
     assert row["status"] == "active" and row["confidence"] == "medium"
     with pytest.raises(ValueError):
         L.update_learning(seeded, row["id"], scope={"tag": "nope", "value": "x"})
+    legacy = seeded.add_learning("old", "do", "audience", scope={"tag": "nope", "value": "x"})
+    with pytest.raises(ValueError):  # a stale stored predicate: refused before writing
+        L.update_learning(seeded, legacy["id"], statement="new", settings=settings, now=NOW)
+    assert seeded.get_learning(legacy["id"])["statement"] == "old"
+    assert refresh_learnings(seeded, settings, NOW)["skipped"][0]["id"] == legacy["id"]
 
 
 async def test_worker_refreshes_once_a_day(seeded):
