@@ -13,6 +13,7 @@ from ..store import CampaignStore
 from ..studio.scheduling import bench
 from ..studio.seed import local_today
 from .learnings import get_feedback, list_learnings, list_revision_requests
+from .mix import batch_mix, with_counts
 from .quotas import todays_quotas
 
 BIBLE_PATH = APP_HOME / "brand" / "BIBLE.md"
@@ -56,6 +57,8 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
     report = store.latest_daily_report()
     on_bench = bench(store, settings, now)
     since_hooks = (today - timedelta(days=settings.dedupe_days)).isoformat()
+    mix = batch_mix(store, settings, today, now=now)  # first: the quotas read its humour share
+    quotas = todays_quotas(store, settings, today, now)
     return {
         "bible": bible,
         "bible_note": None if bible else NO_BIBLE,
@@ -71,7 +74,9 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
                                              report["analysis"].get("experiments", [])},
         "experiments": _rows(store, _EXPERIMENTS,
                              (today - timedelta(days=EXPERIMENT_DAYS)).isoformat()),
-        "quotas": todays_quotas(store, settings, today, now),
+        "quotas": quotas,
+        # Exploit ideas follow the mix; explore ideas (limits.explore) are free picks.
+        "mix": with_counts(mix, quotas["limits"]["ideas"] - quotas["limits"]["explore"]),
         "today": [{k: i[k] for k in IDEA_KEYS}
                   for i in store.list_ideas(batch_date=today, limit=100)],
         "recent_hooks": [r["hook"] for r in _rows(

@@ -8,7 +8,8 @@ brief (055) shows the same numbers to the agent.
   to BATCH_FLOOR, so learning never stops. That effective size is the batch below.
 - explore: at most ceil(BATCH_SIZE x EXPLORE_SHARE) ideas with strategy `explore`, from the
   configured size (the cut comes out of exploit), capped at the effective batch.
-- humour: target round(batch x HUMOUR_SHARE), allowed +/- 1, so humour <= target + 1 and
+- humour: target round(batch x share), allowed +/- 1, where share is the humour share of
+  the day's batch mix (086a, stored when the brief is made) or HUMOUR_SHARE before that, so humour <= target + 1 and
   informative (every other idea, with or without a pillar) <= batch - target + 1. A humour
   idea is one whose pillar has `"humour": true` in brand/taxonomy.json.
 - reactions (track `remix`): at most MAX_REACTIONS_PER_DAY + REACTION_MARGIN, and never more
@@ -32,6 +33,7 @@ from ..taxonomy import load_taxonomy
 _AVAILABLE_CLIPS = ("SELECT COUNT(*) FROM sources s WHERE s.role = 'clip'"
                     " AND s.local_path IS NOT NULL AND s.rights_basis != 'unknown'"
                     " AND NOT EXISTS (SELECT 1 FROM ideas i WHERE i.source_id = s.id)")
+MIX_STATE = "batch_mix:"  # + batch date: that day's mix shares (src/learning/mix.py)
 
 
 def flagged_pillars(flag: str) -> Set[str]:
@@ -64,7 +66,8 @@ def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
     batch = sizes["effective_batch_size"]
     # round() first: 10 * 0.3 is 3.0000000000000004 in floats, and ceil would make it 4.
     explore_max = min(batch, ceil(round(settings.batch_size * settings.explore_share, 6)))
-    target = round(batch * settings.humour_share)
+    mix = store.get_state(MIX_STATE + day.isoformat()) or {}
+    target = round(batch * mix.get("humour", {}).get("humour", settings.humour_share))
     clips = available_clips(store)
     counts = {
         "ideas": len(ideas),

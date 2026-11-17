@@ -78,6 +78,10 @@ def test_create_idea_refuses_at_the_effective_size(store, settings):
 
 def test_every_key_on_an_empty_db(store, settings):
     b = B.creative_brief(store, settings, NOW)
+    mix = b.pop("mix")
+    assert set(mix) == {"template", "hook_type", "pillar", "humour", "moved"}
+    # 10 ideas, 3 explore: 7 exploit ideas split in every dimension
+    assert all(sum(r["count"] for r in mix[d]) == 7 for d in mix if d != "moved")
     assert b == {
         "bible": None, "bible_note": B.NO_BIBLE, "learnings": [], "feedback": [],
         "change_requests": [], "last_daily_report": None, "experiments": [],

@@ -4,7 +4,7 @@
   "type": "object",
   "required": ["bible", "bible_note", "learnings", "feedback", "change_requests",
                "last_daily_report", "experiments", "quotas", "today", "recent_hooks",
-               "inspirations", "bench"],
+               "inspirations", "bench", "mix"],
   "properties": {
     "bible": {"type": ["string", "null"]},
     "bible_note": {"type": ["string", "null"]},
@@ -19,6 +19,22 @@
     "today": {"type": "array", "maxItems": 50},
     "recent_hooks": {"type": "array", "maxItems": 50, "items": {"type": "string"}},
     "inspirations": {"type": "array", "maxItems": 50},
-    "bench": {"type": "object", "required": ["count", "supply_days", "hooks"]}
+    "bench": {"type": "object", "required": ["count", "supply_days", "hooks"]},
+    "mix": {"type": "object",
+            "required": ["template", "hook_type", "pillar", "humour", "moved"],
+            "additionalProperties": {"$ref": "#/$defs/mix_rows"},
+            "properties": {"moved": {"type": "array", "maxItems": 50,
+                                     "items": {"type": "object",
+                                               "required": ["dimension", "option", "from",
+                                                            "to", "why"]}}}}
+  },
+  "$defs": {
+    "mix_rows": {"type": "array", "maxItems": 50,
+                 "items": {"type": "object",
+                           "required": ["option", "share", "count", "likes", "dislikes",
+                                        "posts", "index", "why"],
+                           "properties": {"share": {"type": "number", "minimum": 0,
+                                                    "maximum": 1},
+                                          "count": {"type": "integer", "minimum": 0}}}}
   }
 }
