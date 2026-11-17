@@ -63,7 +63,7 @@ def client() -> InstagramClient:
     global _client
     if _client is None:
         try:
-            _client = InstagramClient(get_settings())
+            _client = InstagramClient(get_settings(), store=store())
         except NotConfigured as e:  # setup mode: store-only tools still work
             raise ToolError(e.message) from e
         except Exception as e:  # noqa: BLE001 - usually missing env vars

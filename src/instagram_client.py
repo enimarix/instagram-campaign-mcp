@@ -30,6 +30,7 @@ import httpx
 import structlog
 
 from .config import InstagramMCPSettings, get_settings
+from .store import CampaignStore
 from .studio import media
 
 logger = structlog.get_logger(__name__)
@@ -70,6 +71,8 @@ JPEG_FORMATS = {"JPEG", "MPO"}
 CONTAINER_SUBCODE_RE = re.compile(r"\b(220\d{4})\b")
 # Publishing-quota subcode: ~100 API posts per rolling 24h.
 PUBLISH_QUOTA_SUBCODE = 2207042
+# Code 100 + subcode 33: "Object with ID ... does not exist" (e.g. the owner deleted a post).
+MISSING_OBJECT = (100, 33)
 # Reels from local files: resumable upload ("rupload") of the bytes, then the usual polling.
 RUPLOAD_URL = "https://rupload.facebook.com/ig-api-upload/{version}/{container_id}"
 RUPLOAD_HOSTS = (".facebook.com", ".instagram.com")  # where we send the OAuth token
@@ -121,26 +124,44 @@ class InvalidMedia(InstagramAPIError):
 class RequestBudget:
     """Sliding-window cap on requests per hour.
 
+    With a `store` the window lives in the database (graph_requests), so the worker, the
+    API and the MCP server share one cap; without one it is this process's own.
     When the window is full it waits if a slot frees up within `max_wait`
     seconds; otherwise it raises RateLimitExceeded right away instead of
     silently blocking a tool call (or the scheduler) for up to an hour.
     """
 
-    def __init__(self, per_hour: int, max_wait: float = 30.0, period: float = 3600.0):
+    def __init__(self, per_hour: int, max_wait: float = 30.0, period: float = 3600.0,
+                 store: Optional[CampaignStore] = None):
         self.per_hour = max(1, int(per_hour))
         self.period = period
         self.max_wait = max_wait
+        self.store = store
         self._log: deque = deque()
+
+    def _take(self, now: float) -> float:
+        """Count one request: 0.0, or the seconds until a slot frees up (nothing counted)."""
+        if self.store is not None:
+            return self.store.take_request_slot(now, self.period, self.per_hour)
+        while self._log and now - self._log[0] >= self.period:
+            self._log.popleft()
+        if len(self._log) < self.per_hour:
+            self._log.append(now)
+            return 0.0
+        return self.period - (now - self._log[0])
+
+    def used(self) -> int:
+        """Requests counted in the current window."""
+        since = time.time() - self.period
+        if self.store is not None:
+            return self.store.graph_requests_since(since)
+        return sum(1 for t in self._log if t > since)
 
     async def acquire(self) -> None:
         while True:
-            now = time.monotonic()
-            while self._log and now - self._log[0] >= self.period:
-                self._log.popleft()
-            if len(self._log) < self.per_hour:
-                self._log.append(now)
+            wait = self._take(time.time())
+            if wait <= 0:
                 return
-            wait = self.period - (now - self._log[0])
             if wait > self.max_wait:
                 raise RateLimitExceeded(
                     f"Client-side cap of {self.per_hour} requests/hour reached; next "
@@ -156,13 +177,15 @@ class InstagramClient:
         self,
         settings: Optional[InstagramMCPSettings] = None,
         http_client: Optional[httpx.AsyncClient] = None,
+        store: Optional[CampaignStore] = None,
     ):
+        """`store`: count requests in its shared budget (else a per-process one)."""
         self.settings = settings or get_settings()
         self.base_url = self.settings.instagram_api_url
         self.access_token = self.settings.instagram_access_token
         if not self.access_token:
             raise NotConfigured(NOT_CONFIGURED_MSG)
-        self.budget = RequestBudget(self.settings.rate_limit_requests_per_hour)
+        self.budget = RequestBudget(self.settings.rate_limit_requests_per_hour, store=store)
         self.client = http_client or httpx.AsyncClient(
             timeout=httpx.Timeout(60.0),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),

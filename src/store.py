@@ -12,6 +12,8 @@ organic posts, so this store keeps:
   (GOAL.md §3.5)
 - audience_hours: followers online per UTC hour, weights for the slot planner
 - worker_state: the worker's key/value state (heartbeat, pause switch, last result)
+- account_snapshots: one account row per owner-local day (followers, reach, views)
+- graph_requests: Graph API request times, the hourly budget shared by all processes
 """
 
 from __future__ import annotations
@@ -228,10 +230,31 @@ CREATE TABLE worker_state (
 );
 """
 
+# Migration 7: worker data jobs (026). post_labels.deleted_at: Instagram says the post is
+# gone; its snapshots stay so analytics still count it (GOAL.md §3.4). graph_requests: one
+# row (unix time) per Graph request, so worker, API and MCP server share one hourly cap.
+DATA_JOBS_SCHEMA = """
+CREATE TABLE account_snapshots (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    date                TEXT NOT NULL UNIQUE
+        CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    followers           INTEGER,
+    reach               INTEGER,
+    views               INTEGER,
+    reach_followers     INTEGER,
+    reach_non_followers INTEGER,
+    raw                 TEXT NOT NULL,
+    captured_at         TEXT NOT NULL
+);
+ALTER TABLE post_labels ADD COLUMN deleted_at TEXT;
+CREATE TABLE graph_requests (at REAL NOT NULL);
+CREATE INDEX idx_graph_requests_at ON graph_requests(at);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
-                         ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA]
+                         ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version")
@@ -251,6 +274,8 @@ _INSERT_STAMPS = {
     "learnings": ("created_at", "updated_at"),
     "agent_runs": ("started_at",),
 }
+ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
+                           "reach_non_followers")
 AGENT_RUN_END_STATUSES = ("succeeded", "failed", "cancelled")
 # New assets start here; every later status move goes through studio.assets.transition().
 ASSET_INITIAL_STATUSES = ("rendering", "needs_reaction")
@@ -674,6 +699,16 @@ class CampaignStore:
             row = c.execute("SELECT * FROM post_labels WHERE media_id=?", (media_id,)).fetchone()
         return dict(row) if row else None
 
+    def mark_deleted(self, media_id: str, at: datetime) -> None:
+        """Instagram reports the post gone: stop snapshotting it, keep its snapshots."""
+        with self._tx() as c:
+            c.execute(
+                "INSERT INTO post_labels (media_id, created_at, deleted_at) VALUES (?,?,?)"
+                " ON CONFLICT(media_id) DO UPDATE SET deleted_at=COALESCE(deleted_at,"
+                " excluded.deleted_at)",
+                (media_id, to_iso(utcnow()), to_iso(at)),
+            )
+
     def labels(self, campaign: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         q, args = "SELECT * FROM post_labels", []
         if campaign:
@@ -712,6 +747,23 @@ class CampaignStore:
                 (media_id, media_product_type, media_type, posted_iso, to_iso(captured),
                  age, json.dumps(metrics), (caption or "")[:500], permalink),
             )
+
+    def snapshot_times(self, posted_since: datetime) -> Dict[str, Dict[str, Any]]:
+        """Feed/Reel posts (not Stories, not deleted) posted since `posted_since`:
+        {media_id: {posted_at, media_product_type, media_type, times: [captured_at...]}}."""
+        out: Dict[str, Dict[str, Any]] = {}
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT media_id, posted_at, media_product_type, media_type, captured_at"
+                " FROM insight_snapshots WHERE posted_at >= ?"
+                " AND COALESCE(media_product_type, '') != 'STORY' AND media_id NOT IN"
+                " (SELECT media_id FROM post_labels WHERE deleted_at IS NOT NULL)",
+                (to_iso(posted_since),),
+            ).fetchall()
+        for r in rows:
+            d = out.setdefault(r["media_id"], {**dict(r), "times": []})
+            d["times"].append(r["captured_at"])
+        return out
 
     def snapshot_history(self) -> Dict[str, List[Dict[str, Any]]]:
         """All snapshots grouped by media_id, oldest first."""
@@ -1042,6 +1094,44 @@ class CampaignStore:
                 " WHERE date > ? GROUP BY hour_utc", (since,),
             ).fetchall()
         return {h: avg for h, avg in rows}
+
+    def save_account_snapshot(self, day: date, raw: Mapping[str, Any], **values: Any) -> None:
+        """Insert or replace the account row of one owner-local date. `values`: followers,
+        reach, views, reach_followers, reach_non_followers (None when Meta gave none)."""
+        row = {k: values.get(k) for k in ACCOUNT_SNAPSHOT_FIELDS}
+        with self._tx() as c:
+            c.execute(
+                f"INSERT INTO account_snapshots (date, {', '.join(row)}, raw, captured_at)"
+                f" VALUES ({','.join('?' * (len(row) + 3))}) ON CONFLICT(date) DO UPDATE SET "
+                + ", ".join(f"{k}=excluded.{k}" for k in (*row, "raw", "captured_at")),
+                (_sql_value(day), *row.values(), json.dumps(raw), to_iso(utcnow())),
+            )
+
+    def account_snapshots(self) -> List[Dict[str, Any]]:
+        with self._tx() as c:
+            rows = c.execute("SELECT * FROM account_snapshots ORDER BY date").fetchall()
+        return [{**dict(r), "raw": json.loads(r["raw"])} for r in rows]
+
+    # ------------------------------------------------------------------
+    # Shared Graph request budget
+    # ------------------------------------------------------------------
+    def take_request_slot(self, now: float, period: float, cap: int) -> float:
+        """Count one Graph request (unix time `now`) if fewer than `cap` happened in the last
+        `period` s: 0.0. Otherwise nothing is counted and the result is the seconds until
+        the oldest one leaves the window. One write transaction, so concurrent processes
+        never overshoot the cap."""
+        with self._tx() as c:
+            c.execute("DELETE FROM graph_requests WHERE at <= ?", (now - period,))
+            if c.execute("INSERT INTO graph_requests (at) SELECT ? WHERE"
+                         " (SELECT COUNT(*) FROM graph_requests) < ?", (now, cap)).rowcount:
+                return 0.0
+            oldest = c.execute("SELECT MIN(at) FROM graph_requests").fetchone()[0]
+        return oldest + period - now
+
+    def graph_requests_since(self, since: float) -> int:
+        with self._tx() as c:
+            return c.execute("SELECT COUNT(*) FROM graph_requests WHERE at > ?",
+                             (since,)).fetchone()[0]
 
     # ------------------------------------------------------------------
     # Worker state

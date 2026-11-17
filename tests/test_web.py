@@ -90,6 +90,10 @@ async def test_up_runs_worker_and_stops_it_with_the_server(settings, monkeypatch
     async def fake_collect(client, store, limit):
         calls.append(("collect", limit))
 
+    async def fake_data_jobs(client, store, settings):
+        calls.append("data_jobs")
+        return {}
+
     class FakeServer:
         def __init__(self, config):
             self.config = config
@@ -102,9 +106,10 @@ async def test_up_runs_worker_and_stops_it_with_the_server(settings, monkeypatch
     monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)
     monkeypatch.setattr(worker, "run_due", fake_run_due)
     monkeypatch.setattr(worker, "collect_insights", fake_collect)
+    monkeypatch.setattr(worker, "data_jobs", fake_data_jobs)
     tasks_before = asyncio.all_tasks()
     await asyncio.wait_for(scheduler._up("127.0.0.1", 0), 5)
-    assert calls[:2] == ["run_due", ("collect", 0)]
+    assert calls[:3] == ["run_due", "data_jobs", ("collect", 0)]
     assert asyncio.all_tasks() == tasks_before  # the worker task was cancelled and awaited
 
 

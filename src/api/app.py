@@ -31,7 +31,7 @@ from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 # Reachable without a session even when UI_PASSWORD is set.
 PUBLIC_PATHS = {"/api/health", "/api/login", "/api/logout", "/api/session"}
 
-ClientFactory = Callable[[InstagramMCPSettings], InstagramClient]
+ClientFactory = Callable[..., InstagramClient]  # (settings, *, store)
 
 try:
     VERSION = version("instagram-campaign-mcp")
@@ -52,7 +52,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.store = store or CampaignStore(settings.database_path)
-        app.state.client = client_factory(settings) if settings.instagram_configured else None
+        app.state.client = (client_factory(settings, store=app.state.store)
+                            if settings.instagram_configured else None)
         try:
             yield
         finally:

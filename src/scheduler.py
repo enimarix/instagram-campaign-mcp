@@ -46,7 +46,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
     try:
         store = CampaignStore(settings.database_path)
         try:
-            async with InstagramClient(settings) as client:
+            async with InstagramClient(settings, store=store) as client:
                 await worker.run(client, store, settings, interval, stories_every)
         finally:
             store.close()
@@ -86,7 +86,7 @@ async def _run(args: argparse.Namespace) -> int:
             # Task Scheduler don't flag a failure; the worker exits too.
             print(f"{args.command}: {NOT_CONFIGURED}; skipping.", file=sys.stderr)
             return 0
-        async with InstagramClient(settings) as client:
+        async with InstagramClient(settings, store=store) as client:
             if args.command == "run-due":
                 print(json.dumps(await run_due(client, store, settings=settings), indent=2))
             elif args.command == "collect":
