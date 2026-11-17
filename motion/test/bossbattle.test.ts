@@ -16,14 +16,17 @@ const base = {
   citations: [],
 };
 
-test("the example props parse; loop defaults to true", () => {
+test("the example props parse; defaults: loop, overworld music", () => {
   assert.ok(bossBattleSchema.safeParse(example).success);
   assert.equal(bossBattleSchema.parse(base).loop, true);
+  assert.equal(bossBattleSchema.parse(base).music, "music-overworld");
+  assert.equal(bossBattleSchema.parse({ ...base, music: "none" }).music, "none");
 });
 
 test("schema rejects unknown keys, 1 or 5 rounds, bad sides and sprites, missing citations, bad voice lines", () => {
   const bad = (p: object) => assert.equal(bossBattleSchema.safeParse(p).success, false, JSON.stringify(p));
   bad({ ...base, extra: 1 });
+  bad({ ...base, music: "sfx-coin" });
   bad({ ...base, left: { name: "MYTH", hp: 3 } });
   bad({ ...base, left: { name: "MYTH", sprite: "tiles" } });
   bad({ ...base, rounds: [round("left", 1)] });

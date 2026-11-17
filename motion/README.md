@@ -9,7 +9,9 @@
   (`--bundle <dir>` builds the bundle there once and reuses it; `--concurrency N`).
   Prints `{"out", "durationInFrames", "renderMs"}` plus `"coverFrame"` (the Reel cover,
   `thumb_offset`) for templates that set one; bad props exit 1 with every problem listed.
-  `--bundle-only --bundle <dir>` only builds the bundle (Python bundles once per process).
+  `--bundle-only --bundle <dir>` only builds the bundle (Python bundles once per process, under
+  the file lock `node_modules/.growth-studio-bundle.lock` shared by all processes: never two
+  bundles at once).
 - Schemas for Python (`src/studio/motion.py`): `node schemas.mjs` prints every template's JSON
   Schema and default props; `node schemas.mjs --validate <id>` checks props JSON from stdin with
   the template's Zod schema (no Chrome, well under a second).
@@ -27,7 +29,8 @@
   with the outro. Props schema in `schema.ts` (example `props/factquest.json`): `hook`, `facts`
   [{title?, text}], `outro`, `citations` [{url, title?}] (required, may be empty; not shown, kept
   with the asset; `sourcesNote` shows on the end card when there are some), `voice` {audioSrc?,
-  lines?: one timing per line: hook, each fact, outro}, `loop` (default true), `palette`,
+  lines?: one timing per line: hook, each fact, outro}, `music` (as QuizChest), `loop` (default
+  true), `palette`,
   `safeZone`. Length = script timeline. Still: `npm run still:factquest` (mid level 1).
 - `BossBattle` (`src/templates/BossBattle/`): A vs B (or myth vs fact) as an 8-bit fight. Hook card
   with "A VS B" under it, 2–4 "ROUND n" scenes (the attacker dashes in, hit flash + `sfx-hit`, the
@@ -36,7 +39,8 @@
   under it when there are citations). Props in `schema.ts` (example `props/bossbattle.json`):
   `hook`, `left`/`right` {name ≤16, sprite?: mascot|slime|coin|heart}, `rounds` [{attacker:
   left|right, text}], `verdict` {winner: left|right|draw, text}, `citations`, `sourcesNote?`,
-  `voice` {audioSrc?, lines?: hook, each round, verdict}, `loop`, `palette`, `safeZone`. Health per
+  `voice` {audioSrc?, lines?: hook, each round, verdict}, `music` (as QuizChest), `loop`, `palette`,
+  `safeZone`. Health per
   scene: `healthSteps()` (each hit takes 1/(rounds+1)). Still: `npm run still:bossbattle` (round 2).
 - `QuizChest` (`src/templates/QuizChest/`): a quiz that invites comments. Hook card, then the
   question (top) over 2–4 choice buttons (band), a countdown ticking next to a closed chest
@@ -47,7 +51,8 @@
   `props/quizchest.json`): `hook`, `question`, `choices` [{label ≤3, text ≤40}], `answer` (index),
   `countdownSeconds` (3–10, default 5), `explanation`, `cta` (default "Comment your answer!"),
   `citations`, `sourcesNote?`, `voice` {audioSrc?, lines?: hook, question, explanation, cta}, `music`
-  (`music-overworld` default, `music-cave` or `none`; loops under everything at 25 %), `loop`,
+  (`music-overworld` default, `music-cave` or `none`; `MusicBed` loops it under everything at
+  25 %), `loop`,
   `palette`, `safeZone`. `withCountdown()` inserts countdown + 1.5 s reveal after the question line;
   the voice track plays in two parts around it, so its timings are those of the plain audio. Still:
   `npm run still:quizchest` (countdown).

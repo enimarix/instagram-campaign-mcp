@@ -5,7 +5,9 @@ run_qc() returns what is saved as `assets.qc`:
   {"passed": bool, "checks": [{"name", "ok", "detail"}], "reasons": [<detail of each failed
    check>], "warnings": [...], "loudness_lufs": float | None}
 Checks: output spec (size, fps, codec), duration bounds, audio present, loudness, black and
-frozen stretches (one ffmpeg analysis pass) and the caption (length, hashtags). Health,
+frozen stretches (one ffmpeg analysis pass) and the caption (length, hashtags). Motion
+renders (`recipe.kind == "motion"`) get a longer freeze limit: their hook and end cards are
+still on purpose (`qc_max_freeze_s_motion`). Health,
 medical or income promises are only warnings: the owner can overrule them in review.
 """
 
@@ -79,7 +81,9 @@ def run_qc(asset: Dict[str, Any], idea: Optional[Dict[str, Any]], master_path: s
     s = settings
     path = media.resolve(media_root, master_path)
     info = ffmpeg.probe(path)
-    found = analyze(path, max_black_s=s.qc_max_black_s, max_freeze_s=s.qc_max_freeze_s,
+    motion = (asset.get("recipe") or {}).get("kind") == "motion"
+    max_freeze = s.qc_max_freeze_s_motion if motion else s.qc_max_freeze_s
+    found = analyze(path, max_black_s=s.qc_max_black_s, max_freeze_s=max_freeze,
                     has_audio=info.has_audio)
     checks: List[Dict[str, Any]] = []
 
@@ -101,8 +105,8 @@ def run_qc(asset: Dict[str, Any], idea: Optional[Dict[str, Any]], master_path: s
           "; ".join(f"black {a:.1f}-{b:.1f} s" for a, b in found["black"])
           or f"no black stretch of {s.qc_max_black_s:g} s")
     check("freeze", not found["freeze"],
-          "; ".join(f"frozen from {t:.1f} s for {s.qc_max_freeze_s:g} s or more"
-                    for t in found["freeze"]) or f"no frozen stretch of {s.qc_max_freeze_s:g} s")
+          "; ".join(f"frozen from {t:.1f} s for {max_freeze:g} s or more"
+                    for t in found["freeze"]) or f"no frozen stretch of {max_freeze:g} s")
     problem = caption_problem(asset.get("caption"), s.max_hashtags)
     check("caption", problem is None, problem or "caption ok")
     idea = idea or {}

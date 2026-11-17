@@ -143,6 +143,9 @@ class InstagramMCPSettings(BaseSettings):
     qc_max_duration_s: float = Field(90.0, gt=0, description="Longest video that passes QC")
     qc_max_black_s: float = Field(1.5, gt=0, description="A black stretch this long fails QC")
     qc_max_freeze_s: float = Field(3.0, gt=0, description="A frozen stretch this long fails QC")
+    qc_max_freeze_s_motion: float = Field(
+        8.0, gt=0, description="Same for motion renders (their title cards are still on purpose)"
+    )
     qc_loudness_tolerance_lu: float = Field(
         2.0, ge=0, description="Allowed distance (LU) from the -14 LUFS loudness target"
     )

@@ -2,6 +2,8 @@
 
 import json
 import shutil
+import threading
+import time
 from functools import partial
 from pathlib import Path
 
@@ -23,7 +25,11 @@ needs_motion = pytest.mark.skipif(
     not (shutil.which("node") and (motion.MOTION_DIR / "node_modules").is_dir()),
     reason="node or motion/node_modules missing (npm ci in motion/)")
 
-FACTQUEST = json.loads((motion.MOTION_DIR / "props" / "factquest.json").read_text("utf-8"))
+def _example(name):
+    return json.loads((motion.MOTION_DIR / "props" / f"{name}.json").read_text("utf-8"))
+
+
+FACTQUEST = _example("factquest")
 VALID = {"props": {"title": "Hi"}, "fps": 30, "durationInFrames": 90, "coverFrame": 12}
 
 
@@ -88,6 +94,31 @@ def test_build_props_copies_the_voice_audio_into_the_media_root(tmp_path, monkey
     assert (tmp_path / "media" / "voice" / "abc.wav").read_bytes() == b"RIFF"
     assert said[0][1] == "nova" and said[0][0].splitlines()[0] == "Two lines?"
     assert len(out["voice"]["lines"]) == len(FACTQUEST["facts"]) + 2
+
+
+def test_file_lock_makes_the_second_holder_wait(tmp_path):
+    lock = tmp_path / "bundle.lock"
+    held, order = threading.Event(), []
+
+    def first():
+        with motion.file_lock(lock, timeout_s=5):
+            held.set()
+            time.sleep(0.5)
+            order.append("first done")
+
+    t = threading.Thread(target=first)
+    t.start()
+    held.wait(5)
+    start = time.monotonic()
+    with motion.file_lock(lock, timeout_s=5, poll_s=0.05):  # another handle, like a process
+        order.append("second in")
+        waited = time.monotonic() - start
+    t.join()
+    assert order == ["first done", "second in"] and waited >= 0.3
+    with motion.file_lock(lock, timeout_s=1):  # released: free again
+        with pytest.raises(motion.MotionError, match="still locked"):
+            with motion.file_lock(lock, timeout_s=0.2, poll_s=0.05):
+                pass
 
 
 def test_stage_audio_copies_media_audio_into_the_bundle(tmp_path):
@@ -155,11 +186,13 @@ def test_render_queue_motion_branch_writes_all_files(store, tmp_path, monkeypatc
 
 @needs_motion
 @needs_ffmpeg
-def test_real_factquest_render_through_the_queue(store, tmp_path):
-    """One real render (~40 s): none voice, render.mjs, loudness, QC, asset ready/failed."""
+@pytest.mark.parametrize("template", ["FactQuest", "BossBattle"])
+def test_real_render_through_the_queue_passes_qc(store, tmp_path, template):
+    """One real render (~40 s): none voice, render.mjs, music bed, loudness, QC -> ready."""
     s = _settings(tmp_path)
     idea = store.add_idea("motion")
-    queued = motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+    queued = motion.queue_motion_render(store, s, template=template,
+                                        props=_example(template.lower()),
                                         idea_id=idea["id"], caption="Ton cœur ?")
     job = store.claim_render_jobs(1, stale_before=FAR_PAST)[0]
     assert job["id"] == queued["job"]["id"]
@@ -167,12 +200,10 @@ def test_real_factquest_render_through_the_queue(store, tmp_path):
                          render_fn=partial(render.render_files, preset="ultrafast"))
     a = store.get_asset(queued["asset"]["id"])
     assert job["state"] == "done", job["failure"]
-    assert a["status"] in ("ready", "failed") and a["recipe"]["thumb_offset_ms"] == 400
+    assert a["status"] == "ready", a["qc"]["reasons"]
+    assert a["qc"]["passed"] is True and a["recipe"]["thumb_offset_ms"] == 400
     assert all((tmp_path / a[k]).is_file()
                for k in ("file_path", "preview_path", "poster_path", "thumbnail_path"))
-    assert a["qc"]["passed"] is (a["status"] == "ready")
-    if a["status"] == "failed":
-        assert a["qc"]["reasons"]
 
 
 async def test_mcp_tools_call_the_services(monkeypatch):

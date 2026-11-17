@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { buildTimeline } from "../src/lib/timeline.ts";
 import { ASSETS } from "../src/assets.ts";
+import { bossBattleSchema } from "../src/templates/BossBattle/schema.ts";
+import { factQuestSchema } from "../src/templates/FactQuest/schema.ts";
 import { countdownAt, countdownTicks, MUSIC, quizChestSchema, quizChestScript, REVEAL_S, withCountdown } from "../src/templates/QuizChest/schema.ts";
 
 const example = JSON.parse(readFileSync(new URL("../props/quizchest.json", import.meta.url), "utf8"));
@@ -92,4 +94,8 @@ test("countdown ticks once a second from N down to 1, then nothing", () => {
   assert.equal(at(130), 2);
   assert.equal(at(189), 1);
   assert.equal(at(190), undefined);
+});
+
+test("FactQuest and BossBattle offer the same music choices", () => {
+  for (const s of [factQuestSchema, bossBattleSchema]) assert.deepEqual(s.shape.music.unwrap().options, [...MUSIC]);
 });

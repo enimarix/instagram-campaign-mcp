@@ -8,6 +8,14 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: Motion videos get a music bed and an 8 s freeze limit
+Every script template (FactQuest, BossBattle, QuizChest) plays a background music loop
+(`music`, default `music-overworld`, `none` to opt out), so a video without a voice still has
+an audio track. The quality check allows still stretches up to `QC_MAX_FREEZE_S_MOTION`
+(default 8 s) for motion renders (`recipe.kind == "motion"`); other renders keep
+`QC_MAX_FREEZE_S` (3 s), and black detection is the same for both.
+Reason: a motion hook card or end card holds still on purpose; at 3 s every FactQuest failed QC.
+
 ## 2026-11-17: Captions carry at most 5 hashtags; QC fails what Instagram would punish
 `MAX_HASHTAGS` (default 5) caps hashtags per caption everywhere `caption_problem` runs (caption
 edits, publish guard, MCP scheduling, the quality check). Instagram's @creators account announced

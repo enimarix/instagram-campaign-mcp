@@ -5,6 +5,7 @@ import { scriptAreas } from "../../brand";
 import { Captions } from "../../components/Captions";
 import { CRTOverlay } from "../../components/CRTOverlay";
 import { HookCard } from "../../components/HookCard";
+import { MusicBed } from "../../components/MusicBed";
 import { HUD } from "../../components/HUD";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
@@ -180,6 +181,7 @@ export const BossBattle = (props: BossBattleProps) => {
         </Fragment>
       ))}
       <Sfx id="sfx-confirm" from={last.startFrame + HIT + (knockout ? JINGLE : 0)} />
+      <MusicBed id={props.music} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
