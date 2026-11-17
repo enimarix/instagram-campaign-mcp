@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import taxonomy
 from ..store import CampaignStore
 from ..studio import feedback
-from .assets import _with_urls, call, get_store
+from .assets import call, get_store, with_urls
 
 router = APIRouter(prefix="/api")
 
@@ -36,7 +36,7 @@ class CommentEdit(BaseModel):
 
 
 def _out(result: dict) -> dict:
-    return {**result, "asset": _with_urls(result["asset"])}
+    return {**result, "asset": with_urls(result["asset"])}
 
 
 @router.get("/assets/{asset_id}/feedback")

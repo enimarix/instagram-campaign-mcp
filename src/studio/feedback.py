@@ -9,7 +9,7 @@ result says why. Nothing here ever schedules or publishes.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore
 from .assets import InvalidTransition, transition
@@ -72,7 +72,7 @@ def edit_comment(store: CampaignStore, feedback_id: int, **fields: Any) -> Dict[
     return {"feedback": feedback, **_ask_for_changes(store, asset)}
 
 
-def list_comments(store: CampaignStore, asset_id: int) -> list:
+def list_comments(store: CampaignStore, asset_id: int) -> List[Dict[str, Any]]:
     """Oldest first. KeyError: no such asset."""
     store.get_asset(asset_id)
     return store.list_feedback(asset_id=asset_id, limit=1000)

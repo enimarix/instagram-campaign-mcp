@@ -28,7 +28,7 @@ def get_store(request: Request) -> CampaignStore:
 
 
 def _call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    return call(lambda: _with_urls(fn(*args, **kwargs)))
+    return call(lambda: with_urls(fn(*args, **kwargs)))
 
 
 def call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
@@ -44,7 +44,7 @@ def call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         return JSONResponse(status_code=422, content={"error": "invalid", "message": str(e)})
 
 
-def _with_urls(asset: dict) -> dict:
+def with_urls(asset: dict) -> dict:
     """The asset plus file_url / preview_url / thumbnail_url (None when there is no file)."""
     return {**asset, **{f"{k}_url": media_url(asset.get(f"{k}_path"))
                         for k in ("file", "preview", "thumbnail")}}
@@ -65,7 +65,7 @@ def list_assets(batch_date: Optional[str] = None, status: Optional[str] = None,
                 verdict: Optional[str] = None, track: Optional[str] = None,
                 limit: int = Query(100, ge=1, le=500),
                 store: CampaignStore = Depends(get_store)):
-    return [_with_urls(a) for a in store.list_assets(
+    return [with_urls(a) for a in store.list_assets(
         batch_date=batch_date, status=status, verdict=verdict, track=track, limit=limit)]
 
 
