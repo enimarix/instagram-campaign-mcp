@@ -28,10 +28,14 @@ def get_store(request: Request) -> CampaignStore:
 
 
 def _call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    return call(lambda: _with_urls(fn(*args, **kwargs)))
+
+
+def call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Run a service call; translate its errors to the API's JSON errors."""
     try:
-        return _with_urls(fn(*args, **kwargs))
-    except KeyError:  # the store's "no asset with id"
+        return fn(*args, **kwargs)
+    except KeyError:  # the store's "no <row> with id"
         return JSONResponse(status_code=404, content={"error": "not_found"})
     except InvalidTransition as e:
         return JSONResponse(status_code=409,
