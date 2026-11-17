@@ -48,9 +48,9 @@ def call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 
 
 def with_urls(asset: dict) -> dict:
-    """The asset plus file_url / preview_url / thumbnail_url (None when there is no file)."""
+    """The asset plus file_url / preview_url / poster_url / thumbnail_url (None: no file)."""
     return {**asset, **{f"{k}_url": media_url(asset.get(f"{k}_path"))
-                        for k in ("file", "preview", "thumbnail")}}
+                        for k in ("file", "preview", "poster", "thumbnail")}}
 
 
 class VerdictIn(BaseModel):

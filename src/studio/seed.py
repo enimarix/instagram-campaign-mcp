@@ -98,8 +98,11 @@ def _new_asset(store, rng, batch_date, track, status, media_root, *, n, parent=N
                                    rights_basis=rng.choice(["own", "licensed"]))
             fields["source_id"] = src["id"]
         idea = store.add_idea(track, **fields)
-    recipe = ({"template": rng.choice(valid_values("templates"))} if track == "motion"
-              else {"edit": "[demo] reaction split screen"})
+    # The recipe envelope of studio/render.py; the demo source path holds no file.
+    recipe = ({"kind": "motion", "template": rng.choice(valid_values("templates")), "props": {}}
+              if track == "motion" else
+              {"kind": "ffmpeg", "recipe": {"version": 1, "ops": [{"op": "fit_vertical"}]},
+               "inputs": {"source": "demo/source.mp4"}})
     asset = store.add_asset(
         idea["id"], status="needs_reaction" if status == "needs_reaction" else "rendering",
         batch_date=batch_date, recipe=recipe, parent_asset_id=parent and parent["id"],

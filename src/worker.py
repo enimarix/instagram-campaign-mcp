@@ -7,11 +7,15 @@ gap rules live there, so `run-due` and the MCP tool obey them too), then the dat
 followers online), and snapshots live Stories hourly. On Windows it keeps one one-shot
 Task Scheduler task that wakes the PC a few minutes before the next pending slot;
 elsewhere that part does nothing.
+
+render_loop() runs beside it (and alone in setup mode: renders need no Instagram): it
+renders queued render jobs (src/studio/render.py) in threads, keeping the PC awake meanwhile.
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import subprocess
 import sys
@@ -33,6 +37,8 @@ from .campaign import (
 from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
 from .store import CampaignStore, parse_dt, to_iso, utcnow
+from .studio import render
+from .studio.power import keep_awake
 from .studio.publish import reconcile_publish_checks
 
 logger = structlog.get_logger(__name__)
@@ -47,6 +53,8 @@ DATA_SHARE = 0.8
 INSIGHTS_EVERY = timedelta(minutes=15)
 RECONCILE_EVERY = timedelta(minutes=10)  # it lists media while an asset waits for a check
 DAILY_RETRY = timedelta(hours=1)  # a failing daily job (e.g. no insights permission) waits
+RENDER_TICK = 5.0  # s between queue polls and job heartbeats
+RENDER_STALE = timedelta(minutes=10)  # a running job without heartbeat this long is re-queued
 
 
 def next_slot(store: CampaignStore) -> Optional[str]:
@@ -145,6 +153,41 @@ async def run(client: InstagramClient, store: CampaignStore, settings: Instagram
                 await collect_insights(client, store, limit=0)
             except Exception as e:  # noqa: BLE001
                 print(f"story snapshot failed: {e!r}", file=sys.stderr, flush=True)
+        await asyncio.sleep(interval)
+
+
+async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
+                      run: Optional[Callable[[Dict[str, Any]], Any]] = None,
+                      interval: float = RENDER_TICK, stale_after: timedelta = RENDER_STALE
+                      ) -> None:
+    """Render queued jobs, up to settings.render_concurrency at once, each in a thread so
+    the loop stays responsive; heartbeat running jobs; keep the PC awake while any runs.
+    Runs until cancelled (a job cut off then is re-queued once its heartbeat is stale)."""
+    run = run or functools.partial(render.run_job, store, settings.media_root)
+    running: Dict[int, asyncio.Task] = {}
+
+    def claim() -> None:
+        try:
+            store.touch_render_jobs(list(running))
+            free = settings.render_concurrency - len(running)
+            for job in store.claim_render_jobs(free, stale_before=utcnow() - stale_after):
+                running[job["id"]] = asyncio.create_task(asyncio.to_thread(run, job))
+        except Exception as e:  # noqa: BLE001 - e.g. database locked: try next tick
+            print(f"render queue: {e!r}", file=sys.stderr, flush=True)
+
+    while True:
+        claim()
+        if running:
+            with keep_awake():
+                while running:
+                    done, _ = await asyncio.wait(running.values(), timeout=interval)
+                    for job_id, task in list(running.items()):
+                        if task in done:
+                            del running[job_id]
+                            if task.exception():
+                                print(f"render job {job_id} failed: {task.exception()!r}",
+                                      file=sys.stderr, flush=True)
+                    claim()
         await asyncio.sleep(interval)
 
 

@@ -39,20 +39,27 @@ NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
 
 async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                   stories_every: int = 60) -> None:
-    """The publishing part of `up`. Setup mode: say so once and idle; the API keeps serving."""
-    if not settings.instagram_configured:
-        print(f"worker: {NOT_CONFIGURED}; publishing is idle.", file=sys.stderr, flush=True)
-        return
+    """The worker of `up` and `worker`: the render loop always (renders need no Instagram),
+    publishing when Instagram is configured. Setup mode: say so once; renders still run."""
     try:
         store = CampaignStore(settings.database_path)
+        renders = asyncio.create_task(worker.render_loop(store, settings))
         try:
-            async with InstagramClient(settings, store=store) as client:
-                await worker.run(client, store, settings, interval, stories_every)
+            if settings.instagram_configured:
+                async with InstagramClient(settings, store=store) as client:
+                    await worker.run(client, store, settings, interval, stories_every)
+            else:
+                print(f"worker: {NOT_CONFIGURED}; publishing is idle, renders run.",
+                      file=sys.stderr, flush=True)
+                await renders
         finally:
+            renders.cancel()
+            with suppress(asyncio.CancelledError):
+                await renders
             store.close()
     except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: say so, keep the API up
-        print(f"worker stopped: {e!r}; publishing is off until restart.", file=sys.stderr,
-              flush=True)
+        print(f"worker stopped: {e!r}; publishing and renders are off until restart.",
+              file=sys.stderr, flush=True)
 
 
 async def _up(host: str, port: int) -> None:
@@ -81,9 +88,14 @@ async def _run(args: argparse.Namespace) -> int:
         if args.command == "rank":
             print(json.dumps(rank(store, settings, campaign=args.campaign), indent=2, default=str))
             return 0
+        if args.command in ("worker", "daemon"):
+            print(f"Worker running, checking every {args.interval}s. Ctrl+C to stop.",
+                  file=sys.stderr)
+            await _worker(settings, args.interval, args.stories_every)
+            return 0
         if not settings.instagram_configured:
             # Setup mode: nothing to publish or measure yet. Exit 0 so cron and
-            # Task Scheduler don't flag a failure; the worker exits too.
+            # Task Scheduler don't flag a failure.
             print(f"{args.command}: {NOT_CONFIGURED}; skipping.", file=sys.stderr)
             return 0
         async with InstagramClient(settings, store=store) as client:
@@ -92,10 +104,6 @@ async def _run(args: argparse.Namespace) -> int:
             elif args.command == "collect":
                 limit = 0 if args.stories_only else args.limit
                 print(json.dumps(await collect_insights(client, store, limit=limit), indent=2))
-            elif args.command in ("worker", "daemon"):
-                print(f"Worker running, checking every {args.interval}s. Ctrl+C to stop.",
-                      file=sys.stderr)
-                await worker.run(client, store, settings, args.interval, args.stories_every)
         return 0
     finally:
         store.close()
@@ -131,7 +139,7 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("run-due", help="Publish queued posts that are due, then exit")
     d = sub.add_parser("worker", aliases=["daemon"],
-                       help="Publish queued posts as they come due (heartbeat, wake task)")
+                       help="Render queued videos; publish queued posts as they come due")
     d.add_argument("--interval", type=int, default=60)
     d.add_argument("--stories-every", type=int, default=60, metavar="MINUTES",
                    help="Snapshot live Stories this often (0 = off). Default 60.")
