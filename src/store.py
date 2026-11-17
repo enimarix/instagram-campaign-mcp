@@ -13,12 +13,17 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from contextlib import contextmanager
+import threading
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 POST_KINDS = ("image", "carousel", "reel", "story")
+BUSY_TIMEOUT_S = 5.0
+
+# Migration 1: the schema from before migrations existed. IF NOT EXISTS lets a
+# pre-migration database (user_version=0) upgrade without touching its data.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scheduled_posts (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +66,25 @@ CREATE TABLE IF NOT EXISTS insight_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_snap_media ON insight_snapshots(media_id, captured_at);
 """
+
+# Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
+# Never edit a released entry; add a new one.
+MIGRATIONS: List[str] = [SCHEMA]
+
+
+class SchemaVersionError(RuntimeError):
+    """The database was written by newer code than this one."""
+
+
+def _statements(script: str) -> Iterator[str]:
+    """Split a SQL script into statements (trigger bodies and strings stay whole)."""
+    buf = ""
+    for part in script.split(";"):
+        buf += part + ";"
+        if sqlite3.complete_statement(buf):
+            if buf.strip(" \t\r\n;"):
+                yield buf
+            buf = ""
 
 
 def utcnow() -> datetime:
@@ -115,26 +139,102 @@ def parse_dt(value: str) -> datetime:
 
 
 class CampaignStore:
+    """SQLite store shared by several processes (API, worker, MCP server).
+
+    Connections: a file database gets one connection per thread
+    (threading.local), so no connection is ever used by two threads. Every
+    sqlite3.connect(":memory:") is a new empty database, so ":memory:" keeps a
+    single connection and serialises all access to it with a lock instead.
+    Every connection uses WAL (file only), a busy timeout and foreign keys.
+    """
+
     def __init__(self, path: str):
         self.path = path
-        if path != ":memory:":
+        self._memory = path == ":memory:"
+        self._local = threading.local()
+        self._conns: List[sqlite3.Connection] = []
+        self._conns_lock = threading.Lock()
+        self._lock = threading.RLock() if self._memory else nullcontext()
+        if not self._memory:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(SCHEMA)
-        self._conn.commit()
+        self._shared = self._connect() if self._memory else None
+        self._migrate()
+
+    def _connect(self) -> sqlite3.Connection:
+        # check_same_thread=False only so close() can close other threads'
+        # connections; each file connection is still used by one thread.
+        conn = sqlite3.connect(self.path, timeout=BUSY_TIMEOUT_S, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON")
+        if not self._memory:
+            conn.execute("PRAGMA journal_mode=WAL")
+        with self._conns_lock:
+            self._conns.append(conn)
+        return conn
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        if self._shared is not None:
+            return self._shared
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            # ponytail: connections of finished threads stay open until close();
+            # fine for thread pools, prune dead threads if threads get unbounded.
+            conn = self._local.conn = self._connect()
+        return conn
+
+    @_conn.setter
+    def _conn(self, conn: sqlite3.Connection) -> None:  # tests swap in wrappers
+        if self._memory:
+            self._shared = conn
+        else:
+            self._local.conn = conn
+
+    def _migrate(self) -> None:
+        """Run every migration above PRAGMA user_version, one transaction each.
+
+        BEGIN IMMEDIATE + re-reading the version inside the transaction means
+        two processes opening the same file at once never apply one twice.
+        """
+        c = self._conn
+        while True:
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                version = c.execute("PRAGMA user_version").fetchone()[0]
+                if version > len(MIGRATIONS):
+                    raise SchemaVersionError(
+                        f"{self.path} has schema version {version}, this code knows up to"
+                        f" {len(MIGRATIONS)}: update the code before opening it"
+                    )
+                if version == len(MIGRATIONS):
+                    c.rollback()
+                    return
+                for stmt in _statements(MIGRATIONS[version]):
+                    c.execute(stmt)
+                c.execute(f"PRAGMA user_version={version + 1}")
+                c.commit()
+            except BaseException:
+                c.rollback()
+                raise
 
     @contextmanager
     def _tx(self) -> Iterator[sqlite3.Connection]:
-        try:
-            yield self._conn
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
+        """This thread's connection; commit on success, rollback on error."""
+        with self._lock:
+            conn = self._conn
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
     def close(self) -> None:
-        self._conn.close()
+        """Close every connection this store opened, from any thread."""
+        with self._conns_lock:
+            conns, self._conns = self._conns, []
+        for conn in conns:
+            conn.close()
 
     # ------------------------------------------------------------------
     # Schedule
@@ -161,9 +261,8 @@ class CampaignStore:
         return self.get_scheduled(cur.lastrowid)
 
     def get_scheduled(self, post_id: int) -> Dict[str, Any]:
-        row = self._conn.execute(
-            "SELECT * FROM scheduled_posts WHERE id=?", (post_id,)
-        ).fetchone()
+        with self._tx() as c:
+            row = c.execute("SELECT * FROM scheduled_posts WHERE id=?", (post_id,)).fetchone()
         if not row:
             raise KeyError(f"No scheduled post with id {post_id}")
         return _row_to_sched(row)
@@ -180,7 +279,9 @@ class CampaignStore:
             args.append(campaign)
         q += " ORDER BY publish_at LIMIT ?"
         args.append(limit)
-        return [_row_to_sched(r) for r in self._conn.execute(q, args).fetchall()]
+        with self._tx() as c:
+            rows = c.execute(q, args).fetchall()
+        return [_row_to_sched(r) for r in rows]
 
     def cancel(self, post_id: int) -> Dict[str, Any]:
         post = self.get_scheduled(post_id)
@@ -323,9 +424,8 @@ class CampaignStore:
         return self.get_label(media_id) or {}
 
     def get_label(self, media_id: str) -> Optional[Dict[str, Any]]:
-        row = self._conn.execute(
-            "SELECT * FROM post_labels WHERE media_id=?", (media_id,)
-        ).fetchone()
+        with self._tx() as c:
+            row = c.execute("SELECT * FROM post_labels WHERE media_id=?", (media_id,)).fetchone()
         return dict(row) if row else None
 
     def labels(self, campaign: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
@@ -333,7 +433,9 @@ class CampaignStore:
         if campaign:
             q += " WHERE campaign=?"
             args.append(campaign)
-        return {r["media_id"]: dict(r) for r in self._conn.execute(q, args).fetchall()}
+        with self._tx() as c:
+            rows = c.execute(q, args).fetchall()
+        return {r["media_id"]: dict(r) for r in rows}
 
     # ------------------------------------------------------------------
     # Insight snapshots
@@ -368,9 +470,11 @@ class CampaignStore:
     def snapshot_history(self) -> Dict[str, List[Dict[str, Any]]]:
         """All snapshots grouped by media_id, oldest first."""
         out: Dict[str, List[Dict[str, Any]]] = {}
-        for r in self._conn.execute(
-            "SELECT * FROM insight_snapshots ORDER BY media_id, captured_at"
-        ).fetchall():
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT * FROM insight_snapshots ORDER BY media_id, captured_at"
+            ).fetchall()
+        for r in rows:
             d = dict(r)
             d["metrics"] = json.loads(d["metrics"])
             out.setdefault(d["media_id"], []).append(d)
@@ -378,11 +482,12 @@ class CampaignStore:
 
     def latest_snapshots(self) -> List[Dict[str, Any]]:
         """Most recent snapshot per media, newest posts first."""
-        rows = self._conn.execute(
-            "SELECT s.* FROM insight_snapshots s JOIN (SELECT media_id, MAX(id) AS mid"
-            " FROM insight_snapshots GROUP BY media_id) m ON s.id = m.mid"
-            " ORDER BY s.posted_at DESC"
-        ).fetchall()
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT s.* FROM insight_snapshots s JOIN (SELECT media_id, MAX(id) AS mid"
+                " FROM insight_snapshots GROUP BY media_id) m ON s.id = m.mid"
+                " ORDER BY s.posted_at DESC"
+            ).fetchall()
         out = []
         for r in rows:
             d = dict(r)
