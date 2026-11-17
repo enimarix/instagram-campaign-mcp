@@ -174,6 +174,24 @@ between `# ig-campaign begin/end` in your crontab. A run missed while the PC was
 starts when the studio comes up the same day. Re-run after changing `AGENT_SCHEDULE`;
 `--remove` takes it all out. The Settings page shows each playbook's next and last run.
 
+### 6. Reel downloader (Track A reactions)
+Public Reels for reactions are downloaded with the owner's chosen
+[Okramjimmy/Instagram-reels-downloader](https://github.com/Okramjimmy/Instagram-reels-downloader)
+(Next.js, MIT), a git submodule in `vendor/instagram-reels-downloader` pinned to a
+known commit. It is logged out, so it never touches the brand account.
+```bash
+git submodule update --init vendor/instagram-reels-downloader
+ig-campaign downloader setup    # npm ci + build; npm audit advisories are logged
+ig-campaign downloader status   # built?, port, commit, last health check
+ig-campaign downloader update   # latest upstream commit, kept only if healthy (stop `up` first)
+```
+Once built, the worker (`up` / `worker`) runs it on `127.0.0.1:DOWNLOADER_PORT`
+(default 3711, never exposed), restarts it if it dies and stops it on exit; its output
+goes to `data/logs/downloader.log`. Only its `/api/video` API is called, never its
+pages (they carry ads), and it gets no credential of ours. Set `DOWNLOADER_HEALTH_URL`
+to a public Reel permalink for the daily health check (`up` / `down` / `broken`,
+`GET /api/downloader/status`); `update` needs it.
+
 ## Tools (30)
 
 **Account** `validate_access_token`, `get_account_pages`, `get_profile_info`,

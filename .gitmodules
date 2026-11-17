@@ -1,0 +1,3 @@
+[submodule "vendor/instagram-reels-downloader"]
+	path = vendor/instagram-reels-downloader
+	url = https://github.com/Okramjimmy/Instagram-reels-downloader

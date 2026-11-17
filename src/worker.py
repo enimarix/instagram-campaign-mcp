@@ -14,6 +14,8 @@ render_loop() runs beside it (and alone in setup mode: renders need no Instagram
 renders queued render jobs (src/studio/render.py) in threads, keeping the PC awake meanwhile,
 starts none while the media disk is under MIN_FREE_DISK_GB, and runs the daily housekeeping
 (src/studio/housekeeping.py: archive stale assets, purge old files, back up the database).
+
+downloader_loop() runs beside them: the Reel downloader service on loopback (063a).
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -42,7 +44,7 @@ from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
 from .learning import facts
 from .store import CampaignStore, parse_dt, to_iso, utcnow
-from .studio import dm_picks, housekeeping, power, render
+from .studio import dm_picks, downloader_service, housekeeping, power, render
 from .studio.power import keep_awake
 from .studio.publish import reconcile_publish_checks
 
@@ -356,3 +358,46 @@ def register_wake(slot: datetime, run: Callable[..., Any] = subprocess.run) -> b
         logger.warning("wake_task_failed", error=repr(e))
         return False
     return True
+
+
+# --- Reel downloader service (063a) ------------------------------------------
+DOWNLOADER_TICK = 5.0  # s between liveness checks
+DOWNLOADER_BACKOFF = (2.0, 300.0)  # s: first restart delay, doubling up to the cap
+DOWNLOADER_STABLE = 60.0  # s up after which the back-off starts over
+DOWNLOADER_WARMUP = 30.0  # s after a start before the health check
+DOWNLOADER_HEALTH_EVERY = timedelta(days=1)
+
+
+async def downloader_loop(store: CampaignStore, settings: InstagramMCPSettings,
+                          spawn: Optional[Callable[[], Any]] = None,
+                          tick: float = DOWNLOADER_TICK,
+                          backoff: Tuple[float, float] = DOWNLOADER_BACKOFF) -> None:
+    """Keep the downloader service up on loopback once `downloader setup` built it: restart
+    it with a doubling back-off when it dies, health-check it daily, stop it when cancelled."""
+    spawn = spawn or functools.partial(downloader_service.spawn, settings)
+    proc, started, delay, retry_at = None, 0.0, backoff[0], 0.0
+    try:
+        while True:
+            if proc is not None and proc.poll() is not None:
+                if time.monotonic() - started >= DOWNLOADER_STABLE:
+                    delay = backoff[0]
+                print(f"downloader service exited ({proc.returncode}); restart in {delay:g} s",
+                      file=sys.stderr, flush=True)
+                proc, retry_at = None, time.monotonic() + delay
+                delay = min(delay * 2, backoff[1])
+            if proc is None and downloader_service.built() and time.monotonic() >= retry_at:
+                try:
+                    proc, started = spawn(), time.monotonic()
+                except OSError as e:  # e.g. node missing: retry with the back-off
+                    print(f"downloader service: {e!r}", file=sys.stderr, flush=True)
+                    retry_at, delay = time.monotonic() + delay, min(delay * 2, backoff[1])
+            if proc is not None and time.monotonic() - started >= DOWNLOADER_WARMUP:
+                try:
+                    if _every(store, "downloader_health_at", DOWNLOADER_HEALTH_EVERY, utcnow()):
+                        await downloader_service.check_and_store(store, settings)
+                except Exception as e:  # noqa: BLE001 - e.g. database locked
+                    print(f"downloader health check: {e!r}", file=sys.stderr, flush=True)
+            await asyncio.sleep(tick)
+    finally:
+        if proc is not None:
+            await asyncio.to_thread(downloader_service.stop, proc)
