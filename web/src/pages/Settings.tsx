@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  ApiError, errorMessage, getAccount, getHealth, getStorage, getToken, getWorkerStatus,
-  setPublishingPaused, type RunResult, type TokenStatus,
+  ApiError, errorMessage, getAccount, getAgentSchedule, getHealth, getStorage, getToken,
+  getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type RunResult, type TokenStatus,
 } from '../api/client'
 import { button } from '../inbox/ui'
 
@@ -73,6 +73,12 @@ function tokenExpiry(t: TokenStatus) {
   return `${new Date(t.expires_at).toLocaleDateString()} (${t.days_left} days left)`
 }
 
+function scheduleLine(e: AgentScheduleEntry) {
+  const next = e.exists ? `Next ${new Date(e.next_at).toLocaleString()}` : 'Playbook not written yet'
+  const last = e.last_run ? `last ${e.last_run.status} ${relative(e.last_run.started_at)}` : 'never ran'
+  return `${next} · ${last}`
+}
+
 const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : undefined)
 
 export default function Settings() {
@@ -81,6 +87,7 @@ export default function Settings() {
   const [worker, setWorker] = useLoad(getWorkerStatus)
   const [storage] = useLoad(getStorage)
   const [token] = useLoad(getToken)
+  const [schedule] = useLoad(getAgentSchedule)
   const [toggleError, setToggleError] = useState<string | null>(null)
 
   const setupMode = health.data?.instagram_configured === false ||
@@ -171,6 +178,13 @@ export default function Settings() {
 
       <Section title="Backups" load={storage}>
         <Row label="Last backup">{s?.last_backup ? new Date(s.last_backup).toLocaleString() : 'No backups yet'}</Row>
+      </Section>
+
+      <Section title="Agent schedule" load={schedule}>
+        {schedule.data?.length === 0 && <Row label="Runs">None (AGENT_SCHEDULE is empty)</Row>}
+        {schedule.data?.map((e) => (
+          <Row key={e.playbook} label={`${e.playbook} at ${e.time}`}>{scheduleLine(e)}</Row>
+        ))}
       </Section>
 
       <Section title="Server" load={health}>

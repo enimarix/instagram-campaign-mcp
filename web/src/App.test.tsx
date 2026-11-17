@@ -35,7 +35,10 @@ describe('api client', () => {
 
 describe('App', () => {
   it('renders the seven tabs and the setup-mode banner on Settings', async () => {
-    stubFetch(200, { status: 'ok', instagram_configured: false, version: '1.0' })
+    const health = { status: 'ok', instagram_configured: false, version: '1.0' }
+    // every route answers the health body, except the list the Settings page maps over
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      new Response(JSON.stringify(url === '/api/agent/schedule' ? [] : health))))
     render(
       <MemoryRouter initialEntries={['/settings']}>
         <App />

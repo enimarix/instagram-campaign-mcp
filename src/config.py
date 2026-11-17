@@ -230,6 +230,19 @@ class InstagramMCPSettings(BaseSettings):
     agent_timeout_minutes: float = Field(
         90.0, gt=0, description="Wall-clock limit of a run; the CLI is killed after it"
     )
+    # Run times are settled at step 062 (H8); install-schedule registers them with the OS.
+    agent_schedule: str = Field(
+        "daily-produce@03:00",
+        description="Daily agent runs, comma-separated playbook@HH:MM (TIMEZONE); empty = none",
+    )
+
+    @field_validator("agent_schedule")
+    @classmethod
+    def validate_agent_schedule(cls, v):
+        from .agent.schedule import parse_schedule
+
+        parse_schedule(v)
+        return v
 
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(

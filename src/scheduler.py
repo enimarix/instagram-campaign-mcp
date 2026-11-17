@@ -19,6 +19,8 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler token refresh       # new 60-day token (needs app id/secret)
   python -m src.scheduler agent run daily-produce  # locked-down Claude Code run (058)
   python -m src.scheduler agent check         # is the Claude Code CLI there and signed in?
+  python -m src.scheduler agent run-due       # run playbooks due per AGENT_SCHEDULE (061)
+  python -m src.scheduler agent install-schedule [--remove]  # OS autostart + daily runs
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -29,6 +31,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import subprocess
 import sys
 from contextlib import suppress
 
@@ -45,11 +48,14 @@ NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
 
 async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                   stories_every: int = 60) -> None:
-    """The worker of `up` and `worker`: the render loop always (renders need no Instagram),
-    publishing when Instagram is configured. Setup mode: say so once; renders still run."""
+    """The worker of `up` and `worker`: the render loop and the agent catch-up always
+    (neither needs Instagram), publishing when Instagram is configured. Setup mode: say so once; renders still run."""
     try:
+        from .agent.schedule import catch_up_loop
+
         store = CampaignStore(settings.database_path)
         renders = asyncio.create_task(worker.render_loop(store, settings))
+        agents = asyncio.create_task(catch_up_loop(store, settings))
         try:
             if settings.instagram_configured:
                 async with InstagramClient(settings, store=store) as client:
@@ -59,9 +65,10 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                       file=sys.stderr, flush=True)
                 await renders
         finally:
-            renders.cancel()
-            with suppress(asyncio.CancelledError):
-                await renders
+            for task in (renders, agents):
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
             store.close()
     except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: say so, keep the API up
         print(f"worker stopped: {e!r}; publishing and renders are off until restart.",
@@ -177,6 +184,7 @@ def _dev_seed(args: argparse.Namespace) -> int:
 
 # --- agent (058) ---------------------------------------------------------
 def _agent(args: argparse.Namespace) -> int:
+    from .agent import schedule
     from .agent.runner import AgentError, preflight, run_agent
 
     settings = get_settings()
@@ -184,7 +192,21 @@ def _agent(args: argparse.Namespace) -> int:
         if args.agent_command == "check":
             print(f"agent check: ok, {preflight(settings)} is signed in.")
             return 0
+        if args.agent_command == "install-schedule":
+            try:
+                print(schedule.install_schedule(settings, remove=args.remove))
+            except (OSError, subprocess.SubprocessError) as e:
+                print(f"agent install-schedule: {e!r}", file=sys.stderr)
+                return 1
+            return 0
         store = CampaignStore(settings.database_path)
+        if args.agent_command == "run-due":
+            try:
+                runs = schedule.run_due(store, settings)
+            finally:
+                store.close()
+            print(json.dumps(runs, indent=2, default=str))
+            return 0 if all(r["status"] == "succeeded" for r in runs) else 1
         try:
             run = run_agent(store, settings, args.playbook, max_turns=args.max_turns,
                             timeout_s=args.timeout * 60 if args.timeout else None,
@@ -242,6 +264,10 @@ def main(argv: list[str] | None = None) -> None:
     ar.add_argument("--timeout", type=float, metavar="MIN",
                     help="Wall-clock limit in minutes (default AGENT_TIMEOUT_MINUTES)")
     agent.add_parser("check", help="Preflight only: CLI found and signed in")
+    agent.add_parser("run-due", help="Run every playbook due per AGENT_SCHEDULE, in turn")
+    ais = agent.add_parser("install-schedule",
+                           help="Start `up` at logon and the daily runs via the OS scheduler")
+    ais.add_argument("--remove", action="store_true", help="Remove those OS tasks instead")
     args = parser.parse_args(argv)
     if args.command == "agent" and args.agent_command == "run" and (
             (args.max_turns is not None and args.max_turns < 1)

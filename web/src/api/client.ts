@@ -256,6 +256,15 @@ export type AgentRun = {
   permission_denials: number | null
   has_log: boolean
 }
+/** A row of GET /api/agent/schedule (src/agent/schedule.py overview). */
+export type AgentScheduleEntry = {
+  playbook: string
+  time: string
+  next_at: string
+  exists: boolean
+  last_run: Pick<AgentRun, 'id' | 'status' | 'started_at' | 'finished_at'> | null
+}
+export const getAgentSchedule = () => request<AgentScheduleEntry[]>('/api/agent/schedule')
 export const getPlaybooks = () => request<string[]>('/api/agent/playbooks')
 export const getAgentRuns = (limit = 50) => request<AgentRun[]>(`/api/agent/runs?limit=${limit}`)
 export const getAgentLog = (id: number) => request<{ id: number; lines: string[] }>(`/api/agent/runs/${id}/log`)
