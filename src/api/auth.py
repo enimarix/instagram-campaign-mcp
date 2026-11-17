@@ -37,7 +37,7 @@ class Auth:
     # and clears the lock. One global counter is fine for a single-owner studio.
     def __init__(self, settings: InstagramMCPSettings, clock: Callable[[], float] = time.time):
         secret = settings.ui_password.get_secret_value() if settings.ui_password else ""
-        self._required = bool(secret)
+        self.required = bool(secret)
         self._password_hash = hashlib.sha256(secret.encode("utf-8")).digest()
         self.ttl = settings.session_ttl_hours * 3600
         self.max_failures = settings.login_max_failures
@@ -46,10 +46,6 @@ class Auth:
         self._sessions: Dict[str, float] = {}  # sha256(token) -> expiry
         self._failures: List[float] = []
         self._locked_until = 0.0
-
-    @property
-    def required(self) -> bool:
-        return self._required
 
     def check_password(self, password: str) -> bool:
         """Constant-time check that counts failures and honours the lock.

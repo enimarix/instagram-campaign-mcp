@@ -8,6 +8,16 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: Website password: in-memory sessions, Origin check on every state change
+`UI_PASSWORD` (optional) guards every `/api/*` route except health, login, logout and session.
+Sessions are random tokens stored hashed in memory (a restart logs out); the login lock
+(5 failures in 15 min → 15 min) is one global counter. POST/PUT/PATCH/DELETE are refused (403
+`bad_origin`) when `Origin` (else `Referer`) is not the request's own scheme+host+port, and when
+both are missing on a request that carries the session cookie. `serve` refuses a non-loopback
+`--host` without a password. `X-Forwarded-Proto` is not trusted: HTTPS through a proxy (H7) will
+need an explicit setting for the cookie `Secure` flag and the own-origin check.
+Reason: single owner, stdlib only; browsers always send `Origin` on cross-site POSTs.
+
 ## 2026-11-17: Render-time spike: ~0.4 min per 30 s video on CPU; a nightly batch easily fits
 Throwaway Remotion 4.0.544 project (`npx create-video --yes --blank`, outside the repo, deleted
 afterwards): 30 s, 1080×1920, 30 fps (900 frames), Courier New bold typewriter text, 6 blocky
