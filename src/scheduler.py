@@ -16,7 +16,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler up                  # website + API + worker in one process
   python -m src.scheduler dev seed --days 3   # fake demo batch for website work
   python -m src.scheduler token status        # access token validity and expiry
-  python -m src.scheduler token refresh       # swap it for a new 60-day token (needs app id/secret)
+  python -m src.scheduler token refresh       # new 60-day token (needs app id/secret)
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -33,7 +33,7 @@ from contextlib import suppress
 from . import worker
 from .campaign import collect_insights, rank, run_due
 from .config import InstagramMCPSettings, get_settings
-from .instagram_client import InstagramClient
+from .instagram_client import InstagramAPIError, InstagramClient
 from .logging_setup import configure_logging
 from .store import CampaignStore
 
@@ -131,13 +131,16 @@ async def _token(args: argparse.Namespace, settings: InstagramMCPSettings,
               file=sys.stderr)
         return 0
     async with InstagramClient(settings, store=store) as client:
-        if args.token_command == "status":
-            print(json.dumps(await token_status(client, settings), indent=2))
-            return 0
         try:
+            if args.token_command == "status":
+                print(json.dumps(await token_status(client, settings), indent=2))
+                return 0
             result = await refresh_token(client, settings, Path(ENV_FILE))
         except RefreshRefused as e:
             print(f"token refresh: refused, {e}.", file=sys.stderr)
+            return 1
+        except InstagramAPIError as e:  # Meta's message, never the token
+            print(f"token {args.token_command}: {e.message}", file=sys.stderr)
             return 1
     expires = result["expires_at"]
     print(f"refreshed, expires on {expires[:10] if expires else 'never'}"

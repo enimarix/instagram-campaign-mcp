@@ -82,6 +82,15 @@ async def test_status_invalid_token_and_self_inspection():
 
 
 @respx.mock
+def test_bad_app_credentials_are_an_error_not_an_invalid_token(
+        real_logging, env_file, monkeypatch, capsys):
+    respx.get(f"{API}/debug_token").mock(return_value=httpx.Response(
+        400, json={"error": {"code": 190, "message": "Invalid OAuth access token"}}))
+    assert _cli(["token", "status"], _settings(), env_file, monkeypatch) == 1
+    assert "token status: Invalid OAuth access token" in capsys.readouterr().err
+
+
+@respx.mock
 async def test_status_cached_for_an_hour():
     route = _debug(is_valid=True, expires_at=int(NOW + 30 * DAY))
     s = _settings()

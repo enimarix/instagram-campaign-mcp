@@ -65,12 +65,14 @@ async def token_status(client: Optional[InstagramClient], settings: InstagramMCP
     hit = _status.get(key)
     if hit and now - hit[0] < CACHE_SECONDS:
         return {**hit[1], "can_refresh": out["can_refresh"]}
+    app_token = _app_token(settings)
     try:
         # Without app credentials, the token inspects itself (works for the app's developers).
         data = (await client._make_request("GET", "debug_token", params={"input_token": token},
-                                           token=_app_token(settings))).get("data") or {}
+                                           token=app_token)).get("data") or {}
     except InstagramAPIError as e:
-        if e.error_code != INVALID_TOKEN:
+        # With an app token, a bad input token answers 200 is_valid=false; 190 = bad app creds.
+        if e.error_code != INVALID_TOKEN or app_token:
             raise
         data = {"is_valid": False}
     expires = data.get("expires_at") or None
