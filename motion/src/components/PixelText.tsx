@@ -35,7 +35,8 @@ export const PixelText = ({
   const { fps } = useVideoConfig();
   const size = fontPx(scale);
   const lineHeight = linePx(scale);
-  const cols = maxWidth === undefined ? Infinity : Math.max(1, Math.floor(maxWidth / size));
+  // A cursor needs one free cell after a full line.
+  const cols = maxWidth === undefined ? Infinity : Math.max(1, Math.floor(maxWidth / size) - (cursor ? 1 : 0));
   const lines = useMemo(() => wrap(text.normalize("NFC"), cols).map((l) => Array.from(l)), [text, cols]);
   const total = lines.reduce((n, l) => n + l.length, 0);
   const visible = visibleChars(frame, total, fps, speed, startFrame);
@@ -57,7 +58,7 @@ export const PixelText = ({
         lineHeight: `${lineHeight}px`,
         color,
         whiteSpace: "pre",
-        width: Number.isFinite(cols) ? cols * size : undefined,
+        width: Number.isFinite(cols) ? (cols + (cursor ? 1 : 0)) * size : undefined,
       }}
     >
       {lines.map((l, i) => (
