@@ -199,9 +199,9 @@ async def publish_image(
     variant: Optional[str] = None,
     hypothesis: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Publish a single-image feed post now. Image must be a public HTTPS JPEG/PNG
-    at 4:5, 1:1 or 1.91:1. campaign/variant/hypothesis are stored locally for A/B
-    comparison."""
+    """Publish a single-image feed post now. Image must be a public HTTPS JPEG
+    (Instagram's API does not take PNG) with an aspect ratio between 4:5 and
+    1.91:1. campaign/variant/hypothesis are stored locally for A/B comparison."""
     try:
         res = await client().publish_image(image_url, caption, alt_text, location_id,
                                            None, collaborators)
@@ -221,7 +221,8 @@ async def publish_carousel(
     hypothesis: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Publish a carousel now. items: 2-10 of {"image_url": ...} or {"video_url": ...}
-    (optional "alt_text" on images). All slides are cropped to the first slide's ratio."""
+    (optional "alt_text" on images). Images must be JPEG. All slides are cropped to
+    the first slide's ratio (4:5 to 1.91:1)."""
     try:
         res = await client().publish_carousel(items, caption, location_id, collaborators)
     except InstagramAPIError as e:
@@ -266,7 +267,7 @@ async def publish_story(
     campaign: Optional[str] = None,
     variant: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Publish a Story now (exactly one of image_url / video_url, 9:16).
+    """Publish a Story now (exactly one of image_url / video_url, 9:16; images JPEG).
     The API cannot add stickers, links or text overlays: bake them into the media."""
     try:
         res = await client().publish_story(image_url, video_url)
@@ -440,11 +441,16 @@ async def get_competitor_profile(username: str, media_limit: int = 12) -> Dict[s
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
                                       open_world_hint=True))
-async def collect_insights(limit: int = 25, max_age_days: int = 30) -> Dict[str, Any]:
+async def collect_insights(
+    limit: int = 25, max_age_days: int = 30, stories_only: bool = False
+) -> Dict[str, Any]:
     """Snapshot insights of recent posts (and live Stories) into the local store.
-    Run daily; scoring uses the latest snapshot of each post."""
+    Run daily; scoring uses the latest snapshot of each post. Stories are only
+    judged on a snapshot taken 20-24h after posting: the scheduler daemon takes
+    those hourly, or call this with stories_only=True."""
     try:
-        return await camp.collect_insights(client(), store(), limit, max_age_days)
+        return await camp.collect_insights(
+            client(), store(), 0 if stories_only else limit, max_age_days)
     except InstagramAPIError as e:
         raise _err(e)
 
@@ -453,12 +459,16 @@ async def collect_insights(limit: int = 25, max_age_days: int = 30) -> Dict[str,
 async def rank_posts(
     campaign: Optional[str] = None,
     only: Optional[Literal["winner", "promising", "average", "weak", "too_early",
-                           "inconclusive", "no_baseline", "no_signal"]] = None,
+                           "inconclusive", "incomplete", "no_baseline",
+                           "no_signal"]] = None,
     limit: int = 20,
 ) -> Dict[str, Any]:
-    """Score posts vs the account's own median (same type: feed/Reels/Stories).
-    engagement_index 1.0 = typical; winners beat the threshold (default 1.5x)
-    with enough reach. Winners are the candidates to promote as ads."""
+    """Score posts vs the account's own median (same type: feed/Reels/Stories),
+    with baseline posts read at a similar age. engagement_index 1.0 = typical.
+    A winner has enough reach (default 300) and either engagement >= the
+    threshold (default 1.5x) or reach >= 2x the median with engagement >= 1.0x.
+    Winners are the candidates to promote as ads. summary counts every post in
+    scope, before the `only` filter."""
     return camp.rank(store(), get_settings(), campaign, only, limit)
 
 

@@ -1,21 +1,38 @@
 """
 Configuration management for the Instagram campaign MCP server.
 
-Settings come from environment variables or a `.env` file. The `.env` file is
-looked up in the project root (next to README.md), so it is found even when an
-MCP client launches the server from another working directory. Set
-IG_MCP_ENV_FILE to use a different file.
+Settings come from environment variables or a `.env` file in the app's home
+folder, so it is found even when an MCP client launches the server from
+another working directory. The home folder is:
+
+- IG_MCP_HOME if set;
+- the project folder (next to pyproject.toml) for a source checkout or an
+  editable install (`pip install -e .`, what install.ps1 / install.sh do);
+- ~/.instagram-campaign-mcp for a regular `pip install`, where the code lives
+  in site-packages and must not hold your .env or database.
+
+Set IG_MCP_ENV_FILE to use a different .env file.
 """
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-ENV_FILE = os.environ.get("IG_MCP_ENV_FILE", str(PROJECT_ROOT / ".env"))
+
+def _app_home(source_root: Optional[Path] = None) -> Path:
+    if os.environ.get("IG_MCP_HOME"):
+        return Path(os.environ["IG_MCP_HOME"]).expanduser().resolve()
+    source_root = source_root or Path(__file__).resolve().parent.parent
+    if (source_root / "pyproject.toml").is_file():
+        return source_root
+    return Path.home() / ".instagram-campaign-mcp"
+
+
+APP_HOME = _app_home()
+ENV_FILE = os.environ.get("IG_MCP_ENV_FILE", str(APP_HOME / ".env"))
 
 
 class InstagramMCPSettings(BaseSettings):
@@ -51,7 +68,9 @@ class InstagramMCPSettings(BaseSettings):
         600.0, description="Max seconds to wait for a container to finish processing"
     )
     validate_image_ratio: bool = Field(
-        True, description="Download feed images and check aspect ratio before publishing"
+        True,
+        description="Download images before publishing and reject non-JPEG files "
+        "and feed ratios outside 4:5..1.91:1",
     )
 
     timezone: str = Field(
@@ -61,7 +80,7 @@ class InstagramMCPSettings(BaseSettings):
 
     # --- Campaign store ---------------------------------------------------
     database_path: str = Field(
-        str(PROJECT_ROOT / "data" / "ig_campaign.db"),
+        str(APP_HOME / "data" / "ig_campaign.db"),
         description="SQLite file for schedule, labels and insight snapshots",
     )
 
@@ -84,21 +103,10 @@ class InstagramMCPSettings(BaseSettings):
     cache_enabled: bool = Field(True, description="Cache GET responses")
     cache_ttl_seconds: int = Field(300, description="Cache TTL in seconds")
 
-    allowed_image_formats: List[str] = Field(
-        ["jpg", "jpeg", "png"], description="Allowed image formats"
-    )
-
     # --- MCP --------------------------------------------------------------
     mcp_server_name: str = Field("instagram-campaign-mcp", description="MCP server name")
     mcp_server_version: str = Field("2.0.0", description="MCP server version")
     mcp_transport: str = Field("stdio", description="stdio | streamable-http")
-
-    @field_validator("allowed_image_formats", mode="before")
-    @classmethod
-    def parse_list_from_string(cls, v):
-        if isinstance(v, str):
-            return [item.strip() for item in v.split(",")]
-        return v
 
     @field_validator("log_level")
     @classmethod
