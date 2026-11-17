@@ -156,6 +156,12 @@ def test_disk_ok_with_fake_usage(tmp_path, monkeypatch):
     monkeypatch.setattr(storage.shutil, "disk_usage", lambda p: usage(0, 0, 5 * 1024**3))
     assert housekeeping.disk_ok(s) is True
 
+    def unplugged(p):
+        raise FileNotFoundError(p)
+
+    monkeypatch.setattr(storage.shutil, "disk_usage", unplugged)
+    assert housekeeping.disk_ok(s) is False
+
 
 async def test_disk_floor_blocks_claiming(store, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: False)

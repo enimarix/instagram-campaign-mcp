@@ -104,5 +104,9 @@ def backup_database(store: CampaignStore, settings: InstagramMCPSettings, now: d
 
 
 def disk_ok(settings: InstagramMCPSettings) -> bool:
-    """Free space on the media root's disk is at least min_free_disk_gb."""
-    return free_bytes(settings.media_root) >= settings.min_free_disk_gb * 1024**3
+    """Free space on the media root's disk is at least min_free_disk_gb (False when the disk
+    can't be read, e.g. an unplugged drive: renders could not be written there either)."""
+    try:
+        return free_bytes(settings.media_root) >= settings.min_free_disk_gb * 1024**3
+    except OSError:
+        return False
