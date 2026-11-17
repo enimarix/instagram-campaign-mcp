@@ -293,3 +293,17 @@ def test_route(store, cfg, no_ytdlp):
         assert bad.status_code == 422 and "not a Reel link" in bad.json()["message"]
         assert tc.post("/api/sources/download", json={}).status_code == 422
         assert tc.post("/api/sources/download", json={"x": 1}).status_code == 422
+
+
+@respx.mock
+async def test_mcp_tool(store, cfg, no_ytdlp, monkeypatch):
+    import src.instagram_mcp_server as srv
+    monkeypatch.setattr(srv, "store", lambda: store)
+    monkeypatch.setattr(srv, "get_settings", lambda: cfg)
+    respx.get(API).mock(return_value=answer())
+    respx.get(CDN).mock(return_value=httpx.Response(200, content=VIDEO))
+    r = await srv.download_reel(REEL)
+    assert r["status"] == "downloaded" and r["source"]["author"] == "creator.one"
+    assert (await srv.download_reel(r["source"]["id"]))["status"] == "exists"
+    with pytest.raises(srv.ToolError, match="not a Reel link"):
+        await srv.download_reel("https://x.com/a")

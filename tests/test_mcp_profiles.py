@@ -19,7 +19,7 @@ AGENT_ALLOWED = {
     "update_learning", "list_learnings", "get_creative_brief", "get_daily_facts",
     "save_daily_report",
     "add_to_watchlist", "list_watchlist", "remove_from_watchlist", "research_trends",
-    "get_trend_report", "list_inspirations", "mark_inspiration_used",
+    "get_trend_report", "list_inspirations", "mark_inspiration_used", "download_reel",
     "list_dm_picks", "mark_dm_pick",
 }
 NEVER_FOR_AGENT = {
