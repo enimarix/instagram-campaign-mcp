@@ -2,7 +2,7 @@
 
 import asyncio
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -42,7 +42,7 @@ def started_at(store, run_id, when):
 
 def test_parse_schedule():
     assert schedule.parse_schedule(" a@03:00, b-2@23:59 ,") == [
-        ("a", schedule.time(3)), ("b-2", schedule.time(23, 59))]
+        ("a", time(3)), ("b-2", time(23, 59))]
     assert schedule.parse_schedule("") == []
     for bad in ("a@3:00", "a@24:00", "a", "../a@03:00", "a@03:00,a@04:00"):
         with pytest.raises(ValueError):
