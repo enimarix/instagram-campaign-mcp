@@ -10,6 +10,7 @@ posts against the account's own baseline to find winners worth promoting.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 from zoneinfo import ZoneInfo
@@ -23,6 +24,7 @@ from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
+from .studio import motion
 from .studio.publish import cancel_post, refuse_asset_file
 
 configure_logging()
@@ -513,6 +515,49 @@ async def label_post(
 
 
 # ----------------------------------------------------------------------
+# Studio: motion templates (motion/, src/studio/motion.py)
+# ----------------------------------------------------------------------
+async def _studio(fn, *args, **kwargs) -> Any:
+    """Run a blocking studio call off the event loop; its errors become tool errors."""
+    try:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except (ValueError, KeyError, RuntimeError) as e:
+        raise ToolError(str(e)) from e
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def list_motion_templates() -> Dict[str, Any]:
+    """Motion video templates with their props JSON Schema and default props. Pass props
+    that match a template's schema to preview_motion and render_motion."""
+    return {"templates": await _studio(motion.list_templates)}
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def preview_motion(template: str, props: Dict[str, Any],
+                         frames: Optional[List[int]] = None) -> Dict[str, Any]:
+    """Render 3-4 PNG stills of a template (default: cover + three spread frames) in seconds,
+    to check the layout before render_motion. Returns their media paths."""
+    paths = await _studio(motion.preview_stills, template, props, get_settings().media_root,
+                          frames)
+    return {"stills": paths}
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[int] = None,
+                        asset_id: Optional[int] = None, caption: Optional[str] = None,
+                        voice: Optional[str] = None) -> Dict[str, Any]:
+    """Queue a motion render and return at once with the job id: a new asset for idea_id,
+    or a re-render of asset_id (failed asset: same asset; ready: a new child asset).
+    Templates with a script get their voice-over (TTS) first unless props carry `voice`.
+    The worker renders; the asset becomes `ready`, or `failed` with QC reasons."""
+    out = await _studio(motion.queue_motion_render, store(), get_settings(), template=template,
+                        props=props, idea_id=idea_id, asset_id=asset_id, caption=caption,
+                        voice=voice)
+    return {"asset_id": out["asset"]["id"], "job_id": out["job"]["id"],
+            "state": out["job"]["state"]}
+
+
+# ----------------------------------------------------------------------
 # DMs (requires instagram_manage_messages)
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=READ)
@@ -555,6 +600,7 @@ async def send_dm(recipient_id: str, message: str, page_id: Optional[str] = None
 # reads private DMs. This is an allow-list, never a deny-list: every new tool is out of
 # `agent` until it is deliberately added here (tests/test_mcp_profiles.py pins the set).
 # collect_insights stays out until the shared request budget (step 026) exists.
+# Motion tools are in: they only make assets for the owner's review (step 048).
 AGENT_TOOLS = frozenset({
     "validate_access_token",
     "get_profile_info",
@@ -568,6 +614,9 @@ AGENT_TOOLS = frozenset({
     "list_scheduled_posts",
     "rank_posts",
     "compare_variants",
+    "list_motion_templates",
+    "preview_motion",
+    "render_motion",
 })
 
 

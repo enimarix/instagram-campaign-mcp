@@ -120,12 +120,16 @@ def test_failure_retries_then_fails_the_asset(store, tmp_path):
     assert store.claim_render_jobs(1, stale_before=FAR_PAST) == []
 
 
-def test_motion_recipe_fails_without_retry(store, tmp_path):
+def test_motion_recipe_with_bad_props_fails_without_retry(store, tmp_path, monkeypatch):
+    def invalid(template, props):
+        raise ValueError(f"invalid props for {template}: title is required")
+
+    monkeypatch.setattr(render.motion, "validate_props", invalid)
     a = _asset(store, {"kind": "motion", "template": "Hello", "props": {}})
     render.enqueue_render(store, a["id"])
     job = render.run_job(store, tmp_path, _claim(store))
-    assert job["state"] == "failed" and "step 048" in job["failure"] and job["attempts"] == 1
-    assert store.get_asset(a["id"])["status"] == "failed"
+    assert job["state"] == "failed" and "invalid props for Hello" in job["failure"]
+    assert job["attempts"] == 1 and store.get_asset(a["id"])["status"] == "failed"
 
 
 def test_stale_running_job_is_requeued(store):

@@ -4,8 +4,8 @@ Render jobs (GOAL.md §3.1, §3.2, §4.3): render an asset from its recipe into 
 `assets.recipe` is an envelope (docs/DECISIONS.md):
   {"kind": "ffmpeg", "recipe": <Recipe>, "inputs": {"source": <media path>, ...}}  Track A
   {"kind": "motion", "template": <id>, "props": {...}}                             Track B
-plus an optional `thumb_offset_ms` (cover frame, also sent to Instagram). Motion renders
-arrive in step 048 (Remotion); until then such a job fails.
+plus an optional `thumb_offset_ms` (cover frame, also sent to Instagram). Motion recipes
+render through src/studio/motion.py (Remotion); their cover is the template's cover frame.
 
 A render writes, into media.asset_dir(): `video.mp4` (the master), `preview.mp4` (light copy
 the inbox plays), `poster.jpg` (cover frame) and `thumb.jpg`. The worker render loop
@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, to_iso, utcnow
-from . import ffmpeg, media
+from . import ffmpeg, media, motion
 from .assets import InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
 from .qc import run_qc
@@ -122,17 +122,21 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
     """Render the master, preview, poster and thumbnail; return the master's MediaInfo and
     the asset fields (relative paths)."""
     env = _ENVELOPE.validate_python(asset["recipe"])
-    if isinstance(env, MotionRecipe):
-        raise ValueError("motion renders arrive in step 048")
     folder = media.asset_dir(media_root, asset["batch_date"], asset["id"])
-    inputs = {k: media.resolve(media_root, v) for k, v in env.inputs.items()}
     video, preview = folder / "video.mp4", folder / "preview.mp4"
     poster, thumb = folder / "poster.jpg", folder / "thumb.jpg"
-    info = render(env.recipe, inputs, video, timeout_s=timeout_s, preset=preset)
+    cover_ms = env.thumb_offset_ms
+    if isinstance(env, MotionRecipe):
+        info, template_cover_ms = motion.render_motion_asset(
+            env.template, env.props, video, media_root, timeout_s=timeout_s)
+        cover_ms = template_cover_ms if cover_ms is None else cover_ms
+    else:
+        inputs = {k: media.resolve(media_root, v) for k, v in env.inputs.items()}
+        info = render(env.recipe, inputs, video, timeout_s=timeout_s, preset=preset)
     progress(0.8)
     ffmpeg.run(["-i", video, *PREVIEW_ARGS, "-preset", preset, preview], timeout_s=timeout_s)
     progress(0.9)
-    at = POSTER_AT_S if env.thumb_offset_ms is None else env.thumb_offset_ms / 1000
+    at = POSTER_AT_S if cover_ms is None else cover_ms / 1000
     at = max(min(at, info.duration - 0.1), 0.0)  # a frame that exists in short clips
     ffmpeg.run(["-ss", f"{at:.3f}", "-i", video, "-frames:v", "1", "-q:v", "3", poster],
                timeout_s=timeout_s)
