@@ -12,7 +12,8 @@
     "still:preview": "node render.mjs --template Preview8bit --props props/preview8bit.json --out out/preview8bit.png --still --frame 220",
     "still:timeline": "node render.mjs --template TimelineDemo --props props/timeline-demo.json --out out/timeline-demo.png --still --frame 120",
     "still:factquest": "node render.mjs --template FactQuest --props props/factquest.json --out out/factquest.png --still --frame 160",
-    "still:bossbattle": "node render.mjs --template BossBattle --props props/bossbattle.json --out out/bossbattle.png --still --frame 300"
+    "still:bossbattle": "node render.mjs --template BossBattle --props props/bossbattle.json --out out/bossbattle.png --still --frame 300",
+    "still:quizchest": "node render.mjs --template QuizChest --props props/quizchest.json --out out/quizchest.png --still --frame 230"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.544",

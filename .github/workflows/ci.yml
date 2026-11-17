@@ -74,3 +74,4 @@ jobs:
       - run: npm run still:timeline
       - run: npm run still:factquest
       - run: npm run still:bossbattle
+      - run: npm run still:quizchest
