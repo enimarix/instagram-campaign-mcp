@@ -9,6 +9,8 @@ yesterday). Posts are scored like rank_posts (analytics.scored_posts). Per windo
 - matured: posts the scorer judges matured whose maturity time (posted_at + the scoring min
   age) falls in the window.
 - winners / losers: matured posts scored `winner` / `weak`, with tags and the drivers.
+  Matured, winner and loser rows carry `retention`: the Reel's retention findings (111,
+  src/learning/retention.py; [] for other post types).
 - slots: matured posts grouped by owner-local posting hour; best and worst hour by median
   engagement index, with n (small_sample when n < 3, as in the tag breakdowns).
 - movers: views gained between a post's two most recent snapshots taken before the window
@@ -37,6 +39,7 @@ from ..studio.seed import local_today
 from .analytics import scored_posts, studio_side
 from .breakdowns import _group
 from .funnel import funnel, taste
+from .retention import retention_all
 
 WINDOWS = {"yesterday": 1, "last_7_days": 7}
 LOSER = "weak"  # the scorer's lowest judged verdict
@@ -61,9 +64,13 @@ async def daily_facts(store: CampaignStore, settings: InstagramMCPSettings, *,
     scored = scored_posts(store, settings)
     facts: Dict[str, Any] = {"report_date": yesterday.isoformat(),
                              "timezone": settings.timezone, "generated_at": to_iso(utcnow())}
+    week = max(WINDOWS.values())  # retention of every post that matured in any window
+    retention = retention_all(
+        store, settings, since=datetime.combine(yesterday - timedelta(days=week - 1), time(), tz),
+        until=datetime.combine(yesterday + timedelta(days=1), time(), tz))
     for name, days in WINDOWS.items():
         facts[name] = _window(store, settings, scored, yesterday - timedelta(days=days - 1),
-                              yesterday, tz)
+                              yesterday, tz, retention)
     facts["experiments"] = experiments(store, settings)
     facts["audience_comments"] = await _comments(client, facts["last_7_days"]["published"]["posts"])
     return facts
@@ -97,10 +104,15 @@ async def facts_for(store: CampaignStore, settings: InstagramMCPSettings, *,
 
 
 def _window(store: CampaignStore, settings: InstagramMCPSettings, scored: Scored,
-            first: date, last: date, tz: ZoneInfo) -> Dict[str, Any]:
+            first: date, last: date, tz: ZoneInfo,
+            retention: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
     start = datetime.combine(first, time(), tz)
     end = datetime.combine(last + timedelta(days=1), time(), tz)
     cfg = scoring_config(settings)
+
+    def scored_row(snap: Dict[str, Any], s: Dict[str, Any]) -> Dict[str, Any]:
+        return {**_post(store, snap, s, scored=True),
+                "retention": retention.get(snap["media_id"], [])}
 
     def within(at: Optional[str], hours: float = 0) -> bool:
         return bool(at) and start <= parse_dt(at) + timedelta(hours=hours) < end
@@ -116,11 +128,9 @@ def _window(store: CampaignStore, settings: InstagramMCPSettings, scored: Scored
         "published": {"count": len(published),
                       "posts": [_post(store, snap, s) for snap, s in published]},
         "matured": {"count": len(matured),
-                    "posts": [_post(store, snap, s, scored=True) for snap, s in matured]},
-        "winners": [_post(store, snap, s, scored=True) for snap, s in matured
-                    if s["verdict"] == "winner"],
-        "losers": [_post(store, snap, s, scored=True) for snap, s in matured
-                   if s["verdict"] == LOSER],
+                    "posts": [scored_row(snap, s) for snap, s in matured]},
+        "winners": [scored_row(snap, s) for snap, s in matured if s["verdict"] == "winner"],
+        "losers": [scored_row(snap, s) for snap, s in matured if s["verdict"] == LOSER],
         "slots": _slots(matured, tz),
         "movers": _movers(store, scored, start, end),
         "funnel": {**funnel(store, settings, days=days, now=noon)["totals"],

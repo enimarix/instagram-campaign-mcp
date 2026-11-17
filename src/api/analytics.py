@@ -32,8 +32,8 @@ def posts(request: Request, limit: int = Query(50, ge=1, le=500),
 
 
 @router.get("/posts/{media_id}")
-def post(media_id: str, store: CampaignStore = Depends(get_store)):
-    return call(analytics.post_detail, store, media_id)
+def post(request: Request, media_id: str, store: CampaignStore = Depends(get_store)):
+    return call(analytics.post_detail, store, request.app.state.settings, media_id)
 
 
 @router.get("/breakdown")

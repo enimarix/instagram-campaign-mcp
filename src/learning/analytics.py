@@ -16,6 +16,7 @@ from ..scoring import group_of, score_posts
 from ..store import ACCOUNT_SNAPSHOT_FIELDS, CampaignStore
 from ..studio.media import media_url
 from ..studio.seed import local_today
+from .retention import retention_for
 
 SCORE_KEYS = ("verdict", "why", "engagement_index", "reach_index", "confidence",
               "baseline_posts", "drivers", "watch_ratio", "view_rate")
@@ -108,9 +109,11 @@ def scored_posts(store: CampaignStore,
     return list(zip(latest, scored))  # score_posts keeps the input order
 
 
-def post_detail(store: CampaignStore, media_id: str) -> Dict[str, Any]:
+def post_detail(store: CampaignStore, settings: InstagramMCPSettings,
+                media_id: str) -> Dict[str, Any]:
     """One post: its own snapshot series (oldest first), tags, hypothesis, source asset with
-    preview URL and the owner's feedback when the studio made it. KeyError: unknown media."""
+    preview URL and the owner's feedback when the studio made it, and its retention findings
+    (src/learning/retention.py; [] unless a matured Reel). KeyError: unknown media."""
     snaps = store.media_snapshots(media_id)
     if not snaps:
         raise KeyError(f"No snapshots for media {media_id}")
@@ -128,6 +131,7 @@ def post_detail(store: CampaignStore, media_id: str) -> Dict[str, Any]:
         "feedback": store.list_feedback(asset_id=asset["id"], limit=1000) if asset else [],
         "series": [{"captured_at": s["captured_at"], "age_hours": s["age_hours"],
                     "metrics": s["metrics"]} for s in snaps],
+        "retention": retention_for(store, settings, media_id),
     }
 
 
