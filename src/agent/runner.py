@@ -203,6 +203,8 @@ def _outcome(code: int, stdout: str) -> tuple[str, str, Optional[Dict[str, Any]]
     try:
         res = json.loads(stdout)
     except ValueError:
+        res = None
+    if not isinstance(res, dict):
         return "failed", f"exit {code}, no JSON result: {stdout[:500]}", None
     usage = {k: res.get(k) for k in ("subtype", "num_turns", "duration_ms", "total_cost_usd",
                                      "usage", "modelUsage")}
@@ -223,12 +225,14 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     if held:
         # A run left `running` by a crash or power cut would hold the lock forever.
         # ponytail: check-then-insert, two starts in the same instant could both pass.
-        if utcnow() - parse_iso(held["started_at"]) < timedelta(seconds=timeout_s + 600):
+        # Its own --timeout is unknown here: a day (or this timeout) is surely dead.
+        stale_after = timedelta(seconds=max(timeout_s + 600, 24 * 3600))
+        if utcnow() - parse_iso(held["started_at"]) < stale_after:
             raise AgentRunRefused(f"playbook {name!r} is already running (run {held['id']})")
         store.finish_agent_run(held["id"], "failed", summary="stale: the runner died")
-    run = store.start_agent_run(name)
     log_dir = Path(settings.agent_log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
+    run = store.start_agent_run(name)
     log = log_dir / f"{run['id']}.log"
     status, summary, usage = "failed", "", None
     try:

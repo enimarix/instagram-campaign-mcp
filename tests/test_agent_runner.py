@@ -202,7 +202,7 @@ def test_stale_lock_is_released(cfg, agent_dir, store):
     held = store.start_agent_run("hello")
     with store._tx() as c:
         c.execute("UPDATE agent_runs SET started_at=? WHERE id=?",
-                  (to_iso(utcnow() - timedelta(hours=5)), held["id"]))
+                  (to_iso(utcnow() - timedelta(hours=25)), held["id"]))
     run = runner.run_agent(store, cfg, "hello", agent_dir=agent_dir, timeout_s=60)
     assert run["status"] == "succeeded"
     assert [r["status"] for r in store.list_agent_runs("hello")] == ["succeeded", "failed"]
@@ -212,6 +212,8 @@ def test_cli_agent_check(cfg, monkeypatch, capsys):
     from src import scheduler
 
     monkeypatch.setattr(scheduler, "get_settings", lambda: cfg)
+    # configure_logging would bind loggers to capsys's stream, closed after the test.
+    monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)
     with pytest.raises(SystemExit) as done:
         scheduler.main(["agent", "check"])
     assert done.value.code == 0 and "signed in" in capsys.readouterr().out
