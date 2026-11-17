@@ -13,7 +13,8 @@ AGENT_ALLOWED = {
     "get_publishing_limit", "get_media_posts", "get_media_insights", "get_comments",
     "search_hashtag", "get_competitor_profile", "list_scheduled_posts", "rank_posts",
     "compare_variants", "list_motion_templates", "preview_motion", "render_motion",
-    "create_idea", "get_render_status", "wait_for_renders", "submit_asset", "list_assets",
+    "create_idea", "get_render_status", "get_asset_frames", "wait_for_renders",
+    "submit_asset", "list_assets",
     "get_feedback", "mark_feedback_digested", "list_revision_requests", "add_learning",
     "update_learning", "list_learnings",
 }
