@@ -1,8 +1,9 @@
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router'
+import { NavLink, Navigate, Route, Routes } from 'react-router'
 import CalendarPage from './calendar/CalendarPage'
 import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
 import Agent from './pages/Agent'
+import Analytics from './pages/Analytics'
 import Placeholder from './pages/Placeholder'
 import Settings from './pages/Settings'
 import Trends from './pages/Trends'
@@ -56,20 +57,14 @@ export default function App() {
                   t.path === '/inbox' ? <InboxPage /> :
                   t.path === '/calendar' ? <CalendarPage /> :
                   t.path === '/agent' ? <Agent /> :
-                  // ponytail: Trends hangs off the Analytics placeholder until 078 builds the tab
-                  t.path === '/analytics' ? (
-                    <Placeholder title="Analytics">
-                      <Link to="/trends" className="mt-2 inline-flex min-h-11 items-center text-blue-600 underline">
-                        Trends: what works for watched accounts and hashtags
-                      </Link>
-                    </Placeholder>
-                  ) :
+                  t.path === '/analytics' ? <Analytics /> :
                   t.path === '/settings' ? <Settings /> : <Placeholder title={t.label} />
                 }
               />
             ))}
             <Route path="/assets/:id" element={<AssetPage />} />
             <Route path="/trends" element={<Trends />} />
+            <Route path="/analytics/posts/:id" element={<Placeholder title="Post" />} />
             <Route path="*" element={<Placeholder title="Not found" />} />
           </Routes>
         </main>

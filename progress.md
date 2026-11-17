@@ -198,7 +198,7 @@ dropped (with a line under *Follow-ups* saying why).
 - [ ] 075 — Retention metrics — the video length is known for our assets: add watch ratio (average watch time ÷ length) and view rate (views ÷ reach) to the scored output, and score Reels on watch ratio instead of raw watch time when the length is known (raw time favours long videos). **Verify in docs** which Reels metrics the pinned version offers beyond the current set (total watch time, skip rate, reposts) and collect those that exist; tests.
 - [ ] 076 — Tag breakdowns — service and API: engagement index, reach, views and watch ratio grouped by any tag (track, pillar, hook type, template, slot hour, duration bucket), with sample size and spread, matured posts only, same post type only; posts published outside the studio appear as "untagged"; tests.
 - [x] 077 — Studio funnel — service and API: produced → reviewed → liked → approved → published → winner per day, track, template and hook type; the **like-rate** trend (the taste metric; approval rate is shown but is capped by the posts-per-day limit, GOAL.md §2.1); the agent's **calibration** (self-score against the owner's verdict: how often its top 5 were liked); **waste** (liked videos that expired on the bench, render minutes spent on them); and the most frequent feedback reasons; tests.
-- [ ] 078 — Analytics overview page — follower, reach and views trends, this week's posts, winners, publishing streak, the funnel, the like-rate trend and the agent's calibration.
+- [x] 078 — Analytics overview page — follower, reach and views trends, this week's posts, winners, publishing streak, the funnel, the like-rate trend and the agent's calibration.
 - [ ] 079 — Posts table and post detail pages — sortable, filterable table; detail shows the growth curve, tags, hypothesis, the owner's feedback and the video.
 - [ ] 080 — Breakdowns and A/B page — charts per tag with sample sizes shown; A/B comparison using existing `compare_variants`.
 
@@ -248,6 +248,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 078 — Analytics overview page — https://github.com/enimarix/instagram-campaign-mcp/pull/77 (2026-11-17) — KPI tiles, follower/reach/views trends, this week's posts, streak, funnel, like-rate, agent calibration, waste, reasons; SVG charts, help text
 - [x] 051b — Inspirations inbox — https://github.com/enimarix/instagram-campaign-mcp/pull/76 (2026-11-17) — paste a Reel link + note on the Trends page; the agent sees new ones in its brief (list_inspirations, mark_inspiration_used)
 - [x] 077 — Studio funnel — https://github.com/enimarix/instagram-campaign-mcp/pull/75 (2026-11-17) — funnel per day/track/template/hook type, like-rate (7-day), agent calibration (top 5 liked), waste, feedback reasons (/api/analytics/funnel, /taste)
 - [x] 052 — Trend report — https://github.com/enimarix/instagram-campaign-mcp/pull/74 (2026-11-17) — outlier scores vs the account's (or hashtag's) median, hook lines, hashtags, hour; MCP get_trend_report, /api/trends, Trends page with the watchlist editor

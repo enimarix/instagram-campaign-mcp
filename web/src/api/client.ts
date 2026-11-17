@@ -313,3 +313,46 @@ export type TrendItem = {
 }
 export type TrendReport = { accounts: TrendItem[]; hashtags: Record<string, TrendItem[]>; generated_at: string }
 export const getTrends = (days = 14) => request<TrendReport>(`/api/trends?days=${days}`)
+
+// --- Analytics (steps 074, 077; page 078) ---
+type AccountValues = { followers: number | null; reach: number | null; views: number | null }
+/** A day of GET /api/analytics/account; `deltas`: change since the previous stored day. */
+export type AccountDay = AccountValues & { date: string; deltas: AccountValues }
+export const getAccountSeries = (days: number) =>
+  request<{ since: string; until: string; days: AccountDay[] }>(`/api/analytics/account?days=${days}`)
+
+/** A row of GET /api/analytics/posts (src/learning/analytics.py posts_table). */
+export type AnalyticsPost = {
+  media_id: string
+  permalink: string | null
+  posted_at: string | null
+  group: string
+  metrics: Record<string, number | null>
+  caption: string
+  deleted: boolean
+  verdict: string // src/scoring.py: winner, promising, average, weak, too_early, ...
+  why: string | null
+  asset_id: number | null
+}
+export const getAnalyticsPosts = (limit = 100) =>
+  request<{ total: number; posts: AnalyticsPost[] }>(`/api/analytics/posts?limit=${limit}`)
+
+/** Stage counts of GET /api/analytics/funnel (src/learning/funnel.py). */
+export type FunnelStats = Record<'produced' | 'reviewed' | 'liked' | 'approved' | 'published' | 'winner', number> & {
+  like_rate: number | null
+  approval_rate: number | null
+}
+export type Funnel = { since: string; until: string; approval_rate_note: string; totals: FunnelStats }
+export const getFunnel = (days = 30) => request<Funnel>(`/api/analytics/funnel?days=${days}`)
+
+/** GET /api/analytics/taste: like-rate series, calibration, waste, feedback reasons. */
+export type Taste = {
+  like_rate: { date: string; reviewed: number; liked: number; like_rate: number | null; rolling_7d: number | null }[]
+  calibration: {
+    days: { date: string; scored: number; top_liked: number; top_n: number }[]
+    mean_self_score: { liked: number | null; disliked: number | null }
+  }
+  waste: { count: number; render_minutes: number }
+  reasons: { code: string; label: string; count: number }[]
+}
+export const getTaste = (days = 30) => request<Taste>(`/api/analytics/taste?days=${days}`)
