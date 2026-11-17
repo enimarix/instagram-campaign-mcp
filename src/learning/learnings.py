@@ -14,11 +14,14 @@ functions with actor="owner", which lifts the agent's limits.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Sequence
 
-from ..store import CampaignStore
+from ..config import InstagramMCPSettings, get_settings
+from ..store import CampaignStore, utcnow
 from ..studio.production import MAX_LIST, compact_asset
 from ..taxonomy import load_taxonomy
+from .evidence import evaluate_learning, predicate
 
 Actor = Literal["agent", "owner"]
 KINDS = ("do", "dont", "hypothesis")
@@ -110,6 +113,12 @@ def _check_caps(kind: str, confidence: str, evidence: Sequence[Any]) -> None:
                          " do/dont or medium needs at least 2")
 
 
+def _check_scope(scope: Any) -> None:
+    if scope is not None and not isinstance(scope, dict):
+        raise ValueError("scope must be an object of tags")
+    predicate(scope)  # ValueError: an unknown tag or value
+
+
 def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
                  evidence_feedback_ids: Sequence[int] = (), *,
                  evidence: Optional[List[Dict[str, Any]]] = None,
@@ -123,8 +132,7 @@ def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
         raise ValueError("a statement is required")
     _one_of("kind", kind, KINDS)
     _one_of("origin", origin, ORIGINS)
-    if scope is not None and not isinstance(scope, dict):
-        raise ValueError("scope must be an object of tags")
+    _check_scope(scope)
     if evidence and (origin == "taste" or not all(isinstance(e, dict) and e for e in evidence)):
         raise ValueError("evidence dicts are for audience/ads learnings;"
                          " taste cites evidence_feedback_ids")
@@ -157,9 +165,14 @@ def update_learning(store: CampaignStore, learning_id: int, *,
                     statement: Optional[str] = None, kind: Optional[str] = None,
                     confidence: Optional[str] = None, status: Optional[str] = None,
                     evidence_feedback_ids_to_add: Sequence[int] = (),
+                    scope: Optional[Dict[str, Any]] = None, evaluate: bool = False,
+                    settings: Optional[InstagramMCPSettings] = None,
+                    now: Optional[datetime] = None,
                     actor: Actor = "agent") -> Dict[str, Any]:
     """Edit, re-rate, retire or add evidence to a learning; the agent may never touch one
-    at confidence `owner`. Everything is checked before anything is written."""
+    at confidence `owner`. Everything is checked before anything is written. A learning
+    with a tag predicate is re-checked against the numbers (evidence.evaluate_learning)
+    after a statement, kind or scope change, or when `evaluate` is set."""
     current = store.get_learning(learning_id)
     if actor != "owner" and current["confidence"] == "owner":
         raise ValueError(f"learning {learning_id} is the owner's rule: {OWNER_ONLY}")
@@ -174,6 +187,9 @@ def update_learning(store: CampaignStore, learning_id: int, *,
         fields["confidence"] = _one_of("confidence", confidence, CONFIDENCES)
     if status is not None:
         fields["status"] = _one_of("status", status, STATUSES)
+    if scope is not None:
+        _check_scope(scope)
+        fields["scope"] = scope
     if evidence_feedback_ids_to_add:
         known = {e.get("feedback_id") for e in current["evidence"]}
         fields["evidence"] = current["evidence"] + [
@@ -183,7 +199,12 @@ def update_learning(store: CampaignStore, learning_id: int, *,
         _check_caps(fields.get("kind", current["kind"]),
                     fields.get("confidence", current["confidence"]),
                     fields.get("evidence", current["evidence"]))
-    return store.update_learning(learning_id, **fields)
+    recheck = ((evaluate or fields.keys() & {"statement", "kind", "scope"})
+               and predicate(fields.get("scope", current["scope"])))  # ValueError before writing
+    row = store.update_learning(learning_id, **fields)
+    if recheck:
+        row = evaluate_learning(store, settings or get_settings(), row, now=now or utcnow())
+    return row
 
 
 def list_learnings(store: CampaignStore, *, kind: Optional[str] = None,
