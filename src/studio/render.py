@@ -22,10 +22,12 @@ from typing import Annotated, Any, Callable, Dict, Literal, Optional, Tuple, Uni
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
+from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, to_iso, utcnow
 from . import ffmpeg, media
 from .assets import InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
+from .qc import run_qc
 from .recipe import DEFAULT_PRESET, DEFAULT_TIMEOUT_S, Recipe, render
 
 MAX_ATTEMPTS = 3
@@ -141,20 +143,15 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
     return info, {k: media.relative(media_root, p) for k, p in paths.items()}
 
 
-def _qc(asset: Dict[str, Any], info: MediaInfo) -> Dict[str, Any]:
-    """Stub until step 035 swaps in the real quality check: the master probes (it exists and
-    is media) and has a duration."""
-    checks = [{"check": "probe", "passed": True},
-              {"check": "duration", "passed": info.duration > 0, "value": info.duration}]
-    return {"passed": all(c["passed"] for c in checks), "checks": checks, "stub": True}
-
-
 def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
-            render_fn: Callable[..., Tuple[MediaInfo, Dict[str, str]]] = render_files
-            ) -> Dict[str, Any]:
-    """Render one claimed job (state running). Errors are retried up to MAX_ATTEMPTS, except
-    ValueError (a bad recipe: retrying gives the same result); then the job fails with the
-    reason and the asset moves rendering -> failed. Returns the job."""
+            render_fn: Callable[..., Tuple[MediaInfo, Dict[str, str]]] = render_files,
+            qc_fn: Callable[..., Dict[str, Any]] = run_qc,
+            settings: Optional[InstagramMCPSettings] = None) -> Dict[str, Any]:
+    """Render one claimed job (state running), then run the quality check (src/studio/qc.py):
+    the asset becomes `ready`, or `failed` with the reasons in `assets.qc`. Errors are retried
+    up to MAX_ATTEMPTS, except ValueError (a bad recipe: retrying gives the same result);
+    then the job fails with the reason and the asset moves rendering -> failed. Returns the
+    job. `settings` defaults to get_settings() (QC thresholds, hashtag cap)."""
     job_id = job["id"]
     asset = store.get_asset(job["asset_id"])
     if asset["status"] != "rendering":
@@ -165,7 +162,8 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
     try:
         info, files = render_fn(asset, media_root,
                                 lambda p: store.update_render_job(job_id, progress=p))
-        qc = _qc(asset, info)
+        qc = qc_fn(asset, store.get_idea(asset["idea_id"]), files["file_path"], media_root,
+                   settings or get_settings())
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason
         reason = f"{type(e).__name__}: {e}"[:FAILURE_CHARS]
         if isinstance(e, ValueError) or job["attempts"] >= MAX_ATTEMPTS:

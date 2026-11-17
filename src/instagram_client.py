@@ -628,7 +628,7 @@ class InstagramClient:
         user_tags: Optional[List[Dict[str, Any]]] = None,
         collaborators: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        _check_caption(caption)
+        _check_caption(caption, self.settings.max_hashtags)
         await self._check_image(image_url)
         container = await self._create_container(
             {
@@ -653,7 +653,7 @@ class InstagramClient:
 
         Instagram crops every slide to the first slide's aspect ratio.
         """
-        _check_caption(caption)
+        _check_caption(caption, self.settings.max_hashtags)
         if not 2 <= len(items) <= 10:
             raise InvalidMedia("A carousel needs 2 to 10 items.")
         for i, item in enumerate(items):
@@ -713,7 +713,7 @@ class InstagramClient:
         SS_PERFORMANCE makes it a trial Reel shown to non-followers first."""
         if bool(video_url) == bool(video_path):
             raise InvalidMedia("Give exactly one of video_url or video_path for a Reel.")
-        _check_caption(caption)
+        _check_caption(caption, self.settings.max_hashtags)
         path = self._local_video(video_path) if video_path else None
         payload: Dict[str, Any] = {
             "media_type": "REELS",
@@ -917,19 +917,23 @@ class InstagramClient:
         )
 
 
-def caption_problem(caption: Optional[str]) -> Optional[str]:
-    """Why Instagram would reject this caption, or None if it looks fine."""
+def caption_problem(caption: Optional[str], max_hashtags: Optional[int] = None
+                    ) -> Optional[str]:
+    """Why Instagram would reject this caption, or None if it looks fine. `max_hashtags`
+    defaults to the `max_hashtags` setting."""
     if not caption:
         return None
+    if max_hashtags is None:
+        max_hashtags = get_settings().max_hashtags
     if len(caption) > 2200:
         return "Caption must be 2200 characters or less"
-    if len(HASHTAG_RE.findall(caption)) > 30:
-        return "Instagram allows at most 30 hashtags per caption"
+    if len(HASHTAG_RE.findall(caption)) > max_hashtags:
+        return f"Instagram allows at most {max_hashtags} hashtags per caption"
     return None
 
 
-def _check_caption(caption: Optional[str]) -> None:
-    problem = caption_problem(caption)
+def _check_caption(caption: Optional[str], max_hashtags: int) -> None:
+    problem = caption_problem(caption, max_hashtags)
     if problem:
         raise InvalidMedia(problem)
 

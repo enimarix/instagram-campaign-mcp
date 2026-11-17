@@ -244,6 +244,9 @@ function AssetPage({ id }: { id: number }) {
               <Row label="Quality check">
                 {asset.qc.passed ? 'Passed' : 'Failed'}
                 {qcReasons.length > 0 && `: ${qcReasons.join('; ')}`}
+                {asset.qc.warnings && asset.qc.warnings.length > 0 && (
+                  <p className="text-amber-700">Check the wording: {asset.qc.warnings.join('; ')}</p>
+                )}
               </Row>
             )}
           </dl>

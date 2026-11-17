@@ -77,10 +77,11 @@ def test_render_writes_master_preview_poster_thumb(store, tmp_path):
     a = _asset(store)
     render.enqueue_render(store, a["id"])
     job = render.run_job(store, tmp_path, _claim(store),
-                         render_fn=partial(render.render_files, preset="ultrafast"))
+                         render_fn=partial(render.render_files, preset="ultrafast"),
+                         settings=_settings(tmp_path, qc_min_duration_s=1))
     assert job["state"] == "done" and job["progress"] == 1 and job["render_ms"] > 0
     a = store.get_asset(a["id"])
-    assert a["status"] == "ready" and a["qc"]["passed"] and a["qc"]["stub"]
+    assert a["status"] == "ready" and a["qc"]["passed"] is True, a["qc"]
     assert a["duration"] == pytest.approx(2.0, abs=0.1)
     folder = f"{a['batch_date']}/{a['id']}"
     assert (a["file_path"], a["preview_path"], a["poster_path"], a["thumbnail_path"]) == (
@@ -171,10 +172,11 @@ async def test_render_loop_respects_concurrency_and_keeps_awake(store, tmp_path,
         time.sleep(0.05)
         with lock:
             active[0] -= 1
-        return INFO, {}
+        return INFO, {"file_path": "video.mp4"}
 
     settings = _settings(tmp_path, render_concurrency=2)
-    run = partial(render.run_job, store, tmp_path, render_fn=fake_render)
+    run = partial(render.run_job, store, tmp_path, render_fn=fake_render,
+                  qc_fn=lambda *a: {"passed": True})
     loop = asyncio.create_task(worker.render_loop(store, settings, run=run, interval=0.05))
     deadline = time.monotonic() + 20
     try:
