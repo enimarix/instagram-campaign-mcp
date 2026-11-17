@@ -1,6 +1,6 @@
 import { Composition } from "remotion";
 import { z } from "zod";
-import { FPS, HEIGHT, type Template, templates, WIDTH } from "./registry";
+import { COVER_FRAME_PROP, FPS, HEIGHT, type Template, templates, WIDTH } from "./registry";
 
 // ponytail: registry entries are typed one by one; the loop only sees them as plain-props templates.
 const entries = Object.entries(templates) as unknown as [string, Template<z.ZodType<Record<string, unknown>>>][];
@@ -25,7 +25,9 @@ export const Root = () => (
           if (!parsed.success) {
             throw new Error(`invalid props for ${id}:\n${z.prettifyError(parsed.error)}`);
           }
-          return { props: parsed.data, durationInFrames: t.durationInFrames(parsed.data) };
+          // Remotion's metadata has no free field: the cover frame rides along in the props.
+          const resolved = t.coverFrame ? { ...parsed.data, [COVER_FRAME_PROP]: t.coverFrame(parsed.data) } : parsed.data;
+          return { props: resolved, durationInFrames: t.durationInFrames(parsed.data) };
         }}
       />
     ))}

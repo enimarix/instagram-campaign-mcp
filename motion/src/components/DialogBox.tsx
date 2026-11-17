@@ -13,10 +13,12 @@ export type DialogBoxProps = {
   /** Typewriter speed in characters per second; none = all at once. */
   speed?: number;
   startFrame?: number;
+  /** Block cursor after the text (off for captions). */
+  cursor?: boolean;
 };
 
 // RPG-style text box. All sizes are whole multiples of one "box pixel" (= scale px).
-export const DialogBox = ({ text, name, width, scale = 4, speed, startFrame = 0 }: DialogBoxProps) => {
+export const DialogBox = ({ text, name, width, scale = 4, speed, startFrame = 0, cursor = true }: DialogBoxProps) => {
   const px = intScale(scale);
   const border = 2 * px;
   const pad = 6 * px;
@@ -58,7 +60,7 @@ export const DialogBox = ({ text, name, width, scale = 4, speed, startFrame = 0 
         scale={px}
         speed={speed}
         startFrame={startFrame}
-        cursor
+        cursor={cursor}
         maxWidth={outer - 2 * (border + pad)}
       />
     </div>
