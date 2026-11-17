@@ -8,6 +8,8 @@ organic posts, so this store keeps:
 - insight_snapshots: insights captured over time, used for winner scoring
 - sources / ideas / assets: the studio's clips, content ideas and rendered
   candidates (GOAL.md §4.3); asset status moves live in src/studio/assets.py
+- feedback / learnings / daily_reports / agent_runs: the learning loop's memory
+  (GOAL.md §3.5)
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
-from .taxonomy import validate
+from .taxonomy import validate, validate_many
 
 POST_KINDS = ("image", "carousel", "reel", "story")
 BUSY_TIMEOUT_S = 5.0
@@ -135,9 +137,69 @@ CREATE INDEX idx_assets_batch_status ON assets(batch_date, status);
 CREATE INDEX idx_assets_idea ON assets(idea_id);
 """
 
+# Migration 3: learning-loop tables (GOAL.md §3.2, §3.5, §4.3).
+#   learnings.kind:       do | dont | hypothesis
+#   learnings.confidence: low | medium | high | owner (an explicit owner rule)
+#   learnings.origin:     taste (owner feedback) | audience (analytics) | ads
+#   learnings.status:     active | retired | contradicted
+#   agent_runs.status:    running | succeeded | failed | cancelled
+LEARNING_SCHEMA = """
+CREATE TABLE feedback (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id      INTEGER NOT NULL REFERENCES assets(id),
+    text          TEXT,
+    reason_codes  TEXT NOT NULL DEFAULT '[]',
+    video_time_s  REAL CHECK (video_time_s IS NULL OR video_time_s >= 0),
+    wants_changes INTEGER NOT NULL DEFAULT 0 CHECK (wants_changes IN (0,1)),
+    digested_at   TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+CREATE INDEX idx_feedback_asset ON feedback(asset_id);
+CREATE INDEX idx_feedback_digested ON feedback(digested_at);
+
+CREATE TABLE learnings (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    statement   TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('do','dont','hypothesis')),
+    scope       TEXT NOT NULL DEFAULT '{}',
+    evidence    TEXT NOT NULL DEFAULT '[]',
+    confidence  TEXT NOT NULL DEFAULT 'low' CHECK (confidence IN
+        ('low','medium','high','owner')),
+    origin      TEXT NOT NULL CHECK (origin IN ('taste','audience','ads')),
+    status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN
+        ('active','retired','contradicted')),
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX idx_learnings_status ON learnings(status);
+
+CREATE TABLE daily_reports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_date TEXT NOT NULL UNIQUE
+        CHECK (report_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    summary     TEXT,
+    facts       TEXT NOT NULL DEFAULT '{}',
+    created_at  TEXT NOT NULL
+);
+
+CREATE TABLE agent_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    playbook    TEXT NOT NULL,
+    started_at  TEXT NOT NULL,
+    finished_at TEXT,
+    status      TEXT NOT NULL DEFAULT 'running' CHECK (status IN
+        ('running','succeeded','failed','cancelled')),
+    summary     TEXT,
+    usage       TEXT,
+    log_path    TEXT
+);
+CREATE INDEX idx_agent_runs_playbook ON agent_runs(playbook, started_at);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
-MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA]
+MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version")
@@ -146,7 +208,18 @@ IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "c
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
                 "caption", "audio_name", "recipe", "duration", "batch_date", "status",
                 "verdict", "qc", "self_score", "self_score_reason", "best_before")
-JSON_FIELDS = ("stats", "citations", "recipe", "qc")
+FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
+LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "origin", "status")
+JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
+               "facts", "usage")
+# Timestamp columns _insert() fills with "now"; tables not listed get created_at.
+_INSERT_STAMPS = {
+    "assets": ("created_at", "updated_at"),
+    "feedback": ("created_at", "updated_at"),
+    "learnings": ("created_at", "updated_at"),
+    "agent_runs": ("started_at",),
+}
+AGENT_RUN_END_STATUSES = ("succeeded", "failed", "cancelled")
 # New assets start here; every later status move goes through studio.assets.transition().
 ASSET_INITIAL_STATUSES = ("rendering", "needs_reaction")
 _UNCHANGED = object()
@@ -586,9 +659,9 @@ class CampaignStore:
         self, table: str, allowed: Sequence[str], fields: Dict[str, Any]
     ) -> Dict[str, Any]:
         row = _encode(allowed, fields)
-        row["created_at"] = to_iso(utcnow())
-        if table == "assets":
-            row["updated_at"] = row["created_at"]
+        now = to_iso(utcnow())
+        for col in _INSERT_STAMPS.get(table, ("created_at",)):
+            row[col] = now
         cols = ", ".join(row)
         with self._tx() as c:
             cur = c.execute(
@@ -601,8 +674,22 @@ class CampaignStore:
         with self._tx() as c:
             row = c.execute(f"SELECT * FROM {table} WHERE id=?", (row_id,)).fetchone()
         if not row:
-            raise KeyError(f"No {table[:-1]} with id {row_id}")
+            raise KeyError(f"No {table.removesuffix('s')} with id {row_id}")
         return _decode(row)
+
+    def _update(
+        self, table: str, allowed: Sequence[str], row_id: int, fields: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Set fields and updated_at on one row; KeyError if it doesn't exist."""
+        row = _encode(allowed, fields)
+        if row:
+            sets = ", ".join(f"{k}=?" for k in row)
+            with self._tx() as c:
+                cur = c.execute(f"UPDATE {table} SET {sets}, updated_at=? WHERE id=?",
+                                [*row.values(), to_iso(utcnow()), row_id])
+            if cur.rowcount != 1:
+                raise KeyError(f"No {table.removesuffix('s')} with id {row_id}")
+        return self._get(table, row_id)
 
     def _select(
         self, q: str, filters: Dict[str, Any], order: str, limit: int
@@ -676,15 +763,7 @@ class CampaignStore:
         """Change asset fields; status only moves through studio.assets.transition()."""
         if "status" in fields:
             raise ValueError("status changes only through studio.assets.transition()")
-        row = _encode(ASSET_FIELDS, fields)
-        if row:
-            sets = ", ".join(f"{k}=?" for k in row)
-            with self._tx() as c:
-                cur = c.execute(f"UPDATE assets SET {sets}, updated_at=? WHERE id=?",
-                                [*row.values(), to_iso(utcnow()), asset_id])
-            if cur.rowcount != 1:
-                raise KeyError(f"No asset with id {asset_id}")
-        return self.get_asset(asset_id)
+        return self._update("assets", ASSET_FIELDS, asset_id, fields)
 
     def _set_asset_status(
         self, asset_id: int, from_status: str, to_status: str, approved_at: Any = _UNCHANGED
@@ -699,6 +778,159 @@ class CampaignStore:
                             [*args, asset_id, from_status])
         return cur.rowcount == 1
 
+    # ------------------------------------------------------------------
+    # Learning loop: feedback, learnings, daily reports, agent runs
+    # ------------------------------------------------------------------
+    # Service rules live elsewhere: wants_changes moving the asset is
+    # studio/feedback.py (013); owner-confidence learnings being off-limits to
+    # the agent is the learning tools' job (054).
+    def add_feedback(
+        self,
+        asset_id: int,
+        text: Optional[str] = None,
+        reason_codes: Sequence[str] = (),
+        video_time_s: Optional[float] = None,
+        wants_changes: bool = False,
+    ) -> Dict[str, Any]:
+        """Owner comment on an asset; needs text or at least one reason code."""
+        reason_codes = validate_many("feedback_reasons", reason_codes)
+        _check_feedback(text, reason_codes)
+        return self._insert("feedback", ("asset_id",) + FEEDBACK_FIELDS, {
+            "asset_id": asset_id, "text": text, "reason_codes": reason_codes,
+            "video_time_s": video_time_s, "wants_changes": bool(wants_changes)})
+
+    def get_feedback(self, feedback_id: int) -> Dict[str, Any]:
+        return self._get("feedback", feedback_id)
+
+    def list_feedback(
+        self, asset_id: Optional[int] = None, undigested: Optional[bool] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Oldest first. undigested=True: not yet read by the agent; False: already read."""
+        return self._select("SELECT * FROM feedback", {
+            "asset_id": asset_id,
+            "(digested_at IS NULL)": None if undigested is None else int(undigested),
+        }, "id", limit)
+
+    def update_feedback(self, feedback_id: int, **fields: Any) -> Dict[str, Any]:
+        """Edit a comment. An edited comment counts as undigested again."""
+        if "reason_codes" in fields:
+            fields["reason_codes"] = validate_many("feedback_reasons", fields["reason_codes"])
+        if "wants_changes" in fields:
+            fields["wants_changes"] = bool(fields["wants_changes"])
+        if fields:
+            current = self.get_feedback(feedback_id)
+            _check_feedback(fields.get("text", current["text"]),
+                            fields.get("reason_codes", current["reason_codes"]))
+            fields["digested_at"] = None
+        return self._update("feedback", FEEDBACK_FIELDS + ("digested_at",), feedback_id, fields)
+
+    def delete_feedback(self, feedback_id: int) -> None:
+        with self._tx() as c:
+            cur = c.execute("DELETE FROM feedback WHERE id=?", (feedback_id,))
+        if cur.rowcount != 1:
+            raise KeyError(f"No feedback with id {feedback_id}")
+
+    def mark_feedback_digested(self, ids: Sequence[int]) -> int:
+        """Stamp digested_at on the given comments not yet digested; returns how many."""
+        ids = list(ids)
+        if not ids:
+            return 0
+        with self._tx() as c:
+            cur = c.execute(
+                f"UPDATE feedback SET digested_at=? WHERE digested_at IS NULL"
+                f" AND id IN ({','.join('?' * len(ids))})",
+                [to_iso(utcnow()), *ids],
+            )
+        return cur.rowcount
+
+    def add_learning(
+        self, statement: str, kind: str, origin: str, **fields: Any
+    ) -> Dict[str, Any]:
+        """Optional: scope (dict), evidence (list), confidence, status (see LEARNING_SCHEMA)."""
+        return self._insert("learnings", LEARNING_FIELDS,
+                            {"statement": statement, "kind": kind, "origin": origin, **fields})
+
+    def get_learning(self, learning_id: int) -> Dict[str, Any]:
+        return self._get("learnings", learning_id)
+
+    def list_learnings(
+        self, kind: Optional[str] = None, status: Optional[str] = None,
+        origin: Optional[str] = None, limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Strongest first: confidence owner > high > medium > low, then newest."""
+        return self._select(
+            "SELECT * FROM learnings", {"kind": kind, "status": status, "origin": origin},
+            "CASE confidence WHEN 'owner' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2"
+            " ELSE 3 END, id DESC", limit,
+        )
+
+    def update_learning(self, learning_id: int, **fields: Any) -> Dict[str, Any]:
+        return self._update("learnings", LEARNING_FIELDS, learning_id, fields)
+
+    def save_daily_report(
+        self, report_date: date, summary: Optional[str], facts: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Insert or replace the report of one owner-local date (computed by the caller)."""
+        day = _sql_value(report_date)
+        with self._tx() as c:
+            c.execute(
+                "INSERT INTO daily_reports (report_date, summary, facts, created_at)"
+                " VALUES (?,?,?,?) ON CONFLICT(report_date) DO UPDATE SET"
+                " summary=excluded.summary, facts=excluded.facts",
+                (day, summary, json.dumps(facts), to_iso(utcnow())),
+            )
+        return self.get_daily_report(day)
+
+    def get_daily_report(self, report_date: Any) -> Optional[Dict[str, Any]]:
+        rows = self._select("SELECT * FROM daily_reports",
+                            {"report_date": _sql_value(report_date)}, "id", 1)
+        return rows[0] if rows else None
+
+    def latest_daily_report(self) -> Optional[Dict[str, Any]]:
+        rows = self._select("SELECT * FROM daily_reports", {}, "report_date DESC", 1)
+        return rows[0] if rows else None
+
+    def start_agent_run(self, playbook: str) -> Dict[str, Any]:
+        return self._insert("agent_runs", ("playbook",), {"playbook": playbook})
+
+    def finish_agent_run(
+        self,
+        run_id: int,
+        status: str,
+        summary: Optional[str] = None,
+        usage: Optional[Dict[str, Any]] = None,
+        log_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Close a running run once; usage is whatever token/cost numbers the CLI reported."""
+        if status not in AGENT_RUN_END_STATUSES:
+            raise ValueError(f"a run finishes as one of {AGENT_RUN_END_STATUSES}, not {status!r}")
+        with self._tx() as c:
+            cur = c.execute(
+                "UPDATE agent_runs SET status=?, finished_at=?, summary=?, usage=?, log_path=?"
+                " WHERE id=? AND status='running'",
+                (status, to_iso(utcnow()), summary,
+                 None if usage is None else json.dumps(usage), log_path, run_id),
+            )
+        if cur.rowcount != 1:
+            run = self._get("agent_runs", run_id)  # KeyError if missing
+            raise ValueError(f"agent run {run_id} already finished as {run['status']}")
+        return self._get("agent_runs", run_id)
+
+    def list_agent_runs(
+        self, playbook: Optional[str] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Newest first."""
+        return self._select("SELECT * FROM agent_runs", {"playbook": playbook},
+                            "started_at DESC, id DESC", limit)
+
+    def running_agent_run(self, playbook: str) -> Optional[Dict[str, Any]]:
+        """The newest run of this playbook still marked running, if any (058's lock)."""
+        rows = self._select("SELECT * FROM agent_runs",
+                            {"playbook": playbook, "status": "running"},
+                            "started_at DESC, id DESC", 1)
+        return rows[0] if rows else None
+
 
 def _sql_value(v: Any) -> Any:
     """datetime -> ISO UTC string, date -> YYYY-MM-DD, everything else unchanged."""
@@ -707,6 +939,11 @@ def _sql_value(v: Any) -> Any:
     if isinstance(v, date):
         return v.isoformat()
     return v
+
+
+def _check_feedback(text: Optional[str], reason_codes: Sequence[str]) -> None:
+    if not (text and text.strip()) and not reason_codes:
+        raise ValueError("feedback needs a text or at least one reason code")
 
 
 def _encode(allowed: Sequence[str], fields: Dict[str, Any]) -> Dict[str, Any]:
