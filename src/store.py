@@ -458,13 +458,14 @@ class CampaignStore:
             )
 
     def unsettled_assets(self) -> List[int]:
-        """Assets still `scheduled` whose row failed: the publish may have reached
+        """Assets still `scheduled` whose latest row failed: the publish may have reached
         Instagram (crash recovered by recover_stuck), so they need a check."""
         with self._tx() as c:
             rows = c.execute(
                 "SELECT DISTINCT p.asset_id FROM scheduled_posts p"
                 " JOIN assets a ON a.id = p.asset_id"
                 " WHERE p.status='failed' AND a.status='scheduled'"
+                " AND p.id = (SELECT MAX(id) FROM scheduled_posts WHERE asset_id = p.asset_id)"
             ).fetchall()
         return [r[0] for r in rows]
 
@@ -509,6 +510,8 @@ class CampaignStore:
         post = self.get_scheduled(post_id)
         if post["status"] not in ("pending", "failed", "cancelled"):
             raise ValueError(f"Post {post_id} is {post['status']} and can't be rescheduled")
+        if post["asset_id"] is not None and post["status"] != "pending":
+            raise ValueError(f"Post {post_id} is a studio asset's: queue the asset again instead")
         with self._tx() as c:
             cur = c.execute(
                 "UPDATE scheduled_posts SET publish_at=?, status='pending', error=NULL,"
