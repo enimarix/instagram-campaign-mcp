@@ -102,6 +102,11 @@ if ($uv) {
 & $Py -c "import src.instagram_mcp_server"
 Assert-Ok "Import check"
 
+# ffmpeg renders and probes the videos. Like uv above, we point to the install
+# command rather than installing system tools ourselves.
+$needsFfmpeg = -not ((Get-Command ffmpeg -ErrorAction SilentlyContinue) -and
+                     (Get-Command ffprobe -ErrorAction SilentlyContinue))
+
 # --- 2. .env -------------------------------------------------------------
 $EnvFile = Join-Path $Root ".env"
 if (-not (Test-Path $EnvFile)) {
@@ -140,6 +145,9 @@ Write-Host ""
 Write-Host "Done." -ForegroundColor Green
 if ($needsToken) {
     Write-Host "Next: edit .env and set INSTAGRAM_ACCESS_TOKEN (and INSTAGRAM_BUSINESS_ACCOUNT_ID)." -ForegroundColor Yellow
+}
+if ($needsFfmpeg) {
+    Write-Host "Next: install ffmpeg (video rendering): winget install --id Gyan.FFmpeg -e, then open a new terminal." -ForegroundColor Yellow
 }
 Write-Host "MCP server:      $ServerExe"
 Write-Host "Claude Code:     claude mcp add --scope user $Name -- `"$ServerExe`""
