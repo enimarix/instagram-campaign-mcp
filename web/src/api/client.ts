@@ -62,13 +62,24 @@ export type Asset = {
   batch_date: string
   preview_url: string | null
   thumbnail_url: string | null
+  // the detail page (016)
+  best_before?: string | null
+  duration?: number | null
+  recipe?: { template?: string; edit?: string; ops?: { op: string }[] }
+  qc?: { passed?: boolean; reason?: string; reasons?: string[] } | null
   // from the asset's idea; only the list carries them
   track?: string
   strategy?: 'explore' | 'exploit' | null
 }
 
 export type Vocabulary = { values: { id: string; label: string }[] }
-export type Taxonomy = { feedback_reasons: Vocabulary; tracks?: Vocabulary }
+export type Taxonomy = {
+  feedback_reasons: Vocabulary
+  tracks?: Vocabulary
+  pillars?: Vocabulary
+  hook_types?: Vocabulary
+  templates?: Vocabulary
+}
 
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, {
@@ -85,5 +96,65 @@ export const setVerdict = (id: number, verdict: Verdict) =>
   post<Asset>(`/api/assets/${id}/verdict`, { verdict })
 export const approveAsset = (id: number) => post<Asset>(`/api/assets/${id}/approve`)
 export const getTaxonomy = () => request<Taxonomy>('/api/taxonomy')
-export const addFeedback = (id: number, fb: { text?: string; reason_codes: string[] }) =>
-  post<unknown>(`/api/assets/${id}/feedback`, fb)
+
+export type Comment = {
+  id: number
+  text: string | null
+  reason_codes: string[]
+  video_time_s: number | null
+  wants_changes: number // 0/1
+  created_at: string
+}
+export type CommentIn = {
+  text?: string
+  reason_codes: string[]
+  video_time_s?: number
+  wants_changes?: boolean
+}
+/** What saving a comment did: `moved` = sent back for a new version, else `reason` says why not. */
+export type CommentResult = { feedback: Comment; asset: Asset; moved: boolean; reason: string | null }
+
+export const addFeedback = (id: number, fb: CommentIn) =>
+  post<CommentResult>(`/api/assets/${id}/feedback`, fb)
+
+const send = <T>(method: string, path: string, body?: unknown) =>
+  request<T>(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+export const getAsset = (id: number) => request<Asset>(`/api/assets/${id}`)
+export const editAsset = (id: number, fields: { caption?: string; best_before?: string | null }) =>
+  send<Asset>('PATCH', `/api/assets/${id}`, fields)
+export const unapproveAsset = (id: number) => post<Asset>(`/api/assets/${id}/unapprove`)
+export const archiveAsset = (id: number) => post<Asset>(`/api/assets/${id}/archive`)
+export const listFeedback = (id: number) => request<Comment[]>(`/api/assets/${id}/feedback`)
+export const editFeedback = (id: number, fields: Partial<CommentIn>) =>
+  send<CommentResult>('PATCH', `/api/feedback/${id}`, fields)
+export const deleteFeedback = (id: number) => request<null>(`/api/feedback/${id}`, { method: 'DELETE' })
+
+export type Citation = { title?: string; url?: string }
+/** GET /api/assets/{id}/context: the idea, its rights source and the version chain. */
+export type AssetContext = {
+  idea: {
+    track: string
+    pillar: string | null
+    hook: string | null
+    hook_type: string | null
+    hypothesis: string | null
+    strategy: 'explore' | 'exploit' | null
+    citations: Citation[]
+  }
+  source: { rights_basis: string; author: string | null; url: string | null } | null
+  parent: Asset | null
+  children: Asset[]
+}
+export const getAssetContext = (id: number) => request<AssetContext>(`/api/assets/${id}/context`)
+
+/** The server's own words for a refused request (`message`), else the error itself. */
+export function errorMessage(e: unknown): string {
+  if (e instanceof ApiError && e.body && typeof e.body === 'object' && 'message' in e.body)
+    return String(e.body.message)
+  return e instanceof Error ? e.message : String(e)
+}

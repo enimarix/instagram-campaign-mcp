@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { Link } from 'react-router'
 import type { Asset, Verdict } from '../api/client'
 import { button, chip } from './ui'
 
@@ -111,6 +112,9 @@ export default function AssetCard({ asset: a, current, onVerdict, onApprove, onF
           </p>
         )}
         {a.caption && <p className="line-clamp-2 text-sm text-gray-600">{a.caption}</p>}
+        <Link to={`/assets/${a.id}`} className="text-sm text-blue-700 underline">
+          Details and comments
+        </Link>
         <div className="grid grid-cols-3 gap-2">
           <button
             type="button"

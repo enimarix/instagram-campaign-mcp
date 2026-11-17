@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Asset } from '../api/client'
 import InboxPage from './InboxPage'
@@ -54,7 +55,7 @@ afterEach(() => {
 describe('InboxPage', () => {
   it('lists the batch in API order with the counter, player and badges', async () => {
     const calls = stubApi()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     expect(await screen.findByText('1 of 2 reviewed')).toBeTruthy()
     expect(screen.getAllByRole('article').map((a) => a.getAttribute('aria-label')))
       .toEqual(['Video 1', 'Video 2'])
@@ -71,7 +72,7 @@ describe('InboxPage', () => {
 
   it('sends the filters to the API', async () => {
     const calls = stubApi()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'ready' } })
     await waitFor(() => expect(calls.at(-1)?.url).toContain('status=ready'))
@@ -79,7 +80,7 @@ describe('InboxPage', () => {
 
   it('like updates the counter and posts the verdict', async () => {
     const calls = stubApi({ 'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'liked' })] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     fireEvent.click(within(card(1)).getByRole('button', { name: 'Like' }))
     expect(screen.getByText('2 of 2 reviewed')).toBeTruthy()
@@ -92,7 +93,7 @@ describe('InboxPage', () => {
       'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'disliked' })],
       'POST /api/assets/1/feedback': [201, { id: 1 }],
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     fireEvent.click(within(card(1)).getByRole('button', { name: 'Dislike' }))
     const sheet = await screen.findByRole('dialog', { name: 'What was wrong?' })
@@ -105,7 +106,7 @@ describe('InboxPage', () => {
 
   it('the sheet closes on Esc (native close) without posting feedback', async () => {
     const calls = stubApi({ 'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'disliked' })] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     fireEvent.click(within(card(1)).getByRole('button', { name: 'Dislike' }))
     ;(await screen.findByRole('dialog') as HTMLDialogElement).close()
@@ -115,7 +116,7 @@ describe('InboxPage', () => {
 
   it('a horizontal touch swipe sets the verdict, a vertical one does not', async () => {
     const calls = stubApi({ 'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'liked' })] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     const swipe = (dx: number, dy: number) => {
       fireEvent.pointerDown(card(1), { pointerType: 'touch', clientX: 100, clientY: 100 })
@@ -130,7 +131,7 @@ describe('InboxPage', () => {
 
   it('rolls back a failed verdict and shows the error', async () => {
     stubApi({ 'POST /api/assets/1/verdict': [500, { error: 'boom' }] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     fireEvent.click(within(card(1)).getByRole('button', { name: 'Like' }))
     expect((await screen.findByRole('alert')).textContent).toContain('boom')
@@ -142,7 +143,7 @@ describe('InboxPage', () => {
       'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'liked' })],
       'POST /api/assets/2/verdict': [200, asset(2, { verdict: 'disliked' })],
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     fireEvent.keyDown(screen.getByLabelText('Batch date'), { key: 'l' })
     expect(posts(calls)).toEqual([])
@@ -158,7 +159,7 @@ describe('InboxPage', () => {
 
   it('approve shows the new status', async () => {
     stubApi({ 'POST /api/assets/1/approve': [200, asset(1, { status: 'approved' })] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: MemoryRouter })
     await screen.findByText('1 of 2 reviewed')
     fireEvent.click(within(card(1)).getByRole('button', { name: 'Approve' }))
     expect(await within(card(1)).findByText('approved')).toBeTruthy()
