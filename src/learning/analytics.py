@@ -8,7 +8,7 @@ Lives in src/learning/ (GOAL.md §4.2: analytics feed the learning loop).
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..campaign import scoring_config
 from ..config import InstagramMCPSettings
@@ -60,14 +60,8 @@ def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: 
         raise ValueError(f"sort must be one of {ROW_SORTS + METRIC_SORTS}, '-' for descending")
     if post_type is not None and post_type.upper() not in POST_TYPES:
         raise ValueError(f"type must be one of {POST_TYPES}")
-    labels = store.labels()
-    latest = store.latest_snapshots()
-    # ponytail: scores every post (one baseline query per matured post) on each call;
-    # cache by latest snapshot id if the table gets slow.
-    scored = score_posts(latest, scoring_config(settings), labels,
-                         near_age=store.snapshots_near_age)
     rows = []
-    for snap, s in zip(latest, scored):  # score_posts keeps the input order
+    for snap, s in scored_posts(store, settings):
         if post_type and s["group"] != post_type.upper():
             continue
         rows.append({
@@ -75,7 +69,7 @@ def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: 
             "posted_at": snap["posted_at"], "product_type": snap["media_product_type"],
             "group": s["group"], "age_hours": snap["age_hours"], "metrics": snap["metrics"],
             "caption": (snap["caption"] or "")[:CAPTION_CHARS],
-            "deleted": bool((labels.get(snap["media_id"]) or {}).get("deleted_at")),
+            "deleted": bool((s["label"] or {}).get("deleted_at")),
             **{k: s.get(k) for k in SCORE_KEYS},
         })
 
@@ -85,10 +79,23 @@ def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: 
     rows = (sorted((r for r in rows if value(r) is not None), key=value, reverse=desc)
             + [r for r in rows if value(r) is None])
     page = rows[offset:offset + limit]
+    labels = store.labels()
     for row in page:  # only the page's assets are read
-        row.update(_studio(store, (labels.get(row["media_id"]) or {}).get("asset_id")))
+        row.update(studio_side(store, (labels.get(row["media_id"]) or {}).get("asset_id")))
         row.pop("asset", None)
     return {"total": len(rows), "limit": limit, "offset": offset, "sort": sort, "posts": page}
+
+
+def scored_posts(store: CampaignStore,
+                 settings: InstagramMCPSettings) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    """(latest snapshot, score) per post, newest first, scored like rank_posts. The score's
+    `label` is the post's post_labels row (None when it has none)."""
+    latest = store.latest_snapshots()
+    # ponytail: scores every post (one baseline query per matured post) on each call;
+    # cache by latest snapshot id if the table gets slow.
+    scored = score_posts(latest, scoring_config(settings), store.labels(),
+                         near_age=store.snapshots_near_age)
+    return list(zip(latest, scored))  # score_posts keeps the input order
 
 
 def post_detail(store: CampaignStore, media_id: str) -> Dict[str, Any]:
@@ -98,7 +105,7 @@ def post_detail(store: CampaignStore, media_id: str) -> Dict[str, Any]:
     if not snaps:
         raise KeyError(f"No snapshots for media {media_id}")
     last, label = snaps[-1], store.get_label(media_id) or {}
-    studio = _studio(store, label.get("asset_id"))
+    studio = studio_side(store, label.get("asset_id"))
     asset = studio.pop("asset")
     return {
         "media_id": media_id, "permalink": last["permalink"], "posted_at": last["posted_at"],
@@ -114,7 +121,7 @@ def post_detail(store: CampaignStore, media_id: str) -> Dict[str, Any]:
     }
 
 
-def _studio(store: CampaignStore, asset_id: Optional[int]) -> Dict[str, Any]:
+def studio_side(store: CampaignStore, asset_id: Optional[int]) -> Dict[str, Any]:
     """The studio side of a post: asset, owner verdict, idea tags and hypothesis."""
     if asset_id is None:
         return {"asset": None, "asset_id": None, "owner_verdict": None, "tags": None,
