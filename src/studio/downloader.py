@@ -267,8 +267,7 @@ def _mark_picks(store: CampaignStore, url: str, result: Dict[str, Any]) -> None:
 
 def download_reel(store: CampaignStore, settings: InstagramMCPSettings,
                   source_or_url: Union[int, str], *, now: datetime,
-                  sleep: Callable[[float], None] = time.sleep,
-                  downloaders: Optional[List[ClipDownloader]] = None) -> Dict[str, Any]:
+                  sleep: Callable[[float], None] = time.sleep) -> Dict[str, Any]:
     """Download one public Reel (a source id or a permalink) for a reaction. Returns
     {status: downloaded | exists | refused | failed, source?, reason?, provider?}.
     ValueError for a link that is not a Reel permalink, KeyError for an unknown source id.
@@ -295,7 +294,7 @@ def download_reel(store: CampaignStore, settings: InstagramMCPSettings,
         source = store.add_source(PROVIDER, role="clip", url=url)
     folder = root / "sources" / str(source["id"])
     errors = []
-    for provider in downloaders if downloaders is not None else providers(settings):
+    for provider in providers(settings):
         try:
             reel = provider.find(url)
             size = fetch_video(reel["video_url"], folder / "clip.mp4",
