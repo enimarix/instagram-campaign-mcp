@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router'
+import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
 import Placeholder from './pages/Placeholder'
 import Settings from './pages/Settings'
@@ -51,6 +52,7 @@ export default function App() {
                 }
               />
             ))}
+            <Route path="/assets/:id" element={<AssetPage />} />
             <Route path="*" element={<Placeholder title="Not found" />} />
           </Routes>
         </main>
