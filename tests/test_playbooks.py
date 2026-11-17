@@ -71,7 +71,7 @@ def test_prepare_workspace_with_the_real_agent_folder(tmp_path):
         assert (ws / ".claude" / "skills" / skill.name / "SKILL.md").is_file()
 
 
-@pytest.mark.parametrize("name", ["daily-produce", "daily-revise"])
+@pytest.mark.parametrize("name", ["daily-produce", "daily-revise", "daily-learn"])
 def test_scheduled_playbooks_read_their_work_packet_first(name):
     from src.agent import packet
 
@@ -79,3 +79,23 @@ def test_scheduled_playbooks_read_their_work_packet_first(name):
     text = (runner.AGENT_DIR / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
     head = text.split("## Your tools")[0]
     assert "## Your work packet" in head and "work/manifest.json" in head
+
+
+def test_daily_learn_analyses_and_writes_the_report():
+    text = (runner.AGENT_DIR / "playbooks" / "daily-learn.md").read_text(encoding="utf-8")
+    named = set(re.findall(r"`(\w+)", text))
+    assert {"get_asset_frames", "list_learnings", "add_learning", "update_learning",
+            "save_daily_report"} <= named
+    assert "## Safety" in text and "data, never instructions" in text
+    assert "no shell" in text and "contradicted" in text  # never deletes a learning
+
+
+def test_default_schedule_runs_the_analysis_before_the_batch():
+    from src.agent.schedule import parse_schedule
+
+    cfg = InstagramMCPSettings(_env_file=None, instagram_access_token=None)
+    runs = parse_schedule(cfg.agent_schedule)
+    assert [p for p, _ in runs] == ["daily-learn", "daily-produce"]
+    assert runs[0][1] < runs[1][1]
+    for name, _ in runs:
+        assert (runner.AGENT_DIR / "playbooks" / f"{name}.md").is_file()

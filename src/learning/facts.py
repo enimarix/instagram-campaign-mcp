@@ -140,9 +140,10 @@ def _window(store: CampaignStore, settings: InstagramMCPSettings, scored: Scored
 
 def _post(store: CampaignStore, snap: Dict[str, Any], s: Dict[str, Any], *,
           scored: bool = False) -> Dict[str, Any]:
-    row = {"media_id": snap["media_id"], "permalink": snap["permalink"],
+    asset_id = (s["label"] or {}).get("asset_id")  # 083: get_asset_frames(asset_id)
+    row = {"media_id": snap["media_id"], "permalink": snap["permalink"], "asset_id": asset_id,
            "posted_at": snap["posted_at"], "product_type": snap["media_product_type"],
-           "tags": studio_side(store, (s["label"] or {}).get("asset_id"))["tags"]}
+           "tags": studio_side(store, asset_id)["tags"]}
     if scored:
         row.update({k: s.get(k) for k in ("verdict", "engagement_index", "drivers", "why")})
     return row

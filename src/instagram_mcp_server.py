@@ -22,7 +22,7 @@ from mcp.types import ToolAnnotations
 from . import campaign as camp
 from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
-from .learning import brief, facts, learnings
+from .learning import brief, facts, learnings, report
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
 from .studio import dm_picks, motion, production, research
@@ -817,6 +817,22 @@ async def get_daily_facts(date: Optional[str] = None) -> Dict[str, Any]:
         raise ToolError(str(e)) from e
 
 
+@mcp.tool(annotations=LOCAL_WRITE)
+async def save_daily_report(report_date: str, summary: str,
+                            best: Optional[List[Dict[str, Any]]] = None,
+                            worst: Optional[List[Dict[str, Any]]] = None,
+                            experiments: Optional[List[Dict[str, Any]]] = None
+                            ) -> Dict[str, Any]:
+    """Write the daily report of report_date (YYYY-MM-DD, a past owner-local day whose
+    facts exist; re-running overwrites it): summary = short markdown (up to 4000 chars)
+    the owner reads. Optional: best / worst = up to 3 each [{media_id, why}] (matured posts
+    of the facts), experiments = up to 3 proposals [{hypothesis, variable, variants: 2-4}],
+    listed in the next creative brief."""
+    return await _studio(report.save_daily_report, store(), get_settings(), report_date,
+                         summary, best=best, worst=worst, experiments=experiments,
+                         now=utcnow())
+
+
 @mcp.tool(annotations=LOCAL_READ)
 async def list_learnings(kind: Optional[str] = None, status: Optional[str] = "active",
                          origin: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
@@ -901,6 +917,7 @@ AGENT_TOOLS = frozenset({
     "list_learnings",
     "get_creative_brief",  # step 055: local read, the start of every batch
     "get_daily_facts",  # step 082: no-AI facts; comments read within the data budget
+    "save_daily_report",  # step 083: the late-night analysis writes the day's report
     # Research (step 051): the agent's own watchlist, and Graph reads that respect the
     # shared request budget; results are references, never publishable.
     "add_to_watchlist",

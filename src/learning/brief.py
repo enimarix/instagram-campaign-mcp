@@ -65,7 +65,10 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
         "feedback": get_feedback(store, limit=30),
         "change_requests": list_revision_requests(store)[:30],
         "last_daily_report": report and {"report_date": report["report_date"],
-                                         "summary": _cut(report["summary"], REPORT_CHARS)},
+                                         "summary": _cut(report["summary"], REPORT_CHARS),
+                                         # 083: ideas to try; 086 makes real experiments
+                                         "proposed_experiments":
+                                             report["analysis"].get("experiments", [])},
         "experiments": _rows(store, _EXPERIMENTS,
                              (today - timedelta(days=EXPERIMENT_DAYS)).isoformat()),
         "quotas": todays_quotas(store, settings, today, now),

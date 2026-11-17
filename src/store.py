@@ -376,12 +376,19 @@ CREATE TABLE dm_picks (
 CREATE INDEX idx_dm_picks_status ON dm_picks(status, received_at);
 """
 
+# Migration 14: the daily-learn agent's structured analysis of a day (083):
+# {best: [{media_id, why}], worst: [...], experiments: [{hypothesis, variable, variants}]}.
+DAILY_ANALYSIS_SCHEMA = """
+ALTER TABLE daily_reports ADD COLUMN analysis TEXT NOT NULL DEFAULT '{}';
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
-                         REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA]
+                         REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
+                         DAILY_ANALYSIS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -406,7 +413,7 @@ RENDER_JOB_FIELDS = ("state", "progress", "attempts", "failure", "started_at", "
 FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
 LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "origin", "status")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
-               "facts", "usage", "silences", "timeline")
+               "facts", "usage", "silences", "timeline", "analysis")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),
@@ -1387,13 +1394,26 @@ class CampaignStore:
             )
         return self.get_daily_report(day)
 
+    def save_daily_analysis(self, report_date: Any, summary: str,
+                            analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Set the agent's summary and analysis of a day whose report row (the facts) exists;
+        KeyError otherwise. The facts are kept."""
+        day = _sql_value(report_date)
+        with self._tx() as c:
+            if c.execute("UPDATE daily_reports SET summary=?, analysis=? WHERE report_date=?",
+                         (summary, json.dumps(analysis), day)).rowcount != 1:
+                raise KeyError(f"No daily report for {day}")
+        return self.get_daily_report(day)
+
     def get_daily_report(self, report_date: Any) -> Optional[Dict[str, Any]]:
         rows = self._select("SELECT * FROM daily_reports",
                             {"report_date": _sql_value(report_date)}, "id", 1)
         return rows[0] if rows else None
 
     def latest_daily_report(self) -> Optional[Dict[str, Any]]:
-        rows = self._select("SELECT * FROM daily_reports", {}, "report_date DESC", 1)
+        """The newest report with a summary (a quiet day's facts-only row is passed over)."""
+        rows = self._select("SELECT * FROM daily_reports WHERE summary IS NOT NULL", {},
+                            "report_date DESC", 1)
         return rows[0] if rows else None
 
     def start_agent_run(self, playbook: str) -> Dict[str, Any]:

@@ -17,7 +17,8 @@ scheduled like any other: `AGENT_SCHEDULE=daily-produce@03:00,daily-revise@14:00
 playbook not in the table gets every section.
 
 A run whose sections all count 0 is skipped (no Claude launch). brief and quotas always
-count 1, so a run that needs them (making the batch, the daily report) never is.
+count 1, so a run that needs them (making the batch) never is, except a run with a gate
+(GATES): `daily-learn` is skipped when yesterday's facts count 0 (no report summary then).
 After the run, gaps() looks the packet's revision and feedback ids up again.
 """
 
@@ -107,6 +108,9 @@ RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
     "daily-revise": ("light", ("revisions", "feedback", "dm_picks")),
     "daily-learn": ("learn", ("facts", "brief")),
 }
+# playbook -> the section that decides the skip, whatever the others count: a day with
+# nothing published or matured has nothing to analyse.
+GATES: Dict[str, str] = {"daily-learn": "facts"}
 
 
 def _compact(value: Any) -> Any:
@@ -174,8 +178,9 @@ def write_packet(store: CampaignStore, settings: InstagramMCPSettings, playbook:
     for name, (raw, _) in files.items():
         _write_atomic(work / f"{name}.json", raw)
     _write_atomic(work / "manifest.json", raw_manifest)
-    return {"manifest": manifest, "ids": ids,
-            "skip": not any(count for _, count in files.values())}
+    gate = GATES.get(playbook)
+    skip = files[gate][1] == 0 if gate else not any(count for _, count in files.values())
+    return {"manifest": manifest, "ids": ids, "skip": skip}
 
 
 _OPEN_REVISIONS = (

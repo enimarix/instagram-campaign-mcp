@@ -261,7 +261,7 @@ class InstagramMCPSettings(BaseSettings):
     )
     # Run times are settled at step 062 (H8); install-schedule registers them with the OS.
     agent_schedule: str = Field(
-        "daily-produce@03:00",
+        "daily-learn@02:00,daily-produce@03:00",
         description="Daily agent runs, comma-separated playbook@HH:MM (TIMEZONE); empty = none",
     )
 
