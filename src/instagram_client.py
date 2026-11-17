@@ -195,6 +195,7 @@ class InstagramClient:
         )
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._page_tokens: Dict[str, str] = {}
+        self._linked_page: Optional[str] = None
 
     async def __aenter__(self):
         return self
@@ -845,6 +846,8 @@ class InstagramClient:
     async def _resolve_page_id(self, page_id: Optional[str]) -> str:
         if page_id:
             return page_id
+        if self._linked_page:  # one me/accounts lookup per client, not one per DM call
+            return self._linked_page
         account_id = self.account_id  # raises if not configured
         pages = await self.get_account_pages()
         linked = [
@@ -857,7 +860,8 @@ class InstagramClient:
                 f"No Facebook Page linked to Instagram account {account_id} was found for "
                 "this token. Pass page_id explicitly, or check get_account_pages."
             )
-        return linked[0]["id"]
+        self._linked_page = linked[0]["id"]
+        return self._linked_page
 
     async def _page_token(self, page_id: str) -> str:
         if page_id not in self._page_tokens:
@@ -897,8 +901,10 @@ class InstagramClient:
             "GET",
             conversation_id,
             params={
+                # shares: a shared post or Reel; its sub-fields must be asked for by name
+                # (Graph API Message reference). Only the 20 newest messages have details.
                 "fields": f"messages.limit({min(limit, 100)})"
-                "{id,from,to,message,created_time,attachments}"
+                "{id,from,to,message,created_time,attachments,shares{link,name,id}}"
             },
             token=await self._page_token(page_id),
         )

@@ -12,9 +12,9 @@ does it. Before every agent run, write_packet() rebuilds `<workspace>/work/`:
   section raises PacketError: the run fails before Claude starts.
 
 Run kinds are playbook names (RUNS): `daily-produce` (night) needs every section, the light
-afternoon run is a second playbook, `daily-revise` (revisions + feedback), scheduled like
-any other: `AGENT_SCHEDULE=daily-produce@03:00,daily-revise@14:00`. A playbook not in the
-table gets every section.
+afternoon run is a second playbook, `daily-revise` (revisions, feedback, DM picks),
+scheduled like any other: `AGENT_SCHEDULE=daily-produce@03:00,daily-revise@14:00`. A
+playbook not in the table gets every section.
 
 A run whose sections all count 0 is skipped (no Claude launch). brief and quotas always
 count 1, so a run that needs them (making the batch, the daily report) never is.
@@ -41,6 +41,7 @@ from ..learning.facts import facts_for
 from ..learning.learnings import get_feedback, list_revision_requests
 from ..learning.quotas import todays_quotas
 from ..store import CampaignStore, to_iso, utcnow
+from ..studio import dm_picks
 from ..studio.seed import local_today
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "agent" / "schemas"
@@ -92,14 +93,18 @@ def _quotas(store: CampaignStore, settings: InstagramMCPSettings, now: datetime)
     return todays_quotas(store, settings, local_today(settings.timezone, now), now), 1
 
 
-# 113 registers dm_picks here (and in RUNS for daily-produce / daily-revise).
+def _dm_picks(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
+    picks = dm_picks.for_agent(store, "new", MAX_ITEMS)
+    return {"untrusted_notes": True, "picks": picks}, len(picks)
+
+
 SECTIONS: Dict[str, Producer] = {"brief": _brief, "feedback": _feedback,
                                  "revisions": _revisions, "facts": _facts,
-                                 "quotas": _quotas}
+                                 "quotas": _quotas, "dm_picks": _dm_picks}
 # playbook -> (run_kind, sections); None = every section.
 RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
     "daily-produce": ("produce", None),
-    "daily-revise": ("light", ("revisions", "feedback")),
+    "daily-revise": ("light", ("revisions", "feedback", "dm_picks")),
     "daily-learn": ("learn", ("facts", "brief")),
 }
 

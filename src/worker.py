@@ -3,8 +3,8 @@ The publishing worker (GOAL.md §3.3): `ig-campaign worker` (alias `daemon`) and
 
 Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late-slot and
 gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
-(data_jobs: publish-check reconcile, insight age schedule, daily account snapshot,
-followers online and the daily facts), and snapshots live Stories hourly. On Windows it
+(data_jobs: publish-check reconcile, insight age schedule, DM picks, daily account
+snapshot, followers online and the daily facts), and snapshots live Stories hourly. On Windows it
 keeps one one-shot Task Scheduler task that wakes the PC a few minutes before the next
 pending slot (its action, `run-due --wait-until-next`, holds the PC awake and publishes
 even when no worker runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the
@@ -42,7 +42,7 @@ from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
 from .learning import facts
 from .store import CampaignStore, parse_dt, to_iso, utcnow
-from .studio import housekeeping, power, render
+from .studio import dm_picks, housekeeping, power, render
 from .studio.power import keep_awake
 from .studio.publish import reconcile_publish_checks
 
@@ -59,6 +59,7 @@ REPORTED = ("published", "retrying", "failed", "recovered_stuck", "replanned")
 DATA_SHARE = 0.8
 INSIGHTS_EVERY = timedelta(minutes=15)
 RECONCILE_EVERY = timedelta(minutes=10)  # it lists media while an asset waits for a check
+DM_PICKS_EVERY = timedelta(minutes=15)  # Reels pinned accounts sent by DM (step 113)
 DAILY_RETRY = timedelta(hours=1)  # a failing daily job (e.g. no insights permission) waits
 RENDER_TICK = 5.0  # s between queue polls and job heartbeats
 RENDER_STALE = timedelta(minutes=10)  # a running job without heartbeat this long is re-queued
@@ -169,6 +170,9 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
     if _every(store, "insights_at", INSIGHTS_EVERY, t):
         await job("insights", lambda: collect_due_insights(client, store, t,
                                                            lambda: data_budget_left(client)))
+    if _every(store, "dm_picks_at", DM_PICKS_EVERY, t):
+        await job("dm_picks", lambda: dm_picks.poll_dm_picks(
+            client, store, budget_left=lambda: data_budget_left(client)))
 
     async def daily_facts() -> Dict[str, Any]:  # after the snapshots: yesterday's facts
         return {"report_date": (await facts.build_and_store(store, settings, client, t))

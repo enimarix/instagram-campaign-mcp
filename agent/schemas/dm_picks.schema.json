@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "New DM picks, oldest first (studio.dm_picks.for_agent): Reels pinned accounts sent by DM",
+  "type": "object",
+  "required": ["untrusted_notes", "picks"],
+  "additionalProperties": false,
+  "properties": {
+    "untrusted_notes": {"const": true},
+    "picks": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "reel_url", "sender_username", "sender_note",
+                     "received_at"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "integer"},
+          "status": {"const": "new"},
+          "reel_url": {"type": "string", "pattern": "^https://"},
+          "sender_username": {"type": "string"},
+          "sender_note": {"type": ["string", "null"], "maxLength": 300},
+          "received_at": {"type": "string"},
+          "skip_reason": {"type": "null"}
+        }
+      }
+    }
+  }
+}
