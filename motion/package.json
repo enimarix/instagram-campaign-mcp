@@ -14,7 +14,8 @@
     "still:factquest": "node render.mjs --template FactQuest --props props/factquest.json --out out/factquest.png --still --frame 160",
     "still:bossbattle": "node render.mjs --template BossBattle --props props/bossbattle.json --out out/bossbattle.png --still --frame 300",
     "still:quizchest": "node render.mjs --template QuizChest --props props/quizchest.json --out out/quizchest.png --still --frame 230",
-    "still:dialogstory": "node render.mjs --template DialogStory --props props/dialogstory.json --out out/dialogstory.png --still --frame 150"
+    "still:dialogstory": "node render.mjs --template DialogStory --props props/dialogstory.json --out out/dialogstory.png --still --frame 150",
+    "still:pixelskit": "node render.mjs --template PixelSkit --props props/pixelskit.json --out out/pixelskit.png --still --frame 240"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.544",
