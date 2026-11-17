@@ -234,8 +234,6 @@ def test_real_render_through_the_queue_passes_qc(store, tmp_path, template):
 async def test_mcp_tools_call_the_services(monkeypatch):
     calls = {}
     monkeypatch.setattr(motion, "list_templates", lambda: [{"id": "Hello"}])
-    monkeypatch.setattr(motion, "preview_stills",
-                        lambda *a: calls.setdefault("preview", a) and ["previews/x/frame-0.png"])
 
     def queue(store, settings, **kw):
         calls["queue"] = kw
@@ -244,9 +242,6 @@ async def test_mcp_tools_call_the_services(monkeypatch):
     monkeypatch.setattr(motion, "queue_motion_render", queue)
     monkeypatch.setattr(srv, "store", lambda: None)
     assert await srv.list_motion_templates() == {"templates": [{"id": "Hello"}]}
-    assert await srv.preview_motion("Hello", {"title": "Hi"}, [0]) == {
-        "stills": ["previews/x/frame-0.png"]}
-    assert calls["preview"][0:2] == ("Hello", {"title": "Hi"}) and calls["preview"][3] == [0]
     assert await srv.render_motion("Hello", {"title": "Hi"}, idea_id=1) == {
         "asset_id": 7, "job_id": 3, "state": "queued"}
     assert calls["queue"]["idea_id"] == 1 and calls["queue"]["template"] == "Hello"

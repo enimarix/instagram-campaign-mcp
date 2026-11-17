@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 from zoneinfo import ZoneInfo
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
@@ -25,6 +25,7 @@ from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .learning import learnings
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
+from .studio import frames as frames_
 from .studio import motion, production
 from .studio.publish import cancel_post, refuse_asset_file
 
@@ -43,7 +44,8 @@ Typical loop:
    compare_variants(campaign) says which variant is ahead.
 
 Studio batch (the agent): create_idea for each idea, render_motion each one,
-wait_for_renders(batch_date) to review renders as they land (get_render_status for one),
+wait_for_renders(batch_date) to review renders as they land (get_render_status for one,
+get_asset_frames to look at it),
 submit_asset each QC-passed asset with a self_score, caption and best_before;
 list_assets shows the batch best first.
 
@@ -538,14 +540,24 @@ async def list_motion_templates() -> Dict[str, Any]:
     return {"templates": await _studio(motion.list_templates)}
 
 
+# A list result is flattened into content blocks: the JSON part as text, then the images
+# (MCP SDK docs "Structured output": media carry no structured_content).
+Images = List[Union[Dict[str, Any], Image]]
+
+
+def _with_images(out) -> Images:
+    jpegs, info = out
+    return [info, *(Image(data=j, format="jpeg") for j in jpegs)]
+
+
 @mcp.tool(annotations=LOCAL_WRITE)
 async def preview_motion(template: str, props: Dict[str, Any],
-                         frames: Optional[List[int]] = None) -> Dict[str, Any]:
-    """Render 3-4 PNG stills of a template (default: cover + three spread frames) in seconds,
-    to check the layout before render_motion. Returns their media paths."""
-    paths = await _studio(motion.preview_stills, template, props, get_settings().media_root,
-                          frames)
-    return {"stills": paths}
+                         frames: Optional[List[int]] = None) -> Images:
+    """Render 3-4 stills of a template (default: cover + three spread frames) in seconds,
+    to check the layout before render_motion. Returns their media paths and the stills
+    as images (540 px wide)."""
+    return _with_images(await _studio(frames_.preview_images, template, props,
+                                      get_settings().media_root, frames))
 
 
 @mcp.tool(annotations=LOCAL_WRITE)
@@ -586,6 +598,15 @@ async def get_render_status(job_id: Optional[int] = None,
                             asset_id: Optional[int] = None) -> Dict[str, Any]:
     """One render job, or an asset and its latest job: state, progress, QC summary."""
     return await _studio(production.render_status, store(), job_id=job_id, asset_id=asset_id)
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def get_asset_frames(asset_id: int, n: int = 4) -> Images:
+    """Look at a rendered asset: n frames (default 4: the cover, then spread to the end;
+    540 px JPEGs) plus {status, qc, duration_s, frame_times_s}. Fix or drop it before
+    submit_asset. Errors while it is still rendering or failed before writing a file."""
+    return _with_images(await _studio(frames_.asset_frames, store(), get_settings(),
+                                      asset_id, n))
 
 
 @mcp.tool(annotations=LOCAL_READ)
@@ -748,6 +769,7 @@ AGENT_TOOLS = frozenset({
     # Production batch (step 053): ideas and the agent's own submissions, never publishing.
     "create_idea",
     "get_render_status",
+    "get_asset_frames",  # step 057: self-review, local read of its own renders
     "wait_for_renders",
     "submit_asset",
     "list_assets",
