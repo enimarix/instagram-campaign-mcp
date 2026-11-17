@@ -91,6 +91,12 @@ class InstagramMCPSettings(BaseSettings):
     slot_jitter_minutes: int = Field(
         7, ge=0, description="Random shift of each planned slot, in minutes either way"
     )
+    max_late_minutes: int = Field(
+        30, ge=1, description="A post later than this (e.g. PC asleep) moves to the next slot"
+    )
+    publishing_paused: bool = Field(
+        False, description="Hold the whole queue (default; the website's pause switch wins)"
+    )
 
     @field_validator("posting_windows")
     @classmethod

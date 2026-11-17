@@ -115,6 +115,8 @@ def cli(tmp_path, monkeypatch):
                                     database_path=str(prod), timezone="Europe/Paris",
                                     media_root=str(tmp_path / "prod-media"))
     monkeypatch.setattr(scheduler, "get_settings", lambda: settings)
+    # configure_logging would bind loggers to capsys's stream, closed after the test.
+    monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)
 
     def run(*argv):
         with pytest.raises(SystemExit) as e:
