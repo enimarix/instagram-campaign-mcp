@@ -136,7 +136,9 @@ def _dev_seed(args: argparse.Namespace) -> int:
         if why and not args.force:
             print(f"dev seed: refused, {why}. Use --force to seed anyway.", file=sys.stderr)
             return 1
-        summary = seed(store, db.parent / "media", args.days, random.Random(args.seed),
+        # a scratch --db keeps its media next to it (tests); the configured DB uses MEDIA_ROOT
+        media_root = Path(settings.media_root) if production else db.parent / "media"
+        summary = seed(store, media_root, args.days, random.Random(args.seed),
                        local_today(settings.timezone))
     finally:
         store.close()
