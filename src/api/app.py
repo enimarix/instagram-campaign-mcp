@@ -25,7 +25,7 @@ from .. import campaign
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
-from . import assets, media
+from . import assets, feedback, media
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 
 # Reachable without a session even when UI_PASSWORD is set.
@@ -140,6 +140,7 @@ def create_app(
     app.state.media_root = settings.media_root
     app.include_router(assets.router)
     app.include_router(media.router)
+    app.include_router(feedback.router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 
