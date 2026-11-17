@@ -48,3 +48,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getHealth = () => request<Health>('/api/health')
 export const getAccount = () => request<Account>('/api/account')
+
+export type Verdict = 'none' | 'liked' | 'disliked'
+
+/** A row of GET /api/assets (src/api/assets.py); only the fields the website reads. */
+export type Asset = {
+  id: number
+  status: string
+  verdict: Verdict
+  self_score: number | null
+  self_score_reason: string | null
+  caption: string | null
+  batch_date: string
+  preview_url: string | null
+  thumbnail_url: string | null
+  // from the asset's idea; only the list carries them
+  track?: string
+  strategy?: 'explore' | 'exploit' | null
+}
+
+export type Vocabulary = { values: { id: string; label: string }[] }
+export type Taxonomy = { feedback_reasons: Vocabulary; tracks?: Vocabulary }
+
+const post = <T>(path: string, body?: unknown) =>
+  request<T>(path, {
+    method: 'POST',
+    ...(body !== undefined && {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  })
+
+export const listAssets = (query: Record<string, string>) =>
+  request<Asset[]>(`/api/assets?${new URLSearchParams(query)}`)
+export const setVerdict = (id: number, verdict: Verdict) =>
+  post<Asset>(`/api/assets/${id}/verdict`, { verdict })
+export const approveAsset = (id: number) => post<Asset>(`/api/assets/${id}/approve`)
+export const getTaxonomy = () => request<Taxonomy>('/api/taxonomy')
+export const addFeedback = (id: number, fb: { text?: string; reason_codes: string[] }) =>
+  post<unknown>(`/api/assets/${id}/feedback`, fb)

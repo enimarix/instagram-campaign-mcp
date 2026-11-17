@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router'
+import InboxPage from './inbox/InboxPage'
 import Placeholder from './pages/Placeholder'
 import Settings from './pages/Settings'
 
@@ -44,7 +45,10 @@ export default function App() {
               <Route
                 key={t.path}
                 path={t.path}
-                element={t.path === '/settings' ? <Settings /> : <Placeholder title={t.label} />}
+                element={
+                  t.path === '/inbox' ? <InboxPage /> :
+                  t.path === '/settings' ? <Settings /> : <Placeholder title={t.label} />
+                }
               />
             ))}
             <Route path="*" element={<Placeholder title="Not found" />} />
