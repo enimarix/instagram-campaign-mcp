@@ -113,6 +113,21 @@ describe('InboxPage', () => {
     expect(posts(calls).map((c) => c.url)).toEqual(['/api/assets/1/verdict'])
   })
 
+  it('a horizontal touch swipe sets the verdict, a vertical one does not', async () => {
+    const calls = stubApi({ 'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'liked' })] })
+    render(<InboxPage />)
+    await screen.findByText('1 of 2 reviewed')
+    const swipe = (dx: number, dy: number) => {
+      fireEvent.pointerDown(card(1), { pointerType: 'touch', clientX: 100, clientY: 100 })
+      fireEvent.pointerUp(card(1), { pointerType: 'touch', clientX: 100 + dx, clientY: 100 + dy })
+    }
+    swipe(20, 200) // a scroll
+    expect(posts(calls)).toEqual([])
+    swipe(120, 10)
+    expect(screen.getByText('2 of 2 reviewed')).toBeTruthy()
+    await waitFor(() => expect(posts(calls).map((c) => c.body)).toEqual([{ verdict: 'liked' }]))
+  })
+
   it('rolls back a failed verdict and shows the error', async () => {
     stubApi({ 'POST /api/assets/1/verdict': [500, { error: 'boom' }] })
     render(<InboxPage />)

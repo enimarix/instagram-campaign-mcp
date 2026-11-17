@@ -23,6 +23,7 @@ export default function AssetCard({ asset: a, current, onVerdict, onApprove, onF
   const video = useRef<HTMLVideoElement>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
   const [dx, setDx] = useState(0)
+  const [muted, setMuted] = useState(true)
 
   // Play while mostly visible, pause otherwise. jsdom has no IntersectionObserver.
   useEffect(() => {
@@ -74,17 +75,26 @@ export default function AssetCard({ asset: a, current, onVerdict, onApprove, onF
         a.verdict === 'disliked' ? 'border-l-4 border-red-500 opacity-70' : ''
       }`}
     >
-      <video
-        ref={video}
-        src={a.preview_url ?? undefined}
-        poster={a.thumbnail_url ?? undefined}
-        muted
-        playsInline
-        loop
-        controls // the owner must be able to unmute to judge the audio
-        preload="metadata"
-        className="mx-auto aspect-[9/16] max-h-[70dvh] w-full bg-black object-contain"
-      />
+      <div className="relative">
+        {/* No native controls: their seek bar would fight the horizontal swipe. */}
+        <video
+          ref={video}
+          src={a.preview_url ?? undefined}
+          poster={a.thumbnail_url ?? undefined}
+          muted={muted}
+          playsInline
+          loop
+          preload="metadata"
+          className="mx-auto aspect-[9/16] max-h-[70dvh] w-full bg-black object-contain"
+        />
+        <button
+          type="button"
+          onClick={() => setMuted((m) => !m)}
+          className={`${button} absolute top-2 right-2 bg-black/60 text-white`}
+        >
+          {muted ? 'Sound on' : 'Mute'}
+        </button>
+      </div>
       <div className="space-y-2 p-3">
         <div className="flex flex-wrap gap-1">
           <span className={`${chip} ${STATUS_COLOR[a.status] ?? 'bg-gray-100 text-gray-700'}`}>

@@ -39,7 +39,7 @@ export default function ReasonSheet({ reasons, onSave, onClose }: Props) {
       ref={ref}
       onClose={onClose}
       aria-labelledby="reason-title"
-      className="mx-auto mt-auto mb-0 w-full max-w-md rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop:bg-black/40 md:mb-auto md:rounded-2xl"
+      className="mx-auto mt-auto mb-0 w-full max-w-full rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop:bg-black/40 md:mb-auto md:max-w-md md:rounded-2xl"
     >
       <h2 id="reason-title" className="text-lg font-semibold">
         What was wrong?
