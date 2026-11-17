@@ -314,6 +314,40 @@ export type TrendItem = {
 export type TrendReport = { accounts: TrendItem[]; hashtags: Record<string, TrendItem[]>; generated_at: string }
 export const getTrends = (days = 14) => request<TrendReport>(`/api/trends?days=${days}`)
 
+// --- Reaction reel (step 071) ---
+/** A reel of GET /api/reactions (src/studio/reactions.py reel_status). */
+export type ReactionReel = {
+  id: number
+  path: string
+  duration_s: number
+  cursor_s: number
+  pieces_used: number
+  used_pct: number
+  active: boolean
+  created_at: string
+}
+export const listReactionReels = () => request<ReactionReel[]>('/api/reactions')
+export const activateReactionReel = (id: number) => post<ReactionReel>(`/api/reactions/${id}/activate`)
+export const resetReactionReel = (id: number) => post<ReactionReel>(`/api/reactions/${id}/reset`)
+/** Sends the file itself as the body (the server streams it to disk). XHR, not fetch:
+ * fetch reports no upload progress. `onProgress` gets 0..1. */
+export const uploadReactionReel = (file: File, onProgress?: (fraction: number) => void) =>
+  new Promise<ReactionReel>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `/api/reactions/upload?name=${encodeURIComponent(file.name)}`)
+    xhr.setRequestHeader('Accept', 'application/json')
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total) }
+    xhr.onload = () => {
+      let body: unknown = null
+      try { body = JSON.parse(xhr.responseText) } catch { /* not JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as ReactionReel)
+      const code = (body as { error?: unknown } | null)?.error
+      reject(new ApiError(xhr.status, typeof code === 'string' ? code : 'http_error', body))
+    }
+    xhr.onerror = () => reject(new Error('Upload failed: check the connection and try again'))
+    xhr.send(file)
+  })
+
 // --- Analytics (steps 074, 077; page 078) ---
 type AccountValues = { followers: number | null; reach: number | null; views: number | null }
 /** A day of GET /api/analytics/account; `deltas`: change since the previous stored day. */

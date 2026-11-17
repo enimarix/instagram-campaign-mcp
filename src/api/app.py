@@ -25,7 +25,19 @@ from .. import campaign
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
-from . import agent, assets, bench, context, feedback, media, render, research, sources, worker
+from . import (
+    agent,
+    assets,
+    bench,
+    context,
+    feedback,
+    media,
+    reactions,
+    render,
+    research,
+    sources,
+    worker,
+)
 from . import settings as settings_routes
 from . import token as token_routes
 from .analytics import router as analytics_router
@@ -158,6 +170,7 @@ def create_app(
     app.include_router(render.router)
     app.include_router(analytics_router)
     app.include_router(sources.router)
+    app.include_router(reactions.router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 

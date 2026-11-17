@@ -291,6 +291,12 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "web" / "dist"), description="Built website (`npm --prefix web run build`)"
     )
 
+    # --- Reaction reel ----------------------------------------------------
+    # src/studio/reactions.py: one long owner recording, cut into pieces in order.
+    reaction_upload_max_mb: int = Field(
+        16000, ge=1, description="Largest reaction reel upload (an hour of phone video fits)"
+    )
+
     # --- Logging / cache --------------------------------------------------
     log_level: str = Field("INFO", description="Log level")
     cache_enabled: bool = Field(True, description="Cache GET responses")

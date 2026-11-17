@@ -5,6 +5,7 @@ import {
 } from '../api/client'
 import { button } from '../inbox/ui'
 import ClipsSection from './Clips'
+import ReactionReelSection from './ReactionReel'
 
 // ponytail: fixed threshold (~a week of daily batches); make it a setting if it nags.
 const LOW_FREE_BYTES = 5e9
@@ -189,6 +190,7 @@ export default function Settings() {
       </Section>
 
       <ClipsSection />
+      <ReactionReelSection />
 
       <Section title="Server" load={health}>
         <Row label="Version">{health.data ? `${health.data.status}, v${health.data.version}` : ''}</Row>

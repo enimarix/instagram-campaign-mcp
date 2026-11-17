@@ -35,6 +35,23 @@ from that account … download it"; "approve directly a video without clicking o
 "a really smart pipeline between the server and the automated task"; "timestamps on
 each event … so if the drop rate is at 2 seconds it's the hook").
 
+## 2026-11-17: Reactions come from one long pre-recorded reel
+Replaces GOAL.md §3.1 Track A steps 3–4 (the asset waits in "To record", the owner records a
+reaction per clip in the browser). The owner records one long reaction video and uploads it
+in Settings (`POST /api/reactions/upload`, the raw file as the request body, streamed to
+disk; cap `REACTION_UPLOAD_MAX_MB`). `src/studio/reactions.py next_reaction_piece()` cuts the
+next consecutive piece of the needed length (re-encoded, frame-accurate) and moves a stored
+cursor in the same write transaction; a piece that would pass the end starts over at 0 (a
+loop, never stitched across the end). The start snaps forward to a silence within 1.5 s
+(found once at upload with `silencedetect`) so a piece rarely starts mid-word. Several reels
+may be kept; one is active. No mood tags, no per-clip recording, no `needs_reaction` wait
+(072). The upload is a raw body, not multipart: no temporary spool copy of a multi-GB file
+and no dependency on python-multipart.
+Reason: owner decision (2026-11-17), "i will record a big long reaction, and you will cut
+pieces in a loop from the long video". Recording per clip does not fit the owner's day.
+Risk: a generic reaction weakens the `commentary` basis, so the agent's voice-over must
+comment on the specific clip (069/072).
+
 ## 2026-11-17: A clip counts as available for a reaction idea once downloaded, rights known and unused
 The reaction quota (`src/learning/quotas.py`) is MAX_REACTIONS_PER_DAY + REACTION_MARGIN
 (default 3 + 2) and never more than the available clips: sources with a `local_path`,
