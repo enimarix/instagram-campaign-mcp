@@ -37,7 +37,7 @@ def mcp_store(store, monkeypatch):
 
 def test_create_idea_uses_local_date_and_rejects_bad_tags(store, settings):
     idea = production.create_idea(store, settings, "motion", hook="Hi", pillar="myths",
-                                  script=None)
+                                  script=None, citations=[{"url": "https://a.org"}])
     assert idea["pillar"] == "myths" and idea["script"] is None and idea["batch_date"]
     with pytest.raises(ValueError, match="valid: fun_facts"):
         production.create_idea(store, settings, "motion", hook="Hi", pillar="cats")

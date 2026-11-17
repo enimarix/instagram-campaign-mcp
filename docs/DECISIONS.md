@@ -8,6 +8,14 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: A clip counts as available for a reaction idea once downloaded, rights known and unused
+The reaction quota (`src/learning/quotas.py`) is MAX_REACTIONS_PER_DAY + REACTION_MARGIN
+(default 3 + 2) and never more than the available clips: sources with a `local_path`,
+`rights_basis` other than `unknown`, and no idea using them yet. Ideas without a pillar count
+as informative in the humour/informative mix.
+Reason: no column marks a downloaded clip yet (063 will fill `local_path`); a clip with
+unknown rights is never queued, so planning a reaction on it wastes the batch.
+
 ## 2026-11-17: The agent runner pre-approves only MCP and web tools; reads stay in the workspace
 `ig-campaign agent run` (src/agent/runner.py) keeps the built-ins to Read, Glob, Grep,
 WebSearch, WebFetch, Skill and ToolSearch (`--tools`), disallows every shell, write,
