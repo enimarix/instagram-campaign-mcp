@@ -312,8 +312,8 @@ SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_n
 WATCH_KINDS = ("hashtag", "account")
 # Hashtags may hold any letter or digit; usernames are Instagram's letters, digits, . and _.
 # Both end up inside Graph request parameters, so nothing else gets in.
-_WATCH_VALUE = {"hashtag": re.compile(r"^\w{1,100}$"),
-                "account": re.compile(r"^[a-z0-9._]{1,30}$")}
+_WATCH_VALUE = {"hashtag": re.compile(r"\w{1,100}"),
+                "account": re.compile(r"[a-z0-9._]{1,30}")}
 IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "citations",
                "hypothesis", "strategy", "experiment", "batch_date")
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
@@ -933,21 +933,18 @@ class CampaignStore:
         """(source row, created). A new post is stored as a reference with rights unknown;
         a known one (same provider + external_id, any role) gets url and stats refreshed
         (stats merged key by key) and keeps an author it already has."""
-        with self._tx() as c:
-            row = c.execute("SELECT id FROM sources WHERE provider=? AND external_id=?",
-                            (provider, external_id)).fetchone()
-            if row is None:
-                cur = c.execute(
-                    "INSERT INTO sources (provider, external_id, url, author, stats, role,"
-                    " rights_basis, created_at) VALUES (?,?,?,?,?,'reference','unknown',?)",
-                    (provider, external_id, url, author, json.dumps(stats), to_iso(utcnow())))
-                source_id = cur.lastrowid
-            else:
-                source_id = row[0]
-                c.execute("UPDATE sources SET url=COALESCE(?, url), author=COALESCE(?, author),"
-                          " stats=json_patch(stats, ?) WHERE id=?",
-                          (url, author, json.dumps(stats), source_id))
-        return self.get_source(source_id), row is None
+        with self._tx() as c:  # write first: two processes can't both insert the same post
+            cur = c.execute(
+                "INSERT INTO sources (provider, external_id, url, author, stats, role,"
+                " rights_basis, created_at) VALUES (?,?,?,?,?,'reference','unknown',?)"
+                " ON CONFLICT(provider, external_id) WHERE external_id IS NOT NULL DO NOTHING",
+                (provider, external_id, url, author, json.dumps(stats), to_iso(utcnow())))
+            created = cur.rowcount == 1
+            source_id = cur.lastrowid if created else c.execute(
+                "UPDATE sources SET url=COALESCE(?, url), author=COALESCE(?, author),"
+                " stats=json_patch(stats, ?) WHERE provider=? AND external_id=? RETURNING id",
+                (url, author, json.dumps(stats), provider, external_id)).fetchone()[0]
+        return self.get_source(source_id), created
 
     # ------------------------------------------------------------------
     # Research: watchlist and the hashtag budget
@@ -958,7 +955,7 @@ class CampaignStore:
         if kind not in WATCH_KINDS:
             raise ValueError(f"kind must be one of {', '.join(WATCH_KINDS)}")
         value = (value or "").strip().lstrip("#@").lower()
-        if not _WATCH_VALUE[kind].match(value):
+        if not _WATCH_VALUE[kind].fullmatch(value):
             raise ValueError(f"not a valid {kind}: {value!r}")
         with self._tx() as c:
             c.execute("INSERT INTO watchlist (kind, value, note, created_at) VALUES (?,?,?,?)"
@@ -985,16 +982,14 @@ class CampaignStore:
         `window` (a repeat is free) or fewer than `limit` unique tags were. One write
         transaction, so concurrent processes never overshoot."""
         since = to_iso(now - window)
+        # ponytail: a repeat moves the tag's time forward, so it counts longer (the safe side).
         with self._tx() as c:
-            fits = c.execute(
-                "SELECT EXISTS(SELECT 1 FROM hashtag_searches WHERE tag=? AND searched_at>?)"
-                " OR (SELECT COUNT(*) FROM hashtag_searches WHERE searched_at>?) < ?",
-                (tag, since, since, limit)).fetchone()[0]
-            if fits:  # ponytail: a repeat moves the tag's time forward (counts longer: safe)
-                c.execute("INSERT INTO hashtag_searches (tag, searched_at) VALUES (?,?)"
-                          " ON CONFLICT(tag) DO UPDATE SET searched_at=excluded.searched_at",
-                          (tag, to_iso(now)))
-        return bool(fits)
+            return c.execute(
+                "INSERT INTO hashtag_searches (tag, searched_at) SELECT ?, ? WHERE"
+                " EXISTS(SELECT 1 FROM hashtag_searches WHERE tag=? AND searched_at>?)"
+                " OR (SELECT COUNT(*) FROM hashtag_searches WHERE searched_at>?) < ?"
+                " ON CONFLICT(tag) DO UPDATE SET searched_at=excluded.searched_at",
+                (tag, to_iso(now), tag, since, since, limit)).rowcount == 1
 
     def add_idea(self, track: str, **fields: Any) -> Dict[str, Any]:
         """Tags are checked against brand/taxonomy.json (TaxonomyError lists valid values)."""
