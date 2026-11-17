@@ -44,14 +44,14 @@ export const Hello = ({ title, subtitle, safeZone }: Props) => {
           outline: safeZone ? `4px dashed ${colors.accent}` : undefined,
         }}
       >
-      <div style={{ fontSize: 120, color: colors.primary, textShadow: `8px 8px 0 ${colors.palette[1]}` }}>
-        {title.slice(0, shown).toUpperCase()}
-        {cursor}
-        {/* The hidden rest of the title keeps the line from re-centring while it types. */}
-        <span style={{ visibility: "hidden" }}>{title.slice(shown).toUpperCase()}</span>
-      </div>
-      <div style={{ fontSize: 48, color: colors.secondary, textShadow: `4px 4px 0 ${colors.palette[15]}` }}>
-        {subtitle.toUpperCase()}
+        <div style={{ fontSize: 120, color: colors.primary, textShadow: `8px 8px 0 ${colors.palette[1]}` }}>
+          {title.slice(0, shown).toUpperCase()}
+          {cursor}
+          {/* The hidden rest of the title keeps the line from re-centring while it types. */}
+          <span style={{ visibility: "hidden" }}>{title.slice(shown).toUpperCase()}</span>
+        </div>
+        <div style={{ fontSize: 48, color: colors.secondary, textShadow: `4px 4px 0 ${colors.palette[15]}` }}>
+          {subtitle.toUpperCase()}
       </div>
       </div>
     </AbsoluteFill>
