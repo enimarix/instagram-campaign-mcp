@@ -341,3 +341,5 @@ redis_data/
 local_config.py
 dev_settings.py
 .local/ 
+# Campaign data (schedule, labels, insight snapshots)
+data/

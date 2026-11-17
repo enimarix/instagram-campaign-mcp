@@ -35,6 +35,8 @@
    - `instagram_basic`
    - `instagram_content_publish`
    - `instagram_manage_insights`
+   - `instagram_manage_comments`
+   - `pages_read_engagement`, `business_management`
 5. Copy the generated token
 
 #### 5. Get Instagram Business Account ID (30 seconds)
@@ -56,7 +58,7 @@ INSTAGRAM_ACCESS_TOKEN=your_access_token_here
 INSTAGRAM_BUSINESS_ACCOUNT_ID=your_instagram_account_id_here
 
 # Optional Configuration
-INSTAGRAM_API_VERSION=v19.0
+INSTAGRAM_API_VERSION=v25.0
 RATE_LIMIT_REQUESTS_PER_HOUR=200
 CACHE_ENABLED=true
 LOG_LEVEL=INFO
@@ -76,7 +78,7 @@ import os
 
 # Test API connection
 access_token = "YOUR_ACCESS_TOKEN"
-response = requests.get(f'https://graph.facebook.com/v19.0/me?access_token={access_token}')
+response = requests.get(f'https://graph.facebook.com/v25.0/me?access_token={access_token}')
 print(response.json())
 ```
 
@@ -87,7 +89,7 @@ print(response.json())
 - Check if token expired (short-lived tokens expire in 1 hour)
 - Generate long-lived token (60 days):
 ```bash
-curl "https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=YOUR_APP_ID&client_secret=YOUR_APP_SECRET&fb_exchange_token=YOUR_SHORT_TOKEN"
+curl "https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=YOUR_APP_ID&client_secret=YOUR_APP_SECRET&fb_exchange_token=YOUR_SHORT_TOKEN"
 ```
 
 ### Issue: "Instagram account not found"
@@ -118,7 +120,7 @@ curl "https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange
 ### Token Refresh
 ```python
 def refresh_token(current_token, app_id, app_secret):
-    url = "https://graph.facebook.com/v19.0/oauth/access_token"
+    url = "https://graph.facebook.com/v25.0/oauth/access_token"
     params = {
         'grant_type': 'fb_exchange_token',
         'client_id': app_id,

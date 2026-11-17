@@ -1,97 +1,101 @@
 """
-Configuration management for Instagram MCP Server.
+Configuration management for the Instagram campaign MCP server.
+
+Settings come from environment variables or a `.env` file. The `.env` file is
+looked up in the project root (next to README.md), so it is found even when an
+MCP client launches the server from another working directory. Set
+IG_MCP_ENV_FILE to use a different file.
 """
 
+import os
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import ConfigDict, Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ENV_FILE = os.environ.get("IG_MCP_ENV_FILE", str(PROJECT_ROOT / ".env"))
 
 
 class InstagramMCPSettings(BaseSettings):
     """Instagram MCP Server configuration settings."""
 
-    model_config = ConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
     )
 
-    # Instagram API Configuration
-    instagram_access_token: str = Field(..., description="Instagram access token")
-    facebook_app_id: str = Field(..., description="Facebook app ID")
-    facebook_app_secret: str = Field(..., description="Facebook app secret")
+    # --- Instagram API ---------------------------------------------------
+    instagram_access_token: str = Field(..., description="Long-lived access token")
     instagram_business_account_id: Optional[str] = Field(
-        None, description="Instagram business account ID"
+        None, description="Instagram professional account ID (IG User ID)"
     )
+    # App ID/secret are only needed for token exchange helpers; API calls work without them.
+    facebook_app_id: Optional[str] = Field(None, description="Meta app ID")
+    facebook_app_secret: Optional[str] = Field(None, description="Meta app secret")
 
-    # API Configuration
-    instagram_api_version: str = Field("v19.0", description="Instagram API version")
+    instagram_api_version: str = Field("v25.0", description="Graph API version")
     instagram_api_base_url: str = Field(
-        "https://graph.facebook.com", description="Instagram API base URL"
+        "https://graph.facebook.com", description="Graph API host"
     )
 
-    # Rate Limiting Configuration
-    rate_limit_requests_per_hour: int = Field(
-        200, description="Rate limit requests per hour"
+    # --- Rate limiting / publishing ---------------------------------------
+    rate_limit_requests_per_hour: int = Field(200, description="Client-side request cap")
+    container_poll_interval_seconds: float = Field(
+        5.0, description="Seconds between media container status checks"
     )
-    rate_limit_posts_per_day: int = Field(25, description="Rate limit posts per day")
-    rate_limit_enable_backoff: bool = Field(
-        True, description="Enable rate limit backoff"
+    container_timeout_seconds: float = Field(
+        600.0, description="Max seconds to wait for a container to finish processing"
+    )
+    validate_image_ratio: bool = Field(
+        True, description="Download feed images and check aspect ratio before publishing"
     )
 
-    # Logging Configuration
+    timezone: str = Field(
+        "Europe/Paris",
+        description="Time zone used for schedule times given without an offset",
+    )
+
+    # --- Campaign store ---------------------------------------------------
+    database_path: str = Field(
+        str(PROJECT_ROOT / "data" / "ig_campaign.db"),
+        description="SQLite file for schedule, labels and insight snapshots",
+    )
+
+    # --- Winner scoring ---------------------------------------------------
+    winner_min_age_hours: float = Field(
+        48.0, description="Posts younger than this are not judged yet"
+    )
+    winner_min_reach: int = Field(
+        300, description="Minimum reach before a post can be called a winner"
+    )
+    winner_threshold: float = Field(
+        1.5, description="Engagement index (vs account median) needed to win"
+    )
+    baseline_window: int = Field(
+        30, description="How many recent matured posts form the account baseline"
+    )
+
+    # --- Logging / cache --------------------------------------------------
     log_level: str = Field("INFO", description="Log level")
-    log_format: str = Field("json", description="Log format")
-    log_file: Optional[str] = Field(
-        "logs/instagram_mcp.log", description="Log file path"
-    )
-
-    # Cache Configuration
-    cache_enabled: bool = Field(True, description="Enable caching")
+    cache_enabled: bool = Field(True, description="Cache GET responses")
     cache_ttl_seconds: int = Field(300, description="Cache TTL in seconds")
-    redis_url: Optional[str] = Field(
-        "redis://localhost:6379/0", description="Redis URL"
-    )
 
-    # Security Configuration
-    enable_request_validation: bool = Field(
-        True, description="Enable request validation"
-    )
-    max_request_size_mb: int = Field(10, description="Max request size in MB")
     allowed_image_formats: List[str] = Field(
-        ["jpg", "jpeg", "png", "gif"], description="Allowed image formats"
-    )
-    allowed_video_formats: List[str] = Field(
-        ["mp4", "mov"], description="Allowed video formats"
+        ["jpg", "jpeg", "png"], description="Allowed image formats"
     )
 
-    # Development Configuration
-    debug_mode: bool = Field(False, description="Debug mode")
-    mock_api_responses: bool = Field(False, description="Mock API responses")
-    enable_metrics: bool = Field(True, description="Enable metrics")
+    # --- MCP --------------------------------------------------------------
+    mcp_server_name: str = Field("instagram-campaign-mcp", description="MCP server name")
+    mcp_server_version: str = Field("2.0.0", description="MCP server version")
+    mcp_transport: str = Field("stdio", description="stdio | streamable-http")
 
-    # MCP Server Configuration
-    mcp_server_name: str = Field("instagram-mcp-server", description="MCP server name")
-    mcp_server_version: str = Field("1.0.0", description="MCP server version")
-    mcp_transport: str = Field("stdio", description="MCP transport")
-
-    # Optional: Database Configuration
-    database_url: Optional[str] = Field(
-        "sqlite:///instagram_mcp.db", description="Database URL"
-    )
-    database_echo: bool = Field(False, description="Database echo")
-
-    # Optional: Webhook Configuration
-    webhook_verify_token: Optional[str] = Field(
-        None, description="Webhook verify token"
-    )
-    webhook_secret: Optional[str] = Field(None, description="Webhook secret")
-    webhook_url: Optional[str] = Field(None, description="Webhook URL")
-
-    @field_validator("allowed_image_formats", "allowed_video_formats", mode="before")
+    @field_validator("allowed_image_formats", mode="before")
     @classmethod
     def parse_list_from_string(cls, v):
-        """Parse comma-separated string into list."""
         if isinstance(v, str):
             return [item.strip() for item in v.split(",")]
         return v
@@ -99,51 +103,23 @@ class InstagramMCPSettings(BaseSettings):
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v):
-        """Validate log level."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
             raise ValueError(f"Log level must be one of: {valid_levels}")
         return v.upper()
 
-    @field_validator("log_format")
-    @classmethod
-    def validate_log_format(cls, v):
-        """Validate log format."""
-        valid_formats = ["json", "text"]
-        if v.lower() not in valid_formats:
-            raise ValueError(f"Log format must be one of: {valid_formats}")
-        return v.lower()
-
     @field_validator("instagram_api_version")
     @classmethod
     def validate_api_version(cls, v):
-        """Validate Instagram API version format."""
         if not v.startswith("v"):
-            raise ValueError("API version must start with 'v' (e.g., 'v19.0')")
+            raise ValueError("API version must start with 'v' (e.g., 'v25.0')")
         return v
 
     @property
     def instagram_api_url(self) -> str:
-        """Get the full Instagram API URL."""
-        return f"{self.instagram_api_base_url}/{self.instagram_api_version}"
-
-    @property
-    def log_file_path(self) -> Optional[Path]:
-        """Get log file path as Path object."""
-        if self.log_file:
-            path = Path(self.log_file)
-            # Create directory if it doesn't exist
-            path.parent.mkdir(parents=True, exist_ok=True)
-            return path
-        return None
-
-    @property
-    def max_request_size_bytes(self) -> int:
-        """Get max request size in bytes."""
-        return self.max_request_size_mb * 1024 * 1024
+        return f"{self.instagram_api_base_url.rstrip('/')}/{self.instagram_api_version}"
 
 
-# Global settings instance - will be None until first access
 _settings: Optional[InstagramMCPSettings] = None
 
 
