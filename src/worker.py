@@ -5,7 +5,9 @@ Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late
 gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
 (data_jobs: publish-check reconcile, insight age schedule, daily account snapshot and
 followers online), and snapshots live Stories hourly. On Windows it keeps one one-shot
-Task Scheduler task that wakes the PC a few minutes before the next pending slot;
+Task Scheduler task that wakes the PC a few minutes before the next pending slot (its
+action, `run-due --wait-until-next`, holds the PC awake and publishes even when no worker
+runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the run handled it;
 elsewhere that part does nothing.
 
 render_loop() runs beside it (and alone in setup mode: renders need no Instagram): it
@@ -37,7 +39,7 @@ from .campaign import (
 from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
 from .store import CampaignStore, parse_dt, to_iso, utcnow
-from .studio import render
+from .studio import power, render
 from .studio.power import keep_awake
 from .studio.publish import reconcile_publish_checks
 
@@ -46,6 +48,8 @@ logger = structlog.get_logger(__name__)
 ALIVE_WITHIN = timedelta(minutes=3)
 WAKE_TASK = "IGCampaignWake"
 WAKE_LEAD = timedelta(minutes=5)
+AWAKE_BEFORE = WAKE_LEAD + timedelta(minutes=5)  # the worker's hold starts this early
+WAIT_MAX = timedelta(minutes=15)  # run-due --wait-until-next waits at most this long
 REPORTED = ("published", "retrying", "failed", "recovered_stuck", "replanned")
 # Publishing keeps priority: data jobs start nothing once this share of the hourly Graph
 # budget (RATE_LIMIT_REQUESTS_PER_HOUR, shared by worker, API and MCP server) is used.
@@ -61,6 +65,48 @@ def next_slot(store: CampaignStore) -> Optional[str]:
     """publish_at of the earliest pending post (ISO UTC), or None."""
     rows = store.list_scheduled("pending", limit=1)
     return rows[0]["publish_at"] if rows else None
+
+
+def slot_near(store: CampaignStore, settings: InstagramMCPSettings, now: datetime) -> bool:
+    """The next pending post is due within AWAKE_BEFORE, or overdue but not yet late (the
+    next run publishes it). Paused: never (overdue posts then wait indefinitely)."""
+    slot = next_slot(store)
+    if slot is None or is_paused(store, settings):
+        return False
+    at = parse_dt(slot)
+    return now - timedelta(minutes=settings.max_late_minutes) <= at <= now + AWAKE_BEFORE
+
+
+def hold_for_slot(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+                  held: bool) -> bool:
+    """Take or drop the worker's keep-awake hold for a near slot; returns whether it is held."""
+    try:
+        near = slot_near(store, settings, now)
+    except Exception as e:  # noqa: BLE001 - e.g. database locked: keep the hold as it is
+        print(f"slot hold check failed: {e!r}", file=sys.stderr, flush=True)
+        return held
+    if near and not held:
+        power.hold()
+    elif held and not near:
+        power.release()
+    return near
+
+
+async def run_due_after_wait(client: InstagramClient, store: CampaignStore,
+                             settings: InstagramMCPSettings,
+                             now: Callable[[], datetime] = utcnow,
+                             sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
+                             max_wait: timedelta = WAIT_MAX) -> Dict[str, Any]:
+    """The wake task's action: keep the PC awake, wait for the next pending slot when it is
+    due within max_wait (else don't wait), then run_due once. A running worker may publish
+    the same post meanwhile: claims are atomic, so only one of them does."""
+    with power.keep_awake():
+        slot = next_slot(store)
+        wait = (parse_dt(slot) - now()).total_seconds() if slot else None
+        waited = wait if wait is not None and 0 < wait <= max_wait.total_seconds() else 0
+        if waited:
+            await sleep(waited + 1)  # +1 s: a timer may fire a little early on Windows
+        return {**await run_due(client, store, settings=settings, now=now), "waited_s": waited}
 
 
 async def cycle(client: InstagramClient, store: CampaignStore, settings: InstagramMCPSettings,
@@ -133,27 +179,34 @@ async def run(client: InstagramClient, store: CampaignStore, settings: Instagram
     """Publish due posts every `interval` s and snapshot live Stories; runs until cancelled."""
     last_stories = float("-inf")
     woken_for = None
-    while True:
-        result = await cycle(client, store, settings)
-        if result.get("error") or any(result.get(k) for k in REPORTED):
-            print(json.dumps(result), flush=True)
-        try:
-            jobs = await data_jobs(client, store, settings)
-            if jobs:
-                print(json.dumps({"data_jobs": jobs}, default=str), flush=True)
-        except Exception as e:  # noqa: BLE001 - e.g. database locked for too long
-            print(f"data jobs failed: {e!r}", file=sys.stderr, flush=True)
-        slot = next_slot(store)
-        if slot and slot != woken_for and parse_dt(slot) > utcnow():  # queue changed
-            woken_for = slot
-            await asyncio.to_thread(register_wake, parse_dt(slot))
-        if stories_every and time.monotonic() - last_stories >= stories_every * 60:
-            last_stories = time.monotonic()
+    held = False
+    try:
+        while True:
+            result = await cycle(client, store, settings)
+            if result.get("error") or any(result.get(k) for k in REPORTED):
+                print(json.dumps(result), flush=True)
+            # stay awake from AWAKE_BEFORE a slot until a run handled it
+            held = hold_for_slot(store, settings, utcnow(), held)
             try:
-                await collect_insights(client, store, limit=0)
-            except Exception as e:  # noqa: BLE001
-                print(f"story snapshot failed: {e!r}", file=sys.stderr, flush=True)
-        await asyncio.sleep(interval)
+                jobs = await data_jobs(client, store, settings)
+                if jobs:
+                    print(json.dumps({"data_jobs": jobs}, default=str), flush=True)
+            except Exception as e:  # noqa: BLE001 - e.g. database locked for too long
+                print(f"data jobs failed: {e!r}", file=sys.stderr, flush=True)
+            slot = next_slot(store)
+            if slot and slot != woken_for and parse_dt(slot) > utcnow():  # queue changed
+                woken_for = slot
+                await asyncio.to_thread(register_wake, parse_dt(slot))
+            if stories_every and time.monotonic() - last_stories >= stories_every * 60:
+                last_stories = time.monotonic()
+                try:
+                    await collect_insights(client, store, limit=0)
+                except Exception as e:  # noqa: BLE001
+                    print(f"story snapshot failed: {e!r}", file=sys.stderr, flush=True)
+            await asyncio.sleep(interval)
+    finally:
+        if held:
+            power.release()
 
 
 async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
@@ -216,10 +269,12 @@ def _ps(s: str) -> str:
 
 def wake_task_command(slot: datetime, exe: str = sys.executable) -> List[str]:
     """PowerShell that (re)registers the one-shot wake task WAKE_LEAD before `slot`, in this
-    machine's local time; its action runs `ig-campaign run-due` (via `exe -m src.scheduler`)."""
+    machine's local time; its action runs `ig-campaign run-due --wait-until-next` (via
+    `exe -m src.scheduler`), which keeps the PC awake until the slot and publishes."""
     at = (slot - WAKE_LEAD).astimezone().strftime("%Y-%m-%dT%H:%M:%S")
     script = (
-        f"$a = New-ScheduledTaskAction -Execute {_ps(exe)} -Argument '-m src.scheduler run-due'; "
+        f"$a = New-ScheduledTaskAction -Execute {_ps(exe)} -Argument "
+        "'-m src.scheduler run-due --wait-until-next'; "
         f"$t = New-ScheduledTaskTrigger -Once -At {_ps(at)}; "
         "$s = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable; "
         f"Register-ScheduledTask -TaskName {_ps(WAKE_TASK)} -Action $a -Trigger $t -Settings $s"
