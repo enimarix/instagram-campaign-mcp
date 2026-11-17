@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Literal, Mapping, Type
+from typing import Any, Dict, List, Literal, Mapping, Type
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator
 
@@ -38,7 +38,7 @@ class Op(BaseModel):
     """Base of every op. Subclasses set `op: Literal["<name>"]` and implement apply()."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    name: ClassVar[str]
+    op: str
 
     def apply(self, src: Path, info: MediaInfo, out: Path, *, inputs: Mapping[str, Path],
               timeout_s: float, preset: str) -> None:
@@ -53,7 +53,6 @@ def register(cls: Type[Op]) -> Type[Op]:
     name = cls.model_fields["op"].default
     if name in OPS:
         raise ValueError(f"op {name!r} is already registered")
-    cls.name = name
     OPS[name] = cls
     return cls
 
@@ -136,7 +135,7 @@ def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
     with tempfile.TemporaryDirectory(prefix="render-", dir=out.parent) as work:
         current = paths["source"]
         for i, op in enumerate(recipe.ops):
-            nxt = Path(work) / f"{i:02d}-{op.name}.mp4"
+            nxt = Path(work) / f"{i:02d}-{op.op}.mp4"
             op.apply(current, ffmpeg.probe(current), nxt, inputs=paths, timeout_s=timeout_s,
                      preset=preset)
             current = nxt
