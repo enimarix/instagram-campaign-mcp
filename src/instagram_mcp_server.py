@@ -23,7 +23,7 @@ from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
-from .studio.publish import cancel_post
+from .studio.publish import cancel_post, refuse_asset_file
 
 configure_logging()
 
@@ -97,6 +97,14 @@ def _when(value: str, name: str = "publish_at") -> datetime:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=ZoneInfo(get_settings().timezone))
     return parse_dt(dt.isoformat())
+
+
+def _not_an_asset(video_path: Optional[str]) -> None:
+    """Studio assets publish only through queue_asset (the website), never by path."""
+    try:
+        refuse_asset_file(store(), get_settings(), video_path)
+    except ValueError as e:
+        raise ToolError(str(e)) from e
 
 
 def _label(result: Dict[str, Any], kind: str, campaign: Optional[str],
@@ -254,6 +262,7 @@ async def publish_reel(
     trial_graduation makes it a trial Reel shown to non-followers first:
     SS_PERFORMANCE = Instagram shares it to followers if it performs,
     MANUAL = you decide in the app. Waits for video processing (can take minutes)."""
+    _not_an_asset(video_path)
     try:
         res = await client().publish_reel(
             video_url, caption, cover_url, thumb_offset_ms, share_to_feed,
@@ -307,6 +316,7 @@ async def schedule_post(
     media root). publish_at is ISO 8601; without an offset it is read
     in the configured time zone (default Europe/Paris), e.g. "2026-11-20T18:30".
     Needs the scheduler running (python -m src.scheduler daemon) or run_due_posts."""
+    _not_an_asset(video_path)
     payload: Dict[str, Any]
     if kind == "image":
         payload = {"image_url": image_url, "caption": caption, "alt_text": alt_text,

@@ -17,6 +17,7 @@ from ..store import CampaignStore
 from ..studio import assets
 from ..studio.assets import InvalidTransition
 from ..studio.media import media_url
+from ..studio.publish import release_publish_check
 
 OWNER = "owner"
 
@@ -98,3 +99,9 @@ def unapprove(asset_id: int, store: CampaignStore = Depends(get_store)):
 @router.post("/{asset_id}/archive")
 def archive(asset_id: int, store: CampaignStore = Depends(get_store)):
     return _call(assets.transition, store, asset_id, "archived", actor=OWNER)
+
+
+@router.post("/{asset_id}/release")
+def release(asset_id: int, store: CampaignStore = Depends(get_store)):
+    # The owner checked Instagram: the post is not there (publish_check -> approved).
+    return _call(release_publish_check, store, asset_id)

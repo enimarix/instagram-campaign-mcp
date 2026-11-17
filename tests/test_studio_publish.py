@@ -4,14 +4,26 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import SecretStr
 
+import src.instagram_mcp_server as srv
 from src import campaign as camp
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.instagram_client import InstagramAPIError, InvalidMedia
 from src.store import utcnow
-from src.studio.assets import edit_asset, transition
-from src.studio.publish import QueueRefused, cancel_post, queue_asset
+from src.studio.assets import InvalidTransition, edit_asset, transition
+from src.studio.publish import (
+    QueueRefused,
+    cancel_post,
+    queue_asset,
+    reconcile_publish_checks,
+    release_publish_check,
+)
+
+from .conftest import LOCAL
 
 LATER = timedelta(hours=2)
 
@@ -196,3 +208,130 @@ async def test_interrupted_publish_needs_a_check(store, cfg):
     assert store.get_asset(a["id"])["status"] == "publish_check"
     assert cancel_post(store, post["id"])["status"] == "cancelled"
     assert store.get_asset(a["id"])["status"] == "publish_check"  # never back to approved
+
+
+# ------------------------------------------------------------- 019b: reconcile, release
+class MediaClient:
+    def __init__(self, *pages):
+        self.pages, self.calls = list(pages), 0
+
+    async def get_media_posts(self, limit=25, after=None):
+        self.calls += 1
+        posts = self.pages.pop(0) if self.pages else []
+        return {"posts": posts, "next_cursor": "c" if self.pages else None}
+
+
+def _reel(media_id, caption="hi #demo", at=None, kind="REELS"):
+    return {"id": media_id, "caption": caption, "media_product_type": kind,
+            "permalink": f"https://instagram.com/reel/{media_id}",
+            "timestamp": (at or utcnow()).strftime("%Y-%m-%dT%H:%M:%S+0000")}
+
+
+async def _checked(store, cfg):
+    """An asset whose publish may have reached Instagram, and its failed queue row."""
+    a, post = _due(store, cfg)
+    await camp.run_due(FakeClient(_maybe()), store)
+    assert store.get_asset(a["id"])["status"] == "publish_check"
+    return a, post
+
+
+async def test_reconcile_one_match_publishes(store, cfg):
+    a, post = await _checked(store, cfg)
+    fake = MediaClient([_reel("OTHER", "something else"), _reel("IMG", kind="FEED")],
+                       [_reel("M9", "  hi\n #demo ")])  # whitespace differs, page 2
+    res = await reconcile_publish_checks(fake, store)
+    assert res == {"checked": 1, "published": 1, "ambiguous": 0, "not_found": 0}
+    assert fake.calls == 2
+    row = store.get_scheduled(post["id"])
+    assert row["status"] == "published" and row["media_id"] == "M9"
+    assert row["permalink"].endswith("/M9")
+    assert store.get_label("M9")["asset_id"] == a["id"]
+    assert store.get_asset(a["id"])["status"] == "published"
+
+
+@pytest.mark.parametrize("posts, key", [
+    ([], "not_found"),
+    ([_reel("M1", at=utcnow() - timedelta(hours=60))], "not_found"),  # outside the window
+    ([_reel("M1"), _reel("M2")], "ambiguous"),
+])
+async def test_reconcile_leaves_unsure_assets(store, cfg, posts, key):
+    a, post = await _checked(store, cfg)
+    res = await reconcile_publish_checks(MediaClient(posts), store)
+    assert res["checked"] == 1 and res[key] == 1 and res["published"] == 0
+    assert store.get_asset(a["id"])["status"] == "publish_check"
+    assert store.get_scheduled(post["id"])["status"] == "failed"
+
+
+async def test_reconcile_without_checks_makes_no_call(store, cfg):
+    fake = MediaClient([_reel("M1")])
+    assert (await reconcile_publish_checks(fake, store))["checked"] == 0
+    assert fake.calls == 0
+
+
+async def test_release_publish_check(store, cfg):
+    a, _ = await _checked(store, cfg)
+    assert release_publish_check(store, a["id"])["status"] == "approved"
+    with pytest.raises(InvalidTransition):  # approved now
+        release_publish_check(store, a["id"])
+    assert queue_asset(store, cfg, a["id"], utcnow() + LATER)  # can be queued again
+
+
+def test_release_route(store, cfg):
+    a = _asset(store, cfg, status="publish_check")
+    ready = _asset(store, cfg, status="ready")
+    with TestClient(create_app(cfg, store=store), base_url=LOCAL) as c:
+        r = c.post(f"/api/assets/{a['id']}/release", headers={"Origin": LOCAL})
+        assert r.status_code == 200 and r.json()["status"] == "approved"
+        r = c.post(f"/api/assets/{ready['id']}/release", headers={"Origin": LOCAL})
+        assert r.status_code == 409 and r.json()["error"] == "invalid_transition"
+        assert c.post("/api/assets/999/release", headers={"Origin": LOCAL}).status_code == 404
+
+
+def test_release_route_needs_session_with_password(store, cfg):
+    a = _asset(store, cfg, status="publish_check")
+    s = cfg.model_copy(update={"ui_password": SecretStr("pw")})
+    with TestClient(create_app(s, store=store), base_url=LOCAL) as c:
+        url, h = f"/api/assets/{a['id']}/release", {"Origin": LOCAL}
+        assert c.post(url, headers=h).status_code == 401
+        assert c.post("/api/login", json={"password": "pw"}, headers=h).status_code == 200
+        assert c.post(url, headers=h).json()["status"] == "approved"
+
+
+# ------------------------------------------------------------- 019b: MCP bypass closed
+class ReelClient:
+    def __init__(self):
+        self.paths = []
+
+    async def publish_reel(self, *args, video_path=None, **kw):
+        self.paths.append(video_path)
+        return {"media_id": "M1", "permalink": None}
+
+
+@pytest.fixture
+def mcp_env(store, cfg, monkeypatch):
+    fake = ReelClient()
+    monkeypatch.setattr(srv, "_store", store)
+    monkeypatch.setattr(srv, "_client", fake)
+    monkeypatch.setattr(srv, "get_settings", lambda: cfg)
+    return fake
+
+
+async def test_mcp_tools_refuse_asset_files(store, cfg, mcp_env):
+    a = _asset(store, cfg, preview_path="2026-11-17/preview.mp4")
+    for path in (a["file_path"], "2026-11-17/./master.mp4", a["preview_path"]):
+        with pytest.raises(ToolError, match="queue the asset from the website"):
+            await srv.publish_reel(video_path=path)
+        with pytest.raises(ToolError, match="queue the asset from the website"):
+            await srv.schedule_post("reel", (utcnow() + LATER).isoformat(), "hi",
+                                    video_path=path)
+    assert mcp_env.paths == [] and store.list_scheduled() == []
+
+
+async def test_mcp_tools_allow_other_media_files(store, cfg, mcp_env):
+    _asset(store, cfg)
+    (Path(cfg.media_root) / "own.mp4").write_bytes(b"mp4")
+    assert (await srv.publish_reel(video_path="own.mp4"))["media_id"] == "M1"
+    assert mcp_env.paths == ["own.mp4"]
+    post = await srv.schedule_post("reel", (utcnow() + LATER).isoformat(), "hi",
+                                   video_path="own.mp4")
+    assert post["payload"]["video_path"] == "own.mp4"
