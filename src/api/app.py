@@ -25,8 +25,19 @@ from .. import campaign
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
-from . import (agent, assets, bench, context, feedback, media, reactions, render, research,
-               sources, worker)
+from . import (
+    agent,
+    assets,
+    bench,
+    context,
+    feedback,
+    media,
+    reactions,
+    render,
+    research,
+    sources,
+    worker,
+)
 from . import settings as settings_routes
 from . import token as token_routes
 from .analytics import router as analytics_router
