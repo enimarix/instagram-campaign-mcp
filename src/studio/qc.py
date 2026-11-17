@@ -7,8 +7,8 @@ run_qc() returns what is saved as `assets.qc`:
 Checks: output spec (size, fps, codec), duration bounds, audio present, loudness, black and
 frozen stretches (one ffmpeg analysis pass) and the caption (length, hashtags). Motion
 renders (`recipe.kind == "motion"`) get a longer freeze limit: their hook and end cards are
-still on purpose (`qc_max_freeze_s_motion`). Health,
-medical or income promises are only warnings: the owner can overrule them in review.
+still on purpose (`qc_max_freeze_s_motion`). Health, medical or income promises are only
+warnings: the owner can overrule them in review.
 """
 
 from __future__ import annotations
