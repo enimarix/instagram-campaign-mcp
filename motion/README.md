@@ -11,6 +11,9 @@
 - Still: `npm run still` (= `--still --frame 45`, writes `out/hello.png`).
 - Still of the 8-bit kit: `npm run still:preview` (`Preview8bit`, writes `out/preview8bit.png`).
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
-- 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading),
-  `src/components/` (`PixelText`, `DialogBox`, `SafeZoneGuide`). Pixel font sizes are whole
+- 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading,
+  game maths in `game.ts`, code-drawn sprites in `sprites.ts`), `src/components/` (`PixelText`,
+  `DialogBox`, `SafeZoneGuide`, `Sprite` (sheet image or code-drawn art), `HUD`, `CRTOverlay`,
+  `Wipe` / `Flash` in `Transitions.tsx`). Everything animates from `useCurrentFrame()` only;
+  noise comes from `seeded(seed, frame)`, never `Math.random`. Pixel font sizes are whole
   multiples of 8 px. Third-party files in `public/` are listed in `ASSETS_LICENSES.md`.

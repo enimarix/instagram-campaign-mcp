@@ -5,5 +5,9 @@
   "dialog": "Où est la crème brûlée? Ça alors, Œdipe l'a mangée!",
   "speed": 15,
   "seconds": 8,
-  "safeZone": true
+  "safeZone": true,
+  "hud": true,
+  "sprites": true,
+  "crt": true,
+  "transitions": true
 }
