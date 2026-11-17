@@ -195,3 +195,28 @@ export const cancelPost = (id: number) => post<QueueRow>(`/api/posts/${id}/cance
 export const replanPost = (id: number, confirmed = false) =>
   post<QueueRow>(`/api/posts/${id}/replan`, { confirmed })
 export const releaseAsset = (id: number) => post<Asset>(`/api/assets/${id}/release`)
+
+/** What the worker's last pass did (campaign.run_due), or `error` when it crashed. */
+export type RunResult = {
+  error?: string
+  paused?: boolean
+  published?: unknown[]
+  failed?: unknown[]
+  retrying?: unknown[]
+  replanned?: unknown[]
+}
+/** GET /api/worker/status (src/worker.py); times ISO UTC. */
+export type WorkerStatus = {
+  heartbeat_at: string | null
+  alive: boolean
+  paused: boolean
+  next_slot: string | null
+  last_result: RunResult | null
+}
+export const getWorkerStatus = () => request<WorkerStatus>('/api/worker/status')
+export const setPublishingPaused = (paused: boolean) =>
+  post<WorkerStatus>(`/api/worker/${paused ? 'pause' : 'resume'}`)
+
+/** GET /api/storage (src/studio/storage.py): sizes in bytes; `free_bytes` of the media disk. */
+export type Storage = { media_bytes: number; db_bytes: number; free_bytes: number; last_backup: string | null }
+export const getStorage = () => request<Storage>('/api/storage')
