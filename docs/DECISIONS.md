@@ -21,6 +21,13 @@ the health check passes. CI does not check the submodule out: it is never built 
 in tests.
 Reason: GOAL.md §5.1 (never the brand account, nothing exposed), step 063a.
 
+## 2026-11-17: Default agent schedule is `daily-learn@02:00,daily-produce@03:00`
+The late-night analysis (step 083) runs an hour before the night batch, so the batch reads
+fresh learnings and the report's proposed experiments. A day with nothing published or
+matured skips the analysis (no Claude run, no summary); the creative brief then shows the
+last report that has one.
+Reason: the owner asked for a nightly analysis the next batch builds on (2026-11-17).
+
 ## 2026-11-17: Owner priorities: reaction reel, DM picks, scroll-and-decide inbox, video timelines, work packets
 The owner asked mid-build for six changes (progress.md Phase 5b, steps 110–116, plus 071/072/073 re-planned):
 - **Reaction reel** (replaces the per-clip recorder and the "To record" wait): the owner

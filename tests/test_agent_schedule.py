@@ -269,7 +269,7 @@ async def test_worker_starts_the_catch_up(monkeypatch):
     monkeypatch.setattr(schedule, "catch_up_loop", fake_loop)
     monkeypatch.setattr(scheduler.worker, "render_loop", renders_done)
     await scheduler._worker(cfg())
-    assert seen == ["daily-produce@03:00"]
+    assert seen == ["daily-learn@02:00,daily-produce@03:00"]
 
 
 def test_light_afternoon_run_is_due_after_the_night_run(store, agent_dir):
