@@ -13,8 +13,8 @@ AI-run, owner-steered video studio. Spec: [GOAL.md](GOAL.md). Roadmap and step s
 - Install: `pip install -e ".[dev]"`
   (or `uv venv .venv --python 3.12 && uv pip install --python .venv/Scripts/python.exe -e ".[dev]"`)
 - Test: `pytest -q` (no network; single test: `pytest -q tests/test_x.py::test_y`)
-- CI: `.github/workflows/ci.yml`, pytest on Python 3.10 / 3.12 / 3.13
-- Lint: added by step 006
+- CI: `.github/workflows/ci.yml`, ruff lint + pytest on Python 3.10 / 3.12 / 3.13
+- Lint: `ruff check .` (rules in `pyproject.toml` `[tool.ruff]`; or `uvx ruff check .`)
 
 ## Layout
 
