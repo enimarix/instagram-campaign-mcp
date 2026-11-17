@@ -26,7 +26,7 @@ import threading
 from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
 from .taxonomy import validate, validate_many
 
@@ -276,14 +276,44 @@ CREATE INDEX idx_render_jobs_state ON render_jobs(state, id);
 ALTER TABLE assets ADD COLUMN poster_path TEXT;
 """
 
+# Migration 9: trend research (051). watchlist values are normalised (lowercase, no #/@).
+# sources.role: clip (material for a video) | reference (research only, never published);
+# external_id: the provider's post id, so a second research run updates stats in place.
+# hashtag_searches: last lookup per tag, for Meta's 30 unique hashtags per rolling 7 days.
+RESEARCH_SCHEMA = """
+CREATE TABLE watchlist (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL CHECK (kind IN ('hashtag','account')),
+    value      TEXT NOT NULL,
+    note       TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (kind, value)
+);
+ALTER TABLE sources ADD COLUMN role TEXT NOT NULL DEFAULT 'clip'
+    CHECK (role IN ('clip','reference'));
+ALTER TABLE sources ADD COLUMN external_id TEXT;
+CREATE UNIQUE INDEX idx_sources_external ON sources(provider, external_id)
+    WHERE external_id IS NOT NULL;
+CREATE TABLE hashtag_searches (
+    tag         TEXT PRIMARY KEY,
+    searched_at TEXT NOT NULL
+);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
-                         RENDER_SCHEMA]
+                         RENDER_SCHEMA, RESEARCH_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
-                 "audio_rights", "local_path", "downloaded_at", "downloader_version")
+                 "audio_rights", "local_path", "downloaded_at", "downloader_version",
+                 "role", "external_id")
+WATCH_KINDS = ("hashtag", "account")
+# Hashtags may hold any letter or digit; usernames are Instagram's letters, digits, . and _.
+# Both end up inside Graph request parameters, so nothing else gets in.
+_WATCH_VALUE = {"hashtag": re.compile(r"^\w{1,100}$"),
+                "account": re.compile(r"^[a-z0-9._]{1,30}$")}
 IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "citations",
                "hypothesis", "strategy", "experiment", "batch_date")
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
@@ -896,6 +926,75 @@ class CampaignStore:
     ) -> List[Dict[str, Any]]:
         return self._select("SELECT * FROM sources",
                             {"rights_basis": rights_basis, "provider": provider}, "id", limit)
+
+    def upsert_reference_source(self, provider: str, external_id: str, *, url: Optional[str],
+                                author: Optional[str], stats: Dict[str, Any]
+                                ) -> Tuple[Dict[str, Any], bool]:
+        """(source row, created). A new post is stored as a reference with rights unknown;
+        a known one (same provider + external_id, any role) gets url and stats refreshed
+        (stats merged key by key) and keeps an author it already has."""
+        with self._tx() as c:
+            row = c.execute("SELECT id FROM sources WHERE provider=? AND external_id=?",
+                            (provider, external_id)).fetchone()
+            if row is None:
+                cur = c.execute(
+                    "INSERT INTO sources (provider, external_id, url, author, stats, role,"
+                    " rights_basis, created_at) VALUES (?,?,?,?,?,'reference','unknown',?)",
+                    (provider, external_id, url, author, json.dumps(stats), to_iso(utcnow())))
+                source_id = cur.lastrowid
+            else:
+                source_id = row[0]
+                c.execute("UPDATE sources SET url=COALESCE(?, url), author=COALESCE(?, author),"
+                          " stats=json_patch(stats, ?) WHERE id=?",
+                          (url, author, json.dumps(stats), source_id))
+        return self.get_source(source_id), row is None
+
+    # ------------------------------------------------------------------
+    # Research: watchlist and the hashtag budget
+    # ------------------------------------------------------------------
+    def add_watch(self, kind: str, value: str, note: Optional[str] = None) -> Dict[str, Any]:
+        """Add a hashtag or account (normalised: lowercase, no #/@). Adding one that is
+        already listed returns it, with the note replaced when one is given."""
+        if kind not in WATCH_KINDS:
+            raise ValueError(f"kind must be one of {', '.join(WATCH_KINDS)}")
+        value = (value or "").strip().lstrip("#@").lower()
+        if not _WATCH_VALUE[kind].match(value):
+            raise ValueError(f"not a valid {kind}: {value!r}")
+        with self._tx() as c:
+            c.execute("INSERT INTO watchlist (kind, value, note, created_at) VALUES (?,?,?,?)"
+                      " ON CONFLICT(kind, value) DO UPDATE SET"
+                      " note=COALESCE(excluded.note, note)",
+                      (kind, value, note, to_iso(utcnow())))
+            row = c.execute("SELECT * FROM watchlist WHERE kind=? AND value=?",
+                            (kind, value)).fetchone()
+        return dict(row)
+
+    def list_watchlist(self, kind: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self._select("SELECT * FROM watchlist", {"kind": kind}, "kind, value", 10_000)
+
+    def remove_watch(self, watch_id: int) -> Dict[str, Any]:
+        """Delete one entry and return it; KeyError when there is none."""
+        row = self._get("watchlist", watch_id)
+        with self._tx() as c:
+            c.execute("DELETE FROM watchlist WHERE id=?", (watch_id,))
+        return row
+
+    def take_hashtag_search(self, tag: str, now: datetime, limit: int,
+                            window: timedelta) -> bool:
+        """Record a lookup of `tag` and return True if it fits: the tag was looked up within
+        `window` (a repeat is free) or fewer than `limit` unique tags were. One write
+        transaction, so concurrent processes never overshoot."""
+        since = to_iso(now - window)
+        with self._tx() as c:
+            fits = c.execute(
+                "SELECT EXISTS(SELECT 1 FROM hashtag_searches WHERE tag=? AND searched_at>?)"
+                " OR (SELECT COUNT(*) FROM hashtag_searches WHERE searched_at>?) < ?",
+                (tag, since, since, limit)).fetchone()[0]
+            if fits:  # ponytail: a repeat moves the tag's time forward (counts longer: safe)
+                c.execute("INSERT INTO hashtag_searches (tag, searched_at) VALUES (?,?)"
+                          " ON CONFLICT(tag) DO UPDATE SET searched_at=excluded.searched_at",
+                          (tag, to_iso(now)))
+        return bool(fits)
 
     def add_idea(self, track: str, **fields: Any) -> Dict[str, Any]:
         """Tags are checked against brand/taxonomy.json (TaxonomyError lists valid values)."""

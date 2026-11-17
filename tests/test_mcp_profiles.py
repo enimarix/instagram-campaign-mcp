@@ -17,6 +17,7 @@ AGENT_ALLOWED = {
     "submit_asset", "list_assets",
     "get_feedback", "mark_feedback_digested", "list_revision_requests", "add_learning",
     "update_learning", "list_learnings", "get_creative_brief",
+    "add_to_watchlist", "list_watchlist", "remove_from_watchlist", "research_trends",
 }
 NEVER_FOR_AGENT = {
     "publish_image", "publish_carousel", "publish_reel", "publish_story",
