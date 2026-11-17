@@ -4,8 +4,9 @@ The publishing worker (GOAL.md §3.3): `ig-campaign worker` (alias `daemon`) and
 Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late-slot and
 gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
 (data_jobs: publish-check reconcile, insight age schedule, daily account snapshot and
-followers online) and snapshots live Stories hourly. On Windows it keeps one one-shot Task Scheduler task that wakes the PC a
-few minutes before the next pending slot; elsewhere that part does nothing.
+followers online), and snapshots live Stories hourly. On Windows it keeps one one-shot
+Task Scheduler task that wakes the PC a few minutes before the next pending slot;
+elsewhere that part does nothing.
 """
 
 from __future__ import annotations
@@ -88,7 +89,8 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
                     settings: InstagramMCPSettings,
                     now: Callable[[], datetime] = utcnow) -> Dict[str, Any]:
     """The scheduled Graph reads, each skipped while the budget is past DATA_SHARE. Daily
-    jobs run once per owner-local day, retried hourly until they succeed. Never raises."""
+    jobs run once per owner-local day, retried hourly until they succeed. A job's error is
+    reported in the result, never raised."""
     t = now()
     today = t.astimezone(ZoneInfo(settings.timezone)).date()
     out: Dict[str, Any] = {}
