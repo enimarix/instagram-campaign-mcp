@@ -47,3 +47,25 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  motion:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: motion
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: motion/package-lock.json
+      - run: npm ci
+      # Remotion downloads Chrome Headless Shell here on the first render; npm ci wipes it.
+      - uses: actions/cache@v6
+        with:
+          path: motion/node_modules/.remotion
+          key: remotion-browser-${{ runner.os }}-${{ hashFiles('motion/package-lock.json') }}
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run still

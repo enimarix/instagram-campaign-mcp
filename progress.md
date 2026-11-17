@@ -143,7 +143,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ### Phase 4 — Track B: 8-bit motion design
 
-- [ ] 039 — Remotion scaffold — `motion/` project, 1080×1920 at 30 fps, template registry, props validated by a schema, `node motion/render.mjs --template <id> --props <file> --out <file>`; CI typechecks and renders one still. **Verify in docs**: current Remotion version, render API, the headless browser it downloads, and licence terms (write the licence conclusion in `docs/DECISIONS.md`). — deps: 037 · touches: `motion/`, `.github/workflows/ci.yml`, `docs/DECISIONS.md`
+- [x] 039 — Remotion scaffold — `motion/` project, 1080×1920 at 30 fps, template registry, props validated by a schema, `node motion/render.mjs --template <id> --props <file> --out <file>`; CI typechecks and renders one still. **Verify in docs**: current Remotion version, render API, the headless browser it downloads, and licence terms (write the licence conclusion in `docs/DECISIONS.md`). — deps: 037 · touches: `motion/`, `.github/workflows/ci.yml`, `docs/DECISIONS.md`
 - [ ] 040 — 8-bit foundations — palettes read from the brand kit, a pixel font with an open licence **whose glyphs cover the channel language(s)** (accents, or another script: check against H9, default Latin with accents), crisp integer scaling, components `PixelText` (typewriter) and `DialogBox`, the safe-zone guide, and a preview composition. — deps: 039 · touches: `motion/`
 - [ ] 041 — 8-bit game kit — components `Sprite` (sprite-sheet animation), `HUD` (hearts, score, level bar), CRT / scanline overlay, transitions (wipe, flash); added to the preview composition. — deps: 040 · touches: `motion/src/components/`
 - [ ] 042 — Sprites and sound — a CC0 sprite and tile pack, a placeholder mascot, CC0 or code-generated chiptune loops and sound effects, all loadable by id; every third-party file listed with its licence in `motion/ASSETS_LICENSES.md`; a test fails when a file in the assets folder is missing from that list. — deps: 039 · touches: `motion/public/`, `motion/ASSETS_LICENSES.md`, `motion/src/assets.ts`
@@ -244,6 +244,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 039 — Remotion scaffold — https://github.com/enimarix/instagram-campaign-mcp/pull/36 (2026-11-17) — motion/ (Remotion 4, template registry with Zod props checked before render, render.mjs JSON result, Hello template), CI motion job renders a still
 - [x] 025 — Worker core — https://github.com/enimarix/instagram-campaign-mcp/pull/37 (2026-11-17) — src/worker.py loop + heartbeat, late-slot re-plan and gap rule in run_due, pause switch (setting + DB + API), /api/worker/status, Windows wake task
 - [x] 019b — Publish guard: reconcile — https://github.com/enimarix/instagram-campaign-mcp/pull/35 (2026-11-17) — reconcile_publish_checks (caption + time match), POST /api/assets/{id}/release (owner), MCP tools refuse studio asset files
 - [x] 016 — Asset detail and comments — https://github.com/enimarix/instagram-campaign-mcp/pull/34 (2026-11-17) — /assets/:id page (player, actions, caption/best-before, comment thread with chips/pin/ask-for-changes, idea/source/QC panel, version links) + GET /api/assets/{id}/context
