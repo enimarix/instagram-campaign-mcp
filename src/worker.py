@@ -45,6 +45,7 @@ REPORTED = ("published", "retrying", "failed", "recovered_stuck", "replanned")
 DATA_SHARE = 0.8
 INSIGHTS_EVERY = timedelta(minutes=15)
 RECONCILE_EVERY = timedelta(minutes=10)  # it lists media while an asset waits for a check
+DAILY_RETRY = timedelta(hours=1)  # a failing daily job (e.g. no insights permission) waits
 
 
 def next_slot(store: CampaignStore) -> Optional[str]:
@@ -87,7 +88,7 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
                     settings: InstagramMCPSettings,
                     now: Callable[[], datetime] = utcnow) -> Dict[str, Any]:
     """The scheduled Graph reads, each skipped while the budget is past DATA_SHARE. Daily
-    jobs run once per owner-local day and retry next tick until they succeed. Never raises."""
+    jobs run once per owner-local day, retried hourly until they succeed. Never raises."""
     t = now()
     today = t.astimezone(ZoneInfo(settings.timezone)).date()
     out: Dict[str, Any] = {}
@@ -111,7 +112,8 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
     for key, make in (("account_day", lambda: snapshot_account(client, store, today)),
                       ("online_followers_day",
                        lambda: collect_online_followers(client, store, today))):
-        if store.get_state(key) != today.isoformat() and await job(key, make):
+        if (store.get_state(key) != today.isoformat()
+                and _every(store, f"{key}_tried_at", DAILY_RETRY, t) and await job(key, make)):
             store.set_state(key, today.isoformat())
     return out
 
