@@ -201,6 +201,14 @@ class InstagramMCPSettings(BaseSettings):
     max_clip_mb: float = Field(300.0, gt=0, description="Largest clip accepted (MB, 10^6 B)")
     max_clip_seconds: float = Field(300.0, gt=0, description="Longest clip accepted (seconds)")
 
+    # --- Reel downloader --------------------------------------------------
+    # src/studio/downloader_service.py: the vendored downloader (vendor/), run by the worker
+    # on 127.0.0.1 only once `ig-campaign downloader setup` built it.
+    downloader_port: int = Field(3711, ge=1, le=65535, description="Loopback port of the service")
+    downloader_health_url: str = Field(
+        "", description="A public Reel permalink for the daily health check; empty = no check"
+    )
+
     # --- Production tools -------------------------------------------------
     # src/studio/production.py (the agent's batch tools).
     best_before_default_days: int = Field(

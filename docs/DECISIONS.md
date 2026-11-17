@@ -8,6 +8,19 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: Reel downloader vendored as a loopback-only service (063a)
+Okramjimmy/Instagram-reels-downloader (owner's choice, MIT licence) is a git submodule in
+`vendor/instagram-reels-downloader`, pinned to `c36c205` (upstream's latest commit on
+2026-11-17; it exists, no history rewrite). The worker runs `next start -H 127.0.0.1`
+on `DOWNLOADER_PORT` (default 3711) with `USE_UPSTASH=false` and an allow-listed
+environment (no secret of ours reaches it), only once `ig-campaign downloader setup`
+built it (`.next/BUILD_ID`), so no separate on/off setting. Only `/api/video` is called.
+`downloader update` refuses while the service port is in use (a rebuild under a running
+server is unsafe) and needs `DOWNLOADER_HEALTH_URL`, since an update is kept only when
+the health check passes. CI does not check the submodule out: it is never built or run
+in tests.
+Reason: GOAL.md §5.1 (never the brand account, nothing exposed), step 063a.
+
 ## 2026-11-17: Owner priorities: reaction reel, DM picks, scroll-and-decide inbox, video timelines, work packets
 The owner asked mid-build for six changes (progress.md Phase 5b, steps 110–116, plus 071/072/073 re-planned):
 - **Reaction reel** (replaces the per-clip recorder and the "To record" wait): the owner

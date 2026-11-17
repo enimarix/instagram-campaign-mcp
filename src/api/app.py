@@ -44,6 +44,7 @@ from . import token as token_routes
 from .analytics import router as analytics_router
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 from .calendar import router as calendar_router
+from .downloader import router as downloader_router
 
 # Reachable without a session even when UI_PASSWORD is set.
 PUBLIC_PATHS = {"/api/health", "/api/login", "/api/logout", "/api/session"}
@@ -173,6 +174,7 @@ def create_app(
     app.include_router(sources.router)
     app.include_router(reactions.router)
     app.include_router(dm_picks.router)
+    app.include_router(downloader_router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 

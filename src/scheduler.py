@@ -22,6 +22,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler agent check         # is the Claude Code CLI there and signed in?
   python -m src.scheduler agent run-due       # run playbooks due per AGENT_SCHEDULE (061)
   python -m src.scheduler agent install-schedule [--remove]  # OS autostart + daily runs
+  python -m src.scheduler downloader setup|update|status  # Reel downloader service (063a)
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -50,8 +51,8 @@ NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
 
 async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                   stories_every: int = 60) -> None:
-    """The worker of `up` and `worker`: the render loop and the agent catch-up always
-    (neither needs Instagram), publishing when Instagram is configured. Setup mode: say so
+    """The worker of `up` and `worker`: the render loop, the agent catch-up and the Reel
+    downloader service always (none needs Instagram), publishing when Instagram is configured. Setup mode: say so
     once; renders still run."""
     try:
         from .agent.schedule import catch_up_loop
@@ -59,6 +60,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
         store = CampaignStore(settings.database_path)
         renders = asyncio.create_task(worker.render_loop(store, settings))
         agents = asyncio.create_task(catch_up_loop(store, settings))
+        downloader = asyncio.create_task(worker.downloader_loop(store, settings))
         try:
             if settings.instagram_configured:
                 async with InstagramClient(settings, store=store) as client:
@@ -68,7 +70,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                       file=sys.stderr, flush=True)
                 await renders
         finally:
-            for task in (renders, agents):
+            for task in (renders, agents, downloader):
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task
@@ -242,6 +244,29 @@ def _agent(args: argparse.Namespace) -> int:
     return 0 if run["status"] == "succeeded" else 1
 
 
+# --- downloader (063a) ----------------------------------------------------
+def _downloader(args: argparse.Namespace) -> int:
+    from .studio import downloader_service as svc
+
+    settings = get_settings()
+    try:
+        if args.downloader_command == "setup":
+            result = svc.setup()
+        elif args.downloader_command == "update":
+            result = asyncio.run(svc.update(settings))
+        else:
+            store = CampaignStore(settings.database_path)
+            try:
+                result = {**svc.status(store, settings), "commit": svc.commit()}
+            finally:
+                store.close()
+    except svc.DownloaderError as e:
+        print(f"downloader {args.downloader_command}: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ig-campaign")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -293,6 +318,12 @@ def main(argv: list[str] | None = None) -> None:
     ais = agent.add_parser("install-schedule",
                            help="Start `up` at logon and the daily runs via the OS scheduler")
     ais.add_argument("--remove", action="store_true", help="Remove those OS tasks instead")
+    dl = sub.add_parser("downloader", help="The Reel downloader service (vendor/)"
+                        ).add_subparsers(dest="downloader_command", required=True)
+    dl.add_parser("setup", help="npm ci + build in the submodule, then npm audit (logged)")
+    dl.add_parser("update", help="Move to upstream's latest commit; roll back if the health "
+                                 "check fails (stop the worker first)")
+    dl.add_parser("status", help="Built?, port, commit and the last health check")
     args = parser.parse_args(argv)
     if args.command == "agent" and args.agent_command == "run" and (
             (args.max_turns is not None and args.max_turns < 1)
@@ -309,6 +340,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_dev_seed(args))
     if args.command == "agent":
         sys.exit(_agent(args))
+    if args.command == "downloader":
+        sys.exit(_downloader(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 
