@@ -206,7 +206,10 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     ready: a child asset). Runs TTS first when the template has a script and no voice yet."""
     if (idea_id is None) == (asset_id is None):
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
-    v = validate_props(template, build_props(template, props, settings, voice))
+    v = validate_props(template, props)  # before TTS: build_props needs well-formed props
+    voiced = build_props(template, v["props"], settings, voice)
+    if voiced is not v["props"]:
+        v = validate_props(template, voiced)
     env: Dict[str, Any] = {"kind": "motion", "template": template, "props": v["props"]}
     if v["coverFrame"] is not None:  # the publish guard sends it to Instagram as the cover
         env["thumb_offset_ms"] = round(v["coverFrame"] * 1000 / v["fps"])
