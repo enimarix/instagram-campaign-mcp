@@ -124,7 +124,9 @@ def test_no_api_route_can_queue(store, cfg):  # DoD (4)
     paths = list(app.openapi()["paths"])  # included routers too; the source scan below
     # also covers routes hidden from the schema
     assert "/api/assets/{asset_id}/approve" in paths
-    assert not [p for p in paths if "schedule" in p.lower() or "queue" in p.lower()]
+    # The owner's schedule route (023) goes through studio.scheduling -> queue_asset.
+    assert [p for p in paths if "schedule" in p.lower() or "queue" in p.lower()] == [
+        "/api/assets/{asset_id}/schedule", "/api/assets/{asset_id}/unschedule"]
     for f in (Path(__file__).parents[1] / "src" / "api").glob("*.py"):  # approving schedules nothing: test_api_assets
         text = f.read_text(encoding="utf-8")
         assert "queue_asset" not in text and ".schedule(" not in text, f

@@ -158,3 +158,14 @@ export function errorMessage(e: unknown): string {
     return String(e.body.message)
   return e instanceof Error ? e.message : String(e)
 }
+
+/** A publish slot: `publish_at` in UTC, `local` in the owner's time zone (both ISO). */
+export type Slot = { publish_at: string; local: string }
+/** GET /api/assets/{id}/proposed-slot; `needs_confirmation`: a commentary clip (GOAL §5.1). */
+export type ProposedSlot = Slot & { needs_confirmation: boolean }
+export const getProposedSlot = (id: number) => request<ProposedSlot>(`/api/assets/${id}/proposed-slot`)
+/** Where a scheduled asset sits in the queue (404 when it has no pending slot). */
+export const getSlot = (id: number) => request<Slot & { post_id: number }>(`/api/assets/${id}/slot`)
+export const scheduleAsset = (id: number, publish_at: string, confirmed: boolean) =>
+  post<{ asset: Asset }>(`/api/assets/${id}/schedule`, { publish_at, confirmed })
+export const unscheduleAsset = (id: number) => post<Asset>(`/api/assets/${id}/unschedule`)

@@ -11,6 +11,7 @@ import {
 } from '../api/client'
 import AssetCard from './AssetCard'
 import ReasonSheet from './ReasonSheet'
+import ScheduleSheet from './ScheduleSheet'
 
 const STATUSES = ['ready', 'needs_reaction', 'revision_requested', 'approved', 'scheduled',
   'published', 'rendering', 'failed', 'archived']
@@ -32,6 +33,7 @@ export default function InboxPage() {
   const [error, setError] = useState<string | null>(null)
   const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null)
   const [sheetFor, setSheetFor] = useState<number | null>(null)
+  const [scheduleFor, setScheduleFor] = useState<number | null>(null)
   const [current, setCurrent] = useState(0)
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export default function InboxPage() {
     setError(null)
     try {
       patch(a.id, await approveAsset(a.id))
+      setScheduleFor(a.id) // scheduling is the second, explicit step
     } catch (e) {
       setError(`Could not approve (${message(e)})`)
     }
@@ -87,7 +90,7 @@ export default function InboxPage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target
-      if (e.ctrlKey || e.metaKey || e.altKey || sheetFor !== null || !assets?.length) return
+      if (e.ctrlKey || e.metaKey || e.altKey || sheetFor !== null || scheduleFor !== null || !assets?.length) return
       if (t instanceof HTMLElement && (t.isContentEditable || t.closest('input, textarea, select')))
         return
       const a = assets[current]
@@ -165,6 +168,8 @@ export default function InboxPage() {
             current={i === current}
             onVerdict={(v) => void verdict(a, v)}
             onApprove={() => void approve(a)}
+            onSchedule={() => setScheduleFor(a.id)}
+            onChange={(next) => patch(a.id, next)}
             onFocus={() => setCurrent(i)}
           />
         ))}
@@ -179,6 +184,16 @@ export default function InboxPage() {
           onSave={async (codes) => {
             await addFeedback(sheetFor, { reason_codes: codes })
             setSheetFor(null)
+          }}
+        />
+      )}
+      {scheduleFor !== null && (
+        <ScheduleSheet
+          assetId={scheduleFor}
+          onClose={() => setScheduleFor(null)}
+          onScheduled={(next) => {
+            patch(next.id, next)
+            setScheduleFor(null)
           }}
         />
       )}
