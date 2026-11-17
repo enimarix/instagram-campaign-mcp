@@ -8,7 +8,7 @@ import pytest
 
 from src.config import InstagramMCPSettings
 from src.studio import ffmpeg, stt
-from src.studio.recipe import Captions, CaptionLine
+from src.studio.recipe import CaptionLine, Captions
 
 
 def _settings(tmp_path, **kw):
