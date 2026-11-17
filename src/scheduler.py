@@ -7,6 +7,8 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler worker              # keeps running, checks every minute
                                               # (`daemon` is the old name, still works)
   python -m src.scheduler run-due             # one pass (for cron / Task Scheduler)
+  python -m src.scheduler run-due --wait-until-next  # stay awake until the next slot
+                                              # (<= 15 min away), then one pass (wake task)
   python -m src.scheduler collect --limit 30  # snapshot insights (run daily)
   python -m src.scheduler collect --stories-only  # live Stories (run hourly)
   python -m src.scheduler rank                # print the winner ranking
@@ -100,7 +102,10 @@ async def _run(args: argparse.Namespace) -> int:
             return 0
         async with InstagramClient(settings, store=store) as client:
             if args.command == "run-due":
-                print(json.dumps(await run_due(client, store, settings=settings), indent=2))
+                result = (await worker.run_due_after_wait(client, store, settings)
+                          if args.wait_until_next else
+                          await run_due(client, store, settings=settings))
+                print(json.dumps(result, indent=2))
             elif args.command == "collect":
                 limit = 0 if args.stories_only else args.limit
                 print(json.dumps(await collect_insights(client, store, limit=limit), indent=2))
@@ -137,7 +142,10 @@ def _dev_seed(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ig-campaign")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("run-due", help="Publish queued posts that are due, then exit")
+    rd = sub.add_parser("run-due", help="Publish queued posts that are due, then exit")
+    rd.add_argument("--wait-until-next", action="store_true",
+                    help="Keep the PC awake and wait for the next slot if it is due within "
+                         "15 min, then run once (the wake task's action)")
     d = sub.add_parser("worker", aliases=["daemon"],
                        help="Render queued videos; publish queued posts as they come due")
     d.add_argument("--interval", type=int, default=60)
