@@ -128,6 +128,9 @@ class InstagramMCPSettings(BaseSettings):
     login_lockout_minutes: float = Field(
         15.0, description="Failure window and lock duration after too many failed logins"
     )
+    web_dist: str = Field(
+        str(APP_HOME / "web" / "dist"), description="Built website (`npm --prefix web run build`)"
+    )
 
     # --- Logging / cache --------------------------------------------------
     log_level: str = Field("INFO", description="Log level")

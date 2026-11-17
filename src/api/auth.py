@@ -2,7 +2,7 @@
 Website password (step 008): sessions, login lockout, origin check, bind guard.
 
 Pure logic here; `app.py` wires it as a middleware plus thin login routes.
-With no UI_PASSWORD everything is open (loopback use) but the origin check still runs.
+With no UI_PASSWORD everything is open to loopback Host names only; the origin check always runs.
 """
 
 from __future__ import annotations
@@ -104,6 +104,18 @@ def origin_ok(method: str, url: str, headers, has_session_cookie: bool) -> bool:
     if not claimed:
         return not has_session_cookie
     return _origin(claimed) == _origin(url)
+
+
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def host_ok(hostname: Optional[str], password_set: bool) -> bool:
+    """DNS-rebinding guard: without a password, only loopback Host names reach the studio.
+
+    A rebinding page talks to 127.0.0.1 under its own domain name, so its Host header gives it
+    away. With a password the studio may be reached by any name (phone over LAN / Tailscale).
+    """
+    return password_set or (hostname or "").lower() in LOOPBACK_HOSTS
 
 
 def bind_error(host: str, settings: InstagramMCPSettings) -> Optional[str]:

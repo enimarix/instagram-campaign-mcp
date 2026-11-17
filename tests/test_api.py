@@ -14,7 +14,7 @@ from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.store import CampaignStore
 
-from .conftest import API
+from .conftest import API, LOCAL
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def test_settings_load_without_token(setup_settings, settings):
 
 def test_health_both_modes(setup_settings, settings):
     for s, configured in ((setup_settings, False), (settings, True)):
-        with TestClient(create_app(s)) as tc:
+        with TestClient(create_app(s), base_url=LOCAL) as tc:
             r = tc.get("/api/health")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
@@ -40,7 +40,7 @@ def test_health_both_modes(setup_settings, settings):
 
 
 def test_account_setup_mode_is_503(setup_settings):
-    with TestClient(create_app(setup_settings)) as tc:
+    with TestClient(create_app(setup_settings), base_url=LOCAL) as tc:
         r = tc.get("/api/account")
     assert r.status_code == 503
     assert r.json() == {"error": "instagram_not_configured"}
@@ -53,7 +53,7 @@ def test_account_configured(settings):
         return_value=httpx.Response(200, json={"id": "1789", "username": "macrobody"}))
     respx.get(f"{API}/1789/content_publishing_limit").mock(
         return_value=httpx.Response(200, json={"data": [{"quota_usage": 2}]}))
-    with TestClient(create_app(settings)) as tc:
+    with TestClient(create_app(settings), base_url=LOCAL) as tc:
         r = tc.get("/api/account")
     assert r.status_code == 200
     assert r.json() == {"token_valid": True,
@@ -66,7 +66,7 @@ def test_account_graph_error_is_clean_json(settings):
     respx.get(f"{API}/me").mock(return_value=httpx.Response(200, json={"id": "1"}))
     respx.get(f"{API}/1789").mock(return_value=httpx.Response(
         400, json={"error": {"message": "Unsupported get request", "code": 100}}))
-    with TestClient(create_app(settings)) as tc:
+    with TestClient(create_app(settings), base_url=LOCAL) as tc:
         r = tc.get("/api/account")
     assert r.status_code == 502
     assert r.json()["error"] == "instagram_api_error"

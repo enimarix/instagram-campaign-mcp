@@ -13,6 +13,8 @@ from src.instagram_client import InstagramClient  # noqa: E402
 from src.store import CampaignStore  # noqa: E402
 
 API = "https://graph.facebook.com/v25.0"
+# TestClient base URL: without UI_PASSWORD the Host guard refuses Starlette's "testserver".
+LOCAL = "http://127.0.0.1"
 
 
 @pytest.fixture
