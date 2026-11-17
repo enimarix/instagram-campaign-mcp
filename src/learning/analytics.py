@@ -113,7 +113,8 @@ def post_detail(store: CampaignStore, settings: InstagramMCPSettings,
                 media_id: str) -> Dict[str, Any]:
     """One post: its own snapshot series (oldest first), tags, hypothesis, source asset with
     preview URL and the owner's feedback when the studio made it, and its retention findings
-    (src/learning/retention.py; [] unless a matured Reel). KeyError: unknown media."""
+    (src/learning/retention.py; [] unless a matured Reel) with the asset's description,
+    timeline and duration (None outside the studio). KeyError: unknown media."""
     snaps = store.media_snapshots(media_id)
     if not snaps:
         raise KeyError(f"No snapshots for media {media_id}")
@@ -132,6 +133,8 @@ def post_detail(store: CampaignStore, settings: InstagramMCPSettings,
         "series": [{"captured_at": s["captured_at"], "age_hours": s["age_hours"],
                     "metrics": s["metrics"]} for s in snaps],
         "retention": retention_for(store, settings, media_id),
+        # the video's own story (110), for the retention card's timeline bar
+        **{k: (asset or {}).get(k) for k in ("description", "timeline", "duration")},
     }
 
 

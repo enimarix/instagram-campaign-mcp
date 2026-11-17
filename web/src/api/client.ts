@@ -428,6 +428,11 @@ export type PostDetail = Omit<AnalyticsPost, 'metrics' | 'verdict' | 'why'> & {
   hypothesis: string | null
   feedback: Comment[]
   series: { captured_at: string; age_hours: number; metrics: Record<string, number | null> }[]
+  retention: RetentionFinding[]
+  // the studio video's story (step 110); null outside the studio
+  description: string | null
+  timeline: TimelineEvent[] | null
+  duration: number | null
 }
 export const getAnalyticsPost = (mediaId: string) =>
   request<PostDetail>(`/api/analytics/posts/${encodeURIComponent(mediaId)}`)
@@ -519,3 +524,26 @@ export const unpinAccount = (id: number) => request<null>(`/api/pinned-accounts/
 export const listDmPicks = (status?: DmPickStatus) =>
   request<DmPick[]>(`/api/dm-picks${status ? `?status=${status}` : ''}`)
 export const skipDmPick = (id: number, reason: string) => post<DmPick>(`/api/dm-picks/${id}/skip`, { reason })
+
+// --- Retention findings (step 111) ---
+/** A finding of src/learning/retention.py; `at_s`/`event`: where in the video it points. */
+export type RetentionFinding = {
+  kind: 'hook' | 'exit' | 'payoff' | 'strong'
+  at_s?: number
+  event?: string
+  evidence: Record<string, number | null>
+  confidence: 'low' | 'medium' | 'high'
+  text: string
+}
+
+// --- Reel downloader (step 063a; src/api/downloader.py) ---
+export type DownloaderHealth = { status: 'up' | 'down' | 'broken' | 'not_configured'; checked_at: string; detail?: string }
+/** GET /api/downloader/status: `health` is the worker's last daily check (null: never ran). */
+export type DownloaderStatus = {
+  set_up: boolean
+  host: string
+  port: number
+  health_configured: boolean
+  health: DownloaderHealth | null
+}
+export const getDownloaderStatus = () => request<DownloaderStatus>('/api/downloader/status')

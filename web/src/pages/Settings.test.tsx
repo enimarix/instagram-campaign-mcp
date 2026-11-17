@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { WorkerStatus } from '../api/client'
+import type { DownloaderStatus, WorkerStatus } from '../api/client'
 import Settings from './Settings'
 
 const WORKER: WorkerStatus = {
@@ -9,6 +9,14 @@ const WORKER: WorkerStatus = {
   paused: false,
   next_slot: '2026-11-18T18:10:00+00:00',
   last_result: { published: [{ id: 1 }], failed: [], retrying: [], replanned: [], paused: false },
+}
+
+const HOUR_AGO = new Date(Date.now() - 3600_000).toISOString()
+function downloader(over: Partial<DownloaderStatus>): DownloaderStatus {
+  return {
+    set_up: true, host: '127.0.0.1', port: 3210, health_configured: true,
+    health: { status: 'up', checked_at: HOUR_AGO }, ...over,
+  }
 }
 
 const ROUTES: Record<string, [number, unknown]> = {
@@ -32,6 +40,9 @@ const ROUTES: Record<string, [number, unknown]> = {
     },
     { playbook: 'review', time: '14:30', next_at: '2026-11-17T14:30:00+01:00', exists: false, last_run: null },
   ]],
+  'GET /api/pinned-accounts': [200, []],
+  'GET /api/dm-picks': [200, []],
+  'GET /api/downloader/status': [200, downloader({})],
 }
 
 function stubApi(overrides: Record<string, [number, unknown]> = {}) {
@@ -98,6 +109,24 @@ describe('Settings', () => {
     expect(await screen.findByRole('button', { name: 'Resume publishing' })).toBeTruthy()
     expect(calls).toContain('POST /api/worker/pause')
     expect(confirm).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    [downloader({}), 'up', ['1 hour ago']],
+    [downloader({ health: { status: 'down', checked_at: HOUR_AGO } }), 'down', []],
+    [downloader({ health: { status: 'broken', checked_at: HOUR_AGO, detail: 'HTTP 500' } }), 'broken', ['1 hour ago · HTTP 500']],
+    [downloader({ health_configured: false, health: { status: 'not_configured', checked_at: HOUR_AGO } }), 'not configured',
+      ['Off: set DOWNLOADER_HEALTH_URL in .env']],
+    [downloader({ health: null }), 'not checked yet', []],
+    [downloader({ set_up: false, health: null }), 'not set up', ['ig-campaign downloader setup']],
+  ] as const)('shows the Reel downloader state %#', async (status, chip, texts) => {
+    stubApi({ 'GET /api/downloader/status': [200, status] })
+    render(<Settings />)
+    const dl = section('Reel downloader')
+    expect(await within(dl).findByText(chip)).toBeTruthy()
+    for (const t of texts) expect(within(dl).getByText((_, el) => el?.tagName === 'DD' && el.textContent?.includes(t) === true)).toBeTruthy()
+    expect(within(dl).queryByText('Set it up') === null).toBe(status.set_up)
+    expect(within(dl).queryByText('Health check') === null).toBe(status.health_configured)
   })
 
   it('shows the setup banner, not an error, in setup mode', async () => {

@@ -143,3 +143,5 @@ async def test_facts_and_post_detail_carry_retention(store):
     with TestClient(create_app(s, store=store), base_url=LOCAL) as tc:
         body = tc.get("/api/analytics/posts/ours").json()
     assert body["retention"] == retention_for(store, s, "ours")
+    assert body["timeline"] == TIMELINE and body["duration"] == DURATION
+    assert body["description"] is None

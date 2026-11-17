@@ -9,6 +9,15 @@ export const VERDICT_TONE: Record<string, Tone | undefined> = { winner: 'success
 export const num = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString('en'))
 export const pct = (r: number | null | undefined) => (r == null ? '–' : `${Math.round(r * 100)} %`)
 
+const pad = (n: number) => String(n).padStart(2, '0')
+/** 754 → "12:34", 3725 → "1:02:05". */
+export function clock(seconds: number) {
+  const t = Math.floor(seconds)
+  const h = Math.floor(t / 3600)
+  const m = Math.floor((t % 3600) / 60)
+  return h ? `${h}:${pad(m)}:${pad(t % 60)}` : `${m}:${pad(t % 60)}`
+}
+
 export type Load<T> = { data?: T; error?: string }
 /** Fetches on mount and whenever `key` changes; a late answer for an old key is dropped. */
 export function useLoad<T>(load: () => Promise<T>, key: unknown): Load<T> {

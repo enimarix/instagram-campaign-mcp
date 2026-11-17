@@ -17,8 +17,19 @@ const DETAIL: PostDetail = {
   hypothesis: 'questions hook better',
   feedback: [{ id: 1, text: 'love the ending', reason_codes: [], video_time_s: null, wants_changes: 0, created_at: '2026-11-11T09:00:00Z' }],
   series: [1, 24, 72].map((h, i) => ({ captured_at: `t${h}`, age_hours: h, metrics: { views: 100 * (i + 1), reach: 50 * (i + 1) } })),
+  description: 'A pixel knight busts three water myths.',
+  timeline: [{ t: 0, d: 3, e: 'hook: myth card' }, { t: 3, d: 12, e: 'fact 1' }, { t: 15, d: 15, e: 'fact 2: water' }],
+  duration: 30,
+  retention: [
+    { kind: 'hook', at_s: 0, event: 'hook: myth card', evidence: { n: 6 }, confidence: 'medium', text: '60% skipped in the first 3 s.' },
+    { kind: 'exit', at_s: 15.2, event: 'fact 2: water', evidence: { n: 6 }, confidence: 'low', text: 'The average viewer leaves around 0:15.' },
+    { kind: 'payoff', evidence: { n: 6 }, confidence: 'high', text: 'Viewers stay but do not share.' },
+  ],
 }
-const EXTERNAL: PostDetail = { ...DETAIL, media_id: 'm1', permalink: 'https://www.instagram.com/reel/1/', asset_id: null, preview_url: null, thumbnail_url: null, tags: null, hypothesis: null, feedback: [] }
+const EXTERNAL: PostDetail = {
+  ...DETAIL, media_id: 'm1', permalink: 'https://www.instagram.com/reel/1/', asset_id: null, preview_url: null, thumbnail_url: null,
+  tags: null, hypothesis: null, feedback: [], description: null, timeline: null, duration: null, retention: [],
+}
 
 function stubApi() {
   const fetchMock = vi.fn(async (url: string) => {
@@ -111,6 +122,34 @@ describe('PostPage', () => {
     expect(screen.queryByLabelText('Studio video')).toBeNull()
     expect(screen.getByText('No tags: made outside the studio.')).toBeTruthy()
     expect(screen.getByText('No feedback.')).toBeTruthy()
+  })
+
+  it('shows why viewers left on the timeline, with confidence chips', async () => {
+    stubApi()
+    show('/analytics/posts/m0')
+    const card = await screen.findByRole('region', { name: 'Why viewers left' })
+    expect(within(card).getByText('A pixel knight busts three water myths.')).toBeTruthy()
+    expect(within(card).getAllByRole('listitem').length).toBe(6) // 3 events + 3 findings
+    expect(within(within(card).getByRole('list', { name: 'Timeline events' })).getAllByRole('listitem').map((li) => li.textContent))
+      .toEqual(['0:00–0:03 hook: myth card', '0:03–0:15 fact 1', '0:15–0:30 fact 2: water'])
+    // markers sit at at_s / duration; a finding without at_s has none
+    expect((within(card).getByTitle('Hook at 0:00') as HTMLElement).style.left).toBe('0%')
+    expect(parseFloat((within(card).getByTitle('Exit at 0:15') as HTMLElement).style.left)).toBeCloseTo(50.67, 1)
+    expect(within(card).queryByTitle(/^Payoff/)).toBeNull()
+    const rows = within(within(card).getByRole('list', { name: 'Findings' })).getAllByRole('listitem')
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Hook · 0:00medium confidence60% skipped in the first 3 s.',
+      'Exit · 0:15low confidenceThe average viewer leaves around 0:15.',
+      'Payoffhigh confidenceViewers stay but do not share.',
+    ])
+  })
+
+  it('says no findings yet and draws no bar without a timeline', async () => {
+    stubApi()
+    show('/analytics/posts/m1')
+    const card = await screen.findByRole('region', { name: 'Why viewers left' })
+    expect(within(card).getByText('No findings yet: they come once the Reel has matured.')).toBeTruthy()
+    expect(within(card).queryByRole('list', { name: 'Timeline events' })).toBeNull()
   })
 
   it('says not found on a 404', async () => {
