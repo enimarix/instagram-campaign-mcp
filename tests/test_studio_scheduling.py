@@ -9,6 +9,7 @@ from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.store import parse_dt, to_iso, utcnow
 from src.studio import scheduling
+from src.studio.assets import set_verdict
 
 from .conftest import LOCAL
 from .test_studio_publish import _asset
@@ -120,3 +121,59 @@ def test_unapprove_publish_check_is_409(tc, store, cfg):
     assert r.status_code == 409 and r.json()["error"] == "invalid_transition"
     assert "publish_check" in r.json()["message"]
     assert store.get_asset(a["id"])["status"] == "publish_check"
+
+
+# Step 023a: the bench (ready + liked from every batch).
+
+def _liked(store, cfg, best_before=None, self_score=None, status="ready"):
+    a = _asset(store, cfg, status=status, best_before=best_before, self_score=self_score)
+    return set_verdict(store, a["id"], "liked")
+
+
+def test_bench_order_and_expiry(store, cfg):
+    now = _day()
+    d = lambda n: (now.date() + timedelta(days=n)).isoformat()  # noqa: E731
+    late = _liked(store, cfg, d(5), 9)
+    none_hi = _liked(store, cfg, None, 8)
+    soon_lo = _liked(store, cfg, d(1), 3)
+    soon_hi = _liked(store, cfg, d(1), 7)
+    today = _liked(store, cfg, d(0))
+    _liked(store, cfg, d(-1), 10)  # expired: left out before housekeeping archives it
+    _liked(store, cfg, d(1), 10, status="approved")  # not on the bench any more
+    _asset(store, cfg, status="ready", best_before=d(1))  # not liked
+    ids = [a["id"] for a in scheduling.bench(store, cfg, now)["assets"]]
+    assert ids == [today["id"], soon_hi["id"], soon_lo["id"], late["id"], none_hi["id"]]
+
+
+@pytest.mark.parametrize("n, days", [(0, 0), (1, 1), (3, 1), (4, 2)])
+def test_bench_supply_days(store, cfg, n, days):
+    cfg = cfg.model_copy(update={"max_posts_per_day": 3})
+    for _ in range(n):
+        _liked(store, cfg)
+    out = scheduling.bench(store, cfg, _day())
+    assert len(out["assets"]) == n and out["supply_days"] == days
+    assert out["max_posts_per_day"] == 3
+
+
+def test_bench_suggestion_only_with_a_free_slot_within_24h(store, cfg):
+    now = _day()
+    assert scheduling.bench(store, cfg, now)["suggestion"] is None  # empty bench
+    _liked(store, cfg, None, 2)
+    fresh = _liked(store, cfg, (now.date() + timedelta(days=3)).isoformat(), 1)
+    s = scheduling.bench(store, cfg, now)["suggestion"]
+    assert s["asset_id"] == fresh["id"] and parse_dt(s["publish_at"]) == now.replace(hour=11)
+    assert s["local"].startswith(f"{now.date()}T11:00:00")
+    for day in (0, 1):  # today and tomorrow full (2 a day): the next slot is > 24 h away
+        for hour in (10, 11):
+            store.schedule("reel", {"video_path": "x.mp4"}, now.replace(hour=hour) + timedelta(
+                days=day, minutes=30))
+    assert scheduling.bench(store, cfg, now)["suggestion"] is None
+
+
+def test_bench_route(tc, store, cfg):
+    a = _liked(store, cfg)
+    r = tc.get("/api/bench")
+    assert r.status_code == 200
+    body = r.json()
+    assert [x["id"] for x in body["assets"]] == [a["id"]] and "file_url" in body["assets"][0]
+    assert body["supply_days"] == 1

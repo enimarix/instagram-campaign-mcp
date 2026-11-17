@@ -50,6 +50,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  sessionStorage.clear()
 })
 
 describe('InboxPage', () => {
@@ -164,5 +165,85 @@ describe('InboxPage', () => {
     fireEvent.click(within(card(1)).getByRole('button', { name: 'Approve' }))
     expect(await within(card(1)).findByText('approved')).toBeTruthy()
     expect(within(card(1)).queryByRole('button', { name: 'Approve' })).toBeNull()
+  })
+
+  describe('bench', () => {
+    const SLOT = { publish_at: '2026-11-18T10:00:00Z', local: '2026-11-18T11:00:00+01:00' }
+    const BENCH = {
+      assets: [asset(7, { verdict: 'liked', best_before: '2026-11-20', batch_date: '2026-11-10' }),
+        asset(8, { verdict: 'liked', best_before: null, batch_date: '2026-11-12' }),
+        asset(9, { verdict: 'liked', batch_date: '2026-11-13' }),
+        asset(10, { verdict: 'liked', batch_date: '2026-11-14' })],
+      supply_days: 2,
+      max_posts_per_day: 3,
+      suggestion: { asset_id: 7, ...SLOT },
+    }
+    const benchApi = (routes: Record<string, [number, unknown]> = {}) =>
+      stubApi({ 'GET /api/bench': [200, BENCH], ...routes })
+
+    it('the Bench tab lists liked videos with the supply line and best-before', async () => {
+      benchApi()
+      render(<InboxPage />, { wrapper: MemoryRouter })
+      fireEvent.click(await screen.findByRole('tab', { name: 'Bench (4)' }))
+      expect(await screen.findByText('4 liked videos = 2 days at 3 a day')).toBeTruthy()
+      expect(screen.getAllByRole('article').map((a) => a.getAttribute('aria-label')))
+        .toEqual(['Video 7', 'Video 8', 'Video 9', 'Video 10'])
+      expect(within(card(7)).getByText('best before 2026-11-20')).toBeTruthy()
+      expect(within(card(8)).queryByText(/best before/)).toBeNull()
+      expect(screen.queryByLabelText('Batch date')).toBeNull()
+      fireEvent.click(screen.getByRole('tab', { name: 'Today' }))
+      expect(await screen.findByText('1 of 2 reviewed')).toBeTruthy()
+    })
+
+    it('one liked video reads in the singular', async () => {
+      stubApi({ 'GET /api/bench': [200, { ...BENCH, assets: [BENCH.assets[0]], supply_days: 1 }] })
+      render(<InboxPage />, { wrapper: MemoryRouter })
+      fireEvent.click(await screen.findByRole('tab', { name: 'Bench (1)' }))
+      expect(await screen.findByText('1 liked video = 1 day at 3 a day')).toBeTruthy()
+    })
+
+    it('approve on the bench (button or key a) opens the schedule sheet', async () => {
+      const calls = benchApi({
+        'POST /api/assets/7/approve': [200, asset(7, { status: 'approved', verdict: 'liked' })],
+        'GET /api/assets/7/proposed-slot': [200, { ...SLOT, needs_confirmation: false }],
+      })
+      render(<InboxPage />, { wrapper: MemoryRouter })
+      fireEvent.click(await screen.findByRole('tab', { name: 'Bench (4)' }))
+      await screen.findByRole('article', { name: 'Video 7' })
+      fireEvent.keyDown(window, { key: 'a' })
+      expect(await screen.findByRole('dialog')).toBeTruthy()
+      expect(posts(calls).map((c) => c.url)).toEqual(['/api/assets/7/approve'])
+      expect(await within(card(7)).findByText('approved')).toBeTruthy()
+    })
+
+    it('the banner suggests the freshest video; Review it opens the bench', async () => {
+      const calls = benchApi()
+      render(<InboxPage />, { wrapper: MemoryRouter })
+      const banner = await screen.findByRole('region', { name: 'Bench suggestion' })
+      expect(banner.textContent).toContain('2026-11-18 11:00')
+      fireEvent.click(within(banner).getByRole('button', { name: 'Review it' }))
+      expect(await screen.findByRole('article', { name: 'Video 7' })).toBeTruthy()
+      expect(screen.getByRole('tab', { name: 'Bench (4)' }).getAttribute('aria-selected')).toBe('true')
+      expect(posts(calls)).toEqual([]) // nothing approved by itself
+    })
+
+    it('the banner can be dismissed for the session', async () => {
+      benchApi()
+      const { unmount } = render(<InboxPage />, { wrapper: MemoryRouter })
+      const banner = await screen.findByRole('region', { name: 'Bench suggestion' })
+      fireEvent.click(within(banner).getByRole('button', { name: 'Dismiss' }))
+      expect(screen.queryByRole('region', { name: 'Bench suggestion' })).toBeNull()
+      unmount()
+      render(<InboxPage />, { wrapper: MemoryRouter })
+      await screen.findByRole('tab', { name: 'Bench (4)' })
+      expect(screen.queryByRole('region', { name: 'Bench suggestion' })).toBeNull()
+    })
+
+    it('no banner without a suggestion', async () => {
+      stubApi({ 'GET /api/bench': [200, { ...BENCH, suggestion: null }] })
+      render(<InboxPage />, { wrapper: MemoryRouter })
+      await screen.findByRole('tab', { name: 'Bench (4)' })
+      expect(screen.queryByRole('region', { name: 'Bench suggestion' })).toBeNull()
+    })
   })
 })

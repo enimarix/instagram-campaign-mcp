@@ -170,6 +170,16 @@ export const scheduleAsset = (id: number, publish_at: string, confirmed: boolean
   post<{ asset: Asset }>(`/api/assets/${id}/schedule`, { publish_at, confirmed })
 export const unscheduleAsset = (id: number) => post<Asset>(`/api/assets/${id}/unschedule`)
 
+/** GET /api/bench: liked videos from every batch still waiting for approval, freshest
+ * best-before first; `suggestion` = the freshest one for a free slot within 24 h. */
+export type Bench = {
+  assets: Asset[]
+  supply_days: number
+  max_posts_per_day: number
+  suggestion: (Slot & { asset_id: number }) | null
+}
+export const getBench = () => request<Bench>('/api/bench')
+
 /** A publish-queue row on the calendar (src/studio/calendar.py); `local`: owner's time zone. */
 export type CalendarPost = Slot & {
   id: number
