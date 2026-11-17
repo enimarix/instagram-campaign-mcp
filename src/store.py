@@ -211,9 +211,17 @@ CREATE TABLE audience_hours (
 );
 """
 
+# Migration 5: queue rows and post labels point at the studio asset they publish (019).
+ASSET_LINK_SCHEMA = """
+ALTER TABLE scheduled_posts ADD COLUMN asset_id INTEGER REFERENCES assets(id);
+ALTER TABLE post_labels ADD COLUMN asset_id INTEGER REFERENCES assets(id);
+CREATE INDEX idx_sched_asset ON scheduled_posts(asset_id);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
-MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA]
+MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
+                         ASSET_LINK_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version")
@@ -418,18 +426,47 @@ class CampaignStore:
         campaign: Optional[str] = None,
         variant: Optional[str] = None,
         hypothesis: Optional[str] = None,
+        asset_id: Optional[int] = None,
     ) -> Dict[str, Any]:
+        """Queue a post. Studio assets come through studio.publish.queue_asset() only."""
         if kind not in POST_KINDS:
             raise ValueError(f"kind must be one of {POST_KINDS}")
         now = to_iso(utcnow())
         with self._tx() as c:
             cur = c.execute(
                 "INSERT INTO scheduled_posts (kind, payload, publish_at, campaign, variant,"
-                " hypothesis, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                " hypothesis, asset_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
                 (kind, json.dumps(payload), to_iso(publish_at), campaign, variant,
-                 hypothesis, now, now),
+                 hypothesis, asset_id, now, now),
             )
         return self.get_scheduled(cur.lastrowid)
+
+    def delete_pending(self, post_id: int) -> bool:
+        """Remove a pending row nobody has claimed (queue_asset lost a race)."""
+        with self._tx() as c:
+            cur = c.execute("DELETE FROM scheduled_posts WHERE id=? AND status='pending'",
+                            (post_id,))
+        return cur.rowcount == 1
+
+    def cancel_claimed(self, post_id: int, error: str) -> None:
+        """The worker drops a row it claimed but must not publish."""
+        with self._tx() as c:
+            c.execute(
+                "UPDATE scheduled_posts SET status='cancelled', error=?, updated_at=?"
+                " WHERE id=? AND status='publishing'",
+                (error, to_iso(utcnow()), post_id),
+            )
+
+    def unsettled_assets(self) -> List[int]:
+        """Assets still `scheduled` whose row failed: the publish may have reached
+        Instagram (crash recovered by recover_stuck), so they need a check."""
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT DISTINCT p.asset_id FROM scheduled_posts p"
+                " JOIN assets a ON a.id = p.asset_id"
+                " WHERE p.status='failed' AND a.status='scheduled'"
+            ).fetchall()
+        return [r[0] for r in rows]
 
     def get_scheduled(self, post_id: int) -> Dict[str, Any]:
         with self._tx() as c:
@@ -514,7 +551,8 @@ class CampaignStore:
                 (media_id, permalink, to_iso(utcnow()), post_id),
             )
         self.label_post(
-            media_id, post["campaign"], post["variant"], post["hypothesis"], post["kind"]
+            media_id, post["campaign"], post["variant"], post["hypothesis"], post["kind"],
+            asset_id=post["asset_id"],
         )
 
     def mark_failed(
@@ -581,16 +619,18 @@ class CampaignStore:
         variant: Optional[str] = None,
         hypothesis: Optional[str] = None,
         kind: Optional[str] = None,
+        asset_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         with self._tx() as c:
             c.execute(
                 "INSERT INTO post_labels (media_id, campaign, variant, hypothesis, kind,"
-                " created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(media_id) DO UPDATE SET"
-                " campaign=COALESCE(excluded.campaign, campaign),"
+                " asset_id, created_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(media_id) DO UPDATE"
+                " SET campaign=COALESCE(excluded.campaign, campaign),"
                 " variant=COALESCE(excluded.variant, variant),"
                 " hypothesis=COALESCE(excluded.hypothesis, hypothesis),"
-                " kind=COALESCE(excluded.kind, kind)",
-                (media_id, campaign, variant, hypothesis, kind, to_iso(utcnow())),
+                " kind=COALESCE(excluded.kind, kind),"
+                " asset_id=COALESCE(excluded.asset_id, asset_id)",
+                (media_id, campaign, variant, hypothesis, kind, asset_id, to_iso(utcnow())),
             )
         return self.get_label(media_id) or {}
 

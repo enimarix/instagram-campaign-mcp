@@ -72,6 +72,8 @@ def _place_media(media_root: Path, batch_date: date, asset_id: int) -> Dict[str,
 def _walk(store: CampaignStore, asset_id: int, *moves: tuple) -> None:
     for to, actor in moves:
         transition(store, asset_id, to, actor=actor)
+        if to == "ready":  # the worker moves to ready only when QC passed
+            store.update_asset(asset_id, qc={"passed": True})
 
 
 def _new_asset(store, rng, batch_date, track, status, media_root, *, n, parent=None):

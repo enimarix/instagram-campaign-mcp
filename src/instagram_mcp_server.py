@@ -23,6 +23,7 @@ from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
+from .studio.publish import cancel_post
 
 configure_logging()
 
@@ -344,9 +345,10 @@ async def list_scheduled_posts(
 
 @mcp.tool(annotations=LOCAL_WRITE)
 async def cancel_scheduled_post(post_id: int) -> Dict[str, Any]:
-    """Cancel a pending or failed scheduled post."""
+    """Cancel a pending or failed scheduled post (a pending studio asset goes back to
+    approved)."""
     try:
-        return store().cancel(post_id)
+        return cancel_post(store(), post_id)
     except (KeyError, ValueError) as e:
         raise ToolError(str(e)) from e
 
