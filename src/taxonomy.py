@@ -100,6 +100,8 @@ def validate_many(
     kind: str, values: Iterable[str], path: Optional[Union[str, Path]] = None
 ) -> List[str]:
     """Return `values` as a list, or raise TaxonomyError naming every unknown one."""
+    if isinstance(values, str):  # list("pov") would check 'p', 'o', 'v'
+        raise TypeError("validate_many() takes a list of values; use validate() for one")
     allowed = valid_values(kind, path)
     values = list(values)
     bad = [v for v in values if v not in allowed]

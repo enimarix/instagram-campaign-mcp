@@ -52,6 +52,8 @@ def test_validate_many_reports_all_bad_values():
         validate_many("hook_types", ["question", "nope", "pov", "nada"])
     msg = str(e.value)
     assert "'nope'" in msg and "'nada'" in msg and "bold_claim" in msg
+    with pytest.raises(TypeError):
+        validate_many("hook_types", "pov")
 
 
 @pytest.mark.parametrize("kind", ["tags", "version"])
