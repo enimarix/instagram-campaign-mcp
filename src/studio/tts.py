@@ -16,6 +16,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional, Protocol, Sequence
@@ -238,7 +239,9 @@ class HttpProvider:
         s = self.s
         headers = {"Content-Type": "application/json"}
         if s.tts_http_auth_header:
-            name, _, value = s.tts_http_auth_header.get_secret_value().partition(":")
+            name, sep, value = s.tts_http_auth_header.get_secret_value().partition(":")
+            if not sep or not name.strip():
+                raise TTSError("TTS_HTTP_AUTH_HEADER must look like 'Name: value'")
             headers[name.strip()] = value.strip()
         body = render_body(s.tts_http_body_template, text, voice)
         client = self.http or httpx.Client()
@@ -279,7 +282,7 @@ def _parse_json(resp: httpx.Response, field: str):
 
 
 def _write_atomic(path: Path, data: bytes) -> None:
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")  # two renders, same text
     tmp.write_bytes(data)
     os.replace(tmp, path)
 

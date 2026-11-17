@@ -127,6 +127,9 @@ def test_http_errors_never_leak_the_header(tmp_path, answer, mode):
     assert not any(tmp_path.glob("*.json"))  # nothing cached
 
 
-def test_http_needs_url(tmp_path):
+def test_http_needs_url_and_a_named_header(tmp_path):
     with pytest.raises(tts.TTSError):
         tts.get_provider(_settings(tmp_path, tts_http_url=None))
+    with pytest.raises(tts.TTSError) as err:
+        tts.get_provider(_settings(tmp_path, tts_http_auth_header="s3cret")).synthesize("hi")
+    assert "s3cret" not in str(err.value)
