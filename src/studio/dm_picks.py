@@ -32,8 +32,9 @@ MESSAGES = 20  # Meta: details only for the 20 most recent messages
 AGENT_KEYS = ("id", "status", "reel_url", "sender_username", "sender_note", "received_at",
               "skip_reason")
 _USERNAME = re.compile(r"[a-z0-9._]{1,30}")
-_NOT_A_REEL = re.compile(r"https://(?:www\.)?instagram\.com/p/|[.](?:jpe?g|png|webp|heic)(?:[?#]|$)",
-                         re.IGNORECASE)
+# A shared feed post or a picture: never a Reel.
+_NOT_A_REEL = re.compile(r"https://(?:www\.)?instagram\.com/p/"
+                         r"|[.](?:jpe?g|png|webp|heic)(?:[?#]|$)", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------- pinned accounts
