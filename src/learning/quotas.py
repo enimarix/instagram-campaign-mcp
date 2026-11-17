@@ -3,8 +3,11 @@ Today's quotas (step 056, GOAL.md §3.1-3.2): how many ideas of each kind a dail
 hold, and how many it already holds. create_idea refuses ideas over a limit; the creative
 brief (055) shows the same numbers to the agent.
 
-- batch: BATCH_SIZE ideas in all.
-- explore: at most ceil(batch x EXPLORE_SHARE) ideas with strategy `explore`.
+- batch: BATCH_SIZE ideas in all, fewer when the bench is full (step 055): every liked,
+  unpublished video beyond BENCH_TARGET_DAYS x MAX_POSTS_PER_DAY takes one idea off, down
+  to BATCH_FLOOR, so learning never stops. That effective size is the batch below.
+- explore: at most ceil(BATCH_SIZE x EXPLORE_SHARE) ideas with strategy `explore`, from the
+  configured size (the cut comes out of exploit), capped at the effective batch.
 - humour: target round(batch x HUMOUR_SHARE), allowed +/- 1, so humour <= target + 1 and
   informative (every other idea, with or without a pillar) <= batch - target + 1. A humour
   idea is one whose pillar has `"humour": true` in brand/taxonomy.json.
@@ -16,12 +19,13 @@ brief (055) shows the same numbers to the agent.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from math import ceil
-from typing import Any, Dict, Set, Union
+from typing import Any, Dict, Optional, Set, Union
 
 from ..config import InstagramMCPSettings
-from ..store import CampaignStore
+from ..store import CampaignStore, utcnow
+from ..studio.scheduling import bench
 from ..taxonomy import load_taxonomy
 
 _AVAILABLE_CLIPS = ("SELECT COUNT(*) FROM sources s WHERE s.local_path IS NOT NULL"
@@ -39,16 +43,26 @@ def available_clips(store: CampaignStore) -> int:
         return c.execute(_AVAILABLE_CLIPS).fetchone()[0]
 
 
+def effective_batch_size(settings: InstagramMCPSettings, bench_count: int) -> Dict[str, int]:
+    """{effective_batch_size, bench_surplus}: the configured size minus the bench surplus,
+    never below batch_floor nor above batch_size."""
+    surplus = max(0, bench_count - settings.bench_target_days * settings.max_posts_per_day)
+    effective = min(settings.batch_size, max(settings.batch_floor, settings.batch_size - surplus))
+    return {"effective_batch_size": effective, "bench_surplus": surplus}
+
+
 def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
-                  day: Union[date, str]) -> Dict[str, Any]:
-    """{date, limits, counts, humour_target, clips_available} for the batch of `day`.
+                  day: Union[date, str], now: Optional[datetime] = None) -> Dict[str, Any]:
+    """{date, limits, counts, humour_target, clips_available, batch_size,
+    effective_batch_size, bench_surplus} for the batch of `day`; the bench is read at `now`.
     limits and counts share the keys ideas, explore, humour, informative, reactions."""
     day = date.fromisoformat(day) if isinstance(day, str) else day
     ideas = store.list_ideas(batch_date=day, limit=100_000)
     humour = flagged_pillars("humour")
-    batch = settings.batch_size
+    sizes = effective_batch_size(settings, len(bench(store, settings, now or utcnow())["assets"]))
+    batch = sizes["effective_batch_size"]
     # round() first: 10 * 0.3 is 3.0000000000000004 in floats, and ceil would make it 4.
-    explore_max = ceil(round(batch * settings.explore_share, 6))
+    explore_max = min(batch, ceil(round(settings.batch_size * settings.explore_share, 6)))
     target = round(batch * settings.humour_share)
     clips = available_clips(store)
     counts = {
@@ -65,4 +79,5 @@ def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
                          counts["reactions"] + clips),
     }
     return {"date": day.isoformat(), "limits": limits, "counts": counts,
-            "humour_target": target, "clips_available": clips}
+            "humour_target": target, "clips_available": clips,
+            "batch_size": settings.batch_size, **sizes}

@@ -208,6 +208,12 @@ class InstagramMCPSettings(BaseSettings):
     dedupe_threshold: float = Field(
         0.85, gt=0, le=1, description="Hook similarity (difflib ratio) that counts as a duplicate"
     )
+    bench_target_days: int = Field(
+        3, ge=0, description="Days of liked videos on the bench beyond which batches shrink"
+    )
+    batch_floor: int = Field(
+        5, ge=1, description="Smallest batch, however full the bench (learning never stops)"
+    )
 
     # --- Agent runs ---------------------------------------------------------
     # `ig-campaign agent run <playbook>` (src/agent/runner.py): Claude Code headless, locked
