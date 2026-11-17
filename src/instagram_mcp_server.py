@@ -22,7 +22,7 @@ from mcp.types import ToolAnnotations
 from . import campaign as camp
 from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
-from .learning import learnings
+from .learning import brief, learnings
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
 from .studio import frames as frames_
@@ -43,7 +43,8 @@ Typical loop:
 4. Decide: rank_posts(only="winner") lists posts beating the account median;
    compare_variants(campaign) says which variant is ahead.
 
-Studio batch (the agent): create_idea for each idea, render_motion each one,
+Studio batch (the agent): start every batch with get_creative_brief (bible, learnings,
+feedback, quotas, what today's batch holds, the bench). create_idea for each idea, render_motion each one,
 wait_for_renders(batch_date) to review renders as they land (get_render_status for one,
 get_asset_frames to look at it),
 submit_asset each QC-passed asset with a self_score, caption and best_before;
@@ -699,6 +700,14 @@ async def update_learning(learning_id: int, statement: Optional[str] = None,
 
 
 @mcp.tool(annotations=LOCAL_READ)
+async def get_creative_brief() -> Dict[str, Any]:
+    """Everything to plan today's batch in one call: bible, learnings, undigested feedback,
+    change requests, last daily report, open experiments, quotas (effective batch size
+    follows the bench), today's ideas, recent hooks to avoid, inspirations, the bench."""
+    return await _studio(brief.creative_brief, store(), get_settings(), utcnow())
+
+
+@mcp.tool(annotations=LOCAL_READ)
 async def list_learnings(kind: Optional[str] = None, status: Optional[str] = "active",
                          origin: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
     """Learnings, strongest first (owner rules first; limit up to 100). status=None: all."""
@@ -780,6 +789,7 @@ AGENT_TOOLS = frozenset({
     "add_learning",
     "update_learning",
     "list_learnings",
+    "get_creative_brief",  # step 055: local read, the start of every batch
 })
 
 
