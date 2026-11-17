@@ -164,7 +164,10 @@ tunnel, gate H7).
 **Autostart and daily agent runs.** `ig-campaign agent install-schedule` (or the
 installer's `-Schedule` / `--schedule`) starts `ig-campaign up` at logon and runs the
 playbooks of `AGENT_SCHEDULE` (default `daily-produce@03:00`, comma-separated
-`playbook@HH:MM` in `TIMEZONE`) every day with `ig-campaign agent run-due`. On Windows
+`playbook@HH:MM` in `TIMEZONE`) every day with `ig-campaign agent run-due`; add
+`daily-revise@14:00` for the light afternoon run (change requests and feedback only).
+Before each run the studio writes its work packet (`work/` in the agent workspace) and
+skips the run when there is nothing to do (see `src/agent/packet.py`). On Windows
 these are Task Scheduler tasks of your user (`IGCampaignUp`, `IGCampaignAgent-<playbook>`;
 the run tasks wake the PC when wake timers are allowed, see above); elsewhere a block
 between `# ig-campaign begin/end` in your crontab. A run missed while the PC was off

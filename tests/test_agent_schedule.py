@@ -270,3 +270,17 @@ async def test_worker_starts_the_catch_up(monkeypatch):
     monkeypatch.setattr(scheduler.worker, "render_loop", renders_done)
     await scheduler._worker(cfg())
     assert seen == ["daily-produce@03:00"]
+
+
+def test_light_afternoon_run_is_due_after_the_night_run(store, agent_dir):
+    (agent_dir / "playbooks" / "daily-revise.md").write_text("Revise.\n")
+    s = cfg(agent_schedule="daily-produce@03:00,daily-revise@14:00")
+    assert schedule.due_runs(store, s, NOW) == ["daily-produce"]  # 03:30 Paris
+    store.finish_agent_run(store.start_agent_run("daily-produce")["id"], "succeeded")
+    afternoon = NOW + timedelta(hours=11)  # 14:30 Paris
+    assert schedule.due_runs(store, s, afternoon) == ["daily-revise"]
+    store.finish_agent_run(store.start_agent_run("daily-revise")["id"], "succeeded",
+                           summary="skipped: nothing to do")  # a skipped run counts as run
+    assert schedule.due_runs(store, s, afternoon) == []
+    assert [r["playbook"] for r in schedule.next_runs(s, afternoon)] == [
+        "daily-produce", "daily-revise"]

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Undigested owner feedback, oldest first (learnings.get_feedback)",
+  "type": "array",
+  "maxItems": 50,
+  "items": {
+    "type": "object",
+    "required": ["id", "asset_id", "text", "reasons", "wants_changes", "created_at", "asset"],
+    "properties": {
+      "id": {"type": "integer"},
+      "asset_id": {"type": "integer"},
+      "text": {"type": ["string", "null"]},
+      "reasons": {
+        "type": "array",
+        "items": {"type": "object", "required": ["code", "label"],
+                  "properties": {"code": {"type": "string"}, "label": {"type": "string"}}}
+      },
+      "video_time_s": {"type": ["number", "null"]},
+      "wants_changes": {"type": "boolean"},
+      "digested_at": {"type": "null"},
+      "created_at": {"type": "string"},
+      "asset": {"type": "object", "required": ["id", "status"],
+                "properties": {"id": {"type": "integer"}, "status": {"type": "string"}}}
+    }
+  }
+}
