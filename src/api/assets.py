@@ -62,6 +62,10 @@ class ScheduleIn(BaseModel):
     confirmed: bool = False
 
 
+class ApproveIn(BaseModel):
+    confirmed: bool = False  # the owner's per-video confirmation a commentary clip needs
+
+
 class AssetEdit(BaseModel):
     model_config = ConfigDict(extra="forbid")
     caption: Optional[str] = None
@@ -97,6 +101,18 @@ def set_verdict(asset_id: int, body: VerdictIn, store: CampaignStore = Depends(g
 def approve(asset_id: int, store: CampaignStore = Depends(get_store)):
     # Approve only opens the door to publishing; scheduling is the next, explicit step.
     return _call(assets.transition, store, asset_id, "approved", actor=OWNER)
+
+
+@router.post("/{asset_id}/approve-and-queue")
+def approve_and_queue(asset_id: int, body: ApproveIn, request: Request,
+                      store: CampaignStore = Depends(get_store)):
+    # The feed's one-tap Approve: approved and queued into the next free slot (or approved
+    # only when the planner's week is full: `slot` null).
+    def run():
+        out = scheduling.approve_and_queue(store, request.app.state.settings, asset_id,
+                                           utcnow(), body.confirmed)
+        return {**out, "asset": with_urls(out["asset"])}
+    return call(run)
 
 
 @router.post("/{asset_id}/unapprove")

@@ -13,6 +13,7 @@ import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { field, link } from '../ui/styles'
+import { clock } from './ui'
 
 type Props = {
   assetId: number
@@ -21,8 +22,6 @@ type Props = {
   reasons: Vocabulary['values']
   onAsset: (a: Asset) => void
 }
-
-const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
 // The owner's comments on one asset, oldest first, plus the form to add one.
 export default function CommentThread({ assetId, currentTime, onSeek, reasons, onAsset }: Props) {

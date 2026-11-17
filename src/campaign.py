@@ -121,8 +121,9 @@ def is_paused(store: CampaignStore, settings: InstagramMCPSettings) -> bool:
     return settings.publishing_paused if flag is None else bool(flag)
 
 
-def _next_free_slot(store: CampaignStore, settings: InstagramMCPSettings,
-                    taken: List[datetime], now: datetime) -> datetime:
+def free_slot(store: CampaignStore, settings: InstagramMCPSettings,
+              taken: List[datetime], now: datetime) -> Optional[datetime]:
+    """The planner's next slot within REPLAN_LOOKAHEAD_DAYS, None when every day is full."""
     day = now.astimezone(ZoneInfo(settings.timezone)).date()
     profile = store.online_followers_profile()
     for d in range(REPLAN_LOOKAHEAD_DAYS):
@@ -130,8 +131,14 @@ def _next_free_slot(store: CampaignStore, settings: InstagramMCPSettings,
                                          hourly_profile=profile)
         if slots:
             return slots[0]
+    return None
+
+
+def _next_free_slot(store: CampaignStore, settings: InstagramMCPSettings,
+                    taken: List[datetime], now: datetime) -> datetime:
     # ponytail: a week full of posts is not a real case; then just go after the last one.
-    return max(taken + [now]) + timedelta(minutes=settings.min_slot_gap_minutes)
+    return free_slot(store, settings, taken, now) or (
+        max(taken + [now]) + timedelta(minutes=settings.min_slot_gap_minutes))
 
 
 def hold_queue(store: CampaignStore, settings: InstagramMCPSettings,

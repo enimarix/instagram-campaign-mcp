@@ -11,7 +11,7 @@ import {
 import { Button } from '../ui/Button'
 import { Sheet } from '../ui/Sheet'
 import { field } from '../ui/styles'
-import { inputValue, wallClock } from './ui'
+import { COMMENTARY_CONFIRMATION, inputValue, wallClock } from './ui'
 
 type Props = {
   assetId: number
@@ -60,7 +60,7 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
         <label className="mt-3 flex items-start gap-2 text-sm">
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}
             className="mt-0.5 size-5" />
-          I checked this reaction video: my own take is a substantial part and the creator is credited.
+          {COMMENTARY_CONFIRMATION}
         </label>
       )}
       {picking && (

@@ -2,7 +2,8 @@
 Scheduling an approved asset from the website (GOAL.md §3.2): the planner proposes a
 slot, the owner accepts it or picks another time, the publish guard queues it.
 
-Approve stays its own owner action; scheduling is the second, explicit step.
+Approve and schedule are two owner steps on the detail page; the review feed's one-tap
+Approve (approve_and_queue, step 115) does both at once.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from ..campaign import _next_free_slot
+from ..campaign import _next_free_slot, free_slot
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_dt, to_iso
 from .assets import InvalidTransition, transition
@@ -54,6 +55,32 @@ def schedule_asset(
     ValueError pass through); return {post, asset}."""
     post = queue_asset(store, settings, asset_id, publish_at, confirmed=confirmed)
     return {"post": post, "asset": store.get_asset(asset_id)}
+
+
+def approve_and_queue(
+    store: CampaignStore,
+    settings: InstagramMCPSettings,
+    asset_id: int,
+    now: datetime,
+    confirmed: bool = False,
+) -> Dict[str, Any]:
+    """The feed's one-tap Approve (step 115): ready -> approved, then queued into the
+    planner's next free slot. No free slot within the planner's week: approved only
+    (`slot` None) and the owner picks a time in the Calendar. Any refusal (rights, QC,
+    file, caption) takes the approval back, so the asset stays `ready`, and passes through.
+    Returns {asset, post, slot}."""
+    status = store.get_asset(asset_id)["status"]
+    if status != "ready":  # scheduled -> approved is also an owner move: not this one
+        raise InvalidTransition(f"asset {asset_id} is {status}, not ready")
+    transition(store, asset_id, "approved", actor="owner")
+    try:
+        at = free_slot(store, settings, _taken(store, now), now)
+        post = queue_asset(store, settings, asset_id, at, confirmed=confirmed) if at else None
+    except Exception:
+        transition(store, asset_id, "ready", actor="owner")
+        raise
+    return {"asset": store.get_asset(asset_id), "post": post,
+            "slot": _slot(settings, at) if at else None}
 
 
 def pending_post(store: CampaignStore, asset_id: int) -> Optional[Dict[str, Any]]:

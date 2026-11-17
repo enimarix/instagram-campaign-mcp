@@ -1,8 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Asset } from '../api/client'
-import InboxPage from './InboxPage'
 import ScheduleSheet, { ScheduledSlot } from './ScheduleSheet'
 
 const ASSET: Asset = {
@@ -114,24 +112,5 @@ describe('ScheduledSlot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Unschedule' }))
     await waitFor(() => expect(onUnscheduled).toHaveBeenCalledWith(ASSET))
     expect(scheduled(calls).map((c) => c.url)).toEqual(['/api/assets/3/unschedule'])
-  })
-})
-
-describe('Inbox approve', () => {
-  it('opens the schedule sheet and the card then shows its slot', async () => {
-    stubApi({
-      'GET /api/assets': [200, [{ ...ASSET, status: 'ready' }]],
-      'GET /api/taxonomy': [200, { feedback_reasons: { values: [] } }],
-      'POST /api/assets/3/approve': [200, ASSET],
-      'GET /api/assets/3/slot': [200, { ...SLOT, post_id: 9 }],
-    })
-    render(<InboxPage />, { wrapper: MemoryRouter })
-    const card = await screen.findByRole('article', { name: 'Video 3' })
-    fireEvent.click(within(card).getByRole('button', { name: 'Approve' }))
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Accept' }))
-    expect(await within(card).findByText('2026-11-19 11:00')).toBeTruthy()
-    expect(within(card).getByRole('button', { name: 'Unschedule' })).toBeTruthy()
-    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
