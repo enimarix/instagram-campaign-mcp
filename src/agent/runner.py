@@ -216,6 +216,19 @@ def _outcome(code: int, stdout: str) -> tuple[str, str, Optional[Dict[str, Any]]
     return ("succeeded" if ok else "failed"), summary, usage
 
 
+def check_lock(store: CampaignStore, name: str, timeout_s: float) -> None:
+    """Raise AgentRunRefused while `name` runs. A run left `running` by a crash or power cut
+    would hold the lock forever: its own --timeout is unknown here, so past a day (or this
+    timeout) it is surely dead and gets closed as failed."""
+    held = store.running_agent_run(name)
+    if not held:
+        return
+    stale_after = timedelta(seconds=max(timeout_s + 600, 24 * 3600))
+    if utcnow() - parse_iso(held["started_at"]) < stale_after:
+        raise AgentRunRefused(f"playbook {name!r} is already running (run {held['id']})")
+    store.finish_agent_run(held["id"], "failed", summary="stale: the runner died")
+
+
 def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: str, *,
               timeout_s: Optional[float] = None, max_turns: Optional[int] = None,
               dry_run: bool = False, agent_dir: Path = AGENT_DIR) -> Dict[str, Any]:
@@ -223,15 +236,8 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     Raises AgentRunRefused while the same playbook runs, AgentError for an unknown playbook."""
     name = _playbook_file(playbook, agent_dir).stem
     timeout_s = timeout_s or settings.agent_timeout_minutes * 60
-    held = store.running_agent_run(name)
-    if held:
-        # A run left `running` by a crash or power cut would hold the lock forever. Its own
-        # --timeout is unknown here: past a day (or this timeout) it is surely dead.
-        # ponytail: check-then-insert, two starts in the same instant could both pass.
-        stale_after = timedelta(seconds=max(timeout_s + 600, 24 * 3600))
-        if utcnow() - parse_iso(held["started_at"]) < stale_after:
-            raise AgentRunRefused(f"playbook {name!r} is already running (run {held['id']})")
-        store.finish_agent_run(held["id"], "failed", summary="stale: the runner died")
+    # ponytail: check-then-insert, two starts in the same instant could both pass.
+    check_lock(store, name, timeout_s)
     log_dir = Path(settings.agent_log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
     run = store.start_agent_run(name)

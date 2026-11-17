@@ -241,3 +241,24 @@ export type TokenStatus = {
   scopes: string[]
 }
 export const getToken = () => request<TokenStatus>('/api/token')
+
+/** A row of GET /api/agent/runs (src/agent/runs.py), newest first; times ISO UTC. */
+export type AgentRun = {
+  id: number
+  playbook: string
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled'
+  started_at: string
+  finished_at: string | null
+  summary: string | null
+  duration_s: number
+  num_turns: number | null
+  cost_usd: number | null
+  permission_denials: number | null
+  has_log: boolean
+}
+export const getPlaybooks = () => request<string[]>('/api/agent/playbooks')
+export const getAgentRuns = (limit = 50) => request<AgentRun[]>(`/api/agent/runs?limit=${limit}`)
+export const getAgentLog = (id: number) => request<{ id: number; lines: string[] }>(`/api/agent/runs/${id}/log`)
+/** Starts `ig-campaign agent run` detached; 409 already_running, 404 unknown_playbook. */
+export const startAgentRun = (playbook: string) =>
+  post<{ started: boolean; playbook: string }>('/api/agent/runs', { playbook })

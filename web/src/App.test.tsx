@@ -34,7 +34,7 @@ describe('api client', () => {
 })
 
 describe('App', () => {
-  it('renders the six tabs and the setup-mode banner on Settings', async () => {
+  it('renders the seven tabs and the setup-mode banner on Settings', async () => {
     stubFetch(200, { status: 'ok', instagram_configured: false, version: '1.0' })
     render(
       <MemoryRouter initialEntries={['/settings']}>
@@ -43,7 +43,7 @@ describe('App', () => {
     )
     const links = within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link')
     expect(links.map((l) => l.textContent)).toEqual([
-      'Inbox', 'Calendar', 'Analytics', 'Learnings', 'Ads', 'Settings',
+      'Inbox', 'Calendar', 'Analytics', 'Learnings', 'Ads', 'Agent', 'Settings',
     ])
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
   })
