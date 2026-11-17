@@ -5,21 +5,25 @@ Build it with `create_app()`; `ig-campaign serve` runs it on uvicorn.
 Without an Instagram token the app still starts ("setup mode"): /api/health
 says so and Graph-backed routes answer 503 instagram_not_configured.
 With UI_PASSWORD set, /api/* needs a session cookie from POST /api/login (see auth.py).
+The built website (`web/dist`) is served at every other path, with an SPA fallback.
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 from typing import Callable, Optional
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.exceptions import HTTPException
+from starlette.staticfiles import StaticFiles
 
 from .. import campaign
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
-from .auth import COOKIE, Auth, Locked, origin_ok
+from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 
 # Reachable without a session even when UI_PASSWORD is set.
 PUBLIC_PATHS = {"/api/health", "/api/login", "/api/logout", "/api/session"}
@@ -61,6 +65,8 @@ def create_app(
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
+        if not host_ok(request.url.hostname, auth.required):
+            return JSONResponse(status_code=403, content={"error": "bad_host"})
         token = request.cookies.get(COOKIE)
         if not origin_ok(request.method, str(request.url), request.headers, token is not None):
             return JSONResponse(status_code=403, content={"error": "bad_origin"})
@@ -117,4 +123,35 @@ def create_app(
             return JSONResponse(status_code=503, content={"error": "instagram_not_configured"})
         return await campaign.account_status(client)
 
+    _serve_website(app, Path(settings.web_dist))
     return app
+
+
+NOT_BUILT = ("<!doctype html><title>Macrobody Growth Studio</title><p>Website not built: run "
+             "<code>npm --prefix web ci &amp;&amp; npm --prefix web run build</code>, then restart."
+             " The API under <code>/api</code> works meanwhile.")
+
+
+def _serve_website(app: FastAPI, dist: Path) -> None:
+    """Catch-all GET, registered last: real files from `dist`, else index.html (SPA routes).
+
+    Public on purpose (the login page must load); /api/* stays behind the guard and unknown
+    /api paths answer JSON 404. StaticFiles does the lookup, which refuses paths outside `dist`.
+    """
+    index = dist / "index.html"
+    if not index.is_file():
+        @app.get("/", include_in_schema=False)
+        async def not_built() -> HTMLResponse:
+            return HTMLResponse(NOT_BUILT)
+        return
+
+    static = StaticFiles(directory=dist)
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def website(path: str, request: Request):
+        if path == "api" or path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        try:
+            return await static.get_response(static.get_path(request.scope), request.scope)
+        except HTTPException:  # not a file in dist: a client-side route
+            return FileResponse(index)

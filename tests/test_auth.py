@@ -28,7 +28,7 @@ def make():
     """make(password, clock, base_url, **settings) -> (started TestClient, Auth)."""
     started = []
 
-    def _make(password=PASSWORD, clock=None, base_url="http://testserver", **kw):
+    def _make(password=PASSWORD, clock=None, base_url="http://127.0.0.1", **kw):
         s = _settings(password, **kw)
         auth = Auth(s, clock or Clock())
         tc = TestClient(create_app(s, auth=auth), base_url=base_url)
@@ -68,15 +68,15 @@ def test_bad_password_and_bad_body_never_echo(make):
     r = _login(tc, "wrong-guess-123")
     assert r.status_code == 401 and r.json() == {"error": "bad_password"}
     assert "wrong-guess-123" not in r.text and PASSWORD not in r.text
-    origin = {"Origin": "http://testserver"}
+    origin = {"Origin": "http://127.0.0.1"}
     for body in ({"password": 12345}, {}, None):
         r = tc.post("/api/login", json=body, headers=origin)
         assert r.status_code == 400 and "12345" not in r.text
     assert PASSWORD not in repr(_settings())
 
 
-@pytest.mark.parametrize("base_url,secure", [("http://testserver", False),
-                                             ("https://testserver", True)])
+@pytest.mark.parametrize("base_url,secure", [("http://127.0.0.1", False),
+                                             ("https://127.0.0.1", True)])
 def test_cookie_flags(base_url, secure, make):
     tc, _ = make(base_url=base_url)
     attrs = {a.strip().lower() for a in _login(tc).headers["set-cookie"].split(";")[1:]}
@@ -98,7 +98,7 @@ def test_logout(make):
     tc, _ = make()
     _login(tc)
     token = tc.cookies.get("studio_session")
-    assert tc.post("/api/logout", headers={"Origin": "http://testserver"}).status_code == 200
+    assert tc.post("/api/logout", headers={"Origin": "http://127.0.0.1"}).status_code == 200
     assert tc.get("/api/account").status_code == 401
     tc.cookies.set("studio_session", token)  # replaying the old cookie is no good either
     assert tc.get("/api/account").status_code == 401
@@ -109,7 +109,7 @@ def test_cross_site_post_refused(password, make):
     tc, _ = make(password=password)
     for headers in ({"Origin": "https://evil.example"},
                     {"Referer": "https://evil.example/page"},
-                    {"Origin": "https://testserver"},  # other scheme = other origin
+                    {"Origin": "https://127.0.0.1"},  # other scheme = other origin
                     {"Origin": "null"}):
         r = tc.post("/api/login", json={"password": PASSWORD}, headers=headers)
         assert r.status_code == 403 and r.json() == {"error": "bad_origin"}

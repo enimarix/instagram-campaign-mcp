@@ -136,6 +136,21 @@ tries again without using up its retries. If Instagram might have published it
 anyway (timeout, or an error while the post shows as published), it is marked
 failed for you to check instead of risking a double post.
 
+### 5. Run the studio (website + API + scheduler)
+Needs Node 22.12+ once, to build the website:
+```bash
+npm --prefix web ci && npm --prefix web run build   # again after each website update
+ig-campaign up                                      # API, website and the daemon above
+```
+Open http://127.0.0.1:8765. Ctrl+C stops everything. Without an Instagram token it
+starts in setup mode: the website works, publishing idles until the token is in `.env`.
+
+To review from your phone, set `UI_PASSWORD` in `.env`, then
+`ig-campaign up --host 0.0.0.0` and open `http://<pc-ip>:8765`. Without a password
+the studio only answers on 127.0.0.1 / localhost. Plain `http://` on Wi-Fi is enough
+to watch and approve; recording on the phone needs HTTPS (Tailscale serve or a
+tunnel, gate H7).
+
 ## Tools (30)
 
 **Account** `validate_access_token`, `get_account_pages`, `get_profile_info`,
