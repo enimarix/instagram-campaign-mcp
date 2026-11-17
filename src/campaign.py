@@ -4,13 +4,14 @@ Campaign layer: ties the Graph API client to the local store.
 - publish(kind, payload): one entry point for image/carousel/reel/story
 - run_due(): publish everything in the queue whose time has come
 - collect_insights(): snapshot insights of recent posts (and live Stories)
+- collect_online_followers(): store today's followers-online-per-hour (slot weights)
 - rank(): score posts against the account baseline
 """
 
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 
 import structlog
@@ -202,6 +203,16 @@ async def collect_insights(
         )
         captured += 1
     return {"captured": captured, "skipped": skipped, "errors": errors}
+
+
+async def collect_online_followers(
+    client: InstagramClient, store: CampaignStore, today: date
+) -> Dict[str, Any]:
+    """Save followers online per UTC hour under `today` (once a day; re-runs overwrite)."""
+    hours = await client.get_online_followers()
+    if not hours:
+        return {"available": False, "saved": 0}
+    return {"available": True, "saved": store.save_online_followers(today, hours)}
 
 
 def scoring_config(settings: InstagramMCPSettings) -> ScoringConfig:

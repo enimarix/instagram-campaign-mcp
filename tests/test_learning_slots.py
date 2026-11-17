@@ -6,7 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from src.config import InstagramMCPSettings
-from src.learning.slots import parse_windows, plan_slots, plan_slots_from_settings
+from src.learning.slots import (
+    parse_windows,
+    plan_slots,
+    plan_slots_from_settings,
+    window_weights,
+)
 
 PARIS = ZoneInfo("Europe/Paris")
 WINDOWS = parse_windows("11:00-13:00,17:00-21:00")
@@ -163,3 +168,40 @@ def test_from_settings(settings):
     check(slots, DAY)
     other = settings.model_copy(update={"posting_windows": "09:00-10:00", "max_posts_per_day": 5})
     assert len(plan_slots_from_settings(other, DAY, 5, [], now=now)) == 1
+
+
+def test_window_weights_follow_the_audience():
+    evening = {h: 50 for h in range(15, 19)}  # 17:00-21:00 Paris summer = 15-19 UTC
+    lunch, eve = window_weights(WINDOWS, "Europe/Paris", DAY, {**evening, 9: 5, 10: 5})
+    assert eve == 50 and lunch == 5
+    # Quiet window floored at 10 % of the busiest, never 0.
+    assert window_weights(WINDOWS, "Europe/Paris", DAY, evening) == [5.0, 50]
+    assert window_weights(WINDOWS, "Europe/Paris", DAY, {}) == [1.0, 1.0]
+    assert window_weights(WINDOWS, "Europe/Paris", DAY, None) == [1.0, 1.0]
+    assert window_weights(WINDOWS, "Europe/Paris", DAY, {3: 9}) == [1.0, 1.0]
+
+
+def test_window_weights_dst_day():
+    profile = {h: 10 for h in range(24)}
+    profile[11] = 100
+    # 11:00-13:00 Paris: 10-12 UTC the day before spring forward, 09-11 UTC on the day.
+    assert window_weights(WINDOWS, "Europe/Paris", date(2026, 3, 28), profile) == [55, 10]
+    assert window_weights(WINDOWS, "Europe/Paris", date(2026, 3, 29), profile) == [10, 10]
+    # Partial hours count by minutes: 11:30-12:30 UTC+2 → half of 9 UTC, half of 10 UTC.
+    half = window_weights(parse_windows("11:30-12:30"), "Europe/Paris", DAY, {9: 40})
+    assert half == [20]
+
+
+def test_from_settings_with_hourly_profile(settings):
+    settings = settings.model_copy(update={"min_slot_gap_minutes": 30})
+    lunch_heavy = {9: 100, 10: 100, 16: 5}  # 11:00-13:00 Paris summer = 9-11 UTC
+
+    def lunch_posts(profile):
+        slots = plan_slots_from_settings(settings, DAY, 3, [], rng=random.Random(3),
+                                         now=local(DAY, 8), hourly_profile=profile)
+        check(slots, DAY, gap=timedelta(minutes=30))
+        assert len(slots) == 3
+        return sum(1 for s in slots if s.astimezone(PARIS).hour < 14)
+
+    assert lunch_posts(None) == 1  # v1: equal weights, the longer evening window gets two
+    assert lunch_posts(lunch_heavy) == 3
