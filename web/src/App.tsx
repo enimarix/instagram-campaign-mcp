@@ -2,6 +2,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router'
 import CalendarPage from './calendar/CalendarPage'
 import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
+import Agent from './pages/Agent'
 import Placeholder from './pages/Placeholder'
 import Settings from './pages/Settings'
 import TokenBanner from './TokenBanner'
@@ -12,6 +13,7 @@ const TABS = [
   { path: '/analytics', label: 'Analytics' },
   { path: '/learnings', label: 'Learnings' },
   { path: '/ads', label: 'Ads' },
+  { path: '/agent', label: 'Agent' },
   { path: '/settings', label: 'Settings' },
 ]
 
@@ -21,7 +23,7 @@ export default function App() {
     <div className="min-h-dvh bg-gray-50 text-gray-900 md:flex">
       <nav
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] md:static md:flex md:w-48 md:shrink-0 md:flex-col md:gap-1 md:border-t-0 md:border-r md:p-3"
+        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-7 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] md:static md:flex md:w-48 md:shrink-0 md:flex-col md:gap-1 md:border-t-0 md:border-r md:p-3"
       >
         {TABS.map((t) => (
           <NavLink
@@ -52,6 +54,7 @@ export default function App() {
                 element={
                   t.path === '/inbox' ? <InboxPage /> :
                   t.path === '/calendar' ? <CalendarPage /> :
+                  t.path === '/agent' ? <Agent /> :
                   t.path === '/settings' ? <Settings /> : <Placeholder title={t.label} />
                 }
               />

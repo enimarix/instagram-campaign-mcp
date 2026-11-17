@@ -25,7 +25,7 @@ from .. import campaign
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
-from . import assets, bench, context, feedback, media, render, worker
+from . import agent, assets, bench, context, feedback, media, render, worker
 from . import settings as settings_routes
 from . import token as token_routes
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
@@ -147,6 +147,7 @@ def create_app(
     app.include_router(media.router)
     app.include_router(token_routes.router)
     app.include_router(bench.router)
+    app.include_router(agent.router)
     app.include_router(settings_routes.router)
     app.include_router(calendar_router)
     app.include_router(feedback.router)
