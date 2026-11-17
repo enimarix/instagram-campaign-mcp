@@ -9,6 +9,7 @@ Campaign layer: ties the Graph API client to the local store.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
@@ -16,8 +17,10 @@ import structlog
 
 from .config import InstagramMCPSettings
 from .instagram_client import (
+    PUBLISH_QUOTA_SUBCODE,
     InstagramAPIError,
     InstagramClient,
+    InvalidMedia,
     RateLimitExceeded,
     caption_problem,
 )
@@ -29,8 +32,26 @@ logger = structlog.get_logger(__name__)
 STORY_FIELDS = "id,media_type,media_product_type,media_url,permalink,timestamp"
 MAX_ATTEMPTS = 3
 RETRY_MINUTES = 15
+BACKOFF_MINUTES = 60      # rate limit or daily publishing quota reached
+HEARTBEAT_SECONDS = 60    # keeps a long publish from looking "stuck"
 # Meta error subcodes that will never succeed on retry (bad media, bad ratio...).
 PERMANENT_SUBCODES = {2207026, 2207004, 2207005, 2207009, 2207010, 2207052, 2207053}
+
+
+async def _with_heartbeat(store: CampaignStore, post_id: int, coro: Any) -> Any:
+    """Run a publish while refreshing the post's claim, so another process's
+    recover_stuck() doesn't fail a publish that is merely slow (long videos,
+    carousels of videos)."""
+    task = asyncio.ensure_future(coro)
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=HEARTBEAT_SECONDS)
+            if done:
+                return task.result()
+            store.touch(post_id)
+    finally:
+        if not task.done():
+            task.cancel()
 
 
 async def publish(client: InstagramClient, kind: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,21 +100,31 @@ async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10
             break
         post = claimed[0]
         try:
-            result = await publish(client, post["kind"], post["payload"])
+            result = await _with_heartbeat(
+                store, post["id"], publish(client, post["kind"], post["payload"])
+            )
             store.mark_published(post["id"], result["media_id"], result.get("permalink"))
             published.append({"id": post["id"], **result})
         except RateLimitExceeded as e:
-            store.mark_failed(post["id"], f"Rate limited: {e.message}", retry_in_minutes=60)
+            store.mark_failed(post["id"], f"Rate limited: {e.message}",
+                              retry_in_minutes=BACKOFF_MINUTES, count_attempt=False)
             retrying.append({"id": post["id"], "error": e.message})
             break  # stop hammering the API this round
         except InstagramAPIError as e:
+            if e.error_subcode == PUBLISH_QUOTA_SUBCODE and not e.maybe_published:
+                # ~100 API posts per rolling 24h: wait, don't burn attempts.
+                msg = f"Daily publishing quota reached: {e.message}"
+                store.mark_failed(post["id"], msg, retry_in_minutes=BACKOFF_MINUTES,
+                                  count_attempt=False)
+                retrying.append({"id": post["id"], "error": msg})
+                break
             if e.maybe_published:
                 # media_publish may have reached Meta; retrying could double-post.
                 msg = f"{e.message} - check Instagram before retrying (reschedule_post)"
                 store.mark_failed(post["id"], msg, retry_in_minutes=None)
                 failed.append({"id": post["id"], "error": msg})
                 continue
-            permanent = e.error_subcode in PERMANENT_SUBCODES
+            permanent = isinstance(e, InvalidMedia) or e.error_subcode in PERMANENT_SUBCODES
             if not permanent and post["attempts"] < MAX_ATTEMPTS:
                 store.mark_failed(post["id"], e.message, retry_in_minutes=RETRY_MINUTES)
                 retrying.append({"id": post["id"], "error": e.message})
@@ -189,10 +220,13 @@ def rank(
     only: Optional[str] = None,
     limit: int = 20,
 ) -> Dict[str, Any]:
-    labels = store.labels()
-    scored = score_posts(store.latest_snapshots(), scoring_config(settings), labels)
+    scored = _score_all(store, settings)
     if campaign:
         scored = [s for s in scored if (s.get("label") or {}).get("campaign") == campaign]
+    # Summary covers every post in scope, before the `only` filter.
+    counts: Dict[str, int] = {}
+    for s in scored:
+        counts[s["verdict"]] = counts.get(s["verdict"], 0) + 1
     if only:
         scored = [s for s in scored if s["verdict"] == only]
     ranked = sorted(
@@ -200,12 +234,17 @@ def rank(
         key=lambda r: (r["engagement_index"] is not None, r["engagement_index"] or 0),
         reverse=True,
     )
-    counts: Dict[str, int] = {}
-    for s in scored:
-        counts[s["verdict"]] = counts.get(s["verdict"], 0) + 1
     return {"summary": counts, "posts": ranked[:limit]}
 
 
+def _score_all(store: CampaignStore, settings: InstagramMCPSettings) -> List[Dict[str, Any]]:
+    return score_posts(
+        store.latest_snapshots(),
+        scoring_config(settings),
+        store.labels(),
+        history=store.snapshot_history(),
+    )
+
+
 def variants(store: CampaignStore, settings: InstagramMCPSettings, campaign: str) -> Dict[str, Any]:
-    scored = score_posts(store.latest_snapshots(), scoring_config(settings), store.labels())
-    return compare_variants(scored, campaign)
+    return compare_variants(_score_all(store, settings), campaign)

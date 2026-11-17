@@ -11,6 +11,7 @@ organic posts, so this store keeps:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -72,15 +73,36 @@ def to_iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
+_ISO_RE = re.compile(
+    r"^(?P<date>\d{4}-\d{2}-\d{2})"
+    r"(?:[T ](?P<time>\d{2}:\d{2}(?::\d{2})?)"
+    r"(?:[.,](?P<frac>\d+))?"
+    r"(?P<tz>Z|[+-]\d{2}(?::?\d{2})?)?)?$",
+    re.IGNORECASE,
+)
+
+
 def parse_iso(value: str) -> datetime:
-    """Parse ISO 8601 as given (naive stays naive). Accepts Z and Meta's
-    +0000 offsets, which datetime.fromisoformat rejects before Python 3.11."""
+    """Parse ISO 8601 as given (naive stays naive).
+
+    Normalises what datetime.fromisoformat rejects before Python 3.11: Z,
+    Meta's +0000 offsets, +HH offsets and fractions that aren't 3 or 6 digits.
+    """
     v = value.strip()
-    if v.endswith(("Z", "z")):
-        v = v[:-1] + "+00:00"
-    # "+0000" / "-0530" offset after a time part -> "+00:00" / "-05:30"
-    if "T" in v and len(v) >= 5 and v[-5] in "+-" and v[-4:].isdigit():
-        v = v[:-2] + ":" + v[-2:]
+    m = _ISO_RE.match(v)
+    if m and m.group("time"):
+        out = f"{m.group('date')}T{m.group('time')}"
+        if m.group("frac"):
+            out += "." + m.group("frac")[:6].ljust(6, "0")
+        tz = m.group("tz")
+        if tz:
+            if tz.upper() == "Z":
+                tz = "+00:00"
+            else:
+                digits = tz[1:].replace(":", "")
+                tz = f"{tz[0]}{digits[:2]}:{digits[2:4] or '00'}"
+            out += tz
+        v = out
     return datetime.fromisoformat(v)
 
 
@@ -223,16 +245,27 @@ class CampaignStore:
             media_id, post["campaign"], post["variant"], post["hypothesis"], post["kind"]
         )
 
-    def mark_failed(self, post_id: int, error: str, retry_in_minutes: Optional[int]) -> None:
-        """Failed attempt: go back to pending with a delay, or stay failed."""
+    def mark_failed(
+        self,
+        post_id: int,
+        error: str,
+        retry_in_minutes: Optional[int],
+        count_attempt: bool = True,
+    ) -> None:
+        """Failed attempt: go back to pending with a delay, or stay failed.
+
+        count_attempt=False gives the attempt back (rate limit / quota: the
+        post itself is fine, it just has to wait).
+        """
         now = utcnow()
+        refund = 0 if count_attempt else 1
         with self._tx() as c:
             if retry_in_minutes is not None:
                 c.execute(
                     "UPDATE scheduled_posts SET status='pending', error=?, publish_at=?,"
-                    " updated_at=? WHERE id=?",
+                    " attempts=MAX(attempts-?, 0), updated_at=? WHERE id=?",
                     (error, to_iso(now + timedelta(minutes=retry_in_minutes)),
-                     to_iso(now), post_id),
+                     refund, to_iso(now), post_id),
                 )
             else:
                 c.execute(
@@ -241,11 +274,20 @@ class CampaignStore:
                     (error, to_iso(now), post_id),
                 )
 
-    def recover_stuck(self, older_than_minutes: int = 30) -> int:
-        """Posts left in 'publishing' by a crash go back to pending.
+    def touch(self, post_id: int) -> None:
+        """Heartbeat for a post being published (see recover_stuck)."""
+        with self._tx() as c:
+            c.execute(
+                "UPDATE scheduled_posts SET updated_at=? WHERE id=? AND status='publishing'",
+                (to_iso(utcnow()), post_id),
+            )
 
-        Risk: if the crash happened after Meta published, this could post twice,
-        so they are marked failed (needs a human look) rather than retried.
+    def recover_stuck(self, older_than_minutes: int = 30) -> int:
+        """Posts left in 'publishing' by a crashed process are marked failed.
+
+        A live publish refreshes updated_at every minute (campaign heartbeat),
+        so only abandoned claims get here. If the crash happened after Meta
+        published, retrying could post twice, so they need a human look.
         """
         cutoff = to_iso(utcnow() - timedelta(minutes=older_than_minutes))
         with self._tx() as c:
@@ -322,6 +364,17 @@ class CampaignStore:
                 (media_id, media_product_type, media_type, posted_iso, to_iso(captured),
                  age, json.dumps(metrics), (caption or "")[:500], permalink),
             )
+
+    def snapshot_history(self) -> Dict[str, List[Dict[str, Any]]]:
+        """All snapshots grouped by media_id, oldest first."""
+        out: Dict[str, List[Dict[str, Any]]] = {}
+        for r in self._conn.execute(
+            "SELECT * FROM insight_snapshots ORDER BY media_id, captured_at"
+        ).fetchall():
+            d = dict(r)
+            d["metrics"] = json.loads(d["metrics"])
+            out.setdefault(d["media_id"], []).append(d)
+        return out
 
     def latest_snapshots(self) -> List[Dict[str, Any]]:
         """Most recent snapshot per media, newest posts first."""

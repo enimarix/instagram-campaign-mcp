@@ -33,11 +33,19 @@ plan ─► publish / schedule_post (tag campaign + variant + hypothesis)
 - **Trial Reels** (`trial_graduation`) show a Reel to non-followers first — a clean way
   to test hooks without spamming followers. `SS_PERFORMANCE` lets Instagram share it
   to followers if it performs; `MANUAL` leaves that to you in the app.
-- A post is judged after **48h** (Stories after 20h), only against posts **of the same
-  type**, and needs a minimum reach (default 300) before it can be called a winner.
+- A post is judged after **48h**, only against posts **of the same type**, read at a
+  **similar age** (a 2-day-old post isn't compared with posts measured at 30 days),
+  and needs a minimum reach (default 300) before it can be called a winner.
+- **Stories** are judged on a snapshot taken 20–24h after posting (they expire at
+  24h). The scheduler daemon snapshots live Stories every hour; without it, run
+  `ig-campaign collect --stories-only` hourly. A Story that expired without such a
+  snapshot is reported as `incomplete`.
 - `engagement_index` = weighted average of per-reach rates divided by your median:
   follows ×4, shares ×3, saves ×3, profile visits ×2, comments ×1.5, likes ×0.5,
-  Reels avg watch time ×2. `1.0` = typical post. Winner = ≥ 1.5 (configurable).
+  Reels avg watch time ×2. `1.0` = typical post.
+- **Winner** = enough reach and either engagement ≥ 1.5× (`WINNER_THRESHOLD`) **or**
+  reach ≥ 2× the median with at least median engagement (a post that travelled far
+  without diluting engagement).
 
 ## Setup
 
@@ -74,7 +82,7 @@ The installer:
 - with `-RegisterClaudeCode` / `--register-claude-code`, runs `claude mcp add`
   (user scope) so Claude Code sees the server right away.
 
-Options: `-Dev` / `--dev` also installs test dependencies and runs the 37 tests
+Options: `-Dev` / `--dev` also installs test dependencies and runs the 67 tests
 (no network); `-Name` / `--name` changes the server name (default `instagram`).
 Re-running the installer is safe and upgrades the install.
 
@@ -85,7 +93,7 @@ Don't know your account ID? Set only the token, connect the server, and call
 <details><summary>Manual install</summary>
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scriptsctivate
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 cp env.example .env
 pytest -q
@@ -111,9 +119,10 @@ command the installer prints.
 ```
 The `.env` in the project folder is found automatically.
 
-### 4. Run the scheduler (only if you schedule posts)
+### 4. Run the scheduler (if you schedule posts or measure Stories)
 The Graph API publishes immediately — it has no "post at 18:00". Keep this running
-on a machine that's on at posting time:
+on a machine that's on at posting time (it also snapshots live Stories hourly;
+`--stories-every 0` turns that off):
 ```bash
 .venv/bin/ig-campaign daemon   # Windows: .venv\Scripts\ig-campaign.exe daemon
 # or, with the venv activated:
@@ -122,6 +131,10 @@ ig-campaign daemon            # checks every 60s
 ig-campaign run-due
 ```
 Also run `ig-campaign collect` once a day (or ask Claude to call `collect_insights`).
+If a publish fails because the daily quota is reached, the post waits an hour and
+tries again without using up its retries. If Instagram might have published it
+anyway (timeout, or an error while the post shows as published), it is marked
+failed for you to check instead of risking a double post.
 
 ## Tools (30)
 
@@ -140,11 +153,15 @@ Also run `ig-campaign collect` once a day (or ask Claude to call `collect_insigh
 
 ## Limits to know
 - Media must be at a **public HTTPS URL**; Instagram downloads it.
-- Feed images: 4:5, 1:1 or 1.91:1. Reels: MP4/MOV H.264 + AAC, 9:16 recommended.
-  Carousels crop every slide to the first slide's ratio.
+- Images must be **JPEG** (the publishing API rejects PNG). Feed images: any ratio
+  from 4:5 to 1.91:1. Reels: MP4/MOV H.264 + AAC, 9:16 recommended.
+  Carousels crop every slide to the first slide's ratio. These checks run before
+  anything is sent to Meta (`VALIDATE_IMAGE_RATIO=false` skips them).
 - ~100 API-published posts per rolling 24h (`get_publishing_limit` shows usage).
 - Stories via API: no stickers, links or text overlays — bake them into the media.
 - 30 unique hashtag searches per 7 days.
+- Client-side cap of 200 API calls/hour (`RATE_LIMIT_REQUESTS_PER_HOUR`): when it is
+  reached, calls fail at once with "next slot in N min" instead of hanging.
 - Tokens expire after 60 days; regenerate before then.
 - Insights count organic interactions only; ad interactions are excluded.
 
@@ -152,6 +169,10 @@ Also run `ig-campaign collect` once a day (or ask Claude to call `collect_insigh
 See [env.example](env.example). Most useful: `TIMEZONE` (default Europe/Paris, used
 for schedule times without an offset), `WINNER_MIN_AGE_HOURS`, `WINNER_MIN_REACH`,
 `WINNER_THRESHOLD`, `DATABASE_PATH`.
+
+`.env` and the database live in the project folder for a clone or the installer's
+editable install. With a plain `pip install .` they go to `~/.instagram-campaign-mcp`
+instead (the code then sits in site-packages). `IG_MCP_HOME` overrides both.
 
 ## Roadmap
 - Paid side: promote winning posts as ads (existing post as creative), A/B tests,

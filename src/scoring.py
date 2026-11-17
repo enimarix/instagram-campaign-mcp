@@ -15,6 +15,7 @@ they predict paid performance better than likes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from statistics import mean, median
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +32,10 @@ ABSOLUTE_SIGNALS = {"ig_reels_avg_watch_time"}
 RATIO_CAP = 5.0          # one freak metric can't carry a post
 SMOOTHING = 0.0005       # avoids divide-by-zero when the baseline rate is ~0
 STORY_MIN_AGE_HOURS = 20.0
+STORY_LIFETIME = timedelta(hours=24)
+# Second way to win: reach this many times the median with at least median
+# engagement (a post that travelled far without diluting engagement).
+REACH_WINNER_INDEX = 2.0
 
 
 @dataclass
@@ -76,14 +81,55 @@ def _is_matured(snap: Dict[str, Any], cfg: ScoringConfig) -> bool:
     return age >= limit
 
 
+def _story_expired(snap: Dict[str, Any], now: datetime) -> bool:
+    posted = snap.get("posted_at")
+    if not posted:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(posted).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return now - dt >= STORY_LIFETIME
+
+
+def _at_age(
+    snap: Dict[str, Any],
+    history: Dict[str, List[Dict[str, Any]]],
+    target_age: Optional[float],
+    cfg: "ScoringConfig",
+) -> Dict[str, Any]:
+    """The matured snapshot of `snap`'s post whose age is closest to target_age.
+
+    Comparing a 48h-old post with baseline posts measured at 30 days would make
+    every new post look weak on reach, so baselines are read at a similar age
+    when the history has it.
+    """
+    if target_age is None:
+        return snap
+    candidates = [s for s in history.get(snap["media_id"], []) if _is_matured(s, cfg)]
+    if not candidates:
+        return snap
+    return min(candidates, key=lambda s: abs((s.get("age_hours") or 0) - target_age))
+
+
 def score_posts(
     snapshots: List[Dict[str, Any]],
     cfg: Optional[ScoringConfig] = None,
     labels: Optional[Dict[str, Dict[str, Any]]] = None,
+    history: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    now: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
-    """Score the latest snapshot of each post. Returns newest-first list."""
+    """Score the latest snapshot of each post. Returns newest-first list.
+
+    history: all snapshots per media_id (optional). When given, each baseline
+    post is read at the age closest to the scored post's age.
+    """
     cfg = cfg or ScoringConfig()
     labels = labels or {}
+    history = history or {}
+    now = now or datetime.now(timezone.utc)
     matured_by_group: Dict[str, List[Dict[str, Any]]] = {}
     for s in snapshots:  # snapshots arrive newest-first
         if _is_matured(s, cfg):
@@ -95,7 +141,8 @@ def score_posts(
         metrics = snap.get("metrics") or {}
         reach = _num(metrics.get("reach"))
         baseline = [
-            b for b in matured_by_group.get(grp, []) if b["media_id"] != snap["media_id"]
+            _at_age(b, history, snap.get("age_hours"), cfg)
+            for b in matured_by_group.get(grp, []) if b["media_id"] != snap["media_id"]
         ][: cfg.baseline_window]
 
         res: Dict[str, Any] = {
@@ -112,8 +159,15 @@ def score_posts(
         }
 
         if not _is_matured(snap, cfg):
-            res.update(verdict="too_early", engagement_index=None, reach_index=None,
-                       drivers=[], why="Insights still accumulating")
+            if grp == "STORY" and _story_expired(snap, now):
+                res.update(verdict="incomplete", engagement_index=None, reach_index=None,
+                           drivers=[], why=(
+                               f"Story expired before a snapshot at {STORY_MIN_AGE_HOURS:.0f}h+; "
+                               "keep the scheduler daemon running (it snapshots live "
+                               "Stories hourly) or run `ig-campaign collect --stories-only` hourly"))
+            else:
+                res.update(verdict="too_early", engagement_index=None, reach_index=None,
+                           drivers=[], why="Insights still accumulating")
             results.append(res)
             continue
         if not baseline:
@@ -170,7 +224,7 @@ def _verdict(eng: Optional[float], reach_index: Optional[float], reach: float,
         return "inconclusive", f"Reach {int(reach)} < {cfg.min_reach}"
     if eng >= cfg.winner_threshold:
         return "winner", f"Engagement {eng}x the account median"
-    if reach_index is not None and reach_index >= 2.0 and eng >= 1.0:
+    if reach_index is not None and reach_index >= REACH_WINNER_INDEX and eng >= 1.0:
         return "winner", f"Reach {reach_index}x median with above-median engagement"
     if eng >= 1.2:
         return "promising", f"Engagement {eng}x median, below the {cfg.winner_threshold}x bar"

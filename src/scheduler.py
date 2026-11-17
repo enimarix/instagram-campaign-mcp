@@ -7,7 +7,11 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler daemon              # keeps running, checks every minute
   python -m src.scheduler run-due             # one pass (for cron / Task Scheduler)
   python -m src.scheduler collect --limit 30  # snapshot insights (run daily)
+  python -m src.scheduler collect --stories-only  # live Stories (run hourly)
   python -m src.scheduler rank                # print the winner ranking
+
+Stories expire after 24h and are judged on a snapshot taken at 20h or later,
+so they must be snapshotted often; the daemon does it every hour.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import argparse
 import asyncio
 import json
 import sys
+import time
 
 from .campaign import collect_insights, rank, run_due
 from .config import get_settings
@@ -36,10 +41,12 @@ async def _run(args: argparse.Namespace) -> int:
             if args.command == "run-due":
                 print(json.dumps(await run_due(client, store), indent=2))
             elif args.command == "collect":
-                print(json.dumps(await collect_insights(client, store, limit=args.limit), indent=2))
+                limit = 0 if args.stories_only else args.limit
+                print(json.dumps(await collect_insights(client, store, limit=limit), indent=2))
             elif args.command == "daemon":
                 print(f"Scheduler running, checking every {args.interval}s. Ctrl+C to stop.",
                       file=sys.stderr)
+                last_stories = float("-inf")
                 while True:
                     try:
                         result = await run_due(client, store)
@@ -49,6 +56,14 @@ async def _run(args: argparse.Namespace) -> int:
                         if any(result[k] for k in ("published", "retrying", "failed",
                                                    "recovered_stuck")):
                             print(json.dumps(result), flush=True)
+                    if args.stories_every and (
+                        time.monotonic() - last_stories >= args.stories_every * 60
+                    ):
+                        last_stories = time.monotonic()
+                        try:
+                            await collect_insights(client, store, limit=0)
+                        except Exception as e:  # noqa: BLE001
+                            print(f"story snapshot failed: {e!r}", file=sys.stderr, flush=True)
                     await asyncio.sleep(args.interval)
         return 0
     finally:
@@ -61,13 +76,19 @@ def main() -> None:
     sub.add_parser("run-due", help="Publish queued posts that are due, then exit")
     d = sub.add_parser("daemon", help="Publish queued posts as they come due")
     d.add_argument("--interval", type=int, default=60)
+    d.add_argument("--stories-every", type=int, default=60, metavar="MINUTES",
+                   help="Snapshot live Stories this often (0 = off). Default 60.")
     c = sub.add_parser("collect", help="Snapshot insights of recent posts")
     c.add_argument("--limit", type=int, default=25)
+    c.add_argument("--stories-only", action="store_true",
+                   help="Only snapshot live Stories (cheap; run hourly)")
     r = sub.add_parser("rank", help="Print winner ranking from stored snapshots")
     r.add_argument("--campaign")
     args = parser.parse_args()
     if args.command == "daemon" and args.interval <= 0:
         parser.error("--interval must be > 0")
+    if args.command == "daemon" and args.stories_every < 0:
+        parser.error("--stories-every must be >= 0")
     configure_logging()
     try:
         sys.exit(asyncio.run(_run(args)))
