@@ -232,6 +232,13 @@ def test_install_schedule_injected_runners():
     schedule.install_schedule(s, remove=True, run=run, platform="linux")
     assert run.calls[1][1]["input"] == "0 5 * * * backup\n"
 
+    def unreadable(argv, **kw):  # never overwrite a crontab we could not read
+        assert argv == ["crontab", "-l"]
+        return subprocess.CompletedProcess(argv, 1, "", "crontab: Permission denied")
+
+    with pytest.raises(subprocess.CalledProcessError):
+        schedule.install_schedule(s, run=unreadable, platform="linux")
+
 
 def test_schedule_route(store, agent_dir):
     s = cfg(agent_schedule="daily-produce@03:00,later@04:00")

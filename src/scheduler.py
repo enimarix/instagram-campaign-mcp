@@ -49,7 +49,8 @@ NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
 async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                   stories_every: int = 60) -> None:
     """The worker of `up` and `worker`: the render loop and the agent catch-up always
-    (neither needs Instagram), publishing when Instagram is configured. Setup mode: say so once; renders still run."""
+    (neither needs Instagram), publishing when Instagram is configured. Setup mode: say so
+    once; renders still run."""
     try:
         from .agent.schedule import catch_up_loop
 

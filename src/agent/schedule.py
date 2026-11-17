@@ -30,7 +30,6 @@ import structlog
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from ..worker import _ps
 from .runner import (
     AGENT_DIR,
     PLAYBOOK_NAME,
@@ -170,6 +169,8 @@ def windows_command(settings: InstagramMCPSettings, *, remove: bool = False,
     """PowerShell that drops every IGCampaign* schedule task, then (unless remove) registers
     the logon task for `up` and one daily, PC-waking task per scheduled playbook. Current
     user, no admin; runs on battery too (a laptop is the studio)."""
+    from ..worker import _ps  # here: config's validator imports this module, keep it light
+
     def action(args: str) -> str:
         return (f"New-ScheduledTaskAction -Execute {_ps(exe)} -Argument "
                 f"{_ps('-m src.scheduler ' + args)} -WorkingDirectory {_ps(str(REPO))}")
@@ -237,7 +238,10 @@ def install_schedule(settings: InstagramMCPSettings, *, remove: bool = False,
         return "Task Scheduler: " + ("removed" if remove else
                                     f"{UP_TASK} at logon, {AGENT_TASK}<playbook> daily")
     current = run(["crontab", "-l"], capture_output=True, text=True, timeout=60)
-    old = current.stdout if current.returncode == 0 else ""  # 1 = no crontab yet
+    if current.returncode and "no crontab" not in current.stderr:  # never overwrite blind
+        raise subprocess.CalledProcessError(current.returncode, "crontab -l",
+                                            current.stdout, current.stderr)
+    old = "" if current.returncode else current.stdout
     run(["crontab", "-"], input=replace_block(old, "" if remove else cron_block(settings)),
         text=True, check=True, timeout=60)
     return "crontab: " + ("removed" if remove else "@reboot up, daily agent run-due")
