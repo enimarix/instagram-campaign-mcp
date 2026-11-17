@@ -180,6 +180,15 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "data" / "cache" / "tts"), description="Synthesized audio cache"
     )
 
+    # --- Production tools -------------------------------------------------
+    # src/studio/production.py (the agent's batch tools).
+    best_before_default_days: int = Field(
+        30, ge=1, description="Shelf life of a submitted video whose pillar sets no shelf_days"
+    )
+    wait_for_renders_max_s: float = Field(
+        240.0, gt=0, description="Longest wait_for_renders call (MCP clients time out long calls)"
+    )
+
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(
         48.0, description="Posts younger than this are not judged yet"

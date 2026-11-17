@@ -13,6 +13,7 @@ AGENT_ALLOWED = {
     "get_publishing_limit", "get_media_posts", "get_media_insights", "get_comments",
     "search_hashtag", "get_competitor_profile", "list_scheduled_posts", "rank_posts",
     "compare_variants", "list_motion_templates", "preview_motion", "render_motion",
+    "create_idea", "get_render_status", "wait_for_renders", "submit_asset", "list_assets",
 }
 NEVER_FOR_AGENT = {
     "publish_image", "publish_carousel", "publish_reel", "publish_story",
