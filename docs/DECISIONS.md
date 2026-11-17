@@ -8,6 +8,33 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: Owner priorities: reaction reel, DM picks, scroll-and-decide inbox, video timelines, work packets
+The owner asked mid-build for six changes (progress.md Phase 5b, steps 110–116, plus 071/072/073 re-planned):
+- **Reaction reel** (replaces the per-clip recorder and the "To record" wait): the owner
+  records one long reaction video; each reaction video gets the next consecutive piece,
+  looping back to the start. Commentary then rests on a clip-specific voice-over and the
+  credit, so a `commentary` recipe needs a reel piece **and** that voice-over. In-app
+  Remix briefs (old 073a) stay parked.
+- **DM picks**: Reels sent to the brand account by DM from accounts the owner pins are
+  downloaded and turned into reaction remixes first. Only pinned senders are read, the
+  agent never sees DMs (only the picked link + note), nothing is sent back. "Rework to
+  repost" means the commentary remix, never a re-upload or an evasion edit.
+- **Scroll-and-decide inbox**: full-screen feed with one-tap Approve (approve + queue in
+  the proposed slot, undo), Decline (dislike + archive, undo) and Change (revision
+  request with reasons and a moment of the video). Approval stays owner-only.
+- **A real UI design system** across the website, phone first.
+- **Every video stores a description and a compressed event timeline**, written while it
+  is made; the late-night analysis lines retention numbers up with it to say why a
+  video lost viewers (hook vs middle vs payoff), using only metrics the API provides.
+- **Work packets**: the server prepares validated JSON work for each scheduled agent run
+  and skips the run when there is nothing to do; the agent still acts only through MCP
+  tools.
+Reason: the owner's own words, 2026-11-17 ("I will record a big long reaction, and you
+will cut pieces in a loop"; "pin an Instagram account … when somebody sends you reels
+from that account … download it"; "approve directly a video without clicking on it";
+"a really smart pipeline between the server and the automated task"; "timestamps on
+each event … so if the drop rate is at 2 seconds it's the hook").
+
 ## 2026-11-17: A clip counts as available for a reaction idea once downloaded, rights known and unused
 The reaction quota (`src/learning/quotas.py`) is MAX_REACTIONS_PER_DAY + REACTION_MARGIN
 (default 3 + 2) and never more than the available clips: sources with a `local_path`,
