@@ -33,6 +33,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from pydantic import SecretStr
+
 from ..config import APP_HOME, ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
 from ..studio.power import keep_awake
@@ -182,9 +184,9 @@ def preflight(settings: InstagramMCPSettings) -> str:
 
 
 def _secrets(settings: InstagramMCPSettings) -> List[str]:
-    values = [settings.instagram_access_token, settings.facebook_app_secret]
-    values += [s.get_secret_value() for s in (settings.ui_password,
-                                              settings.tts_http_auth_header) if s]
+    values = (settings.instagram_access_token, settings.facebook_app_secret,
+              settings.ui_password, settings.tts_http_auth_header)
+    values = [v.get_secret_value() if isinstance(v, SecretStr) else v for v in values]
     return [v for v in values if v]
 
 

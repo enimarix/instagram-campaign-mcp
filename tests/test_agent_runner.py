@@ -69,7 +69,8 @@ def agent_dir(tmp_path):
 def cfg(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_CLAUDE_SEEN", str(tmp_path / "seen.json"))
     return InstagramMCPSettings(
-        _env_file=None, instagram_access_token=TOKEN, database_path=":memory:",
+        _env_file=None, instagram_access_token=TOKEN, facebook_app_secret="app-secret-456",
+        database_path=":memory:",
         agent_workspace=str(tmp_path / "ws"), agent_log_dir=str(tmp_path / "logs"),
         claude_bin=_fake_cli(tmp_path), agent_max_turns=40)
 
@@ -161,6 +162,7 @@ def test_success_records_usage_and_a_log_without_secrets(cfg, agent_dir, store, 
     log = Path(run["log_path"]).read_text()
     assert "fake stderr line" in log and "succeeded" in log
     assert TOKEN not in log and "owner@example.com" not in log
+    assert runner._secrets(cfg) == [TOKEN, "app-secret-456"]
 
 
 def test_failure_is_recorded_as_failed(cfg, agent_dir, store, monkeypatch):
