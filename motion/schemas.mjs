@@ -2,7 +2,7 @@
 // Template schemas for Python (src/studio/motion.py), one JSON line on stdout:
 //   node schemas.mjs                       {"templates": [{id, jsonSchema, defaultProps, description}]}
 //   node schemas.mjs --validate <id>       props JSON on stdin ->
-//     {"ok": true, props, durationInFrames, coverFrame} | {"ok": false, "error": <Zod's message>}
+//     {"ok": true, props, fps, durationInFrames, coverFrame} | {"ok": false, "error": <Zod's message>}
 // Same parse and message as src/Root.tsx, without bundling for Chrome (a fraction of a second).
 // The registry imports .tsx components, so it is bundled for Node first with esbuild (from
 // @remotion/bundler); the font loader is stubbed: only schemas and timings run here.
