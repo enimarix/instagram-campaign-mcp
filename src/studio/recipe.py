@@ -358,14 +358,14 @@ def _strip_emoji(text: str) -> str:
     # ponytail: Unicode-category heuristic, not the font's real cmap; read the cmap if a
     # symbol the font does have (e.g. ™) ever needs to survive.
     return "".join(c for c in text if not (
-        ord(c) >= 0x1F000 or c in "‍⃣︎️"
+        ord(c) >= 0x1F000 or c in "\u200d\u20e3\ufe0e\ufe0f"
         or (ord(c) > 0xFF and unicodedata.category(c) == "So")))
 
 
 def _ass_text(text: str) -> str:
     """User text as literal ASS text: braces can't open an override block ({\\b1} etc.),
     and a word joiner after each backslash keeps "\\N" / "\\h" literal."""
-    text = text.replace("\\", "\\⁠")
+    text = text.replace("\\", "\\\u2060")
     return text.replace("{", "\\{").replace("}", "\\}")
 
 
@@ -434,10 +434,10 @@ class Captions(Op):
         text, box = _ass_color(kit["colors"]["text"]), _ass_color(kit["colors"]["background"], 0.6)
         # WrapStyle 2: no libass wrapping, the lines are wrapped here. BorderStyle 3: an
         # opaque box (OutlineColour) padded by Outline px around each line.
+        width = _wrap_width(sw, self.size)
         events = [
             f"Dialogue: 0,{_ass_time(line.start_s)},{_ass_time(line.end_s)},Brand,,0,0,0,,"
-            f"{{{anchor}}}"
-            + "\\N".join(_ass_text(t) for t in textwrap.wrap(line.text, _wrap_width(sw, self.size)))
+            f"{{{anchor}}}" + "\\N".join(_ass_text(t) for t in textwrap.wrap(line.text, width))
             for line in self.lines
         ]
         ass = out.with_suffix(".ass")  # in render()'s work dir
@@ -472,7 +472,7 @@ class EndCard(Op):
 
     def apply(self, src, info, out, *, inputs, timeout_s, preset):
         kit, root = _brand_kit(info)
-        sx, sy, sw, sh = brand.safe_area(kit)
+        _, sy, _, _ = brand.safe_area(kit)
         text = _drawtext(self.text, info, out, size=48, x="center", y="center")
         card = (f"color=c=0x{kit['colors']['background'][1:]}:s={WIDTH}x{HEIGHT}:r={FPS}"
                 f":d={self.duration_s},{text}")
@@ -505,7 +505,8 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
     else:
         af = "anull"
     ffmpeg.run(["-i", src, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
-                "-af", f"{af},{AUDIO_FORMAT},{_fit(duration)}", *AUDIO_ARGS, *CONTAINER_ARGS, out], timeout_s=timeout_s)
+                "-af", f"{af},{AUDIO_FORMAT},{_fit(duration)}", *AUDIO_ARGS, *CONTAINER_ARGS,
+                out], timeout_s=timeout_s)
 
 
 def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,

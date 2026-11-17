@@ -85,8 +85,8 @@ def test_caption_validation():
 
 
 def test_ass_text_escapes_override_braces_and_backslashes():
-    assert recipe._ass_text("{\\b1}hi}") == "\\{\\⁠b1\\}hi\\}"
-    assert recipe._ass_text("a\\Nb") == "a\\⁠Nb"
+    assert recipe._ass_text("{\\b1}hi}") == "\\{\\\u2060b1\\}hi\\}"
+    assert recipe._ass_text("a\\Nb") == "a\\\u2060Nb"
     assert recipe._ass_time(3725.456) == "1:02:05.46"
     assert recipe._ass_color("#1A1C2C", 0.6) == "&H662C1C1A"
 
