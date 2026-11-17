@@ -76,8 +76,9 @@ def _revisions(store: CampaignStore, settings: InstagramMCPSettings, now: dateti
         pending = {r[0] for r in c.execute(
             "SELECT parent_asset_id FROM assets WHERE status = 'rendering'"
             " AND parent_asset_id IS NOT NULL")}
-    rows = [r for r in list_revision_requests(store) if r["asset"]["id"] not in pending]
-    return rows[:MAX_ITEMS], len(rows[:MAX_ITEMS])
+    rows = [r for r in list_revision_requests(store)
+            if r["asset"]["id"] not in pending][:MAX_ITEMS]
+    return rows, len(rows)
 
 
 def _facts(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
