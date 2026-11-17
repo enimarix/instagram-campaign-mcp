@@ -9,12 +9,12 @@
   },
   "pillars": {
     "placeholder": true,
-    "note": "Placeholders until the channel bible (gate H2, step 049) defines the real pillars.",
+    "note": "Placeholders until the channel bible (gate H2, step 049) defines the real pillars. Optional shelf_days per pillar: days after the batch date a submitted video stays worth posting (its default best_before; trend-type short, evergreen long). Without it the BEST_BEFORE_DEFAULT_DAYS setting applies.",
     "values": [
-      {"id": "fun_facts", "label": "Fun facts", "description": "Surprising, checkable facts."},
-      {"id": "myths", "label": "Myths", "description": "Common beliefs that turn out wrong."},
-      {"id": "stories", "label": "Stories", "description": "A short story that explains one idea."},
-      {"id": "everyday_humor", "label": "Everyday humor", "description": "Relatable POV moments played for laughs."}
+      {"id": "fun_facts", "label": "Fun facts", "description": "Surprising, checkable facts.", "shelf_days": 30},
+      {"id": "myths", "label": "Myths", "description": "Common beliefs that turn out wrong.", "shelf_days": 30},
+      {"id": "stories", "label": "Stories", "description": "A short story that explains one idea.", "shelf_days": 30},
+      {"id": "everyday_humor", "label": "Everyday humor", "description": "Relatable POV moments played for laughs.", "shelf_days": 3}
     ]
   },
   "hook_types": {

@@ -24,7 +24,7 @@ from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
-from .studio import motion
+from .studio import motion, production
 from .studio.publish import cancel_post, refuse_asset_file
 
 configure_logging()
@@ -40,6 +40,11 @@ Typical loop:
 3. Measure: collect_insights daily. Posts are judged after 48h (Stories after 20h).
 4. Decide: rank_posts(only="winner") lists posts beating the account median;
    compare_variants(campaign) says which variant is ahead.
+
+Studio batch (the agent): create_idea for each idea, render_motion each one,
+wait_for_renders(batch_date) to review renders as they land (get_render_status for one),
+submit_asset each QC-passed asset with a self_score, caption and best_before;
+list_assets shows the batch best first.
 
 Media must be at a public HTTPS URL; Instagram downloads it. Reels may instead use
 video_path (relative to the studio media root), uploaded directly. Scheduled posts are
@@ -558,6 +563,65 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
 
 
 # ----------------------------------------------------------------------
+# Studio: production batch (src/studio/production.py)
+# ----------------------------------------------------------------------
+@mcp.tool(annotations=LOCAL_WRITE)
+async def create_idea(track: str, hook: str, pillar: Optional[str] = None,
+                      hook_type: Optional[str] = None, script: Optional[str] = None,
+                      hypothesis: Optional[str] = None,
+                      strategy: Optional[Literal["explore", "exploit"]] = None,
+                      experiment: Optional[str] = None, citations: Optional[List[Any]] = None,
+                      source_id: Optional[int] = None) -> Dict[str, Any]:
+    """Add an idea to today's batch and return it; render it with render_motion(idea_id).
+    track, pillar and hook_type must be taxonomy ids (an error lists the valid ones)."""
+    return await _studio(production.create_idea, store(), get_settings(), track, hook=hook,
+                         pillar=pillar, hook_type=hook_type, script=script,
+                         hypothesis=hypothesis, strategy=strategy, experiment=experiment,
+                         citations=citations, source_id=source_id)
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def get_render_status(job_id: Optional[int] = None,
+                            asset_id: Optional[int] = None) -> Dict[str, Any]:
+    """One render job, or an asset and its latest job: state, progress, QC summary."""
+    return await _studio(production.render_status, store(), job_id=job_id, asset_id=asset_id)
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def wait_for_renders(batch_date: Optional[str] = None, job_ids: Optional[List[int]] = None,
+                           timeout_s: Optional[float] = None) -> Dict[str, Any]:
+    """Block until a render of the batch (YYYY-MM-DD) or of job_ids finishes, all are done,
+    or the timeout (capped at a few minutes). Returns {finished, pending, timed_out};
+    failed ones carry their QC reasons. Call it again with the pending job_ids."""
+    try:
+        return await production.wait_for_renders(store(), get_settings(), batch_date=batch_date,
+                                                 job_ids=job_ids, timeout_s=timeout_s)
+    except (ValueError, KeyError) as e:
+        raise ToolError(str(e)) from e
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def submit_asset(asset_id: int, self_score: int, self_score_reason: str, caption: str,
+                       best_before: Optional[str] = None) -> Dict[str, Any]:
+    """Submit a QC-passed (ready) asset for the owner's review: an honest self_score 1-10
+    with one line on why (best candidates come first), the caption, and best_before
+    (YYYY-MM-DD; default: batch date + the pillar's shelf life). Re-submitting overwrites
+    until the owner reacts."""
+    return await _studio(production.submit_asset, store(), get_settings(), asset_id,
+                         self_score=self_score, self_score_reason=self_score_reason,
+                         caption=caption, best_before=best_before)
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def list_assets(status: Optional[str] = None, batch_date: Optional[str] = None,
+                      limit: int = 50) -> Dict[str, Any]:
+    """Assets, best self-score first (limit up to 100): status, verdict, template, caption
+    excerpt, QC summary, best_before."""
+    return {"assets": await _studio(production.list_assets, store(), status=status,
+                                    batch_date=batch_date, limit=limit)}
+
+
+# ----------------------------------------------------------------------
 # DMs (requires instagram_manage_messages)
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=READ)
@@ -617,6 +681,12 @@ AGENT_TOOLS = frozenset({
     "list_motion_templates",
     "preview_motion",
     "render_motion",
+    # Production batch (step 053): ideas and the agent's own submissions, never publishing.
+    "create_idea",
+    "get_render_status",
+    "wait_for_renders",
+    "submit_asset",
+    "list_assets",
 })
 
 
