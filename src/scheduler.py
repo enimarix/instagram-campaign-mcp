@@ -26,6 +26,7 @@ from .store import CampaignStore
 
 async def _run(args: argparse.Namespace) -> int:
     settings = get_settings()
+    configure_logging(settings.log_level)
     store = CampaignStore(settings.database_path)
     try:
         if args.command == "rank":
@@ -40,9 +41,14 @@ async def _run(args: argparse.Namespace) -> int:
                 print(f"Scheduler running, checking every {args.interval}s. Ctrl+C to stop.",
                       file=sys.stderr)
                 while True:
-                    result = await run_due(client, store)
-                    if any(result[k] for k in ("published", "retrying", "failed")):
-                        print(json.dumps(result), flush=True)
+                    try:
+                        result = await run_due(client, store)
+                    except Exception as e:  # noqa: BLE001 - keep the daemon alive
+                        print(f"run_due failed: {e!r}", file=sys.stderr, flush=True)
+                    else:
+                        if any(result[k] for k in ("published", "retrying", "failed",
+                                                   "recovered_stuck")):
+                            print(json.dumps(result), flush=True)
                     await asyncio.sleep(args.interval)
         return 0
     finally:
@@ -60,6 +66,8 @@ def main() -> None:
     r = sub.add_parser("rank", help="Print winner ranking from stored snapshots")
     r.add_argument("--campaign")
     args = parser.parse_args()
+    if args.command == "daemon" and args.interval <= 0:
+        parser.error("--interval must be > 0")
     configure_logging()
     try:
         sys.exit(asyncio.run(_run(args)))

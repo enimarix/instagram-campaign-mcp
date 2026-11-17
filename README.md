@@ -51,42 +51,72 @@ plan ─► publish / schedule_post (tag campaign + variant + hypothesis)
   See [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md).
 - Hashtag search needs the *Instagram Public Content Access* feature on the app.
 
-### 2. Install
+### 2. Install (one command)
 ```bash
-git clone https://github.com/<you>/ig-mcp.git
-cd ig-mcp
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-cp env.example .env      # fill in INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID
-pytest -q                # 26 tests, no network
+git clone https://github.com/enimarix/instagram-campaign-mcp.git
+cd instagram-campaign-mcp
 ```
+**Windows** (PowerShell):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -RegisterClaudeCode
+```
+**macOS / Linux**:
+```bash
+./install.sh --register-claude-code
+```
+The installer:
+- creates `.venv` with Python 3.12 using [uv](https://docs.astral.sh/uv/) if it is
+  installed (uv downloads Python itself, so a new machine only needs uv), otherwise
+  with any installed Python 3.10+;
+- installs the package, and creates `.env` from `env.example` (never overwrites it);
+- writes `mcp-config.json` with this machine's paths, ready to paste into
+  Claude Desktop;
+- with `-RegisterClaudeCode` / `--register-claude-code`, runs `claude mcp add`
+  (user scope) so Claude Code sees the server right away.
+
+Options: `-Dev` / `--dev` also installs test dependencies and runs the 37 tests
+(no network); `-Name` / `--name` changes the server name (default `instagram`).
+Re-running the installer is safe and upgrades the install.
+
+Then fill in `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_BUSINESS_ACCOUNT_ID` in `.env`.
 Don't know your account ID? Set only the token, connect the server, and call
 `get_account_pages`.
 
+<details><summary>Manual install</summary>
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scriptsctivate
+pip install -e ".[dev]"
+cp env.example .env
+pytest -q
+```
+</details>
+
 ### 3. Connect to Claude
 
-**Claude Code**
-```bash
-claude mcp add instagram -- /path/to/ig-mcp/.venv/bin/ig-campaign-mcp
-```
+**Claude Code**: use `--register-claude-code` above, or run the `claude mcp add`
+command the installer prints.
 
-**Claude Desktop** (`claude_desktop_config.json`)
+**Claude Desktop**: merge the generated `mcp-config.json` into
+`claude_desktop_config.json` (Windows: `%APPDATA%\Claude\`, macOS:
+`~/Library/Application Support/Claude/`), then restart Claude Desktop. It looks like:
 ```json
 {
   "mcpServers": {
     "instagram": {
-      "command": "/path/to/ig-mcp/.venv/bin/ig-campaign-mcp"
+      "command": "/path/to/instagram-campaign-mcp/.venv/bin/ig-campaign-mcp"
     }
   }
 }
 ```
-On Windows use `C:\\path\\to\\ig-mcp\\.venv\\Scripts\\ig-campaign-mcp.exe`.
 The `.env` in the project folder is found automatically.
 
 ### 4. Run the scheduler (only if you schedule posts)
 The Graph API publishes immediately — it has no "post at 18:00". Keep this running
 on a machine that's on at posting time:
 ```bash
+.venv/bin/ig-campaign daemon   # Windows: .venv\Scripts\ig-campaign.exe daemon
+# or, with the venv activated:
 ig-campaign daemon            # checks every 60s
 # or from cron / Task Scheduler every 5 min:
 ig-campaign run-due

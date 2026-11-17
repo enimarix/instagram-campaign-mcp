@@ -108,6 +108,17 @@ class InstagramMCPSettings(BaseSettings):
             raise ValueError(f"Log level must be one of: {valid_levels}")
         return v.upper()
 
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v):
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValueError(f"Unknown time zone {v!r} (use an IANA name like Europe/Paris)") from e
+        return v
+
     @field_validator("instagram_api_version")
     @classmethod
     def validate_api_version(cls, v):
