@@ -248,3 +248,15 @@ def _score_all(store: CampaignStore, settings: InstagramMCPSettings) -> List[Dic
 
 def variants(store: CampaignStore, settings: InstagramMCPSettings, campaign: str) -> Dict[str, Any]:
     return compare_variants(_score_all(store, settings), campaign)
+
+
+async def account_status(client: InstagramClient) -> Dict[str, Any]:
+    """Profile, token validity and publishing quota, for the studio's account page.
+    An invalid token is reported, not raised; other Graph errors propagate."""
+    if not await client.validate_access_token():
+        return {"token_valid": False, "profile": None, "publishing_limit": None}
+    return {
+        "token_valid": True,
+        "profile": await client.get_profile_info(),
+        "publishing_limit": await client.get_publishing_limit(),
+    }

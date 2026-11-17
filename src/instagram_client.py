@@ -91,6 +91,16 @@ class RateLimitExceeded(InstagramAPIError):
     """Raised when Meta reports a rate limit (or the client-side cap is hit)."""
 
 
+class NotConfigured(InstagramAPIError):
+    """No access token yet (setup mode): Graph calls are impossible."""
+
+
+NOT_CONFIGURED_MSG = (
+    "instagram_not_configured: set INSTAGRAM_ACCESS_TOKEN and "
+    "INSTAGRAM_BUSINESS_ACCOUNT_ID in .env"
+)
+
+
 class InvalidMedia(InstagramAPIError):
     """Rejected locally before calling Meta (bad caption, format, ratio...).
     Retrying the same post can never succeed."""
@@ -138,6 +148,8 @@ class InstagramClient:
         self.settings = settings or get_settings()
         self.base_url = self.settings.instagram_api_url
         self.access_token = self.settings.instagram_access_token
+        if not self.access_token:
+            raise NotConfigured(NOT_CONFIGURED_MSG)
         self.budget = RequestBudget(self.settings.rate_limit_requests_per_hour)
         self.client = http_client or httpx.AsyncClient(
             timeout=httpx.Timeout(60.0),

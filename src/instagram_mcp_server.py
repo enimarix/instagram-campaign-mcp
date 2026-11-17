@@ -20,7 +20,7 @@ from mcp.types import ToolAnnotations
 
 from . import campaign as camp
 from .config import get_settings
-from .instagram_client import InstagramAPIError, InstagramClient
+from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
 
@@ -62,6 +62,8 @@ def client() -> InstagramClient:
     if _client is None:
         try:
             _client = InstagramClient(get_settings())
+        except NotConfigured as e:  # setup mode: store-only tools still work
+            raise ToolError(e.message) from e
         except Exception as e:  # noqa: BLE001 - usually missing env vars
             raise ToolError(f"Configuration error: {e}. Check your .env file.") from e
     return _client
