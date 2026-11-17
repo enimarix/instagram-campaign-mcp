@@ -65,8 +65,8 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   </>
 )
 
-function tokenExpiry(t: TokenStatus | undefined) {
-  if (!t?.configured) return 'No token'
+function tokenExpiry(t: TokenStatus) {
+  if (!t.configured) return 'No token'
   if (t.valid === null) return 'Unknown'
   if (!t.valid) return 'Expired or invalid'
   if (!t.expires_at) return 'Never (system-user token)'

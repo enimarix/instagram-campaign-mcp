@@ -26,7 +26,6 @@ from ..config import InstagramMCPSettings
 from ..instagram_client import InstagramAPIError, InstagramClient
 
 CACHE_SECONDS = 3600.0
-WARN_DAYS = 10  # the website's banner shows from here
 INVALID_TOKEN = 190  # Graph error code for an expired / revoked token
 ENV_KEY = "INSTAGRAM_ACCESS_TOKEN"
 _ENV_LINE = re.compile(rf"^\s*(export\s+)?{ENV_KEY}\s*=", re.IGNORECASE)

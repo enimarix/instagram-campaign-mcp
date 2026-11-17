@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getToken, type TokenStatus } from './api/client'
 
-const WARN_DAYS = 10 // src/studio/token.py WARN_DAYS
+const WARN_DAYS = 10 // step 029: warn from 10 days before expiry
 
 /** Shown on every page when the Instagram token is invalid or expires within WARN_DAYS. */
 export default function TokenBanner() {
