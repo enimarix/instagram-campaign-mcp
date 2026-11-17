@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -97,6 +97,15 @@ class InstagramMCPSettings(BaseSettings):
     )
     baseline_window: int = Field(
         30, description="How many recent matured posts form the account baseline"
+    )
+
+    # --- Website ----------------------------------------------------------
+    # Optional; required before `serve` binds a non-loopback host. Never logged or returned.
+    ui_password: Optional[SecretStr] = Field(None, description="Website password")
+    session_ttl_hours: float = Field(720.0, description="Login session lifetime (30 days)")
+    login_max_failures: int = Field(5, ge=1, description="Failed logins before the lock")
+    login_lockout_minutes: float = Field(
+        15.0, description="Failure window and lock duration after too many failed logins"
     )
 
     # --- Logging / cache --------------------------------------------------
