@@ -18,7 +18,7 @@ from ..studio.media import media_url
 from ..studio.seed import local_today
 
 SCORE_KEYS = ("verdict", "why", "engagement_index", "reach_index", "confidence",
-              "baseline_posts", "drivers")
+              "baseline_posts", "drivers", "watch_ratio", "view_rate")
 ROW_SORTS = ("posted_at", "age_hours", "engagement_index", "reach_index")
 METRIC_SORTS = ("views", "reach", "likes", "comments", "saved", "shares",
                 "ig_reels_avg_watch_time")

@@ -49,6 +49,9 @@ INSIGHT_METRICS: Dict[str, List[str]] = {
     "REELS": [
         "reach", "views", "likes", "comments", "saved", "shares",
         "total_interactions", "ig_reels_avg_watch_time",
+        # 075, Media Insights reference (v25+): total watch time (ms), share of views
+        # skipped in the first 3 s (estimated), reposts.
+        "ig_reels_video_view_total_time", "reels_skip_rate", "reposts",
     ],
     "STORY": [
         "reach", "views", "shares", "follows", "profile_visits",
