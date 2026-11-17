@@ -7,6 +7,7 @@ Approve stays its own owner action; scheduling is the second, explicit step.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_dt, to_iso
 from .assets import InvalidTransition, transition
 from .publish import _source, cancel_post, queue_asset
+from .seed import local_today
 
 
 def _taken(store: CampaignStore, now: datetime) -> List[datetime]:
@@ -86,3 +88,23 @@ def unapprove(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
     if store.get_asset(asset_id)["status"] == "scheduled":
         unschedule(store, asset_id)
     return transition(store, asset_id, "ready", actor="owner")
+
+
+def bench(store: CampaignStore, settings: InstagramMCPSettings, now: datetime) -> Dict[str, Any]:
+    """Liked videos not yet approved, from every batch (GOAL.md §3.2 "the bench"): freshest
+    best_before first (none last), then self_score. Past best_before (owner-local) is left out
+    even before housekeeping archives it. `suggestion`: the freshest one for the next free
+    slot when that slot is within 24 h; the owner still approves it."""
+    today = local_today(settings.timezone, now).isoformat()
+    # ponytail: 500 = the store's page cap; a bench that long is weeks of supply anyway.
+    rows = [a for a in store.list_assets(status="ready", verdict="liked", limit=500)
+            if not a["best_before"] or a["best_before"] >= today]
+    rows.sort(key=lambda a: (a["best_before"] is None, a["best_before"] or "",
+                             -(a["self_score"] or 0)))
+    suggestion = None
+    if rows:
+        at = _next_free_slot(store, settings, _taken(store, now), now)
+        if at - now <= timedelta(hours=24):
+            suggestion = {"asset_id": rows[0]["id"], **_slot(settings, at)}
+    return {"assets": rows, "supply_days": math.ceil(len(rows) / settings.max_posts_per_day),
+            "max_posts_per_day": settings.max_posts_per_day, "suggestion": suggestion}

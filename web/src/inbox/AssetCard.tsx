@@ -16,6 +16,7 @@ const STATUS_COLOR: Record<string, string> = {
 type Props = {
   asset: Asset
   current: boolean
+  showBestBefore?: boolean // bench cards
   onVerdict: (v: Verdict) => void
   onApprove: () => void
   onSchedule: () => void
@@ -23,7 +24,7 @@ type Props = {
   onFocus: () => void
 }
 
-export default function AssetCard({ asset: a, current, onVerdict, onApprove, onSchedule, onChange, onFocus }: Props) {
+export default function AssetCard({ asset: a, current, showBestBefore, onVerdict, onApprove, onSchedule, onChange, onFocus }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
   const [dx, setDx] = useState(0)
@@ -108,6 +109,9 @@ export default function AssetCard({ asset: a, current, onVerdict, onApprove, onS
             <span className={`${chip} bg-purple-100 text-purple-800`}>Explore</span>
           )}
           {a.track && <span className={`${chip} bg-gray-100 text-gray-700`}>{a.track}</span>}
+          {showBestBefore && a.best_before && (
+            <span className={`${chip} bg-amber-100 text-amber-800`}>best before {a.best_before}</span>
+          )}
         </div>
         {a.self_score != null && (
           <p className="truncate text-sm" title={a.self_score_reason ?? undefined}>
