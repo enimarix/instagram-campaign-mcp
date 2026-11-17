@@ -410,3 +410,33 @@ export const listClips = () => request<Clip[]>('/api/sources?role=clip')
 export const listInbox = () => request<InboxFile[]>('/api/sources/inbox')
 export const addInboxClip = (name: string, body: ClipIntake) =>
   post<Clip>(`/api/sources/inbox/${encodeURIComponent(name)}`, body)
+
+// --- Breakdowns and A/B (step 080) ---
+type Median = { median: number | null }
+/** A group of GET /api/analytics/breakdown (src/learning/breakdowns.py); `watch_ratio` only when known. */
+export type BreakdownGroup = {
+  tag_value: string | number
+  n: number
+  small_sample: boolean
+  engagement_index: { median: number; p25: number; p75: number } | null
+  reach: Median
+  views: Median
+  watch_ratio?: Median
+}
+export type Breakdown = { tag: string; post_type: string; days: number; since: string; groups: BreakdownGroup[] }
+export const getBreakdown = (tag: string, type: string, days = 90) =>
+  request<Breakdown>(`/api/analytics/breakdown?${new URLSearchParams({ tag, type, days: String(days) })}`)
+
+/** GET /api/analytics/ab (scoring.compare_variants): `leader` null while `note` says why. */
+export type AbVariant = {
+  variant: string
+  posts: number
+  avg_engagement_index: number
+  avg_reach: number
+  winners: number
+  hypothesis: string | null
+}
+export type AbResult = { campaign: string; variants: AbVariant[]; leader: string | null; note: string | null }
+export const getCampaigns = () => request<string[]>('/api/analytics/campaigns')
+export const getAb = (campaign: string) =>
+  request<AbResult>(`/api/analytics/ab?campaign=${encodeURIComponent(campaign)}`)

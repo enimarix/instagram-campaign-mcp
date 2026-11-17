@@ -165,6 +165,9 @@ export default function Analytics() {
       <Link to="/trends" className="inline-flex min-h-11 items-center text-blue-600 underline">
         Trends: what works for watched accounts and hashtags
       </Link>
+      <Link to="/analytics/breakdowns" className="flex min-h-11 items-center text-blue-600 underline">
+        What works for your posts: tags and A/B tests
+      </Link>
 
       <Section title="This week" help={HELP.streak}>
         <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">

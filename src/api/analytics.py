@@ -1,4 +1,5 @@
-"""GET /api/analytics/*: thin doors onto src/learning/analytics.py, breakdowns.py, funnel.py."""
+"""GET /api/analytics/*: thin doors onto src/learning/analytics.py, breakdowns.py, funnel.py
+and campaign.py (A/B)."""
 
 from __future__ import annotations
 
@@ -6,6 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from .. import campaign as campaign_service
 from ..learning import analytics, breakdowns
 from ..learning import funnel as funnel_service
 from ..store import CampaignStore
@@ -39,6 +41,17 @@ def breakdown(request: Request, tag: str, type: str = "REELS",
               days: int = Query(90, ge=1, le=3660), store: CampaignStore = Depends(get_store)):
     return call(breakdowns.tag_breakdown, store, request.app.state.settings,
                 tag=tag, post_type=type, days=days)
+
+
+@router.get("/campaigns")
+def campaigns(store: CampaignStore = Depends(get_store)):
+    return campaign_service.campaigns(store)
+
+
+@router.get("/ab")
+def ab(request: Request, campaign: str = Query(..., min_length=1),
+       store: CampaignStore = Depends(get_store)):
+    return campaign_service.variants(store, request.app.state.settings, campaign)
 
 
 @router.get("/funnel")

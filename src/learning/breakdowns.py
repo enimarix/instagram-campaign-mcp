@@ -19,7 +19,7 @@ from ..store import CampaignStore, parse_dt
 from .analytics import IDEA_TAGS, POST_TYPES, scored_posts, studio_side
 
 TAGS = IDEA_TAGS + ("template", "hour", "duration")
-# Output name -> metric key in the snapshot. 075 adds watch_ratio / view_rate here.
+# Output name -> metric key in the snapshot. watch_ratio comes from the scored row (075).
 METRICS = {"reach": "reach", "views": "views",
            "avg_watch_time": "ig_reels_avg_watch_time",
            "total_watch_time": "ig_reels_video_view_total_time"}
@@ -84,4 +84,7 @@ def _group(value: Any, posts: List[Any]) -> Dict[str, Any]:
                 if snap["metrics"].get(key) is not None]
         if vals or name in ("reach", "views"):  # watch times only when some post has them
             row[name] = {"median": round(median(vals), 2) if vals else None}
+    ratios = [s["watch_ratio"] for _, s in posts if s.get("watch_ratio") is not None]
+    if ratios:
+        row["watch_ratio"] = {"median": round(median(ratios), 3)}
     return row
