@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Render one template: node motion/render.mjs --template <id> --props <file> --out <file>
 //   [--still --frame N] [--bundle <dir>] [--concurrency N]
+//   or: node motion/render.mjs --bundle-only --bundle <dir>  (build the bundle, print {bundle})
 // Prints one JSON line {out, durationInFrames, renderMs[, coverFrame]} on stdout (coverFrame when
 // the template has one: the Reel cover, thumb_offset); errors go to stderr, exit 1.
 import { existsSync, readFileSync, rmSync } from "node:fs";
@@ -29,6 +30,7 @@ const { values: a } = (() => {
         frame: { type: "string", default: "0" },
         bundle: { type: "string" },
         concurrency: { type: "string" },
+        "bundle-only": { type: "boolean", default: false },
       },
     });
   } catch (e) {
@@ -36,6 +38,17 @@ const { values: a } = (() => {
   }
 })();
 
+const entryPoint = join(here, "src", "index.ts");
+if (a["bundle-only"]) {
+  if (!a.bundle) fail("--bundle-only needs --bundle <dir>");
+  try {
+    await bundle({ entryPoint, outDir: resolve(a.bundle) });
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  }
+  process.stdout.write(JSON.stringify({ bundle: resolve(a.bundle) }) + "\n");
+  process.exit(0);
+}
 if (!a.template || !a.out) fail("--template and --out are required");
 const frame = Number(a.frame);
 if (!Number.isInteger(frame)) fail(`--frame must be an integer, got ${a.frame}`);
@@ -67,7 +80,7 @@ try {
   const serveUrl =
     bundleDir && existsSync(join(bundleDir, "index.html"))
       ? bundleDir
-      : await bundle({ entryPoint: join(here, "src", "index.ts"), outDir: bundleDir ?? null });
+      : await bundle({ entryPoint, outDir: bundleDir ?? null });
   if (!bundleDir) tempBundle = serveUrl; // ~40 MB per render otherwise left in the temp dir
 
   // Throws on an unknown id or props that fail the template's Zod schema

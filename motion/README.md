@@ -9,6 +9,10 @@
   (`--bundle <dir>` builds the bundle there once and reuses it; `--concurrency N`).
   Prints `{"out", "durationInFrames", "renderMs"}` plus `"coverFrame"` (the Reel cover,
   `thumb_offset`) for templates that set one; bad props exit 1 with every problem listed.
+  `--bundle-only --bundle <dir>` only builds the bundle (Python bundles once per process).
+- Schemas for Python (`src/studio/motion.py`): `node schemas.mjs` prints every template's JSON
+  Schema and default props; `node schemas.mjs --validate <id>` checks props JSON from stdin with
+  the template's Zod schema (no Chrome, well under a second).
 - Still: `npm run still` (= `--still --frame 45`, writes `out/hello.png`).
 - Still of the 8-bit kit: `npm run still:preview` (`Preview8bit`, writes `out/preview8bit.png`).
 - Still of the script timeline: `npm run still:timeline` (`TimelineDemo`, writes `out/timeline-demo.png`).
