@@ -69,7 +69,9 @@ def preview_images(template: str, props: Dict[str, Any], media_root: Any,
     stills = motion.preview_stills(template, props, media_root, frames)
     pngs = [media.resolve(media_root, s) for s in stills]
     outs = [p.with_name(f"{p.stem}-{width}.jpg") for p in pngs]
-    todo = [i for i, out in enumerate(outs) if not out.is_file()]
+    # preview_stills re-renders the PNGs each time: convert again when one is newer.
+    todo = [i for i, out in enumerate(outs)
+            if not out.is_file() or out.stat().st_mtime_ns < pngs[i].stat().st_mtime_ns]
     if todo:
         _jpegs([["-i", pngs[i]] for i in todo], [outs[i] for i in todo], width)
     return [p.read_bytes() for p in outs], {"stills": stills}
