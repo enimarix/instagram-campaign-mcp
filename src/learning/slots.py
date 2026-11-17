@@ -172,12 +172,11 @@ def window_weights(
     tz: Union[str, ZoneInfo],
     day: date,
     hourly_profile: Optional[Mapping[int, float]],
-    floor: float = WEIGHT_FLOOR,
 ) -> List[float]:
     """One weight per window: the average followers online over the window's real time on
     local `day` (UTC hours, minute-weighted; a missing hour counts as 0).
 
-    A window never weighs less than `floor` x the busiest one. No profile or no audience
+    A window never weighs less than WEIGHT_FLOOR x the busiest one. No profile or no audience
     in any window → all 1.0 (v1 behaviour).
     """
     tz = ZoneInfo(tz) if isinstance(tz, str) else tz
@@ -198,7 +197,7 @@ def window_weights(
     top = max(averages, default=0)
     if top <= 0:
         return [1.0] * len(windows)
-    return [max(avg, floor * top) for avg in averages]
+    return [max(avg, WEIGHT_FLOOR * top) for avg in averages]
 
 
 def plan_slots_from_settings(
