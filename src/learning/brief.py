@@ -37,8 +37,9 @@ def _cut(text: Optional[str], n: int) -> Optional[str]:
 
 
 def _bible() -> Optional[str]:
-    return _cut(BIBLE_PATH.read_text(encoding="utf-8"), BIBLE_CHARS) \
-        if BIBLE_PATH.is_file() else None
+    if not BIBLE_PATH.is_file():
+        return None
+    return _cut(BIBLE_PATH.read_text(encoding="utf-8"), BIBLE_CHARS)
 
 
 def _rows(store: CampaignStore, sql: str, *args: Any) -> List[Dict[str, Any]]:
@@ -48,6 +49,7 @@ def _rows(store: CampaignStore, sql: str, *args: Any) -> List[Dict[str, Any]]:
 
 def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
                    now: datetime) -> Dict[str, Any]:
+    """The brief for the owner-local day of `now` (see the module docstring)."""
     today = local_today(settings.timezone, now)
     bible = _bible()
     report = store.latest_daily_report()
