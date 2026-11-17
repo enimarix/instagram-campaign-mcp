@@ -68,7 +68,7 @@ def test_fit_vertical_output_spec(tmp_path, mode, size):
                   timeout_s=120, preset="ultrafast")
     assert_spec(info, 1.0)
     assert info == ffmpeg.probe(out)
-    assert [p.name for p in tmp_path.iterdir()] == ["in.mp4", "out.mp4"]  # work dir gone
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["in.mp4", "out.mp4"]  # work dir gone
 
 
 @needs_ffmpeg
