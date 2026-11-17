@@ -83,8 +83,10 @@ export const dialogStorySchema = z
 
 export type DialogStoryProps = z.infer<typeof dialogStorySchema>;
 
-/** Script lines for buildTimeline: [hook, ...dialogue lines, moral?]; voice timings when given. */
-// Typed by shape, not DialogStoryProps: the schema's voice refine calls it.
+/**
+ * Script lines for buildTimeline: [hook, ...dialogue lines, moral?]; voice timings when given.
+ * Typed by shape, not DialogStoryProps: the schema's voice refine calls it.
+ */
 export function dialogStoryScript(p: { hook: string; lines: { text: string }[]; moral?: string; voice?: { lines?: Timing[] } }) {
   return { lines: [p.hook, ...p.lines.map((l) => l.text), ...(p.moral ? [p.moral] : [])], timings: p.voice?.lines };
 }
