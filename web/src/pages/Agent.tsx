@@ -2,17 +2,18 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   ApiError, errorMessage, getAgentLog, getAgentRuns, getPlaybooks, startAgentRun, type AgentRun,
 } from '../api/client'
-import { button, chip } from '../inbox/ui'
+import { Button } from '../ui/Button'
+import { Card, EmptyState, Skeleton } from '../ui/Card'
+import { Chip } from '../ui/Chip'
+import { PageHeader } from '../ui/PageHeader'
+import { link, type Tone } from '../ui/styles'
 
 const POLL_MS = 10_000
 // The started process needs a moment to write its `running` row: keep polling meanwhile.
 const START_GRACE_MS = 60_000
 
-const STATUS_CHIP: Record<AgentRun['status'], string> = {
-  running: 'bg-blue-100 text-blue-800',
-  succeeded: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-200 text-gray-700',
+const STATUS_TONE: Record<AgentRun['status'], Tone> = {
+  running: 'info', succeeded: 'success', failed: 'danger', cancelled: 'neutral',
 }
 
 function duration(s: number) {
@@ -34,13 +35,13 @@ function RunCard({ run }: { run: AgentRun }) {
   }
 
   return (
-    <li className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+    <Card as="li" className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{run.playbook}</span>
-        <span className={`${chip} ${STATUS_CHIP[run.status]}`}>{run.status}</span>
-        <span className="text-gray-500">{new Date(run.started_at).toLocaleString()}</span>
+        <Chip tone={STATUS_TONE[run.status]}>{run.status}</Chip>
+        <span className="text-muted">{new Date(run.started_at).toLocaleString()}</span>
       </div>
-      <p className="mt-1 text-gray-600">
+      <p className="mt-1 text-muted">
         {duration(run.duration_s)}
         {run.num_turns !== null && ` · ${run.num_turns} turns`}
         {run.cost_usd !== null && ` · $${run.cost_usd.toFixed(2)}`}
@@ -48,23 +49,20 @@ function RunCard({ run }: { run: AgentRun }) {
       {run.summary && (
         <>
           <p className={`mt-1 break-words whitespace-pre-wrap ${expanded ? '' : 'line-clamp-2'}`}>{run.summary}</p>
-          <button type="button" className="text-xs text-blue-600" onClick={() => setExpanded(!expanded)}>
+          <button type="button" className={`min-h-11 text-xs ${link}`} onClick={() => setExpanded(!expanded)}>
             {expanded ? 'Less' : 'More'}
           </button>
         </>
       )}
       {run.has_log && (
         <div className="mt-1">
-          <button type="button" className={`${button} bg-gray-100`} aria-expanded={log !== null}
-            onClick={() => void toggleLog()}>
-            Log
-          </button>
+          <Button size="sm" aria-expanded={log !== null} onClick={() => void toggleLog()}>Log</Button>
           {log !== null && (
-            <pre className="mt-2 max-h-80 overflow-auto rounded bg-gray-900 p-2 text-xs text-gray-100">{log}</pre>
+            <pre className="mt-2 max-h-80 overflow-auto rounded-control bg-bg p-3 font-mono text-xs text-fg">{log}</pre>
           )}
         </div>
       )}
-    </li>
+    </Card>
   )
 }
 
@@ -106,38 +104,37 @@ export default function Agent() {
 
   return (
     <section>
-      <h2 className="text-2xl font-semibold">Agent</h2>
-      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      <PageHeader title="Agent" />
+      {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}
 
-      <section aria-label="Playbooks" className="mt-4">
-        <h3 className="font-semibold">Playbooks</h3>
+      <Card as="section" aria-label="Playbooks">
+        <h2 className="font-semibold">Playbooks</h2>
         {playbooks === null ? (
-          <p className="mt-2 text-sm text-gray-500">Loading…</p>
+          <Skeleton className="mt-3 h-11" />
         ) : playbooks.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">No playbooks yet</p>
+          <p className="mt-2 text-sm text-muted">No playbooks yet</p>
         ) : (
-          <ul className="mt-2 flex flex-wrap gap-2">
+          <ul className="mt-3 flex flex-wrap gap-2">
             {playbooks.map((p) => (
               <li key={p}>
-                <button type="button" className={`${button} bg-blue-600 text-white`}
-                  disabled={runs?.some((r) => r.playbook === p && r.status === 'running')}
+                <Button variant="primary" disabled={runs?.some((r) => r.playbook === p && r.status === 'running')}
                   onClick={() => void runNow(p)}>
                   Run {p} now
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section aria-label="Runs" className="mt-6">
-        <h3 className="font-semibold">Runs</h3>
+      <section aria-label="Runs" className="mt-8">
+        <h2 className="text-lg font-semibold">Runs</h2>
         {runs === null ? (
-          <p className="mt-2 text-sm text-gray-500">Loading…</p>
+          <Skeleton className="mt-3 h-24" />
         ) : runs.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">No runs yet</p>
+          <div className="mt-3"><EmptyState title="No runs yet">Runs appear here when a playbook starts.</EmptyState></div>
         ) : (
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-3 space-y-2">
             {runs.map((r) => <RunCard key={r.id} run={r} />)}
           </ul>
         )}

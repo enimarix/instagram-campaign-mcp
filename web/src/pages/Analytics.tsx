@@ -3,8 +3,14 @@ import { Link } from 'react-router'
 import {
   getAccountSeries, getAnalyticsPosts, getFunnel, getTaste, type AnalyticsPost, type FunnelStats,
 } from '../api/client'
-import { button, chip, localDate, safeUrl } from '../inbox/ui'
-import { num, pct, useLoad, VERDICT_STYLE, type Load } from './load'
+import { localDate, safeUrl } from '../inbox/ui'
+import { IconButton } from '../ui/Button'
+import { Card, Skeleton, Stat } from '../ui/Card'
+import { Chip } from '../ui/Chip'
+import { InfoIcon } from '../ui/icons'
+import { PageHeader } from '../ui/PageHeader'
+import { card, link } from '../ui/styles'
+import { num, pct, useLoad, VERDICT_TONE, type Load } from './load'
 
 // The definitions of src/learning/funnel.py's docstring, behind the ⓘ toggles.
 const HELP = {
@@ -29,24 +35,24 @@ const daysAgo = (n: number) => {
 
 /** Loading, error and empty states in one place: a friendly line, never a crash. */
 export function Body<T>({ s, empty, children }: { s: Load<T>; empty: (d: T) => string | false; children: (d: T) => ReactNode }) {
-  if (s.error) return <p role="alert" className="mt-2 text-sm text-red-700">Couldn't load: {s.error}</p>
-  if (s.data === undefined) return <p className="mt-2 text-sm text-gray-500">Loading…</p>
+  if (s.error) return <p role="alert" className="mt-2 text-sm text-danger">Couldn't load: {s.error}</p>
+  if (s.data === undefined) return <Skeleton className="mt-2 h-20" />
   const message = empty(s.data)
-  return message ? <p className="mt-2 text-sm text-gray-500">{message}</p> : <>{children(s.data)}</>
+  return message ? <p className="mt-2 text-sm text-muted">{message}</p> : <>{children(s.data)}</>
 }
 
 export function Section({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
-    <section aria-label={title} className="mt-6">
+    <section aria-label={title} className="mt-8 [header+&]:mt-0">
       <div className="flex items-center gap-1">
-        <h3 className="font-semibold">{title}</h3>
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         {help && (
-          <button type="button" aria-expanded={open} aria-label={`About ${title}`}
-            className={`${button} px-2 text-gray-500`} onClick={() => setOpen(!open)}>ⓘ</button>
+          <IconButton variant="ghost" label={`About ${title}`} aria-expanded={open} icon={<InfoIcon className="size-4" />}
+            className="text-muted" onClick={() => setOpen(!open)} />
         )}
       </div>
-      {open && <p className="text-xs text-gray-600">{help}</p>}
+      {open && <p className="max-w-prose rounded-control bg-surface-2 p-3 text-xs text-muted">{help}</p>}
       {children}
     </section>
   )
@@ -55,22 +61,23 @@ export function Section({ title, help, children }: { title: string; help?: strin
 /** A small inline SVG line; null values are skipped. The numbers are also shown as text. */
 export function Line({ label, values, format = num }: { label: string; values: (number | null)[]; format?: (n: number) => string }) {
   const pts = values.flatMap((v, i) => (v === null ? [] : [[i, v] as const]))
-  if (pts.length === 0) return <p className="text-sm text-gray-500">{label}: no data yet</p>
+  if (pts.length === 0) return <p className="text-sm text-muted">{label}: no data yet</p>
   const ys = pts.map(([, v]) => v)
   const [min, max, last] = [Math.min(...ys), Math.max(...ys), ys[ys.length - 1]]
   const change = `${signed(last - ys[0], format)} over the range`
   const points = pts.map(([i, v]) =>
     `${(i / Math.max(values.length - 1, 1)) * 100},${28 - ((v - min) / (max - min || 1)) * 26}`).join(' ')
   return (
-    <figure className="rounded-lg border border-gray-200 bg-white p-3">
+    <figure className={`${card} p-4`}>
       <figcaption className="flex justify-between gap-2 text-sm">
-        <span>{label}</span><span className="font-semibold">{format(last)}</span>
+        <span className="text-muted">{label}</span><span className="font-semibold tabular-nums">{format(last)}</span>
       </figcaption>
       <svg role="img" aria-label={`${label}: ${format(last)}, ${change}`} viewBox="0 0 100 30"
-        preserveAspectRatio="none" className="mt-1 h-12 w-full text-blue-600">
-        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        preserveAspectRatio="none" className="mt-2 h-14 w-full text-accent">
+        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke" />
       </svg>
-      <p className="text-xs text-gray-500">{change}</p>
+      <p className="mt-1 text-xs text-muted">{change}</p>
     </figure>
   )
 }
@@ -83,14 +90,14 @@ function Funnel({ totals, note }: { totals: FunnelStats; note: string }) {
         {STAGES.map((s) => (
           <li key={s} className="grid grid-cols-[5.5rem_1fr_3rem] items-center gap-2 text-sm">
             <span className="capitalize">{s}</span>
-            <span className="h-3 rounded bg-gray-100">
-              <span className="block h-3 rounded bg-blue-600" style={{ width: `${(totals[s] / top) * 100}%` }} />
+            <span className="h-3 rounded-full bg-surface-2">
+              <span className="block h-3 rounded-full bg-accent transition-[width]" style={{ width: `${(totals[s] / top) * 100}%` }} />
             </span>
             <span className="text-right tabular-nums">{totals[s]}</span>
           </li>
         ))}
       </ol>
-      <p className="mt-1 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-muted">
         Like-rate {pct(totals.like_rate)} · approval rate {pct(totals.approval_rate)} ({note})
       </p>
     </>
@@ -101,28 +108,26 @@ function PostCard({ post }: { post: AnalyticsPost }) {
   const thumb = post.thumbnail_url
   const href = safeUrl(post.permalink)
   return (
-    <li className="flex gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm">
-      {thumb && <img src={thumb} alt="" className="h-16 w-9 shrink-0 rounded object-cover" />}
+    <Card as="li" className="flex gap-3 text-sm">
+      {thumb && <img src={thumb} alt="" className="h-20 w-11 shrink-0 rounded-lg object-cover" />}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`${chip} ${VERDICT_STYLE[post.verdict] ?? 'bg-gray-100 text-gray-700'}`}>
-            {post.verdict.replace('_', ' ')}
-          </span>
-          <span className="text-gray-500">{postDay(post)}</span>
-          {post.deleted && <span className={`${chip} bg-gray-100 text-gray-600`}>deleted</span>}
+          <Chip tone={VERDICT_TONE[post.verdict]}>{post.verdict.replace('_', ' ')}</Chip>
+          <span className="text-muted">{postDay(post)}</span>
+          {post.deleted && <Chip>deleted</Chip>}
         </div>
         {post.caption && <p className="mt-1 truncate">{post.caption}</p>}
-        <p className="text-xs text-gray-500">{num(post.metrics.views)} views · {num(post.metrics.likes)} likes</p>
+        <p className="text-xs text-muted">{num(post.metrics.views)} views · {num(post.metrics.likes)} likes</p>
         <div className="flex flex-wrap gap-x-4">
           <Link to={`/analytics/posts/${encodeURIComponent(post.media_id)}`}
-            className="inline-flex min-h-11 items-center text-blue-600 underline">Details</Link>
+            className={`inline-flex min-h-11 items-center ${link}`}>Details</Link>
           {!thumb && href && (
             <a href={href} target="_blank" rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center text-blue-600 underline">Open on Instagram</a>
+              className={`inline-flex min-h-11 items-center ${link}`}>Open on Instagram</a>
           )}
         </div>
       </div>
-    </li>
+    </Card>
   )
 }
 
@@ -161,38 +166,32 @@ export default function Analytics() {
 
   return (
     <section>
-      <h2 className="text-2xl font-semibold">Analytics</h2>
-      <Link to="/trends" className="inline-flex min-h-11 items-center text-blue-600 underline">
-        Trends: what works for watched accounts and hashtags
-      </Link>
-      <Link to="/analytics/breakdowns" className="flex min-h-11 items-center text-blue-600 underline">
-        What works for your posts: tags and A/B tests
-      </Link>
+      <PageHeader title="Analytics">
+        <nav aria-label="More analytics" className="flex flex-wrap gap-x-5">
+          <Link to="/trends" className={`inline-flex min-h-11 items-center ${link}`}>
+            Trends: what works for watched accounts and hashtags
+          </Link>
+          <Link to="/analytics/breakdowns" className={`inline-flex min-h-11 items-center ${link}`}>
+            What works for your posts: tags and A/B tests
+          </Link>
+        </nav>
+      </PageHeader>
 
       <Section title="This week" help={HELP.streak}>
-        <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {tiles.map(([label, value, sub]) => (
-            <div key={label} className="rounded-lg border border-gray-200 bg-white p-3">
-              <dt className="text-xs text-gray-500">{label}</dt>
-              <dd className="text-xl font-semibold">{value}</dd>
-              {sub && <dd className="text-xs text-gray-500">{sub}</dd>}
-            </div>
-          ))}
+        <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {tiles.map(([label, value, sub]) => <Stat key={label} label={label} value={value} sub={sub} />)}
         </dl>
       </Section>
 
       <Section title="Account trends" help={HELP.trends}>
-        <div role="group" aria-label="Range" className="mt-2 flex gap-1">
+        <div role="group" aria-label="Range" className="mt-2 flex gap-2">
           {RANGES.map((r) => (
-            <button key={r} type="button" aria-pressed={range === r} onClick={() => setRange(r)}
-              className={`${button} ${range === r ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border border-gray-300'}`}>
-              {r} d
-            </button>
+            <Chip key={r} pressed={range === r} onClick={() => setRange(r)}>{r} d</Chip>
           ))}
         </div>
         <Body s={account} empty={(a) => a.days.length === 0 && 'No account data yet: the worker saves one row a day once Instagram is connected.'}>
           {(a) => (
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Line label="Followers" values={a.days.map((d) => d.followers)} />
               <Line label="Reach" values={a.days.map((d) => d.reach)} />
               <Line label="Views" values={a.days.map((d) => d.views)} />
@@ -202,7 +201,7 @@ export default function Analytics() {
       </Section>
 
       <Section title="This week's posts">
-        <Link to="/analytics/posts" className="inline-flex min-h-11 items-center text-blue-600 underline">All posts</Link>
+        <Link to="/analytics/posts" className={`inline-flex min-h-11 items-center ${link}`}>All posts</Link>
         <Body s={posts} empty={() => week.length === 0 && 'No posts in the last 7 days.'}>
           {() => <ul className="mt-2 space-y-2">{week.map((p) => <PostCard key={p.media_id} post={p} />)}</ul>}
         </Body>
@@ -229,7 +228,7 @@ export default function Analytics() {
                 <strong>{(cal.reduce((a, d) => a + d.top_liked, 0) / cal.length).toFixed(1)}/{cal[0].top_n}</strong>{' '}
                 on average ({cal.length} day{cal.length === 1 ? '' : 's'}).
               </p>
-              <p className="text-xs text-gray-500">Its mean score: liked {num(mean.liked)}, disliked {num(mean.disliked)}</p>
+              <p className="text-xs text-muted">Its mean score: liked {num(mean.liked)}, disliked {num(mean.disliked)}</p>
             </>
           )}
         </Body>
@@ -243,11 +242,11 @@ export default function Analytics() {
                 {waste.count} liked video{waste.count === 1 ? '' : 's'} expired unapproved · {waste.render_minutes} render minutes
               </p>
               {reasons.length === 0 ? (
-                <p className="mt-1 text-sm text-gray-500">No feedback reasons yet.</p>
+                <p className="mt-1 text-sm text-muted">No feedback reasons yet.</p>
               ) : (
                 <ul aria-label="Top feedback reasons" className="mt-1 flex flex-wrap gap-2">
                   {reasons.slice(0, 5).map((r) => (
-                    <li key={r.code} className={`${chip} bg-gray-100 text-gray-700`}>{r.label} ×{r.count}</li>
+                    <li key={r.code}><Chip>{r.label} ×{r.count}</Chip></li>
                   ))}
                 </ul>
               )}

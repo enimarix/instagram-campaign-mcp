@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   errorMessage,
   getProposedSlot,
@@ -8,7 +8,10 @@ import {
   type Asset,
   type ProposedSlot,
 } from '../api/client'
-import { button, inputValue, wallClock } from './ui'
+import { Button } from '../ui/Button'
+import { Sheet } from '../ui/Sheet'
+import { field } from '../ui/styles'
+import { inputValue, wallClock } from './ui'
 
 type Props = {
   assetId: number
@@ -16,20 +19,14 @@ type Props = {
   onClose: () => void
 }
 
-// Second step after approving: accept the planner's slot or pick another time. Same
-// native modal <dialog> as ReasonSheet.
+// Second step after approving: accept the planner's slot or pick another time.
 export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) {
-  const ref = useRef<HTMLDialogElement>(null)
   const [slot, setSlot] = useState<ProposedSlot | null>(null)
   const [picking, setPicking] = useState(false)
   const [when, setWhen] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!ref.current?.open) ref.current?.showModal()
-  }, [])
 
   useEffect(() => {
     getProposedSlot(assetId).then(
@@ -55,20 +52,14 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
   const blocked = busy || (slot?.needs_confirmation === true && !confirmed)
 
   return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      aria-labelledby="schedule-title"
-      className="mx-auto mt-auto mb-0 w-full max-w-full rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop:bg-black/40 md:mb-auto md:max-w-md md:rounded-2xl"
-    >
-      <h2 id="schedule-title" className="text-lg font-semibold">Schedule this video</h2>
-      <p className="mt-2 text-sm">
-        {slot ? <>Proposed time: <strong>{wallClock(slot.local)}</strong></> : !error && 'Finding a slot…'}
+    <Sheet title="Schedule this video" onClose={onClose}>
+      <p className="mt-2 text-sm text-muted">
+        {slot ? <>Proposed time: <strong className="text-fg">{wallClock(slot.local)}</strong></> : !error && 'Finding a slot…'}
       </p>
       {slot?.needs_confirmation && (
         <label className="mt-3 flex items-start gap-2 text-sm">
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}
-            className="mt-1 size-4" />
+            className="mt-0.5 size-5" />
           I checked this reaction video: my own take is a substantial part and the creator is credited.
         </label>
       )}
@@ -76,33 +67,28 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
         <label className="mt-3 block text-sm font-medium">
           Another time
           <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
-            className="mt-1 block min-h-11 w-full rounded-lg border border-gray-300 px-2 font-normal" />
+            className={`${field} mt-1 block w-full font-normal`} />
         </label>
       )}
-      {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button type="button" onClick={onClose} className={`${button} bg-gray-100`}>
-          Later
-        </button>
+      {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+      <div className="mt-5 grid grid-cols-2 gap-2">
+        <Button onClick={onClose}>Later</Button>
         {picking ? (
-          <button type="button" disabled={blocked || !when}
-            onClick={() => schedule(new Date(when).toISOString())}
-            className={`${button} bg-blue-600 text-white`}>
+          <Button variant="primary" disabled={blocked || !when} onClick={() => schedule(new Date(when).toISOString())}>
             Schedule at this time
-          </button>
+          </Button>
         ) : (
           <>
-            <button type="button" disabled={blocked || !slot} onClick={() => slot && schedule(slot.publish_at)}
-              className={`${button} bg-blue-600 text-white`}>
+            <Button variant="primary" disabled={blocked || !slot} onClick={() => slot && schedule(slot.publish_at)}>
               Accept
-            </button>
-            <button type="button" onClick={() => setPicking(true)} className={`${button} col-span-2 bg-gray-100`}>
+            </Button>
+            <Button variant="ghost" className="col-span-2" onClick={() => setPicking(true)}>
               Pick another time
-            </button>
+            </Button>
           </>
         )}
       </div>
-    </dialog>
+    </Sheet>
   )
 }
 
@@ -127,10 +113,10 @@ export function ScheduledSlot({ assetId, onUnscheduled }: { assetId: number; onU
   return (
     <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span>Scheduled{local && <> for <strong>{wallClock(local)}</strong></>}</span>
-        <button type="button" onClick={unschedule} className={`${button} bg-gray-100`}>Unschedule</button>
+        <span className="text-muted">Scheduled{local && <> for <strong className="text-fg">{wallClock(local)}</strong></>}</span>
+        <Button size="sm" onClick={unschedule}>Unschedule</Button>
       </div>
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>
   )
 }

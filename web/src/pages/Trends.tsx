@@ -4,7 +4,13 @@ import {
   listWatchlist, removeWatch, setInspirationStatus,
   type Inspiration, type TrendItem, type TrendReport, type Watch,
 } from '../api/client'
-import { button, chip, safeUrl } from '../inbox/ui'
+import { safeUrl } from '../inbox/ui'
+import { Button, IconButton } from '../ui/Button'
+import { Card, EmptyState, Skeleton } from '../ui/Card'
+import { Chip } from '../ui/Chip'
+import { CloseIcon } from '../ui/icons'
+import { PageHeader } from '../ui/PageHeader'
+import { field, link, type Tone } from '../ui/styles'
 
 const label = (w: Pick<Watch, 'kind' | 'value'>) => (w.kind === 'hashtag' ? '#' : '@') + w.value
 
@@ -12,35 +18,33 @@ const label = (w: Pick<Watch, 'kind' | 'value'>) => (w.kind === 'hashtag' ? '#' 
 function TrendCard({ item }: { item: TrendItem }) {
   const href = safeUrl(item.url)
   return (
-    <li className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+    <Card as="li" className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold break-all">
           {item.account ? `@${item.account}` : `#${item.hashtag}`}
         </span>
         {item.outlier !== null ? (
-          <span className={`${chip} bg-amber-100 text-amber-900`}>×{item.outlier} {item.metric}</span>
+          <Chip tone="accent">×{item.outlier} {item.metric}</Chip>
         ) : (
-          <span className={`${chip} bg-gray-100 text-gray-600`} title={item.outlier_note ?? undefined}>
-            no score
-          </span>
+          <Chip title={item.outlier_note ?? undefined}>no score</Chip>
         )}
-        <span className="text-gray-500">posted {String(item.hour).padStart(2, '0')}:00</span>
-        {item.duration_s !== null && <span className="text-gray-500">{Math.round(item.duration_s)} s</span>}
+        <span className="text-muted">posted {String(item.hour).padStart(2, '0')}:00</span>
+        {item.duration_s !== null && <span className="text-muted">{Math.round(item.duration_s)} s</span>}
       </div>
       {item.outlier === null && item.outlier_note && (
-        <p className="mt-1 text-xs text-gray-500">{item.outlier_note}</p>
+        <p className="mt-1 text-xs text-muted">{item.outlier_note}</p>
       )}
-      {item.hook_quote && <q className="mt-1 block break-words">{item.hook_quote}</q>}
+      {item.hook_quote && <q className="mt-2 block break-words">{item.hook_quote}</q>}
       {item.hashtags.length > 0 && (
-        <p className="mt-1 break-words text-xs text-blue-700">{item.hashtags.map((t) => `#${t}`).join(' ')}</p>
+        <p className="mt-1 break-words text-xs text-info">{item.hashtags.map((t) => `#${t}`).join(' ')}</p>
       )}
       {href && (
         <a href={href} target="_blank" rel="noopener noreferrer"
-          className="mt-2 inline-flex min-h-11 items-center text-blue-600 underline">
+          className={`mt-1 inline-flex min-h-11 items-center ${link}`}>
           Open on Instagram
         </a>
       )}
-    </li>
+    </Card>
   )
 }
 
@@ -66,11 +70,7 @@ function useEditableList<T>(fetchAll: () => Promise<T[]>) {
   return { items, error, act }
 }
 
-const STATUS_CHIP: Record<Inspiration['status'], string> = {
-  new: 'bg-blue-100 text-blue-900',
-  used: 'bg-green-100 text-green-900',
-  dismissed: 'bg-gray-100 text-gray-600',
-}
+const STATUS_TONE: Record<Inspiration['status'], Tone> = { new: 'info', used: 'success', dismissed: 'neutral' }
 
 // Reels the owner pastes from the phone (step 051b); the agent reads the new ones.
 function Inspirations() {
@@ -89,59 +89,57 @@ function Inspirations() {
   }
 
   return (
-    <section aria-label="Inspirations" className="mt-4">
-      <h3 className="font-semibold">Inspirations</h3>
-      <p className="text-xs text-gray-500">Paste a Reel link and say what you like about it. The agent learns the format, never copies it.</p>
-      <form onSubmit={submit} className="mt-2 flex flex-col gap-2">
+    <Card as="section" aria-label="Inspirations">
+      <h2 className="font-semibold">Inspirations</h2>
+      <p className="text-xs text-muted">Paste a Reel link and say what you like about it. The agent learns the format, never copies it.</p>
+      <form onSubmit={submit} className="mt-3 flex flex-col gap-2">
         <input aria-label="Reel link" type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)}
           placeholder="https://www.instagram.com/reel/…"
-          className="min-h-11 min-w-0 rounded-lg border border-gray-300 px-3 text-sm" />
+          className={`${field} min-w-0`} />
         <div className="flex gap-2">
           <input aria-label="Note" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)}
             placeholder="this format is funny"
-            className="min-h-11 min-w-0 flex-1 rounded-lg border border-gray-300 px-3 text-sm" />
-          <button type="submit" className={`${button} bg-blue-600 text-white`}>Add</button>
+            className={`${field} min-w-0 flex-1`} />
+          <Button type="submit" variant="primary">Add</Button>
         </div>
       </form>
-      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       {items === null ? (
-        !error && <p className="mt-2 text-sm text-gray-500">Loading…</p>
+        !error && <Skeleton className="mt-3 h-12" />
       ) : items.length === 0 ? (
-        <p className="mt-2 text-sm text-gray-500">No inspirations yet</p>
+        <p className="mt-3 text-sm text-muted">No inspirations yet</p>
       ) : (
-        <ul className="mt-2 space-y-2">
+        <ul className="mt-3 space-y-2">
           {items.map((i) => {
             const href = safeUrl(i.url)
             return (
-              <li key={i.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+              <li key={i.id} className="rounded-control bg-surface-2 p-3 text-sm">
                 <div className="flex items-start gap-2">
-                  <p className="min-w-0 flex-1 break-words">{i.note ?? <span className="text-gray-500">No note</span>}</p>
-                  <span className={`${chip} ${STATUS_CHIP[i.status]}`}>{i.status}</span>
+                  <p className="min-w-0 flex-1 break-words">{i.note ?? <span className="text-muted">No note</span>}</p>
+                  <Chip tone={STATUS_TONE[i.status]}>{i.status}</Chip>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   {href && (
                     <a href={href} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex min-h-11 items-center text-blue-600 underline">
+                      className={`mr-auto inline-flex min-h-11 items-center ${link}`}>
                       Open
                     </a>
                   )}
                   {i.status !== 'dismissed' && (
-                    <button type="button" className={`${button} bg-gray-100`}
-                      onClick={() => void act(() => setInspirationStatus(i.id, 'dismissed'))}>
+                    <Button size="sm" variant="ghost" onClick={() => void act(() => setInspirationStatus(i.id, 'dismissed'))}>
                       Dismiss
-                    </button>
+                    </Button>
                   )}
-                  <button type="button" className={`${button} bg-gray-100 text-red-700`}
-                    onClick={() => void act(() => deleteInspiration(i.id))}>
+                  <Button size="sm" variant="ghost" className="text-danger!" onClick={() => void act(() => deleteInspiration(i.id))}>
                     Delete
-                  </button>
+                  </Button>
                 </div>
               </li>
             )
           })}
         </ul>
       )}
-    </section>
+    </Card>
   )
 }
 
@@ -156,39 +154,37 @@ function Watchlist() {
   }
 
   return (
-    <section aria-label="Watchlist" className="mt-4">
-      <h3 className="font-semibold">Watchlist</h3>
-      <p className="text-xs text-gray-500">The agent's research looks these up (hashtag top posts, accounts' recent posts).</p>
-      <form onSubmit={submit} className="mt-2 flex flex-wrap gap-2">
+    <Card as="section" aria-label="Watchlist">
+      <h2 className="font-semibold">Watchlist</h2>
+      <p className="text-xs text-muted">The agent's research looks these up (hashtag top posts, accounts' recent posts).</p>
+      <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
         <select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Watch['kind'])}
-          className="min-h-11 rounded-lg border border-gray-300 bg-white px-2 text-sm">
+          className={field}>
           <option value="hashtag">Hashtag</option>
           <option value="account">Account</option>
         </select>
         <input aria-label="Hashtag or username" value={value} onChange={(e) => setValue(e.target.value)}
           placeholder={kind === 'hashtag' ? '#fitness' : '@username'}
-          className="min-h-11 min-w-0 flex-1 rounded-lg border border-gray-300 px-3 text-sm" />
-        <button type="submit" className={`${button} bg-blue-600 text-white`}>Add</button>
+          className={`${field} min-w-0 flex-1`} />
+        <Button type="submit" variant="primary">Add</Button>
       </form>
-      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       {items === null ? (
-        <p className="mt-2 text-sm text-gray-500">Loading…</p>
+        <Skeleton className="mt-3 h-11" />
       ) : items.length === 0 ? (
-        <p className="mt-2 text-sm text-gray-500">Nothing watched yet</p>
+        <p className="mt-3 text-sm text-muted">Nothing watched yet</p>
       ) : (
-        <ul className="mt-2 flex flex-wrap gap-2">
+        <ul className="mt-3 flex flex-wrap gap-2">
           {items.map((w) => (
-            <li key={w.id} className="flex items-center gap-1 rounded-full bg-gray-100 pl-3 text-sm">
+            <li key={w.id} className="flex items-center rounded-full bg-surface-2 pl-4 text-sm">
               <span className="break-all">{label(w)}</span>
-              <button type="button" aria-label={`Remove ${label(w)}`} className={`${button} px-2`}
-                onClick={() => void act(() => removeWatch(w.id))}>
-                ×
-              </button>
+              <IconButton variant="ghost" label={`Remove ${label(w)}`} icon={<CloseIcon className="size-4" />}
+                className="rounded-full text-muted" onClick={() => void act(() => removeWatch(w.id))} />
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   )
 }
 
@@ -203,26 +199,27 @@ export default function Trends() {
   const tags = report ? Object.entries(report.hashtags) : []
   return (
     <section>
-      <h2 className="text-2xl font-semibold">Trends</h2>
-      <p className="text-sm text-gray-500">Last 14 days. ×N = the post against its account's (or hashtag's) median.</p>
-      <Inspirations />
-      <Watchlist />
-      <section aria-label="Trend report" className="mt-6">
-        {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      <PageHeader title="Trends">Last 14 days. ×N = the post against its account's (or hashtag's) median.</PageHeader>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Inspirations />
+        <Watchlist />
+      </div>
+      <section aria-label="Trend report" className="mt-8">
+        {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
         {report === null ? (
-          !error && <p className="mt-2 text-sm text-gray-500">Loading…</p>
+          !error && <Skeleton className="h-32" />
         ) : report.accounts.length === 0 && tags.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">No trends yet: add to the watchlist, then let the agent research.</p>
+          <EmptyState title="No trends yet">Add to the watchlist, then let the agent research.</EmptyState>
         ) : (
           <>
-            {report.accounts.length > 0 && <h3 className="font-semibold">Watched accounts</h3>}
-            <ul className="mt-2 space-y-2">
+            {report.accounts.length > 0 && <h2 className="text-lg font-semibold">Watched accounts</h2>}
+            <ul className="mt-3 grid gap-3 md:grid-cols-2">
               {report.accounts.map((i) => <TrendCard key={i.source_id} item={i} />)}
             </ul>
             {tags.map(([tag, items]) => (
-              <section key={tag} aria-label={`#${tag}`} className="mt-4">
-                <h3 className="font-semibold">#{tag} <span className="text-xs font-normal text-gray-500">ranked within the hashtag</span></h3>
-                <ul className="mt-2 space-y-2">
+              <section key={tag} aria-label={`#${tag}`} className="mt-6">
+                <h2 className="text-lg font-semibold">#{tag} <span className="text-xs font-normal text-muted">ranked within the hashtag</span></h2>
+                <ul className="mt-3 grid gap-3 md:grid-cols-2">
                   {items.map((i) => <TrendCard key={i.source_id} item={i} />)}
                 </ul>
               </section>

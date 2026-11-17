@@ -1,17 +1,16 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { Link } from 'react-router'
 import type { Asset, Verdict } from '../api/client'
+import { Button, IconButton } from '../ui/Button'
+import { Chip } from '../ui/Chip'
+import { SoundOffIcon, SoundOnIcon } from '../ui/icons'
+import { card, link, verdictButton, type Tone } from '../ui/styles'
 import { ScheduledSlot } from './ScheduleSheet'
-import { button, chip } from './ui'
 
 const SWIPE_PX = 80 // horizontal travel that counts as a like / dislike
 const VISIBLE = 0.6 // share of the video on screen before it plays
 
-const STATUS_COLOR: Record<string, string> = {
-  ready: 'bg-blue-100 text-blue-800',
-  approved: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-}
+const STATUS_TONE: Record<string, Tone> = { ready: 'info', approved: 'success', failed: 'danger' }
 
 type Props = {
   asset: Asset
@@ -74,10 +73,10 @@ export default function AssetCard({ asset: a, current, showBestBefore, onVerdict
       onPointerUp={up}
       onPointerCancel={cancel}
       style={dx ? { transform: `translateX(${dx}px)` } : undefined}
-      className={`touch-pan-y overflow-hidden rounded-xl bg-white shadow-sm ${
-        current ? 'md:ring-2 md:ring-blue-500' : '' // keyboard cursor (desktop)
-      } ${a.verdict === 'liked' ? 'border-l-4 border-green-500' : ''} ${
-        a.verdict === 'disliked' ? 'border-l-4 border-red-500 opacity-70' : ''
+      className={`${card} touch-pan-y overflow-hidden transition-[opacity,box-shadow] ${
+        current ? 'md:ring-2 md:ring-accent' : '' // keyboard cursor (desktop)
+      } ${a.verdict === 'liked' ? 'border-l-4 border-l-success' : ''} ${
+        a.verdict === 'disliked' ? 'border-l-4 border-l-danger opacity-70' : ''
       }`}
     >
       <div className="relative">
@@ -92,63 +91,40 @@ export default function AssetCard({ asset: a, current, showBestBefore, onVerdict
           preload="metadata"
           className="mx-auto aspect-[9/16] max-h-[70dvh] w-full bg-black object-contain"
         />
-        <button
-          type="button"
+        <IconButton
+          label={muted ? 'Sound on' : 'Mute'}
+          icon={muted ? <SoundOffIcon /> : <SoundOnIcon />}
           onClick={() => setMuted((m) => !m)}
-          className={`${button} absolute top-2 right-2 bg-black/60 text-white`}
-        >
-          {muted ? 'Sound on' : 'Mute'}
-        </button>
+          className="absolute top-3 right-3 rounded-full bg-black/55 text-white backdrop-blur hover:bg-black/70"
+        />
       </div>
-      <div className="space-y-2 p-3">
-        <div className="flex flex-wrap gap-1">
-          <span className={`${chip} ${STATUS_COLOR[a.status] ?? 'bg-gray-100 text-gray-700'}`}>
-            {a.status.replace('_', ' ')}
-          </span>
-          {a.strategy === 'explore' && (
-            <span className={`${chip} bg-purple-100 text-purple-800`}>Explore</span>
-          )}
-          {a.track && <span className={`${chip} bg-gray-100 text-gray-700`}>{a.track}</span>}
-          {showBestBefore && a.best_before && (
-            <span className={`${chip} bg-amber-100 text-amber-800`}>best before {a.best_before}</span>
-          )}
+      <div className="space-y-3 p-4">
+        <div className="flex flex-wrap gap-1.5">
+          <Chip tone={STATUS_TONE[a.status] ?? 'neutral'}>{a.status.replace('_', ' ')}</Chip>
+          {a.strategy === 'explore' && <Chip tone="explore">Explore</Chip>}
+          {a.track && <Chip>{a.track}</Chip>}
+          {showBestBefore && a.best_before && <Chip tone="warn">best before {a.best_before}</Chip>}
         </div>
         {a.self_score != null && (
-          <p className="truncate text-sm" title={a.self_score_reason ?? undefined}>
-            <strong>{a.self_score}/10</strong> {a.self_score_reason}
+          <p className="truncate text-sm text-muted" title={a.self_score_reason ?? undefined}>
+            <strong className="mr-1 text-base text-fg tabular-nums">{a.self_score}/10</strong> {a.self_score_reason}
           </p>
         )}
-        {a.caption && <p className="line-clamp-2 text-sm text-gray-600">{a.caption}</p>}
-        <Link to={`/assets/${a.id}`} className="text-sm text-blue-700 underline">
+        {a.caption && <p className="line-clamp-2 text-sm">{a.caption}</p>}
+        <Link to={`/assets/${a.id}`} className={`inline-flex min-h-11 items-center text-sm ${link}`}>
           Details and comments
         </Link>
         <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            aria-pressed={a.verdict === 'disliked'}
-            onClick={() => onVerdict('disliked')}
-            className={`${button} ${a.verdict === 'disliked' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-800'}`}
-          >
+          <Button aria-pressed={a.verdict === 'disliked'} onClick={() => onVerdict('disliked')}
+            className={verdictButton('danger', a.verdict === 'disliked')}>
             Dislike
-          </button>
-          <button
-            type="button"
-            aria-pressed={a.verdict === 'liked'}
-            onClick={() => onVerdict('liked')}
-            className={`${button} ${a.verdict === 'liked' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-800'}`}
-          >
+          </Button>
+          <Button aria-pressed={a.verdict === 'liked'} onClick={() => onVerdict('liked')}
+            className={verdictButton('success', a.verdict === 'liked')}>
             Like
-          </button>
-          {a.status === 'ready' && (
-            <button type="button" onClick={onApprove} className={`${button} bg-blue-600 text-white`}>
-              Approve
-            </button>
-          )}
-          {a.status === 'approved' && (
-            <button type="button" onClick={onSchedule} className={`${button} bg-blue-600 text-white`}>
-              Schedule
-            </button>
-          )}
+          </Button>
+          {a.status === 'ready' && <Button variant="primary" onClick={onApprove}>Approve</Button>}
+          {a.status === 'approved' && <Button variant="primary" onClick={onSchedule}>Schedule</Button>}
         </div>
         {a.status === 'scheduled' && <ScheduledSlot assetId={a.id} onUnscheduled={onChange} />}
       </div>

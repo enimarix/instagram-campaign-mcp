@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
+import { EmptyState } from '../ui/Card'
+import { PageHeader } from '../ui/PageHeader'
 
 export default function Placeholder({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <section>
-      <h2 className="text-2xl font-semibold">{title}</h2>
-      <p className="mt-2 text-gray-500">Coming soon.</p>
+      <PageHeader title={title} />
+      <EmptyState title="Coming soon.">This part of the studio is not built yet.</EmptyState>
       {children}
     </section>
   )

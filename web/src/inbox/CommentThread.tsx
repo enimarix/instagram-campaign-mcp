@@ -9,7 +9,10 @@ import {
   type Comment,
   type Vocabulary,
 } from '../api/client'
-import { button } from './ui'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Chip } from '../ui/Chip'
+import { field, link } from '../ui/styles'
 
 type Props = {
   assetId: number
@@ -85,15 +88,15 @@ export default function CommentThread({ assetId, currentTime, onSeek, reasons, o
   }
 
   return (
-    <section aria-label="Comments" className="space-y-3 rounded-xl bg-white p-3 shadow-sm">
+    <Card as="section" aria-label="Comments" className="space-y-3">
       <h2 className="font-semibold">Comments</h2>
-      <ul className="space-y-2">
+      <ul className="divide-y divide-line/60">
         {comments.map((c) => (
-          <li key={c.id} className="border-b border-gray-100 pb-2 text-sm">
+          <li key={c.id} className="py-2 text-sm">
             {c.video_time_s != null && (
               <button type="button" onClick={() => onSeek(c.video_time_s!)}
                 aria-label={`Play from ${clock(c.video_time_s)}`}
-                className="mr-2 rounded bg-gray-100 px-1 font-mono text-xs">
+                className="mr-2 rounded-md bg-accent/12 px-1.5 py-0.5 font-mono text-xs text-accent">
                 {clock(c.video_time_s)}
               </button>
             )}
@@ -103,17 +106,17 @@ export default function CommentThread({ assetId, currentTime, onSeek, reasons, o
               <div className="mt-1 flex gap-2">
                 <textarea aria-label="Edit comment" value={editing.text}
                   onChange={(e) => setEditing({ id: c.id, text: e.target.value })}
-                  className="flex-1 rounded border border-gray-300 p-1" />
-                <button type="button" onClick={saveEdit} className={`${button} bg-blue-600 text-white`}>Save</button>
-                <button type="button" onClick={() => setEditing(null)} className={`${button} bg-gray-100`}>Cancel</button>
+                  className={`${field} flex-1 py-2`} />
+                <Button variant="primary" size="sm" onClick={saveEdit}>Save</Button>
+                <Button size="sm" onClick={() => setEditing(null)}>Cancel</Button>
               </div>
             ) : (
               <>
                 {c.text && <p>{c.text}</p>}
                 <button type="button" onClick={() => setEditing({ id: c.id, text: c.text ?? '' })}
-                  className="mr-3 text-xs text-blue-700 underline">Edit</button>
+                  className={`mr-3 inline-flex min-h-11 items-center text-xs ${link}`}>Edit</button>
                 <button type="button" onClick={() => remove(c.id)}
-                  className="text-xs text-red-700 underline">Delete</button>
+                  className="inline-flex min-h-11 items-center text-xs text-danger underline underline-offset-2">Delete</button>
               </>
             )}
           </li>
@@ -121,29 +124,27 @@ export default function CommentThread({ assetId, currentTime, onSeek, reasons, o
       </ul>
       <form onSubmit={add} className="space-y-2">
         <textarea aria-label="New comment" value={text} onChange={(e) => setText(e.target.value)}
-          rows={2} className="block w-full rounded-lg border border-gray-300 p-2 text-sm" />
+          rows={2} placeholder="Add a comment" className={`${field} block w-full py-2`} />
         <div role="group" aria-label="Reasons" className="flex flex-wrap gap-2">
           {reasons.map((r) => (
-            <button key={r.id} type="button" aria-pressed={picked.includes(r.id)} onClick={() => toggle(r.id)}
-              className={`${button} border ${picked.includes(r.id) ? 'border-red-600 bg-red-50 text-red-800' : 'border-gray-300'}`}>
+            <Chip key={r.id} tone="danger" pressed={picked.includes(r.id)} onClick={() => toggle(r.id)}>
               {r.label}
-            </button>
+            </Chip>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={pin != null}
+        <label className="flex min-h-11 items-center gap-2 text-sm">
+          <input type="checkbox" className="size-5" checked={pin != null}
             onChange={(e) => setPin(e.target.checked ? currentTime() : null)} />
           Pin to this moment{pin != null && ` (${clock(pin)})`}
         </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" role="switch" checked={wantsChanges}
+        <label className="flex min-h-11 items-center gap-2 text-sm">
+          <input type="checkbox" role="switch" className="size-5" checked={wantsChanges}
             onChange={(e) => setWantsChanges(e.target.checked)} />
           Ask for changes
         </label>
-        <button type="submit" disabled={!text.trim() && !picked.length}
-          className={`${button} bg-blue-600 text-white`}>Add comment</button>
-        {note && <p role="status" className="text-sm">{note}</p>}
+        <Button type="submit" variant="primary" disabled={!text.trim() && !picked.length}>Add comment</Button>
+        {note && <p role="status" className="text-sm text-muted">{note}</p>}
       </form>
-    </section>
+    </Card>
   )
 }
