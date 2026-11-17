@@ -141,6 +141,8 @@ def write_packet(store: CampaignStore, settings: InstagramMCPSettings, playbook:
     skip, ids: {feedback: [...], revisions: [asset ids]}}. Raises PacketError."""
     now = now or utcnow()
     kind, names = RUNS.get(playbook, ("custom", None))
+    work = ws / "work"
+    shutil.rmtree(work, ignore_errors=True)  # a failed build leaves no stale packet
     files: Dict[str, Tuple[bytes, int]] = {}
     ids: Dict[str, List[int]] = {}
     for name in names or SECTIONS:
@@ -162,8 +164,6 @@ def write_packet(store: CampaignStore, settings: InstagramMCPSettings, playbook:
                                     "sha256": hashlib.sha256(raw).hexdigest()}
                              for name, (raw, count) in files.items()}}
     raw_manifest = encode(manifest, "manifest", schemas)
-    work = ws / "work"
-    shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
     for name, (raw, _) in files.items():
         _write_atomic(work / f"{name}.json", raw)

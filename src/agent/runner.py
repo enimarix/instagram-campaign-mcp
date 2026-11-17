@@ -233,7 +233,8 @@ def check_lock(store: CampaignStore, name: str, timeout_s: float) -> None:
 def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: str, *,
               timeout_s: Optional[float] = None, max_turns: Optional[int] = None,
               dry_run: bool = False, agent_dir: Path = AGENT_DIR) -> Dict[str, Any]:
-    """One locked-down run; returns the finished `agent_runs` row.
+    """One locked-down run; returns the finished `agent_runs` row. The work packet is
+    written first (packet.py): an invalid one fails the run, an empty one skips it.
     Raises AgentRunRefused while the same playbook runs, AgentError for an unknown playbook."""
     name = _playbook_file(playbook, agent_dir).stem
     timeout_s = timeout_s or settings.agent_timeout_minutes * 60

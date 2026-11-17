@@ -69,3 +69,13 @@ def test_prepare_workspace_with_the_real_agent_folder(tmp_path):
         (runner.AGENT_DIR / "playbooks" / "daily-produce.md").read_bytes()
     for skill in SKILLS:
         assert (ws / ".claude" / "skills" / skill.name / "SKILL.md").is_file()
+
+
+@pytest.mark.parametrize("name", ["daily-produce", "daily-revise"])
+def test_scheduled_playbooks_read_their_work_packet_first(name):
+    from src.agent import packet
+
+    assert name in packet.RUNS
+    text = (runner.AGENT_DIR / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
+    head = text.split("## Your tools")[0]
+    assert "## Your work packet" in head and "work/manifest.json" in head
