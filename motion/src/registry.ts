@@ -2,6 +2,8 @@ import type { ComponentType } from "react";
 import type { z } from "zod";
 import { BossBattle, timelineOf as bossBattleTimeline } from "./templates/BossBattle/BossBattle";
 import { bossBattleSchema } from "./templates/BossBattle/schema";
+import { DialogStory, timelineOf as dialogStoryTimeline } from "./templates/DialogStory/DialogStory";
+import { dialogStorySchema } from "./templates/DialogStory/schema";
 import { FactQuest, timelineOf as factQuestTimeline } from "./templates/FactQuest/FactQuest";
 import { factQuestSchema } from "./templates/FactQuest/schema";
 import { Hello, helloSchema } from "./templates/Hello";
@@ -125,5 +127,28 @@ export const templates = {
     },
     durationInFrames: (p) => quizChestTimeline(p, FPS).timeline.totalFrames,
     coverFrame: (p) => quizChestTimeline(p, FPS).timeline.hookFrame,
+  }),
+  DialogStory: template({
+    component: DialogStory,
+    schema: dialogStorySchema,
+    defaultProps: {
+      hook: "Bananas are radioactive?!",
+      characters: [
+        { name: "PIXEL", side: "left" },
+        { name: "SLIMY", side: "right" },
+      ],
+      lines: [
+        { speaker: 1, text: "I heard bananas are radioactive!" },
+        { speaker: 0, text: "True: they contain a little potassium-40." },
+        { speaker: 1, text: "So I should stop eating them?" },
+        { speaker: 0, text: "No! The dose from one banana is tiny, far below a single day of natural background." },
+      ],
+      moral: "Radioactive is not the same as dangerous: the dose makes the poison.",
+      citations: [],
+      music: "music-overworld",
+      loop: true,
+    },
+    durationInFrames: (p) => dialogStoryTimeline(p, FPS).totalFrames,
+    coverFrame: (p) => dialogStoryTimeline(p, FPS).hookFrame,
   }),
 };

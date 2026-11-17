@@ -75,3 +75,4 @@ jobs:
       - run: npm run still:factquest
       - run: npm run still:bossbattle
       - run: npm run still:quizchest
+      - run: npm run still:dialogstory
