@@ -70,7 +70,7 @@ export default function AssetCard({ asset: a, current, onVerdict, onApprove, onF
       onPointerCancel={cancel}
       style={dx ? { transform: `translateX(${dx}px)` } : undefined}
       className={`touch-pan-y overflow-hidden rounded-xl bg-white shadow-sm ${
-        current ? 'ring-2 ring-blue-500' : ''
+        current ? 'md:ring-2 md:ring-blue-500' : '' // keyboard cursor (desktop)
       } ${a.verdict === 'liked' ? 'border-l-4 border-green-500' : ''} ${
         a.verdict === 'disliked' ? 'border-l-4 border-red-500 opacity-70' : ''
       }`}
