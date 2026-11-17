@@ -26,7 +26,7 @@ from .learning import brief, learnings
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
 from .studio import frames as frames_
-from .studio import motion, production
+from .studio import motion, production, research
 from .studio.publish import cancel_post, refuse_asset_file
 
 configure_logging()
@@ -35,7 +35,8 @@ INSTRUCTIONS = """\
 Instagram organic campaign toolkit (official Graph API, Business/Creator account).
 
 Typical loop:
-1. Research: search_hashtag, get_competitor_profile, rank_posts on past content.
+1. Research: search_hashtag, get_competitor_profile, rank_posts on past content;
+   add_to_watchlist + research_trends keep watched hashtags/accounts as references.
 2. Plan & publish: publish_* now, or schedule_post for later. Tag every post with
    campaign + variant + hypothesis so A/B results can be compared.
    Trial Reels (publish_reel trial_graduation) test a Reel on non-followers first.
@@ -468,6 +469,40 @@ async def get_competitor_profile(username: str, media_limit: int = 12) -> Dict[s
         raise _err(e)
 
 
+@mcp.tool(annotations=LOCAL_WRITE)
+async def add_to_watchlist(kind: Literal["hashtag", "account"], value: str,
+                           note: Optional[str] = None) -> Dict[str, Any]:
+    """Watch a hashtag or a competitor's username (stored lowercase, without #/@);
+    research_trends looks them all up. Adding one again only updates its note."""
+    return await _studio(store().add_watch, kind, value, note)
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def list_watchlist() -> Dict[str, Any]:
+    """The hashtags and accounts research_trends looks up."""
+    return {"watchlist": await _studio(store().list_watchlist)}
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True,
+                                      open_world_hint=False))
+async def remove_from_watchlist(id: int) -> Dict[str, Any]:
+    """Stop watching an entry (id from list_watchlist); posts already found stay."""
+    return await _studio(store().remove_watch, id)
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                      open_world_hint=True))
+async def research_trends() -> Dict[str, Any]:
+    """Look up the watchlist: hashtag top posts (30 unique hashtags per 7 days; a tag
+    looked up within the week again is free) and the accounts' recent posts with Reel
+    views. Each post is stored as a reference source (never published; hashtag posts have
+    no author) or has its stats refreshed. Stops early when the request budget runs low."""
+    try:
+        return await research.research_trends(client(), store(), now=utcnow())
+    except InstagramAPIError as e:
+        raise _err(e)
+
+
 # ----------------------------------------------------------------------
 # Measurement & winners
 # ----------------------------------------------------------------------
@@ -790,6 +825,12 @@ AGENT_TOOLS = frozenset({
     "update_learning",
     "list_learnings",
     "get_creative_brief",  # step 055: local read, the start of every batch
+    # Research (step 051): the agent's own watchlist, and Graph reads that respect the
+    # shared request budget; results are references, never publishable.
+    "add_to_watchlist",
+    "list_watchlist",
+    "remove_from_watchlist",
+    "research_trends",
 })
 
 

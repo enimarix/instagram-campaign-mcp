@@ -12,7 +12,8 @@ brief (055) shows the same numbers to the agent.
   informative (every other idea, with or without a pillar) <= batch - target + 1. A humour
   idea is one whose pillar has `"humour": true` in brand/taxonomy.json.
 - reactions (track `remix`): at most MAX_REACTIONS_PER_DAY + REACTION_MARGIN, and never more
-  than the clips available. A clip is available when it is downloaded (a source with a
+  than the clips available. A clip is available when it is a `clip` source (research
+  references never count), downloaded (a source with a
   `local_path`), its rights are known (rights_basis != unknown: such a clip is never
   queued) and no idea uses it yet.
 """
@@ -28,8 +29,8 @@ from ..store import CampaignStore, utcnow
 from ..studio.scheduling import bench
 from ..taxonomy import load_taxonomy
 
-_AVAILABLE_CLIPS = ("SELECT COUNT(*) FROM sources s WHERE s.local_path IS NOT NULL"
-                    " AND s.rights_basis != 'unknown'"
+_AVAILABLE_CLIPS = ("SELECT COUNT(*) FROM sources s WHERE s.role = 'clip'"
+                    " AND s.local_path IS NOT NULL AND s.rights_basis != 'unknown'"
                     " AND NOT EXISTS (SELECT 1 FROM ideas i WHERE i.source_id = s.id)")
 
 

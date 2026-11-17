@@ -822,7 +822,7 @@ class InstagramClient:
             f"business_discovery.username({user}){{username,name,biography,"
             f"followers_count,media_count,media.limit({min(media_limit, 50)})"
             "{id,caption,media_type,media_product_type,permalink,timestamp,"
-            "like_count,comments_count}}"
+            "like_count,comments_count,view_count}}"
         )
         data = await self._make_request(
             "GET", self.account_id, params={"fields": fields}, use_cache=True
