@@ -5,8 +5,8 @@ assets.timeline, [{"t": start_s, "d": dur_s, "e": "what happens"}]). No AI.
 
 What the Graph API gives (Media Insights reference, Graph API v25): no per-second retention
 curve. `reels_skip_rate` = % of views skipped in the first 3 s (estimated, in development);
-`ig_reels_avg_watch_time` = average play time (ms); `ig_reels_video_view_total_time` =
-total play time including replays (in development). Replay counts (`clips_replays_count`,
+`ig_reels_avg_watch_time` = average play time (no unit stated; ms, as 075 reads it);
+`ig_reels_video_view_total_time` = total play time including replays (in development). Replay counts (`clips_replays_count`,
 `ig_reels_aggregated_all_plays_count`) were removed in v22. So the only "exit second" is the
 average watch time: one number, the spread of the real exits around it is unknown.
 
