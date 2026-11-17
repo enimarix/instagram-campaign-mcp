@@ -66,7 +66,7 @@ export default function CommentThread({ assetId, currentTime, onSeek, reasons, o
   async function saveEdit() {
     if (!editing) return
     try {
-      const r = await editFeedback(editing.id, { text: editing.text })
+      const r = await editFeedback(editing.id, { text: editing.text.trim() ? editing.text : null })
       setComments((c) => c.map((x) => (x.id === r.feedback.id ? r.feedback : x)))
       setEditing(null)
     } catch (err) {

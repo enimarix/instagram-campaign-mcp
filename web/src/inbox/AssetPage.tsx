@@ -96,7 +96,12 @@ function AssetPage({ id }: { id: number }) {
     e.preventDefault()
     setSaveMsg(null)
     try {
-      setAsset(await editAsset(id, { caption, best_before: bestBefore || null }))
+      // Only what changed: a scheduled asset refuses caption edits but not a best-before.
+      const fields = {
+        ...(caption !== (asset?.caption ?? '') && { caption }),
+        ...(bestBefore !== (asset?.best_before ?? '') && { best_before: bestBefore || null }),
+      }
+      if (Object.keys(fields).length) setAsset(await editAsset(id, fields))
       setSaveMsg('Saved.')
     } catch (err) {
       setSaveMsg(`Not saved: ${errorMessage(err)}`)

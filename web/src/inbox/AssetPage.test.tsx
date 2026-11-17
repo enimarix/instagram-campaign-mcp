@@ -117,6 +117,6 @@ describe('AssetPage', () => {
     fireEvent.change(screen.getByLabelText('Caption'), { target: { value: '#a #b' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Not saved: caption has 31 hashtags')).toBeTruthy()
-    expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ caption: '#a #b', best_before: '2026-11-20' })
+    expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ caption: '#a #b' })
   })
 })

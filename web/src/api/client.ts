@@ -130,7 +130,7 @@ export const editAsset = (id: number, fields: { caption?: string; best_before?: 
 export const unapproveAsset = (id: number) => post<Asset>(`/api/assets/${id}/unapprove`)
 export const archiveAsset = (id: number) => post<Asset>(`/api/assets/${id}/archive`)
 export const listFeedback = (id: number) => request<Comment[]>(`/api/assets/${id}/feedback`)
-export const editFeedback = (id: number, fields: Partial<CommentIn>) =>
+export const editFeedback = (id: number, fields: { text: string | null }) =>
   send<CommentResult>('PATCH', `/api/feedback/${id}`, fields)
 export const deleteFeedback = (id: number) => request<null>(`/api/feedback/${id}`, { method: 'DELETE' })
 
