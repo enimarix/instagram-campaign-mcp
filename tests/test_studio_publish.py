@@ -127,8 +127,10 @@ def test_no_api_route_can_queue(store, cfg):  # DoD (4)
     # The owner's schedule route (023) goes through studio.scheduling -> queue_asset; the
     # calendar's (024) moves rows already queued (store.reschedule refuses a non-pending
     # asset row) and its replan re-queues an asset through scheduling too. The agent
-    # schedule (061) is read-only: agent run times, no post.
+    # schedule (061) is read-only: agent run times, no post. The feed's one-tap approve
+    # (115) queues through studio.scheduling too.
     assert [p for p in paths if "schedule" in p.lower() or "queue" in p.lower()] == [
+        "/api/assets/{asset_id}/approve-and-queue",
         "/api/assets/{asset_id}/schedule", "/api/assets/{asset_id}/unschedule",
         "/api/agent/schedule", "/api/posts/{post_id}/reschedule"]
     for f in (Path(__file__).parents[1] / "src" / "api").glob("*.py"):  # approving schedules nothing: test_api_assets

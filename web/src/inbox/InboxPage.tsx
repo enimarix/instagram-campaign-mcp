@@ -357,6 +357,7 @@ export default function InboxPage() {
         <div role="group" aria-label="Why decline? (optional)"
           className="fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 lg:bottom-24">
           <div className="flex w-full max-w-sm gap-2 overflow-x-auto rounded-card border border-line bg-surface-2 p-2 shadow-overlay">
+            <span aria-hidden className="shrink-0 self-center pl-2 text-sm text-muted">Why?</span>
             {taxonomy.feedback_reasons.values.map((r) => (
               <Chip key={r.id} tone="danger" pressed={why.codes.includes(r.id)} onClick={() => toggleWhy(r.id)}
                 className="shrink-0">

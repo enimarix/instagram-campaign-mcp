@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Asset } from '../api/client'
+import { IconButton } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { CheckIcon, CloseIcon, EditIcon, InfoIcon, SoundOffIcon, SoundOnIcon } from '../ui/icons'
+import { buttonClass } from '../ui/styles'
 
 type Props = {
   asset: Asset
@@ -17,16 +19,17 @@ type Props = {
   onChange: () => void
 }
 
-// The rail's round buttons (Reels-like): white on the video, the theme's beside it (desktop).
-const railCircle = (primary?: boolean) =>
-  `grid size-12 place-items-center rounded-full shadow-overlay transition group-active:scale-95 ${
-    primary ? 'bg-accent text-on-accent' : 'bg-black/55 backdrop-blur group-hover:bg-black/70 lg:bg-surface-2 lg:text-fg lg:group-hover:bg-line'}`
-const railItem = 'group flex min-w-14 flex-col items-center gap-1 text-xs font-medium text-white lg:text-fg'
+const onVideo = 'rounded-full bg-black/55! text-white! backdrop-blur hover:bg-black/70!' // small buttons on the video
 
+// The rail's round buttons (Reels-like): white on the video, the theme's beside it (desktop).
 function RailButton({ label, icon, onClick, primary }: { label: string; icon: ReactNode; onClick: () => void; primary?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className={railItem}>
-      <span aria-hidden className={railCircle(primary)}>{icon}</span>
+    <button type="button" onClick={onClick}
+      className="group flex min-w-14 flex-col items-center gap-1 text-xs font-medium text-white lg:text-fg">
+      <span aria-hidden className={`grid size-12 place-items-center rounded-full shadow-overlay transition group-active:scale-95 ${
+        primary ? 'bg-accent text-on-accent' : 'bg-black/55 backdrop-blur group-hover:bg-black/70 lg:bg-surface-2 lg:text-fg lg:group-hover:bg-line'}`}>
+        {icon}
+      </span>
       {label}
     </button>
   )
@@ -53,6 +56,14 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
         <video ref={video} src={a.preview_url ?? undefined} poster={a.poster_url ?? a.thumbnail_url ?? undefined}
           muted={muted} playsInline loop preload={active || preload ? 'auto' : 'none'}
           onClick={onToggleSound} className="size-full object-contain" />
+        <div className="absolute top-3 right-3 flex gap-2">
+          <IconButton label={muted ? 'Sound on' : 'Mute'} icon={muted ? <SoundOffIcon /> : <SoundOnIcon />}
+            onClick={onToggleSound} className={onVideo} />
+          <Link to={`/assets/${a.id}`} aria-label="Details" title="Details"
+            className={`${buttonClass('secondary')} w-11 px-0! ${onVideo}`}>
+            <InfoIcon />
+          </Link>
+        </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-2 bg-linear-to-t from-black/85 via-black/50 to-transparent px-4 pt-20 pr-24 pb-4 text-white lg:pr-4">
           <div className="flex flex-wrap gap-1.5">
             {a.dm_pick && <Chip tone="accent">DM pick</Chip>}
@@ -80,11 +91,6 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
         <RailButton label="Approve" icon={<CheckIcon />} onClick={onApprove} primary />
         <RailButton label="Change" icon={<EditIcon />} onClick={onChange} />
         <RailButton label="Decline" icon={<CloseIcon />} onClick={onDecline} />
-        <RailButton label={muted ? 'Sound on' : 'Mute'} icon={muted ? <SoundOffIcon /> : <SoundOnIcon />} onClick={onToggleSound} />
-        <Link to={`/assets/${a.id}`} className={railItem}>
-          <span aria-hidden className={railCircle()}><InfoIcon /></span>
-          Details
-        </Link>
       </div>
     </article>
   )
