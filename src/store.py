@@ -158,7 +158,11 @@ class CampaignStore:
         if not self._memory:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._shared = self._connect() if self._memory else None
-        self._migrate()
+        try:
+            self._migrate()
+        except BaseException:
+            self.close()  # don't leave the file locked behind a failed open
+            raise
 
     def _connect(self) -> sqlite3.Connection:
         # check_same_thread=False only so close() can close other threads'

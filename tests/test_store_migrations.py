@@ -57,6 +57,7 @@ def test_newer_schema_version_is_refused(tmp_path):
     conn.close()
     with pytest.raises(SchemaVersionError, match="schema version"):
         CampaignStore(db)
+    (tmp_path / "new.db").unlink()  # the failed open closed its connection
 
 
 def test_file_connection_pragmas(tmp_path):
