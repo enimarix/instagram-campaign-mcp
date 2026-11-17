@@ -17,6 +17,8 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler dev seed --days 3   # fake demo batch for website work
   python -m src.scheduler token status        # access token validity and expiry
   python -m src.scheduler token refresh       # new 60-day token (needs app id/secret)
+  python -m src.scheduler agent run daily-produce  # locked-down Claude Code run (058)
+  python -m src.scheduler agent check         # is the Claude Code CLI there and signed in?
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -173,6 +175,29 @@ def _dev_seed(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- agent (058) ---------------------------------------------------------
+def _agent(args: argparse.Namespace) -> int:
+    from .agent.runner import AgentError, preflight, run_agent
+
+    settings = get_settings()
+    try:
+        if args.agent_command == "check":
+            print(f"agent check: ok, {preflight(settings)} is signed in.")
+            return 0
+        store = CampaignStore(settings.database_path)
+        try:
+            run = run_agent(store, settings, args.playbook, max_turns=args.max_turns,
+                            timeout_s=args.timeout * 60 if args.timeout else None,
+                            dry_run=args.dry_run)
+        finally:
+            store.close()
+    except AgentError as e:
+        print(f"agent {args.agent_command}: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(run, indent=2, default=str))
+    return 0 if run["status"] == "succeeded" else 1
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ig-campaign")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -208,7 +233,20 @@ def main(argv: list[str] | None = None) -> None:
         dest="token_command", required=True)
     t.add_parser("status", help="Validity, expiry and scopes (the token is never printed)")
     t.add_parser("refresh", help="Swap for a new long-lived token, rewrite it in .env")
+    agent = sub.add_parser("agent", help="Unattended Claude Code runs").add_subparsers(
+        dest="agent_command", required=True)
+    ar = agent.add_parser("run", help="Run a playbook from agent/playbooks/, locked down")
+    ar.add_argument("playbook", help="Playbook name, e.g. daily-produce")
+    ar.add_argument("--dry-run", action="store_true", help="The playbook's dry-run mode")
+    ar.add_argument("--max-turns", type=int, help="Default AGENT_MAX_TURNS")
+    ar.add_argument("--timeout", type=float, metavar="MIN",
+                    help="Wall-clock limit in minutes (default AGENT_TIMEOUT_MINUTES)")
+    agent.add_parser("check", help="Preflight only: CLI found and signed in")
     args = parser.parse_args(argv)
+    if args.command == "agent" and args.agent_command == "run" and (
+            (args.max_turns is not None and args.max_turns < 1)
+            or (args.timeout is not None and args.timeout <= 0)):
+        parser.error("--max-turns and --timeout must be > 0")
     if args.command == "dev" and args.days < 1:
         parser.error("--days must be >= 1")
     if args.command in ("worker", "daemon") and args.interval <= 0:
@@ -218,6 +256,8 @@ def main(argv: list[str] | None = None) -> None:
     configure_logging()
     if args.command == "dev":
         sys.exit(_dev_seed(args))
+    if args.command == "agent":
+        sys.exit(_agent(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 
