@@ -454,7 +454,7 @@ def _score_all(store: CampaignStore, settings: InstagramMCPSettings) -> List[Dic
         store.latest_snapshots(),
         scoring_config(settings),
         store.labels(),
-        history=store.snapshot_history(),
+        near_age=store.snapshots_near_age,
     )
 
 
