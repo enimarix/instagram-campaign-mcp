@@ -346,12 +346,42 @@ ALTER TABLE assets ADD COLUMN description TEXT;
 ALTER TABLE assets ADD COLUMN timeline TEXT;
 """
 
+# Migration 13: DM picks (113). Accounts the owner pins (username normalised: lowercase, no
+# @; ig_user_id filled once seen in a conversation) and the Reels they sent the brand
+# account by DM, one row per message. Nothing else from the DMs is ever stored.
+DM_PICKS_SCHEMA = """
+CREATE TABLE pinned_accounts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    username    TEXT NOT NULL UNIQUE,
+    ig_user_id  TEXT,
+    note        TEXT,
+    created_at  TEXT NOT NULL
+);
+CREATE TABLE dm_picks (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id        TEXT NOT NULL UNIQUE,
+    pinned_account_id INTEGER REFERENCES pinned_accounts(id) ON DELETE SET NULL,
+    sender_username   TEXT NOT NULL,
+    reel_url          TEXT NOT NULL,
+    reel_media_id     TEXT,
+    sender_note       TEXT,
+    received_at       TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'new' CHECK (status IN
+        ('new','downloaded','in_production','posted','skipped')),
+    skip_reason       TEXT,
+    source_id         INTEGER REFERENCES sources(id),
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+);
+CREATE INDEX idx_dm_picks_status ON dm_picks(status, received_at);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
-                         REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA]
+                         REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -384,6 +414,7 @@ _INSERT_STAMPS = {
     "learnings": ("created_at", "updated_at"),
     "agent_runs": ("started_at",),
     "render_jobs": ("created_at", "updated_at"),
+    "dm_picks": ("created_at", "updated_at"),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")

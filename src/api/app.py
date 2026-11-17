@@ -30,6 +30,7 @@ from . import (
     assets,
     bench,
     context,
+    dm_picks,
     feedback,
     media,
     reactions,
@@ -171,6 +172,7 @@ def create_app(
     app.include_router(analytics_router)
     app.include_router(sources.router)
     app.include_router(reactions.router)
+    app.include_router(dm_picks.router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 

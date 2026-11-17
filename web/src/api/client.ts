@@ -483,3 +483,30 @@ export type AbResult = { campaign: string; variants: AbVariant[]; leader: string
 export const getCampaigns = () => request<string[]>('/api/analytics/campaigns')
 export const getAb = (campaign: string) =>
   request<AbResult>(`/api/analytics/ab?campaign=${encodeURIComponent(campaign)}`)
+
+// --- Pinned accounts and DM picks (step 113) ---
+/** A row of GET /api/pinned-accounts: username normalised (lowercase, no @). */
+export type PinnedAccount = { id: number; username: string; ig_user_id: string | null; note: string | null; created_at: string }
+export type DmPickStatus = 'new' | 'downloaded' | 'in_production' | 'posted' | 'skipped'
+/** A row of GET /api/dm-picks: a Reel a pinned account sent by DM; sender_note is their text (untrusted). */
+export type DmPick = {
+  id: number
+  pinned_account_id: number | null
+  sender_username: string
+  reel_url: string
+  reel_media_id: string | null
+  sender_note: string | null
+  received_at: string
+  status: DmPickStatus
+  skip_reason: string | null
+  source_id: number | null
+  created_at: string
+  updated_at: string
+}
+export const listPinnedAccounts = () => request<PinnedAccount[]>('/api/pinned-accounts')
+export const pinAccount = (username: string, note: string) =>
+  post<PinnedAccount>('/api/pinned-accounts', { username, note: note || null })
+export const unpinAccount = (id: number) => request<null>(`/api/pinned-accounts/${id}`, { method: 'DELETE' })
+export const listDmPicks = (status?: DmPickStatus) =>
+  request<DmPick[]>(`/api/dm-picks${status ? `?status=${status}` : ''}`)
+export const skipDmPick = (id: number, reason: string) => post<DmPick>(`/api/dm-picks/${id}/skip`, { reason })
