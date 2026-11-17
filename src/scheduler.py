@@ -9,6 +9,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler collect --limit 30  # snapshot insights (run daily)
   python -m src.scheduler collect --stories-only  # live Stories (run hourly)
   python -m src.scheduler rank                # print the winner ranking
+  python -m src.scheduler serve               # studio REST API on 127.0.0.1:8765
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the daemon does it every hour.
@@ -36,6 +37,12 @@ async def _run(args: argparse.Namespace) -> int:
     try:
         if args.command == "rank":
             print(json.dumps(rank(store, settings, campaign=args.campaign), indent=2, default=str))
+            return 0
+        if not settings.instagram_configured:
+            # Setup mode: nothing to publish or measure yet. Exit 0 so cron and
+            # Task Scheduler don't flag a failure; the daemon exits too.
+            print(f"{args.command}: Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
+                  "and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env); skipping.", file=sys.stderr)
             return 0
         async with InstagramClient(settings) as client:
             if args.command == "run-due":
@@ -84,12 +91,23 @@ def main() -> None:
                    help="Only snapshot live Stories (cheap; run hourly)")
     r = sub.add_parser("rank", help="Print winner ranking from stored snapshots")
     r.add_argument("--campaign")
+    s = sub.add_parser("serve", help="Run the studio REST API")
+    # step 008 adds the password guard required before binding a non-loopback host.
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     if args.command == "daemon" and args.interval <= 0:
         parser.error("--interval must be > 0")
     if args.command == "daemon" and args.stories_every < 0:
         parser.error("--stories-every must be >= 0")
     configure_logging()
+    if args.command == "serve":
+        import uvicorn
+
+        from .api.app import create_app
+
+        uvicorn.run(create_app(), host=args.host, port=args.port)
+        return
     try:
         sys.exit(asyncio.run(_run(args)))
     except KeyboardInterrupt:

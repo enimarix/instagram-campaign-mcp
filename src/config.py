@@ -46,7 +46,8 @@ class InstagramMCPSettings(BaseSettings):
     )
 
     # --- Instagram API ---------------------------------------------------
-    instagram_access_token: str = Field(..., description="Long-lived access token")
+    # Optional so everything starts in "setup mode" before the owner adds a token.
+    instagram_access_token: Optional[str] = Field(None, description="Long-lived access token")
     instagram_business_account_id: Optional[str] = Field(
         None, description="Instagram professional account ID (IG User ID)"
     )
@@ -133,6 +134,11 @@ class InstagramMCPSettings(BaseSettings):
         if not v.startswith("v"):
             raise ValueError("API version must start with 'v' (e.g., 'v25.0')")
         return v
+
+    @property
+    def instagram_configured(self) -> bool:
+        """True when Graph-backed work (publish, insights, account) can run."""
+        return bool(self.instagram_access_token and self.instagram_business_account_id)
 
     @property
     def instagram_api_url(self) -> str:
