@@ -6,6 +6,8 @@ organic posts, so this store keeps:
 - scheduled_posts: the publishing queue
 - post_labels: campaign / variant / hypothesis attached to a published post
 - insight_snapshots: insights captured over time, used for winner scoring
+- sources / ideas / assets: the studio's clips, content ideas and rendered
+  candidates (GOAL.md §4.3); asset status moves live in src/studio/assets.py
 """
 
 from __future__ import annotations
@@ -15,9 +17,11 @@ import re
 import sqlite3
 import threading
 from contextlib import contextmanager, nullcontext
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Sequence
+
+from .taxonomy import validate
 
 POST_KINDS = ("image", "carousel", "reel", "story")
 BUSY_TIMEOUT_S = 5.0
@@ -67,9 +71,85 @@ CREATE TABLE IF NOT EXISTS insight_snapshots (
 CREATE INDEX IF NOT EXISTS idx_snap_media ON insight_snapshots(media_id, captured_at);
 """
 
+# Migration 2: studio tables (GOAL.md §4.3). JSON columns hold TEXT JSON.
+STUDIO_SCHEMA = """
+CREATE TABLE sources (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider           TEXT NOT NULL,
+    url                TEXT,
+    author             TEXT,
+    stats              TEXT NOT NULL DEFAULT '{}',
+    rights_basis       TEXT NOT NULL DEFAULT 'unknown' CHECK (rights_basis IN
+        ('own','licensed','public_domain','cc','permission','commentary','unknown')),
+    rights_note        TEXT,
+    audio_rights       TEXT,
+    local_path         TEXT,
+    downloaded_at      TEXT,
+    downloader_version TEXT,
+    created_at         TEXT NOT NULL
+);
+CREATE INDEX idx_sources_rights ON sources(rights_basis);
+
+CREATE TABLE ideas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    track       TEXT NOT NULL,
+    pillar      TEXT,
+    hook        TEXT,
+    hook_type   TEXT,
+    script      TEXT,
+    source_id   INTEGER REFERENCES sources(id),
+    citations   TEXT NOT NULL DEFAULT '[]',
+    hypothesis  TEXT,
+    strategy    TEXT CHECK (strategy IN ('explore','exploit')),
+    experiment  TEXT,
+    batch_date  TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX idx_ideas_batch ON ideas(batch_date, track);
+
+CREATE TABLE assets (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    idea_id           INTEGER NOT NULL REFERENCES ideas(id),
+    parent_asset_id   INTEGER REFERENCES assets(id),
+    file_path         TEXT,
+    preview_path      TEXT,
+    thumbnail_path    TEXT,
+    caption           TEXT,
+    audio_name        TEXT,
+    recipe            TEXT NOT NULL DEFAULT '{}',
+    duration          REAL,
+    batch_date        TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'rendering' CHECK (status IN
+        ('rendering','ready','failed','needs_reaction','revision_requested','approved',
+         'scheduled','publish_check','published','archived')),
+    verdict           TEXT NOT NULL DEFAULT 'none' CHECK (verdict IN ('none','liked','disliked')),
+    qc                TEXT,
+    self_score        INTEGER CHECK (self_score IS NULL OR self_score BETWEEN 1 AND 10),
+    self_score_reason TEXT,
+    best_before       TEXT,
+    approved_at       TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+);
+CREATE INDEX idx_assets_batch_status ON assets(batch_date, status);
+CREATE INDEX idx_assets_idea ON assets(idea_id);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
-MIGRATIONS: List[str] = [SCHEMA]
+MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA]
+
+SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
+                 "audio_rights", "local_path", "downloaded_at", "downloader_version")
+IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "citations",
+               "hypothesis", "strategy", "experiment", "batch_date")
+ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
+                "caption", "audio_name", "recipe", "duration", "batch_date", "status",
+                "verdict", "qc", "self_score", "self_score_reason", "best_before")
+JSON_FIELDS = ("stats", "citations", "recipe", "qc")
+# New assets start here; every later status move goes through studio.assets.transition().
+ASSET_INITIAL_STATUSES = ("rendering", "needs_reaction")
+_UNCHANGED = object()
 
 
 class SchemaVersionError(RuntimeError):
@@ -498,6 +578,145 @@ class CampaignStore:
             d["metrics"] = json.loads(d["metrics"])
             out.append(d)
         return out
+
+    # ------------------------------------------------------------------
+    # Studio: sources, ideas, assets
+    # ------------------------------------------------------------------
+    def _insert(self, table: str, allowed: Sequence[str], fields: Dict[str, Any]) -> Dict[str, Any]:
+        row = _encode(allowed, fields)
+        row["created_at"] = to_iso(utcnow())
+        if table == "assets":
+            row["updated_at"] = row["created_at"]
+        cols = ", ".join(row)
+        with self._tx() as c:
+            cur = c.execute(
+                f"INSERT INTO {table} ({cols}) VALUES ({','.join('?' * len(row))})",
+                list(row.values()),
+            )
+        return self._get(table, cur.lastrowid)
+
+    def _get(self, table: str, row_id: int) -> Dict[str, Any]:
+        with self._tx() as c:
+            row = c.execute(f"SELECT * FROM {table} WHERE id=?", (row_id,)).fetchone()
+        if not row:
+            raise KeyError(f"No {table[:-1]} with id {row_id}")
+        return _decode(row)
+
+    def _select(self, q: str, filters: Dict[str, Any], order: str, limit: int) -> List[Dict[str, Any]]:
+        args = [v for v in filters.values() if v is not None]
+        where = " AND ".join(f"{k}=?" for k, v in filters.items() if v is not None)
+        q += (f" WHERE {where}" if where else "") + f" ORDER BY {order} LIMIT ?"
+        with self._tx() as c:
+            rows = c.execute(q, args + [limit]).fetchall()
+        return [_decode(r) for r in rows]
+
+    def add_source(self, provider: str, **fields: Any) -> Dict[str, Any]:
+        return self._insert("sources", SOURCE_FIELDS, {"provider": provider, **fields})
+
+    def get_source(self, source_id: int) -> Dict[str, Any]:
+        return self._get("sources", source_id)
+
+    def list_sources(
+        self, rights_basis: Optional[str] = None, provider: Optional[str] = None, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        return self._select("SELECT * FROM sources",
+                            {"rights_basis": rights_basis, "provider": provider}, "id", limit)
+
+    def add_idea(self, track: str, **fields: Any) -> Dict[str, Any]:
+        """Tags are checked against brand/taxonomy.json (TaxonomyError lists valid values)."""
+        validate("tracks", track)
+        for col, kind in (("pillar", "pillars"), ("hook_type", "hook_types")):
+            if fields.get(col) is not None:
+                validate(kind, fields[col])
+        fields.setdefault("batch_date", utcnow().date())
+        return self._insert("ideas", IDEA_FIELDS, {"track": track, **fields})
+
+    def get_idea(self, idea_id: int) -> Dict[str, Any]:
+        return self._get("ideas", idea_id)
+
+    def list_ideas(
+        self, track: Optional[str] = None, batch_date: Optional[Any] = None, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        return self._select("SELECT * FROM ideas",
+                            {"track": track, "batch_date": _sql_value(batch_date)}, "id", limit)
+
+    def add_asset(self, idea_id: int, **fields: Any) -> Dict[str, Any]:
+        status = fields.setdefault("status", "rendering")
+        if status not in ASSET_INITIAL_STATUSES:
+            raise ValueError(f"a new asset starts as one of {ASSET_INITIAL_STATUSES}, not {status!r}")
+        fields.setdefault("batch_date", utcnow().date())
+        return self._insert("assets", ASSET_FIELDS, {"idea_id": idea_id, **fields})
+
+    def get_asset(self, asset_id: int) -> Dict[str, Any]:
+        return self._get("assets", asset_id)
+
+    def list_assets(
+        self,
+        batch_date: Optional[Any] = None,
+        status: Optional[str] = None,
+        verdict: Optional[str] = None,
+        track: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Best first: agent self_score high to low (unscored last), then id."""
+        return self._select(
+            "SELECT a.* FROM assets a JOIN ideas i ON i.id = a.idea_id",
+            {"a.batch_date": _sql_value(batch_date), "a.status": status,
+             "a.verdict": verdict, "i.track": track},
+            "a.self_score IS NULL, a.self_score DESC, a.id", limit,
+        )
+
+    def update_asset(self, asset_id: int, **fields: Any) -> Dict[str, Any]:
+        """Change asset fields; status only moves through studio.assets.transition()."""
+        if "status" in fields:
+            raise ValueError("status changes only through studio.assets.transition()")
+        row = _encode(ASSET_FIELDS, fields)
+        if row:
+            sets = ", ".join(f"{k}=?" for k in row)
+            with self._tx() as c:
+                cur = c.execute(f"UPDATE assets SET {sets}, updated_at=? WHERE id=?",
+                                [*row.values(), to_iso(utcnow()), asset_id])
+            if cur.rowcount != 1:
+                raise KeyError(f"No asset with id {asset_id}")
+        return self.get_asset(asset_id)
+
+    def _set_asset_status(
+        self, asset_id: int, from_status: str, to_status: str, approved_at: Any = _UNCHANGED
+    ) -> bool:
+        """Compare-and-set for transition() only: False if the status is no longer from_status."""
+        sets, args = "status=?, updated_at=?", [to_status, to_iso(utcnow())]
+        if approved_at is not _UNCHANGED:
+            sets += ", approved_at=?"
+            args.append(approved_at)
+        with self._tx() as c:
+            cur = c.execute(f"UPDATE assets SET {sets} WHERE id=? AND status=?",
+                            [*args, asset_id, from_status])
+        return cur.rowcount == 1
+
+
+def _sql_value(v: Any) -> Any:
+    """datetime -> ISO UTC string, date -> YYYY-MM-DD, everything else unchanged."""
+    if isinstance(v, datetime):
+        return to_iso(v)
+    if isinstance(v, date):
+        return v.isoformat()
+    return v
+
+
+def _encode(allowed: Sequence[str], fields: Dict[str, Any]) -> Dict[str, Any]:
+    unknown = set(fields) - set(allowed)
+    if unknown:
+        raise TypeError(f"unknown field(s): {', '.join(sorted(unknown))}")
+    return {k: json.dumps(v) if k in JSON_FIELDS and v is not None else _sql_value(v)
+            for k, v in fields.items()}
+
+
+def _decode(row: sqlite3.Row) -> Dict[str, Any]:
+    d = dict(row)
+    for k in JSON_FIELDS:
+        if d.get(k) is not None:
+            d[k] = json.loads(d[k])
+    return d
 
 
 def _row_to_sched(row: sqlite3.Row) -> Dict[str, Any]:
