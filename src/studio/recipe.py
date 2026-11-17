@@ -332,7 +332,7 @@ class Credit(Op):
     position: Literal["bottom_left", "bottom_right"] = "bottom_left"
 
     def apply(self, src, info, out, *, inputs, timeout_s, preset):
-        text = _drawtext(self.text, info, out, size=24, x=self.position[len("bottom_"):],
+        text = _drawtext(self.text, info, out, size=24, x=self.position.removeprefix("bottom_"),
                          y="bottom")
         encode(src, info, out, filter_complex=f"[0:v]{text},{VIDEO_TAIL}",
                timeout_s=timeout_s, preset=preset)

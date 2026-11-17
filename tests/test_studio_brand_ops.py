@@ -84,7 +84,7 @@ def test_logo_sits_in_its_safe_corner(tmp_path, position):
 
 @needs_ffmpeg
 def test_hook_text_only_inside_its_window(tmp_path):
-    text = "Why do cats always land on their feet? Science has the answer"[:60]
+    text = "Why do cats always land on their feet? Science has an answer"  # 60 chars
     src, out = go(tmp_path, HookText(text=text, start_s=0.6, end_s=1.2), duration=2)
     assert changed(tmp_path, src, out, 0.3) is None
     assert changed(tmp_path, src, out, 1.6) is None
