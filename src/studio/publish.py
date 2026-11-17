@@ -68,7 +68,7 @@ def queue_asset(
     qc = asset["qc"]
     if not (isinstance(qc, dict) and qc.get("passed") is True):
         raise QueueRefused("qc", f"asset {asset_id} has not passed QC")
-    problem = caption_problem(asset["caption"])
+    problem = caption_problem(asset["caption"], settings.max_hashtags)
     if problem:
         raise QueueRefused("caption", problem)
 

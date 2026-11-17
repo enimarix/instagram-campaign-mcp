@@ -121,6 +121,19 @@ class InstagramMCPSettings(BaseSettings):
         2, ge=1, description="Renders the worker runs at once (2 fit a laptop CPU, step 006a)"
     )
 
+    # --- Quality check ----------------------------------------------------
+    # Checked after every render (src/studio/qc.py); a failing check makes the asset `failed`.
+    qc_min_duration_s: float = Field(5.0, gt=0, description="Shortest video that passes QC")
+    qc_max_duration_s: float = Field(90.0, gt=0, description="Longest video that passes QC")
+    qc_max_black_s: float = Field(1.5, gt=0, description="A black stretch this long fails QC")
+    qc_max_freeze_s: float = Field(3.0, gt=0, description="A frozen stretch this long fails QC")
+    qc_loudness_tolerance_lu: float = Field(
+        2.0, ge=0, description="Allowed distance (LU) from the -14 LUFS loudness target"
+    )
+    # Instagram cut captions from 30 to 5 hashtags (@creators, Dec 2025); the Graph API
+    # reference still says 30, so we keep to the app's rule (docs/DECISIONS.md).
+    max_hashtags: int = Field(5, ge=0, description="Most hashtags a caption may carry")
+
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(
         48.0, description="Posts younger than this are not judged yet"

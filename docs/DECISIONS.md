@@ -8,6 +8,16 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: Captions carry at most 5 hashtags; QC fails what Instagram would punish
+`MAX_HASHTAGS` (default 5) caps hashtags per caption everywhere `caption_problem` runs (caption
+edits, publish guard, MCP scheduling, the quality check). Instagram's @creators account announced
+in December 2025 that captions of posts and Reels go from 30 to 5 hashtags; the Graph API
+reference for `POST /<IG_USER_ID>/media` still says "30 hashtags". The quality check after every
+render fails a video outside 1080x1920 / 30 fps / H.264, shorter than 5 s or longer than 90 s,
+without audio, more than 2 LU from -14 LUFS, with 1.5 s of black or 3 s frozen, or with a caption
+Instagram would refuse (all `QC_*` settings). Health, medical or income wording is only a warning.
+Reason: the app rule is stricter than the API docs, and a refused or stuffed caption costs reach.
+
 ## 2026-11-17: `assets.recipe` is an envelope; renders run in a queue, two at a time
 `assets.recipe` stores `{"kind": "ffmpeg", "recipe": <Recipe>, "inputs": {"source": <media
 path>, ...}}` for Track A edits and `{"kind": "motion", "template": <id>, "props": {...}}` for

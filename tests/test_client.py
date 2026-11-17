@@ -81,7 +81,7 @@ async def test_carousel_size_is_checked(client):
 
 
 async def test_too_many_hashtags_rejected(client):
-    with pytest.raises(InstagramAPIError, match="30 hashtags"):
+    with pytest.raises(InstagramAPIError, match="5 hashtags"):
         await client.publish_image("https://cdn/1.jpg", " ".join(f"#t{i}" for i in range(31)))
 
 

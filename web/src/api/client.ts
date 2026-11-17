@@ -66,7 +66,7 @@ export type Asset = {
   best_before?: string | null
   duration?: number | null
   recipe?: { template?: string; edit?: string; ops?: { op: string }[] }
-  qc?: { passed?: boolean; reason?: string; reasons?: string[] } | null
+  qc?: { passed?: boolean; reason?: string; reasons?: string[]; warnings?: string[] } | null
   // from the asset's idea; only the list carries them
   track?: string
   strategy?: 'explore' | 'exploit' | null
