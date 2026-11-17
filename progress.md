@@ -218,7 +218,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ### Phase 8 — The learning loop
 
-- [ ] 081 — Evidence engine — a learning can carry a tag predicate (for example `hook_type = question`); `evaluate_learning()` computes sample size and index against the baseline and sets confidence (low / medium / high by configurable thresholds); contradicted learnings are flagged, never silently deleted; a taste learning and an audience learning that disagree are both kept and marked as a conflict; nightly refresh in the worker; tests.
+- [x] 081 — Evidence engine — a learning can carry a tag predicate (for example `hook_type = question`); `evaluate_learning()` computes sample size and index against the baseline and sets confidence (low / medium / high by configurable thresholds); contradicted learnings are flagged, never silently deleted; a taste learning and an audience learning that disagree are both kept and marked as a conflict; nightly refresh in the worker; tests.
 - [x] 082 — Daily facts — service that computes, with no AI, yesterday's and the last 7 days' facts: published, matured, winners and losers with their tags, best and worst slots, biggest movers, the studio funnel, experiments that reached their sample, and the most-liked audience comments per post (read only, passed as quoted data); returned as JSON for the agent and stored with the report.
 - [x] 083 — Playbook `daily-learn.md` — the **late-night analysis run**: read the facts (082) and the retention diagnoses (111) with each video's description and timeline (110), find the best and worst Reels and **why** (which second viewers left, which event was playing, hook vs payoff), re-evaluate learnings, write the daily report (what happened, assumptions about why, taste-versus-audience conflicts, what to try next), propose experiments; reads its work packet (112); runs before `daily-produce`; added to the scheduled runs. `save_daily_report` MCP tool in the `agent` profile. — deps: 082, 110, 111, 112
 - [ ] 084 — Learnings page — list by kind, status, origin and confidence with evidence and linked posts; the owner can edit, confirm, retire and add a rule by hand; owner edits always win over the agent.
@@ -262,6 +262,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 081 — Evidence engine — https://github.com/enimarix/instagram-campaign-mcp/pull/99 (2026-11-18) — learnings with a tag predicate are checked nightly against matured Reels (n, index, confidence); contradicted ones flagged, never deleted; taste vs audience conflicts marked on both; `learnings refresh` CLI
 - [x] 063b — Reel downloads — https://github.com/enimarix/instagram-campaign-mcp/pull/98 (2026-11-18) — download_reel (local service, then yt-dlp fallback): Instagram CDN only, size cap, daily cap + delay, creator + stats on a commentary source, DM picks marked; agent tool + "Download for reaction" on Trends. Real 20-Reel check pending (owner)
 - [x] 117 — Web for DM picks, downloader and retention — https://github.com/enimarix/instagram-campaign-mcp/pull/97 (2026-11-18) — Settings: pinned accounts, DM picks with skip, downloader health; post detail: "Why viewers left" with a timeline bar and markers; fixed a crash on capped timelines
 - [x] 083 — Late-night analysis run — https://github.com/enimarix/instagram-campaign-mcp/pull/96 (2026-11-17) — `daily-learn.md` playbook (best/worst Reels and why, from facts + retention + timelines), `save_daily_report` agent tool with best/worst/experiments, default schedule daily-learn@02:00 before daily-produce@03:00, quiet days skipped
@@ -374,6 +375,10 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - [ ] (from 115) Decline is three calls (verdict, archive, reason); a flush on tab close may land only the first. One thin `decline` route would make it atomic.
 - [ ] (from 083) `update_learning` cannot attach audience evidence to an existing learning (081 evidence engine).
 - [ ] (from 081) Expose `scope` (predicate) and `evaluate` on the `update_learning` MCP tool (the service has them).
+- [ ] (from 116) `/api/account` returns 503 in setup mode: a console error on every Settings visit (return an empty state instead).
+- [ ] (from 116) Settings is ~4000 px on a phone because of the Clips list: collapse it or move Clips to its own page.
+- [ ] (from 116) Learnings and Ads placeholders say only "Coming soon": say what will be there and when.
+- [ ] (from 116) AssetPage source links are under 44 px.
 - [ ] (from 112) `list_revision_requests` (MCP) should also hide requests whose new version is still rendering, like the work packet does.
 - Clip intake (063 review): add a `sources.licence` column (cc licence is kept in stats.licence today, so publishing refuses cc clips: fails safe) and a store setter for local_path; optional streamed upload route for clips.
 - Inspirations (051b review): playbook Safety rule 1 should say the owner's inspiration notes are taste guidance while the Reels themselves are outside data; accept a mixed-case host (Instagram.com) in pasted links; check Trends + Inspirations at 375 px.
