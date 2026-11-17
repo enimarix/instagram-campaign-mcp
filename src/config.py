@@ -79,6 +79,27 @@ class InstagramMCPSettings(BaseSettings):
         description="Time zone used for schedule times given without an offset",
     )
 
+    # --- Slot planner -----------------------------------------------------
+    max_posts_per_day: int = Field(3, ge=1, description="Most posts on one local day")
+    min_slot_gap_minutes: int = Field(
+        120, ge=1, description="Minimum real time between two publishes"
+    )
+    posting_windows: str = Field(
+        "11:00-13:00,17:00-21:00",
+        description="Local posting windows (TIMEZONE), comma-separated HH:MM-HH:MM",
+    )
+    slot_jitter_minutes: int = Field(
+        7, ge=0, description="Random shift of each planned slot, in minutes either way"
+    )
+
+    @field_validator("posting_windows")
+    @classmethod
+    def validate_posting_windows(cls, v):
+        from .learning.slots import parse_windows
+
+        parse_windows(v)
+        return v
+
     # --- Campaign store ---------------------------------------------------
     database_path: str = Field(
         str(APP_HOME / "data" / "ig_campaign.db"),
