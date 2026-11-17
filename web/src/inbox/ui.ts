@@ -10,3 +10,8 @@ const pad = (n: number) => String(n).padStart(2, '0')
 export const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 /** A Date as a <input type="datetime-local"> value, in the browser's time zone. */
 export const inputValue = (d: Date) => `${localDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+/** Seconds as "0:07", a moment of the video. */
+export const clock = (s: number) => `${Math.floor(s / 60)}:${pad(Math.floor(s % 60))}`
+/** What the owner confirms before a `commentary` video is queued (GOAL.md §5.1). */
+export const COMMENTARY_CONFIRMATION =
+  'I checked this reaction video: my own take is a substantial part and the creator is credited.'

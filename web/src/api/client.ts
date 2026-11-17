@@ -62,6 +62,7 @@ export type Asset = {
   batch_date: string
   preview_url: string | null
   thumbnail_url: string | null
+  poster_url?: string | null
   // the detail page (016)
   best_before?: string | null
   duration?: number | null
@@ -73,6 +74,10 @@ export type Asset = {
   // from the asset's idea; only the list carries them
   track?: string
   strategy?: 'explore' | 'exploit' | null
+  // shown by the feed when a row carries them (list rows do not join them yet)
+  pillar?: string | null
+  rights_basis?: string | null
+  dm_pick?: boolean
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -101,6 +106,10 @@ export const listAssets = (query: Record<string, string>) =>
 export const setVerdict = (id: number, verdict: Verdict) =>
   post<Asset>(`/api/assets/${id}/verdict`, { verdict })
 export const approveAsset = (id: number) => post<Asset>(`/api/assets/${id}/approve`)
+/** The feed's one-tap Approve: approved and queued into the next free slot; `slot` null =
+ * the planner's week is full, approved only. `confirmed`: the commentary confirmation. */
+export const approveAndQueue = (id: number, confirmed: boolean) =>
+  post<{ asset: Asset; slot: Slot | null }>(`/api/assets/${id}/approve-and-queue`, { confirmed })
 export const getTaxonomy = () => request<Taxonomy>('/api/taxonomy')
 
 export type Comment = {

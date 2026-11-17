@@ -1,132 +1,90 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import type { Asset, Verdict } from '../api/client'
-import { Button, IconButton } from '../ui/Button'
+import type { Asset } from '../api/client'
 import { Chip } from '../ui/Chip'
-import { SoundOffIcon, SoundOnIcon } from '../ui/icons'
-import { card, link, verdictButton, type Tone } from '../ui/styles'
-import { ScheduledSlot } from './ScheduleSheet'
-
-const SWIPE_PX = 80 // horizontal travel that counts as a like / dislike
-const VISIBLE = 0.6 // share of the video on screen before it plays
-
-const STATUS_TONE: Record<string, Tone> = { ready: 'info', approved: 'success', failed: 'danger' }
+import { CheckIcon, CloseIcon, EditIcon, InfoIcon, SoundOffIcon, SoundOnIcon } from '../ui/icons'
 
 type Props = {
   asset: Asset
-  current: boolean
+  index: number // in the feed: the page's IntersectionObserver reads it back (data-index)
+  active: boolean // the card on screen: it plays
+  preload: boolean // the next card: its preview loads ahead
+  muted: boolean
   showBestBefore?: boolean // bench cards
-  onVerdict: (v: Verdict) => void
+  onToggleSound: () => void
   onApprove: () => void
-  onSchedule: () => void
-  onChange: (a: Asset) => void
-  onFocus: () => void
+  onDecline: () => void
+  onChange: () => void
 }
 
-export default function AssetCard({ asset: a, current, showBestBefore, onVerdict, onApprove, onSchedule, onChange, onFocus }: Props) {
-  const video = useRef<HTMLVideoElement>(null)
-  const start = useRef<{ x: number; y: number } | null>(null)
-  const [dx, setDx] = useState(0)
-  const [muted, setMuted] = useState(true)
+// The rail's round buttons (Reels-like): white on the video, the theme's beside it (desktop).
+const railCircle = (primary?: boolean) =>
+  `grid size-12 place-items-center rounded-full shadow-overlay transition group-active:scale-95 ${
+    primary ? 'bg-accent text-on-accent' : 'bg-black/55 backdrop-blur group-hover:bg-black/70 lg:bg-surface-2 lg:text-fg lg:group-hover:bg-line'}`
+const railItem = 'group flex min-w-14 flex-col items-center gap-1 text-xs font-medium text-white lg:text-fg'
 
-  // Play while mostly visible, pause otherwise. jsdom has no IntersectionObserver.
+function RailButton({ label, icon, onClick, primary }: { label: string; icon: ReactNode; onClick: () => void; primary?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} className={railItem}>
+      <span aria-hidden className={railCircle(primary)}>{icon}</span>
+      {label}
+    </button>
+  )
+}
+
+/** One screen of the review feed: the video, an overlay of what the agent says about it,
+ * and the decision rail (Approve, Change, Decline). */
+export default function AssetCard({ asset: a, index, active, preload, muted, showBestBefore, onToggleSound, onApprove, onDecline, onChange }: Props) {
+  const video = useRef<HTMLVideoElement>(null)
+  const [expanded, setExpanded] = useState(false)
+
   useEffect(() => {
     const v = video.current
-    if (!v || typeof IntersectionObserver === 'undefined') return
-    const io = new IntersectionObserver(
-      ([e]) => (e.intersectionRatio >= VISIBLE ? v.play().catch(() => {}) : v.pause()),
-      { threshold: VISIBLE },
-    )
-    io.observe(v)
-    return () => io.disconnect()
-  }, [])
-
-  // Swipe on touch only. `touch-pan-y` leaves vertical scrolling to the browser, which
-  // then sends pointercancel, so a scroll never turns into a verdict.
-  function down(e: PointerEvent) {
-    if (e.pointerType === 'touch') start.current = { x: e.clientX, y: e.clientY }
-  }
-  function move(e: PointerEvent) {
-    const s = start.current
-    if (s && Math.abs(e.clientX - s.x) > Math.abs(e.clientY - s.y)) setDx(e.clientX - s.x)
-  }
-  function up(e: PointerEvent) {
-    const s = start.current
-    cancel()
-    if (!s) return
-    const x = e.clientX - s.x
-    if (Math.abs(x) >= SWIPE_PX && Math.abs(x) > Math.abs(e.clientY - s.y))
-      onVerdict(x > 0 ? 'liked' : 'disliked')
-  }
-  function cancel() {
-    start.current = null
-    setDx(0)
-  }
+    if (!v) return
+    if (active) v.play()?.catch(() => {}) // autoplay refused: the poster stays, a tap starts it
+    else v.pause()
+  }, [active])
 
   return (
-    <article
-      id={`asset-${a.id}`}
-      aria-label={`Video ${a.id}`}
-      onFocusCapture={onFocus}
-      onPointerDown={down}
-      onPointerMove={move}
-      onPointerUp={up}
-      onPointerCancel={cancel}
-      style={dx ? { transform: `translateX(${dx}px)` } : undefined}
-      className={`${card} touch-pan-y overflow-hidden transition-[opacity,box-shadow] ${
-        current ? 'md:ring-2 md:ring-accent' : '' // keyboard cursor (desktop)
-      } ${a.verdict === 'liked' ? 'border-l-4 border-l-success' : ''} ${
-        a.verdict === 'disliked' ? 'border-l-4 border-l-danger opacity-70' : ''
-      }`}
-    >
-      <div className="relative">
-        {/* No native controls: their seek bar would fight the horizontal swipe. */}
-        <video
-          ref={video}
-          src={a.preview_url ?? undefined}
-          poster={a.thumbnail_url ?? undefined}
-          muted={muted}
-          playsInline
-          loop
-          preload="metadata"
-          className="mx-auto aspect-[9/16] max-h-[70dvh] w-full bg-black object-contain"
-        />
-        <IconButton
-          label={muted ? 'Sound on' : 'Mute'}
-          icon={muted ? <SoundOffIcon /> : <SoundOnIcon />}
-          onClick={() => setMuted((m) => !m)}
-          className="absolute top-3 right-3 rounded-full bg-black/55! text-white! backdrop-blur hover:bg-black/70!"
-        />
+    <article id={`asset-${a.id}`} data-index={index} aria-label={`Video ${a.id}`}
+      className="relative flex h-full snap-start snap-always justify-center lg:gap-4">
+      <div className="relative h-full w-full overflow-hidden bg-black lg:aspect-[9/16] lg:w-auto lg:rounded-card">
+        {/* Tap = sound on / off, like Reels. No native controls: the feed scrolls. */}
+        <video ref={video} src={a.preview_url ?? undefined} poster={a.poster_url ?? a.thumbnail_url ?? undefined}
+          muted={muted} playsInline loop preload={active || preload ? 'auto' : 'none'}
+          onClick={onToggleSound} className="size-full object-contain" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-2 bg-linear-to-t from-black/85 via-black/50 to-transparent px-4 pt-20 pr-24 pb-4 text-white lg:pr-4">
+          <div className="flex flex-wrap gap-1.5">
+            {a.dm_pick && <Chip tone="accent">DM pick</Chip>}
+            {a.rights_basis === 'commentary' && <Chip tone="warn">commentary</Chip>}
+            {a.strategy === 'explore' && <Chip tone="explore">Explore</Chip>}
+            {a.track && <Chip>{a.track}</Chip>}
+            {a.pillar && <Chip>{a.pillar}</Chip>}
+            {showBestBefore && a.best_before && <Chip tone="warn">best before {a.best_before}</Chip>}
+          </div>
+          {a.self_score != null && (
+            <p className="truncate text-sm" title={a.self_score_reason ?? undefined}>
+              <strong className="mr-1 text-base tabular-nums">{a.self_score}/10</strong> {a.self_score_reason}
+            </p>
+          )}
+          {a.description && (
+            <button type="button" aria-expanded={expanded} onClick={() => setExpanded((x) => !x)}
+              className={`pointer-events-auto block text-left text-sm ${expanded ? '' : 'line-clamp-2'}`}>
+              {a.description}
+            </button>
+          )}
+          {a.caption && <p className="line-clamp-1 text-sm text-white/75">{a.caption}</p>}
+        </div>
       </div>
-      <div className="space-y-3 p-4">
-        <div className="flex flex-wrap gap-1.5">
-          <Chip tone={STATUS_TONE[a.status] ?? 'neutral'}>{a.status.replace('_', ' ')}</Chip>
-          {a.strategy === 'explore' && <Chip tone="explore">Explore</Chip>}
-          {a.track && <Chip>{a.track}</Chip>}
-          {showBestBefore && a.best_before && <Chip tone="warn">best before {a.best_before}</Chip>}
-        </div>
-        {a.self_score != null && (
-          <p className="truncate text-sm text-muted" title={a.self_score_reason ?? undefined}>
-            <strong className="mr-1 text-base text-fg tabular-nums">{a.self_score}/10</strong> {a.self_score_reason}
-          </p>
-        )}
-        {a.caption && <p className="line-clamp-2 text-sm">{a.caption}</p>}
-        <Link to={`/assets/${a.id}`} className={`inline-flex min-h-11 items-center text-sm ${link}`}>
-          Details and comments
+      <div className="absolute right-2 bottom-6 flex flex-col items-center gap-4 lg:static lg:justify-end lg:pb-6">
+        <RailButton label="Approve" icon={<CheckIcon />} onClick={onApprove} primary />
+        <RailButton label="Change" icon={<EditIcon />} onClick={onChange} />
+        <RailButton label="Decline" icon={<CloseIcon />} onClick={onDecline} />
+        <RailButton label={muted ? 'Sound on' : 'Mute'} icon={muted ? <SoundOffIcon /> : <SoundOnIcon />} onClick={onToggleSound} />
+        <Link to={`/assets/${a.id}`} className={railItem}>
+          <span aria-hidden className={railCircle()}><InfoIcon /></span>
+          Details
         </Link>
-        <div className="grid grid-cols-3 gap-2">
-          <Button aria-pressed={a.verdict === 'disliked'} onClick={() => onVerdict('disliked')}
-            className={verdictButton('danger', a.verdict === 'disliked')}>
-            Dislike
-          </Button>
-          <Button aria-pressed={a.verdict === 'liked'} onClick={() => onVerdict('liked')}
-            className={verdictButton('success', a.verdict === 'liked')}>
-            Like
-          </Button>
-          {a.status === 'ready' && <Button variant="primary" onClick={onApprove}>Approve</Button>}
-          {a.status === 'approved' && <Button variant="primary" onClick={onSchedule}>Schedule</Button>}
-        </div>
-        {a.status === 'scheduled' && <ScheduledSlot assetId={a.id} onUnscheduled={onChange} />}
       </div>
     </article>
   )

@@ -10,6 +10,7 @@ from src.config import InstagramMCPSettings
 from src.store import parse_dt, to_iso, utcnow
 from src.studio import scheduling
 from src.studio.assets import set_verdict
+from src.studio.publish import QueueRefused
 
 from .conftest import LOCAL
 from .test_studio_publish import _asset
@@ -177,3 +178,65 @@ def test_bench_route(tc, store, cfg):
     body = r.json()
     assert [x["id"] for x in body["assets"]] == [a["id"]] and "file_url" in body["assets"][0]
     assert body["supply_days"] == 1
+
+
+# Step 115: the feed's one-tap Approve.
+
+def _fill_week(store, now):
+    """Two posts a day (the max) for the planner's whole week: no free slot left."""
+    for day in range(7):
+        for hour in (10, 11):
+            store.schedule("reel", {"video_path": "x.mp4"},
+                           now.replace(hour=hour, minute=30) + timedelta(days=day))
+
+
+def test_approve_and_queue_takes_the_next_free_slot(store, cfg):
+    a = _asset(store, cfg, status="ready")
+    now = _day()
+    out = scheduling.approve_and_queue(store, cfg, a["id"], now)
+    assert out["asset"]["status"] == "scheduled" and out["asset"]["approved_at"]
+    assert parse_dt(out["post"]["publish_at"]) == now.replace(hour=11)
+    assert out["slot"]["publish_at"] == out["post"]["publish_at"]
+
+
+def test_approve_and_queue_without_a_free_slot_approves_only(store, cfg):
+    a = _asset(store, cfg, status="ready")
+    now = _day()
+    _fill_week(store, now)
+    out = scheduling.approve_and_queue(store, cfg, a["id"], now)
+    assert out["asset"]["status"] == "approved" and out["post"] is None and out["slot"] is None
+    assert len(store.list_scheduled()) == 14
+
+
+@pytest.mark.parametrize("code, kw", [
+    ("rights", {"track": "remix", "source": COMMENTARY}),  # not confirmed
+    ("qc", {"qc": {"passed": False}}),
+])
+def test_approve_and_queue_refusal_leaves_the_asset_ready(store, cfg, code, kw):
+    a = _asset(store, cfg, status="ready", **kw)
+    with pytest.raises(QueueRefused) as e:
+        scheduling.approve_and_queue(store, cfg, a["id"], _day())
+    assert e.value.code == code
+    after = store.get_asset(a["id"])
+    assert after["status"] == "ready" and after["approved_at"] is None
+    assert store.list_scheduled() == []
+
+
+def test_approve_and_queue_route(tc, store, cfg):
+    url = "/api/assets/{}/approve-and-queue".format
+    a = _asset(store, cfg, status="ready")
+    r = tc.post(url(a["id"]), json={}, headers=H)
+    assert r.status_code == 200, r.text
+    assert r.json()["asset"]["status"] == "scheduled" and "file_url" in r.json()["asset"]
+    assert parse_dt(r.json()["slot"]["publish_at"]) > utcnow()
+    comm = _asset(store, cfg, status="ready", track="remix", source=COMMENTARY)
+    r = tc.post(url(comm["id"]), json={}, headers=H)
+    assert r.status_code == 409 and r.json()["error"] == "rights"
+    assert store.get_asset(comm["id"])["status"] == "ready"
+    r = tc.post(url(comm["id"]), json={"confirmed": True}, headers=H)
+    assert r.status_code == 200 and r.json()["asset"]["status"] == "scheduled"
+    r = tc.post(url(comm["id"]), json={"confirmed": True}, headers=H)  # not ready any more
+    assert r.status_code == 409 and r.json()["error"] == "invalid_transition"
+    assert store.get_asset(comm["id"])["status"] == "scheduled"
+    assert [p["status"] for p in store.list_scheduled()] == ["pending", "pending"]
+    assert tc.post(url(999), json={}, headers=H).status_code == 404
