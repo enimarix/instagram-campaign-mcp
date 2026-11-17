@@ -133,7 +133,7 @@ def refuse_asset_file(
                          " from the website instead")
 
 
-RECONCILE_PAGES = 2  # ponytail: a post older than ~100 media stays with the owner
+RECONCILE_PAGES = 2  # ~100 recent media; an older post is left to the owner
 RECONCILE_PAGE_SIZE = 50
 logger = structlog.get_logger(__name__)
 

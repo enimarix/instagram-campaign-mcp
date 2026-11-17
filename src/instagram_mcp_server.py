@@ -258,7 +258,8 @@ async def publish_reel(
     video_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Publish a Reel now (MP4/MOV H.264+AAC, 9:16 recommended, max 300 MB). Give exactly
-    one of video_url (public HTTPS) or video_path (file relative to the media root).
+    one of video_url (public HTTPS) or video_path (file relative to the media root; a
+    studio asset's video is refused: queue it from the website).
     trial_graduation makes it a trial Reel shown to non-followers first:
     SS_PERFORMANCE = Instagram shares it to followers if it performs,
     MANUAL = you decide in the app. Waits for video processing (can take minutes)."""
@@ -313,7 +314,7 @@ async def schedule_post(
     video_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Queue a post for later. A reel takes video_url or video_path (relative to the
-    media root). publish_at is ISO 8601; without an offset it is read
+    media root; a studio asset's video is refused). publish_at is ISO 8601; without an offset it is read
     in the configured time zone (default Europe/Paris), e.g. "2026-11-20T18:30".
     Needs the scheduler running (python -m src.scheduler daemon) or run_due_posts."""
     _not_an_asset(video_path)
