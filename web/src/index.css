@@ -5,6 +5,8 @@
  * default; [data-theme="light"] on <html> swaps the same variables (ui/theme.ts sets it).
  * Utilities: bg-bg, bg-surface, bg-surface-2, border-line, text-fg, text-muted,
  * bg-accent + text-on-accent, text-success / warn / danger (+ /12 for a soft fill).
+ * Spacing (4 px steps) and the type scale (text-xs … text-3xl) are Tailwind's defaults on
+ * purpose; radius, shadows and motion are ours.
  */
 @theme {
   --color-bg: #1a1c2c;          /* brand background */

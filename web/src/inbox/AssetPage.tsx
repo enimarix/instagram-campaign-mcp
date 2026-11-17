@@ -136,132 +136,132 @@ function AssetPage({ id }: { id: number }) {
 
   return (
     <div className="mx-auto max-w-5xl">
-    <PageHeader title={`Video ${id}`} back={{ to: '/inbox', label: 'Inbox' }} />
-    <div className="grid gap-6 md:grid-cols-[minmax(0,22rem)_1fr]">
-      <section className="space-y-4">
-        <video
-          ref={video}
-          src={asset.preview_url ?? undefined}
-          poster={asset.thumbnail_url ?? undefined}
-          controls
-          playsInline
-          preload="metadata"
-          className="aspect-[9/16] max-h-[70dvh] w-full rounded-card bg-black object-contain shadow-card"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          <Chip>{asset.status.replace('_', ' ')}</Chip>
-          {asset.verdict !== 'none' && (
-            <Chip tone={asset.verdict === 'liked' ? 'success' : 'danger'}>{asset.verdict}</Chip>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button aria-pressed={asset.verdict === 'disliked'} onClick={() => act(() => setVerdict(id, 'disliked'))}
-            className={verdictButton('danger', asset.verdict === 'disliked')}>
-            Dislike
-          </Button>
-          <Button aria-pressed={asset.verdict === 'liked'} onClick={() => act(() => setVerdict(id, 'liked'))}
-            className={verdictButton('success', asset.verdict === 'liked')}>
-            Like
-          </Button>
-          {asset.status === 'ready' && (
-            <>
-              <Button variant="primary" onClick={approve}>Approve</Button>
-              <Button variant="ghost" onClick={() => act(() => archiveAsset(id))}>Archive</Button>
-            </>
-          )}
-          {asset.status === 'approved' && (
-            <Button variant="primary" onClick={() => setScheduling(true)}>Schedule</Button>
-          )}
-          {(asset.status === 'approved' || asset.status === 'scheduled') && (
-            <Button variant="ghost" onClick={() => act(() => unapproveAsset(id))}>Unapprove</Button>
-          )}
-        </div>
-        {asset.status === 'scheduled' && <ScheduledSlot assetId={id} onUnscheduled={setAsset} />}
-        {scheduling && (
-          <ScheduleSheet
-            assetId={id}
-            onClose={() => setScheduling(false)}
-            onScheduled={(a) => {
-              setAsset(a)
-              setScheduling(false)
-            }}
+      <PageHeader title={`Video ${id}`} back={{ to: '/inbox', label: 'Inbox' }} />
+      <div className="grid gap-6 md:grid-cols-[minmax(0,22rem)_1fr]">
+        <section className="space-y-4">
+          <video
+            ref={video}
+            src={asset.preview_url ?? undefined}
+            poster={asset.thumbnail_url ?? undefined}
+            controls
+            playsInline
+            preload="metadata"
+            className="aspect-[9/16] max-h-[70dvh] w-full rounded-card bg-black object-contain shadow-card"
           />
-        )}
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <form onSubmit={save} className="space-y-3">
-          <label className="block text-sm font-medium">
-            Caption
-            <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={4}
-              className={`${field} mt-1 block w-full py-2 font-normal`} />
-          </label>
-          <label className="block text-sm font-medium">
-            Best before
-            <input type="date" value={bestBefore} onChange={(e) => setBestBefore(e.target.value)}
-              className={`${field} mt-1 block font-normal`} />
-          </label>
-          <Button type="submit" variant="primary">Save</Button>
-          {saveMsg && <p role="status" className="text-sm text-muted">{saveMsg}</p>}
-        </form>
-      </section>
-
-      <div className="space-y-4">
-        <Card as="section" aria-label="About this video">
-          <dl className="space-y-3">
-            <Row label="Hook">{idea.hook}</Row>
-            <Row label="Hook type">{label('hook_types', idea.hook_type)}</Row>
-            <Row label="Hypothesis">{idea.hypothesis}</Row>
-            <Row label="Track">
-              {label('tracks', idea.track)}
-              {idea.strategy === 'explore' && (
-                <Chip tone="explore" className="ml-2">Explore</Chip>
-              )}
-            </Row>
-            <Row label="Pillar">{label('pillars', idea.pillar)}</Row>
-            <Row label="Recipe">{recipeSummary(asset.recipe)}</Row>
-            {source && (
-              <Row label="Rights">
-                {source.rights_basis.replace('_', ' ')}
-                {source.author && (
-                  <> · credit: <ExternalLink url={source.url}>{source.author}</ExternalLink></>
-                )}
-              </Row>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip>{asset.status.replace('_', ' ')}</Chip>
+            {asset.verdict !== 'none' && (
+              <Chip tone={asset.verdict === 'liked' ? 'success' : 'danger'}>{asset.verdict}</Chip>
             )}
-            {idea.citations.length > 0 && (
-              <Row label="Sources (check before approving)">
-                <ul className="list-disc pl-5">
-                  {idea.citations.map((c, i) => (
-                    <li key={i}><ExternalLink url={c.url}>{c.title || c.url}</ExternalLink></li>
-                  ))}
-                </ul>
-              </Row>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button aria-pressed={asset.verdict === 'disliked'} onClick={() => act(() => setVerdict(id, 'disliked'))}
+              className={verdictButton('danger', asset.verdict === 'disliked')}>
+              Dislike
+            </Button>
+            <Button aria-pressed={asset.verdict === 'liked'} onClick={() => act(() => setVerdict(id, 'liked'))}
+              className={verdictButton('success', asset.verdict === 'liked')}>
+              Like
+            </Button>
+            {asset.status === 'ready' && (
+              <>
+                <Button variant="primary" onClick={approve}>Approve</Button>
+                <Button variant="ghost" onClick={() => act(() => archiveAsset(id))}>Archive</Button>
+              </>
             )}
-            {asset.qc && (
-              <Row label="Quality check">
-                {asset.qc.passed ? 'Passed' : 'Failed'}
-                {qcReasons.length > 0 && `: ${qcReasons.join('; ')}`}
-                {asset.qc.warnings && asset.qc.warnings.length > 0 && (
-                  <p className="text-warn">Check the wording: {asset.qc.warnings.join('; ')}</p>
-                )}
-              </Row>
+            {asset.status === 'approved' && (
+              <Button variant="primary" onClick={() => setScheduling(true)}>Schedule</Button>
             )}
-          </dl>
-          {(ctx.parent || ctx.children.length > 0) && (
-            <nav aria-label="Versions" className="mt-3 flex flex-wrap gap-3 text-sm">
-              {ctx.parent && (
-                <Link to={`/assets/${ctx.parent.id}`} className={link}>Older version</Link>
-              )}
-              {ctx.children.map((c) => (
-                <Link key={c.id} to={`/assets/${c.id}`} className={link}>
-                  Newer version #{c.id} ({c.status.replace('_', ' ')})
-                </Link>
-              ))}
-            </nav>
+            {(asset.status === 'approved' || asset.status === 'scheduled') && (
+              <Button variant="ghost" onClick={() => act(() => unapproveAsset(id))}>Unapprove</Button>
+            )}
+          </div>
+          {asset.status === 'scheduled' && <ScheduledSlot assetId={id} onUnscheduled={setAsset} />}
+          {scheduling && (
+            <ScheduleSheet
+              assetId={id}
+              onClose={() => setScheduling(false)}
+              onScheduled={(a) => {
+                setAsset(a)
+                setScheduling(false)
+              }}
+            />
           )}
-        </Card>
-        <CommentThread assetId={id} onSeek={seek} currentTime={() => video.current?.currentTime ?? 0}
-          reasons={taxonomy?.feedback_reasons.values ?? []} onAsset={setAsset} />
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <form onSubmit={save} className="space-y-3">
+            <label className="block text-sm font-medium">
+              Caption
+              <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={4}
+                className={`${field} mt-1 block w-full py-2 font-normal`} />
+            </label>
+            <label className="block text-sm font-medium">
+              Best before
+              <input type="date" value={bestBefore} onChange={(e) => setBestBefore(e.target.value)}
+                className={`${field} mt-1 block font-normal`} />
+            </label>
+            <Button type="submit" variant="primary">Save</Button>
+            {saveMsg && <p role="status" className="text-sm text-muted">{saveMsg}</p>}
+          </form>
+        </section>
+
+        <div className="space-y-4">
+          <Card as="section" aria-label="About this video">
+            <dl className="space-y-3">
+              <Row label="Hook">{idea.hook}</Row>
+              <Row label="Hook type">{label('hook_types', idea.hook_type)}</Row>
+              <Row label="Hypothesis">{idea.hypothesis}</Row>
+              <Row label="Track">
+                {label('tracks', idea.track)}
+                {idea.strategy === 'explore' && (
+                  <Chip tone="explore" className="ml-2">Explore</Chip>
+                )}
+              </Row>
+              <Row label="Pillar">{label('pillars', idea.pillar)}</Row>
+              <Row label="Recipe">{recipeSummary(asset.recipe)}</Row>
+              {source && (
+                <Row label="Rights">
+                  {source.rights_basis.replace('_', ' ')}
+                  {source.author && (
+                    <> · credit: <ExternalLink url={source.url}>{source.author}</ExternalLink></>
+                  )}
+                </Row>
+              )}
+              {idea.citations.length > 0 && (
+                <Row label="Sources (check before approving)">
+                  <ul className="list-disc pl-5">
+                    {idea.citations.map((c, i) => (
+                      <li key={i}><ExternalLink url={c.url}>{c.title || c.url}</ExternalLink></li>
+                    ))}
+                  </ul>
+                </Row>
+              )}
+              {asset.qc && (
+                <Row label="Quality check">
+                  {asset.qc.passed ? 'Passed' : 'Failed'}
+                  {qcReasons.length > 0 && `: ${qcReasons.join('; ')}`}
+                  {asset.qc.warnings && asset.qc.warnings.length > 0 && (
+                    <p className="text-warn">Check the wording: {asset.qc.warnings.join('; ')}</p>
+                  )}
+                </Row>
+              )}
+            </dl>
+            {(ctx.parent || ctx.children.length > 0) && (
+              <nav aria-label="Versions" className="mt-3 flex flex-wrap gap-3 text-sm">
+                {ctx.parent && (
+                  <Link to={`/assets/${ctx.parent.id}`} className={link}>Older version</Link>
+                )}
+                {ctx.children.map((c) => (
+                  <Link key={c.id} to={`/assets/${c.id}`} className={link}>
+                    Newer version #{c.id} ({c.status.replace('_', ' ')})
+                  </Link>
+                ))}
+              </nav>
+            )}
+          </Card>
+          <CommentThread assetId={id} onSeek={seek} currentTime={() => video.current?.currentTime ?? 0}
+            reasons={taxonomy?.feedback_reasons.values ?? []} onAsset={setAsset} />
+        </div>
       </div>
-    </div>
     </div>
   )
 }
