@@ -22,7 +22,7 @@ from . import campaign as camp
 from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient
 from .logging_setup import configure_logging
-from .store import CampaignStore, parse_dt, to_iso, utcnow
+from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
 
 configure_logging()
 
@@ -84,12 +84,12 @@ def _err(e: InstagramAPIError) -> ToolError:
     return ToolError(f"Instagram API error: {e.message}{detail}")
 
 
-def _when(value: str) -> datetime:
+def _when(value: str, name: str = "publish_at") -> datetime:
     """ISO time; without an offset it is read in the configured time zone."""
     try:
-        dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        dt = parse_iso(value)
     except ValueError as e:
-        raise ToolError(f"publish_at must be ISO 8601, e.g. 2026-11-20T18:30: {e}") from e
+        raise ToolError(f"{name} must be ISO 8601, e.g. 2026-11-20T18:30: {e}") from e
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=ZoneInfo(get_settings().timezone))
     return parse_dt(dt.isoformat())
@@ -144,8 +144,8 @@ async def get_account_insights(
     try:
         data = await client().get_account_insights(
             metrics, period,
-            int(_when(since).timestamp()) if since else None,
-            int(_when(until).timestamp()) if until else None,
+            int(_when(since, "since").timestamp()) if since else None,
+            int(_when(until, "until").timestamp()) if until else None,
             breakdown,
         )
         return {"insights": data}
@@ -355,7 +355,10 @@ async def reschedule_post(post_id: int, publish_at: str) -> Dict[str, Any]:
 @mcp.tool(annotations=PUBLISH)
 async def run_due_posts() -> Dict[str, Any]:
     """Publish every queued post whose time has come. Same as one scheduler pass."""
-    return await camp.run_due(client(), store())
+    try:
+        return await camp.run_due(client(), store())
+    except InstagramAPIError as e:
+        raise _err(e)
 
 
 # ----------------------------------------------------------------------
@@ -440,14 +443,17 @@ async def get_competitor_profile(username: str, media_limit: int = 12) -> Dict[s
 async def collect_insights(limit: int = 25, max_age_days: int = 30) -> Dict[str, Any]:
     """Snapshot insights of recent posts (and live Stories) into the local store.
     Run daily; scoring uses the latest snapshot of each post."""
-    return await camp.collect_insights(client(), store(), limit, max_age_days)
+    try:
+        return await camp.collect_insights(client(), store(), limit, max_age_days)
+    except InstagramAPIError as e:
+        raise _err(e)
 
 
 @mcp.tool(annotations=LOCAL_READ)
 async def rank_posts(
     campaign: Optional[str] = None,
     only: Optional[Literal["winner", "promising", "average", "weak", "too_early",
-                           "inconclusive"]] = None,
+                           "inconclusive", "no_baseline", "no_signal"]] = None,
     limit: int = 20,
 ) -> Dict[str, Any]:
     """Score posts vs the account's own median (same type: feed/Reels/Stories).
@@ -480,7 +486,8 @@ async def label_post(
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=READ)
 async def get_conversations(page_id: Optional[str] = None, limit: int = 25) -> Dict[str, Any]:
-    """Instagram DM conversations (needs instagram_manage_messages)."""
+    """Instagram DM conversations (needs instagram_manage_messages). page_id defaults
+    to the Facebook Page linked to the configured Instagram account."""
     try:
         return {"conversations": await client().get_conversations(page_id, limit)}
     except InstagramAPIError as e:
@@ -488,19 +495,23 @@ async def get_conversations(page_id: Optional[str] = None, limit: int = 25) -> D
 
 
 @mcp.tool(annotations=READ)
-async def get_conversation_messages(conversation_id: str, limit: int = 25) -> Dict[str, Any]:
+async def get_conversation_messages(
+    conversation_id: str, limit: int = 25, page_id: Optional[str] = None
+) -> Dict[str, Any]:
     """Messages in one DM conversation."""
     try:
-        return {"messages": await client().get_conversation_messages(conversation_id, limit)}
+        return {"messages": await client().get_conversation_messages(
+            conversation_id, limit, page_id)}
     except InstagramAPIError as e:
         raise _err(e)
 
 
 @mcp.tool(annotations=PUBLISH)
-async def send_dm(recipient_id: str, message: str) -> Dict[str, Any]:
-    """Reply to a DM (only within 24h of the user's last message; user must write first)."""
+async def send_dm(recipient_id: str, message: str, page_id: Optional[str] = None) -> Dict[str, Any]:
+    """Reply to a DM (only within 24h of the user's last message; user must write first).
+    recipient_id is the Instagram-scoped ID from get_conversation_messages."""
     try:
-        return await client().send_dm(recipient_id, message)
+        return await client().send_dm(recipient_id, message, page_id)
     except InstagramAPIError as e:
         raise _err(e)
 

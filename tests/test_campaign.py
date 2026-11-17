@@ -184,3 +184,75 @@ def test_compare_variants_flags_thin_samples():
 
     out2 = compare_variants(score_posts(a[:1] + b + baseline, labels=labels), "launch")
     assert out2["leader"] is None and "Fewer than 3" in out2["note"]
+
+
+# ---------------------------------------------------------------- regressions
+def test_claim_due_skips_posts_claimed_by_another_process(tmp_path):
+    from src.store import CampaignStore
+
+    db = str(tmp_path / "q.db")
+    a, b = CampaignStore(db), CampaignStore(db)
+    try:
+        a.schedule("image", {"image_url": "https://x/1.jpg"}, utcnow() - timedelta(minutes=1))
+        assert len(a.claim_due()) == 1
+        assert b.claim_due() == []
+        # Simulate b's SELECT seeing the row as pending before a's UPDATE committed.
+        p = b.schedule("image", {"image_url": "https://x/2.jpg"}, utcnow() - timedelta(minutes=1))
+        b._conn.execute("UPDATE scheduled_posts SET status='publishing' WHERE id=?", (p["id"],))
+        b._conn.commit()
+        orig = b._conn
+
+        class Stale:  # returns the row id as if it were still pending
+            def __init__(self, conn):
+                self.conn = conn
+
+            def execute(self, sql, args=()):
+                if sql.startswith("SELECT id FROM scheduled_posts"):
+                    return self.conn.execute("SELECT id FROM scheduled_posts WHERE id=?",
+                                             (p["id"],))
+                return self.conn.execute(sql, args)
+
+            def __getattr__(self, name):
+                return getattr(self.conn, name)
+
+        b._conn = Stale(orig)
+        assert b.claim_due() == []
+        b._conn = orig
+    finally:
+        a.close()
+        b.close()
+
+
+def test_reschedule_resets_attempts(store):
+    p = store.schedule("image", {"image_url": "https://x/1.jpg"}, utcnow() - timedelta(minutes=1))
+    store.claim_due()
+    store.mark_failed(p["id"], "boom", retry_in_minutes=None)
+    again = store.reschedule(p["id"], utcnow() + timedelta(hours=1))
+    assert again["attempts"] == 0 and again["status"] == "pending"
+
+
+def test_cannot_cancel_or_reschedule_while_publishing(store):
+    p = store.schedule("image", {"image_url": "https://x/1.jpg"}, utcnow() - timedelta(minutes=1))
+    store.claim_due()
+    with pytest.raises(ValueError):
+        store.cancel(p["id"])
+    with pytest.raises(ValueError):
+        store.reschedule(p["id"], utcnow() + timedelta(hours=1))
+
+
+def test_parse_dt_handles_meta_offsets_and_dates():
+    from src.store import parse_dt
+
+    assert parse_dt("2026-11-01T10:00:00+0000").hour == 10
+    assert parse_dt("2026-11-01T10:00:00+0130").hour == 8
+    assert parse_dt("2026-11-01T10:00:00Z").hour == 10
+    assert parse_dt("2026-11-20").day == 20
+
+
+@respx.mock
+async def test_network_error_before_publish_is_retried(client, store):
+    respx.post(f"{API}/1789/media").respond(json={"id": "C1"})
+    respx.get(f"{API}/C1").mock(side_effect=httpx.ConnectError("down"))
+    p = store.schedule("image", {"image_url": "https://x/1.jpg"}, utcnow() - timedelta(seconds=5))
+    res = await camp.run_due(client, store)
+    assert res["retrying"] and store.get_scheduled(p["id"])["status"] == "pending"

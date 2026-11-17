@@ -158,3 +158,67 @@ async def test_competitor_profile_flattens_media(client):
     res = await client.get_competitor_profile("@rival")
     assert res["recent_media"][0]["id"] == "R1" and "media" not in res
     assert "business_discovery.username(rival)" in route.calls.last.request.url.params["fields"]
+
+
+# ---------------------------------------------------------------- regressions
+@respx.mock
+async def test_cached_response_is_not_mutated_by_callers(settings):
+    from src.instagram_client import InstagramClient
+
+    c = InstagramClient(settings.model_copy(update={"cache_enabled": True}),
+                        http_client=httpx.AsyncClient())
+    route = respx.get(f"{API}/1789").respond(json={"business_discovery": {
+        "username": "rival", "media": {"data": [{"id": "R1"}]}}})
+    try:
+        first = await c.get_competitor_profile("rival")
+        second = await c.get_competitor_profile("rival")
+    finally:
+        await c.close()
+    assert route.call_count == 1  # second call served from cache
+    assert first["recent_media"] == second["recent_media"] == [{"id": "R1"}]
+
+
+@respx.mock
+async def test_http_error_without_graph_error_body_raises(client):
+    respx.get(f"{API}/M1").respond(500, json={})
+    with pytest.raises(InstagramAPIError, match="HTTP 500"):
+        await client.get_media("M1")
+
+
+@respx.mock
+async def test_429_with_non_json_body_is_rate_limit(client):
+    respx.get(f"{API}/M1").respond(429, text="Too Many Requests")
+    with pytest.raises(RateLimitExceeded):
+        await client.get_media("M1")
+
+
+@respx.mock
+async def test_insights_raise_when_every_metric_fails(client):
+    respx.get(f"{API}/BAD/insights").respond(
+        400, json={"error": {"message": "Unsupported get request", "code": 100}})
+    with pytest.raises(InstagramAPIError, match="Unsupported"):
+        await client.get_media_insights("BAD", media_product_type="FEED")
+
+
+def test_hashtag_limit_counts_hashtags_not_hash_signs():
+    from src.instagram_client import caption_problem
+
+    assert caption_problem("C# tips " + "# " * 40) is None
+    assert caption_problem(" ".join(f"#t{i}" for i in range(31)))
+
+
+@respx.mock
+async def test_dm_uses_page_token_and_page_endpoint(client):
+    respx.get(f"{API}/me/accounts").respond(json={"data": [
+        {"id": "P0", "instagram_business_account": {"id": "other"}},
+        {"id": "P1", "instagram_business_account": {"id": "1789"}}]})
+    token = respx.get(f"{API}/P1").respond(json={"access_token": "page_tok", "id": "P1"})
+    send = respx.post(f"{API}/P1/messages").respond(json={"message_id": "x"})
+
+    await client.send_dm("IGSID", "hello")
+    await client.send_dm("IGSID", "again", page_id="P1")
+
+    assert token.call_count == 1  # page token is cached
+    req = send.calls.last.request
+    assert req.headers["Authorization"] == "Bearer page_tok"
+    assert _body(send.calls[0]) == {"recipient": {"id": "IGSID"}, "message": {"text": "hello"}}

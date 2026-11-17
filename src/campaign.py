@@ -19,6 +19,7 @@ from .instagram_client import (
     InstagramAPIError,
     InstagramClient,
     RateLimitExceeded,
+    caption_problem,
 )
 from .scoring import ScoringConfig, compare_variants, score_posts
 from .store import CampaignStore, parse_dt, utcnow
@@ -51,7 +52,9 @@ def validate_payload(kind: str, payload: Dict[str, Any]) -> None:
         "carousel": ["items"],
         "reel": ["video_url"],
         "story": [],
-    }[kind]
+    }.get(kind)
+    if required is None:
+        raise ValueError(f"Unknown post kind: {kind}")
     missing = [k for k in required if not payload.get(k)]
     if missing:
         raise ValueError(f"{kind} post is missing: {', '.join(missing)}")
@@ -59,11 +62,11 @@ def validate_payload(kind: str, payload: Dict[str, Any]) -> None:
         raise ValueError("A carousel needs 2 to 10 items")
     if kind == "story" and bool(payload.get("image_url")) == bool(payload.get("video_url")):
         raise ValueError("A story needs exactly one of image_url or video_url")
-    caption = payload.get("caption") or ""
-    if len(caption) > 2200:
-        raise ValueError("Caption must be 2200 characters or less")
-    if caption.count("#") > 30:
-        raise ValueError("Instagram allows at most 30 hashtags per caption")
+    if kind == "reel" and payload.get("trial_graduation") not in (None, "MANUAL", "SS_PERFORMANCE"):
+        raise ValueError("trial_graduation must be MANUAL or SS_PERFORMANCE")
+    problem = caption_problem(payload.get("caption"))
+    if problem:
+        raise ValueError(problem)
 
 
 async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10) -> Dict[str, Any]:
@@ -84,8 +87,8 @@ async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10
             retrying.append({"id": post["id"], "error": e.message})
             break  # stop hammering the API this round
         except InstagramAPIError as e:
-            if e.network:
-                # The request may have reached Meta; retrying could double-post.
+            if e.maybe_published:
+                # media_publish may have reached Meta; retrying could double-post.
                 msg = f"{e.message} - check Instagram before retrying (reschedule_post)"
                 store.mark_failed(post["id"], msg, retry_in_minutes=None)
                 failed.append({"id": post["id"], "error": msg})

@@ -72,13 +72,21 @@ def to_iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
-def parse_dt(value: str) -> datetime:
-    """Parse ISO 8601 (with Z, offset, or naive = UTC). Also handles Meta's
-    +0000 offsets."""
-    v = value.strip().replace("Z", "+00:00")
-    if len(v) >= 5 and v[-5] in "+-" and v[-3] != ":":
+def parse_iso(value: str) -> datetime:
+    """Parse ISO 8601 as given (naive stays naive). Accepts Z and Meta's
+    +0000 offsets, which datetime.fromisoformat rejects before Python 3.11."""
+    v = value.strip()
+    if v.endswith(("Z", "z")):
+        v = v[:-1] + "+00:00"
+    # "+0000" / "-0530" offset after a time part -> "+00:00" / "-05:30"
+    if "T" in v and len(v) >= 5 and v[-5] in "+-" and v[-4:].isdigit():
         v = v[:-2] + ":" + v[-2:]
-    dt = datetime.fromisoformat(v)
+    return datetime.fromisoformat(v)
+
+
+def parse_dt(value: str) -> datetime:
+    """Parse ISO 8601 to an aware UTC datetime (naive = UTC)."""
+    dt = parse_iso(value)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
@@ -156,7 +164,14 @@ class CampaignStore:
         post = self.get_scheduled(post_id)
         if post["status"] not in ("pending", "failed"):
             raise ValueError(f"Post {post_id} is {post['status']}; only pending/failed can be cancelled")
-        self._set_status(post_id, "cancelled")
+        with self._tx() as c:
+            cur = c.execute(
+                "UPDATE scheduled_posts SET status='cancelled', updated_at=?"
+                " WHERE id=? AND status IN ('pending','failed')",
+                (to_iso(utcnow()), post_id),
+            )
+        if cur.rowcount != 1:  # claimed by the scheduler in the meantime
+            raise ValueError(f"Post {post_id} changed state; it can no longer be cancelled")
         return self.get_scheduled(post_id)
 
     def reschedule(self, post_id: int, publish_at: datetime) -> Dict[str, Any]:
@@ -164,11 +179,14 @@ class CampaignStore:
         if post["status"] not in ("pending", "failed", "cancelled"):
             raise ValueError(f"Post {post_id} is {post['status']} and can't be rescheduled")
         with self._tx() as c:
-            c.execute(
+            cur = c.execute(
                 "UPDATE scheduled_posts SET publish_at=?, status='pending', error=NULL,"
-                " updated_at=? WHERE id=?",
+                " attempts=0, updated_at=? WHERE id=?"
+                " AND status IN ('pending','failed','cancelled')",
                 (to_iso(publish_at), to_iso(utcnow()), post_id),
             )
+        if cur.rowcount != 1:
+            raise ValueError(f"Post {post_id} changed state; it can no longer be rescheduled")
         return self.get_scheduled(post_id)
 
     def claim_due(self, now: Optional[datetime] = None, limit: int = 10) -> List[Dict[str, Any]]:
@@ -180,13 +198,17 @@ class CampaignStore:
                 " ORDER BY publish_at LIMIT ?",
                 (now_iso, limit),
             ).fetchall()
-            ids = [r["id"] for r in rows]
-            for pid in ids:
-                c.execute(
+            ids = []
+            for r in rows:
+                cur = c.execute(
                     "UPDATE scheduled_posts SET status='publishing', attempts=attempts+1,"
                     " updated_at=? WHERE id=? AND status='pending'",
-                    (now_iso, pid),
+                    (now_iso, r["id"]),
                 )
+                # Another process (daemon vs MCP server) may have claimed it
+                # between the SELECT and this UPDATE: only keep what we won.
+                if cur.rowcount == 1:
+                    ids.append(r["id"])
         return [self.get_scheduled(pid) for pid in ids]
 
     def mark_published(self, post_id: int, media_id: str, permalink: Optional[str]) -> None:
@@ -234,13 +256,6 @@ class CampaignStore:
                 (to_iso(utcnow()), cutoff),
             )
         return cur.rowcount
-
-    def _set_status(self, post_id: int, status: str) -> None:
-        with self._tx() as c:
-            c.execute(
-                "UPDATE scheduled_posts SET status=?, updated_at=? WHERE id=?",
-                (status, to_iso(utcnow()), post_id),
-            )
 
     # ------------------------------------------------------------------
     # Labels

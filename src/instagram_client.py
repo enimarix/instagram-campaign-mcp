@@ -14,7 +14,9 @@ All methods return plain dicts so they serialise straight into MCP tool results.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
+import re
 import time
 from io import BytesIO
 from typing import Any, Dict, Iterable, List, Optional
@@ -50,6 +52,7 @@ MEDIA_FIELDS = (
     "id,caption,media_type,media_product_type,media_url,thumbnail_url,"
     "permalink,timestamp,like_count,comments_count"
 )
+HASHTAG_RE = re.compile(r"#\w+")
 ACCEPTED_FEED_RATIOS = {
     "4:5 portrait": (0.78, 0.82),
     "1:1 square": (0.98, 1.02),
@@ -70,8 +73,11 @@ class InstagramAPIError(Exception):
         self.error_code = error_code
         self.error_subcode = error_subcode
         # True when the request may or may not have reached Meta (timeout,
-        # dropped connection). For publishing this means "maybe published".
+        # dropped connection).
         self.network = False
+        # True only when the network failure hit the final media_publish call:
+        # the post may be live, so retrying could double-post.
+        self.maybe_published = False
         super().__init__(message)
 
 
@@ -98,6 +104,7 @@ class InstagramClient:
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
         )
         self._cache: Dict[str, Dict[str, Any]] = {}
+        self._page_tokens: Dict[str, str] = {}
 
     async def __aenter__(self):
         return self
@@ -129,18 +136,21 @@ class InstagramClient:
         params: Optional[Dict[str, Any]] = None,
         data: Optional[Dict[str, Any]] = None,
         use_cache: bool = False,
+        token: Optional[str] = None,
     ) -> Dict[str, Any]:
         params = dict(params or {})
         method = method.upper()
         cache_key = f"{endpoint}?{urlencode(sorted(params.items()))}"
+        use_cache = use_cache and token is None and self.settings.cache_enabled
 
-        if method == "GET" and use_cache and self.settings.cache_enabled:
+        if method == "GET" and use_cache:
             entry = self._cache.get(cache_key)
             if entry and entry["expires"] > time.monotonic():
-                return entry["data"]
+                # Copy so callers can't mutate the cached response.
+                return copy.deepcopy(entry["data"])
 
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = {"Authorization": f"Bearer {token or self.access_token}"}
 
         async with self.throttler:
             try:
@@ -162,6 +172,8 @@ class InstagramClient:
         try:
             payload = response.json()
         except (json.JSONDecodeError, ValueError) as e:
+            if response.status_code == 429:
+                raise RateLimitExceeded("Instagram API rate limit exceeded", 429) from e
             raise InstagramAPIError(
                 f"Invalid JSON response (HTTP {response.status_code})"
             ) from e
@@ -177,10 +189,14 @@ class InstagramClient:
 
         if response.status_code == 429:
             raise RateLimitExceeded("Instagram API rate limit exceeded", 429)
+        if response.status_code >= 400:
+            raise InstagramAPIError(f"HTTP {response.status_code} from {endpoint}")
+        if not isinstance(payload, dict):
+            raise InstagramAPIError(f"Unexpected response from {endpoint}: {payload!r}")
 
-        if method == "GET" and use_cache and self.settings.cache_enabled:
+        if method == "GET" and use_cache:
             self._cache[cache_key] = {
-                "data": payload,
+                "data": copy.deepcopy(payload),
                 "expires": time.monotonic() + self.settings.cache_ttl_seconds,
             }
         return payload
@@ -302,6 +318,10 @@ class InstagramClient:
                     raise
                 except InstagramAPIError as e:
                     unavailable[metric] = e.message
+            if not values:
+                # Every metric failed: the media itself is the problem (bad id,
+                # no permission...). Don't pass that off as "no metrics".
+                raise
         return {
             "media_id": media_id,
             "media_product_type": media_product_type,
@@ -315,7 +335,7 @@ class InstagramClient:
     async def _create_container(self, payload: Dict[str, Any]) -> str:
         clean = {k: v for k, v in payload.items() if v is not None}
         data = await self._make_request("POST", f"{self.account_id}/media", data=clean)
-        return data["id"]
+        return _require_id(data, "media container")
 
     async def get_container_status(self, container_id: str) -> Dict[str, Any]:
         return await self._make_request(
@@ -344,12 +364,17 @@ class InstagramClient:
 
     async def _publish_container(self, container_id: str) -> Dict[str, Any]:
         await self.wait_for_container(container_id)
-        data = await self._make_request(
-            "POST",
-            f"{self.account_id}/media_publish",
-            data={"creation_id": container_id},
-        )
-        media_id = data["id"]
+        try:
+            data = await self._make_request(
+                "POST",
+                f"{self.account_id}/media_publish",
+                data={"creation_id": container_id},
+            )
+        except InstagramAPIError as e:
+            if e.network:
+                e.maybe_published = True
+            raise
+        media_id = _require_id(data, "media_publish")
         result: Dict[str, Any] = {"media_id": media_id, "container_id": container_id}
         try:
             media = await self.get_media(media_id)
@@ -369,7 +394,9 @@ class InstagramClient:
             resp.raise_for_status()
             width, height = Image.open(BytesIO(resp.content)).size
         except Exception as e:  # noqa: BLE001 - surface any download/decode issue
-            raise InstagramAPIError(f"Could not download/read image {image_url}: {e}")
+            raise InstagramAPIError(f"Could not download/read image {image_url}: {e}") from e
+        if not width or not height:
+            raise InstagramAPIError(f"Image {image_url} has no size")
         ratio = width / height
         if not any(lo <= ratio <= hi for lo, hi in ACCEPTED_FEED_RATIOS.values()):
             raise InstagramAPIError(
@@ -574,15 +601,43 @@ class InstagramClient:
 
     # ------------------------------------------------------------------
     # DMs (instagram_manage_messages)
+    #
+    # The Messenger-platform endpoints for Instagram only accept a *Page*
+    # access token, so the user token is exchanged for the Page's token
+    # (kept in memory only, never returned to the caller).
     # ------------------------------------------------------------------
+    async def _resolve_page_id(self, page_id: Optional[str]) -> str:
+        if page_id:
+            return page_id
+        pages = await self.get_account_pages()
+        linked = [
+            p for p in pages
+            if (p.get("instagram_business_account") or {}).get("id")
+            == self.settings.instagram_business_account_id
+        ]
+        chosen = linked or pages
+        if not chosen:
+            raise InstagramAPIError("No Facebook Page found for this token.")
+        return chosen[0]["id"]
+
+    async def _page_token(self, page_id: str) -> str:
+        if page_id not in self._page_tokens:
+            data = await self._make_request(
+                "GET", page_id, params={"fields": "access_token"}
+            )
+            token = data.get("access_token")
+            if not token:
+                raise InstagramAPIError(
+                    f"Could not get a Page access token for page {page_id}. The token "
+                    "needs pages_show_list / pages_manage_metadata and a role on the Page."
+                )
+            self._page_tokens[page_id] = token
+        return self._page_tokens[page_id]
+
     async def get_conversations(
         self, page_id: Optional[str] = None, limit: int = 25
     ) -> List[Dict[str, Any]]:
-        if not page_id:
-            pages = await self.get_account_pages()
-            if not pages:
-                raise InstagramAPIError("No Facebook Page found for this token.")
-            page_id = pages[0]["id"]
+        page_id = await self._resolve_page_id(page_id)
         data = await self._make_request(
             "GET",
             f"{page_id}/conversations",
@@ -591,12 +646,14 @@ class InstagramClient:
                 "fields": "id,updated_time,message_count,participants",
                 "limit": min(limit, 100),
             },
+            token=await self._page_token(page_id),
         )
         return data.get("data", [])
 
     async def get_conversation_messages(
-        self, conversation_id: str, limit: int = 25
+        self, conversation_id: str, limit: int = 25, page_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
+        page_id = await self._resolve_page_id(page_id)
         data = await self._make_request(
             "GET",
             conversation_id,
@@ -604,26 +661,48 @@ class InstagramClient:
                 "fields": f"messages.limit({min(limit, 100)})"
                 "{id,from,to,message,created_time,attachments}"
             },
+            token=await self._page_token(page_id),
         )
         return data.get("messages", {}).get("data", [])
 
-    async def send_dm(self, recipient_id: str, message: str) -> Dict[str, Any]:
-        if len(message) > 1000:
-            raise InstagramAPIError("DM text must be 1000 characters or less")
+    async def send_dm(
+        self, recipient_id: str, message: str, page_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        if not message.strip():
+            raise InstagramAPIError("DM text is empty")
+        if len(message.encode("utf-8")) > 1000:
+            raise InstagramAPIError("DM text must be 1000 bytes (UTF-8) or less")
+        page_id = await self._resolve_page_id(page_id)
         return await self._make_request(
             "POST",
-            "me/messages",
+            f"{page_id}/messages",
             data={"recipient": {"id": recipient_id}, "message": {"text": message}},
+            token=await self._page_token(page_id),
         )
 
 
-def _check_caption(caption: Optional[str]) -> None:
+def caption_problem(caption: Optional[str]) -> Optional[str]:
+    """Why Instagram would reject this caption, or None if it looks fine."""
     if not caption:
-        return
+        return None
     if len(caption) > 2200:
-        raise InstagramAPIError("Caption must be 2200 characters or less")
-    if caption.count("#") > 30:
-        raise InstagramAPIError("Instagram allows at most 30 hashtags per caption")
+        return "Caption must be 2200 characters or less"
+    if len(HASHTAG_RE.findall(caption)) > 30:
+        return "Instagram allows at most 30 hashtags per caption"
+    return None
+
+
+def _check_caption(caption: Optional[str]) -> None:
+    problem = caption_problem(caption)
+    if problem:
+        raise InstagramAPIError(problem)
+
+
+def _require_id(data: Dict[str, Any], what: str) -> str:
+    media_id = data.get("id")
+    if not media_id:
+        raise InstagramAPIError(f"{what} returned no id: {data!r}")
+    return str(media_id)
 
 
 def _parse_insights(items: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
