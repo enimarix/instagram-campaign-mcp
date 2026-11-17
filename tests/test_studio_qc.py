@@ -7,6 +7,7 @@ from src.studio import ffmpeg, qc, render
 from tests.test_studio_ffmpeg import needs_ffmpeg
 from tests.test_studio_render import _asset, _claim
 
+BLACK = ",drawbox=t=fill:c=black:enable='between(t,1,4)'"  # 3 s of black
 TAGS6 = "Tip " + " ".join(f"#t{i}" for i in range(6))
 
 
@@ -14,10 +15,13 @@ def _settings(**kw):
     return InstagramMCPSettings(_env_file=None, instagram_access_token=None, **kw)
 
 
-def make(path, *, size="1080x1920", rate=30, duration=6, vf="", audio="tone"):
-    """A clip near the output spec: moving test pattern, a 440 Hz tone at about -14 LUFS."""
+def make(path, *, size="1080x1920", rate=30, duration=6, vf="", audio="tone", still=0):
+    """A clip near the output spec: moving test pattern (then `still` s of its last frame),
+    a 440 Hz tone at about -14 LUFS."""
+    if still:
+        vf += f",tpad=stop_mode=clone:stop_duration={still}"
     args = ["-f", "lavfi", "-i", f"testsrc2=size={size}:rate={rate}:duration={duration}{vf}"]
-    total = duration + (4 if "tpad" in vf else 0)
+    total = duration + still
     if audio:
         src = (f"sine=frequency=440:duration={total},volume=7.8dB" if audio == "tone"
                else f"anullsrc=r=48000:cl=mono:d={total}")
@@ -28,9 +32,10 @@ def make(path, *, size="1080x1920", rate=30, duration=6, vf="", audio="tone"):
 
 
 def check(tmp_path, name="clip.mp4", *, caption="Fun fact #8bit", idea=None, settings=None,
-          **clip):
+          kind="ffmpeg", **clip):
     make(tmp_path / name, **clip)
-    return qc.run_qc({"caption": caption}, idea, name, tmp_path, settings or _settings())
+    asset = {"caption": caption, "recipe": {"kind": kind}}
+    return qc.run_qc(asset, idea, name, tmp_path, settings or _settings())
 
 
 def failed(result):
@@ -55,14 +60,26 @@ def test_good_clip_passes(tmp_path):
     ({"audio": None}, {}, ["audio", "loudness"]),
     ({"audio": "silence"}, {}, ["loudness"]),
     # 3 s of black is also 3 s frozen
-    ({"vf": ",drawbox=t=fill:c=black:enable='between(t,1,4)'"}, {}, ["black", "freeze"]),
-    ({"duration": 2, "vf": ",tpad=stop_mode=clone:stop_duration=4"}, {}, ["freeze"]),
+    ({"vf": BLACK}, {}, ["black", "freeze"]),
+    ({"duration": 2, "still": 4}, {}, ["freeze"]),
     ({"caption": TAGS6}, {}, ["caption"]),
 ])
 def test_failing_checks(tmp_path, clip, settings, names):
     r = check(tmp_path, settings=_settings(**settings), **clip)
     assert not r["passed"] and failed(r) == names
     assert r["reasons"] == [c["detail"] for c in r["checks"] if not c["ok"]]
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("kind, clip, names", [
+    # Motion title cards hold still on purpose: 5 s passes there (limit 8 s), not elsewhere.
+    ("motion", {"duration": 2, "still": 5}, []),
+    ("ffmpeg", {"duration": 2, "still": 5}, ["freeze"]),
+    ("motion", {"vf": BLACK}, ["black"]),  # black still fails (ffmpeg: test_failing_checks)
+])
+def test_motion_freeze_limit(tmp_path, kind, clip, names):
+    r = check(tmp_path, kind=kind, **clip)
+    assert failed(r) == names and r["passed"] == (not names)
 
 
 @needs_ffmpeg

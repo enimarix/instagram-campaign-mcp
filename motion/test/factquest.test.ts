@@ -8,14 +8,17 @@ const example = JSON.parse(readFileSync(new URL("../props/factquest.json", impor
 const fact = (i: number) => ({ text: `Fact ${i}` });
 const base = { hook: "Hook?", facts: [1, 2, 3].map(fact), outro: "Follow for level 2", citations: [] };
 
-test("the example props parse; loop defaults to true", () => {
+test("the example props parse; defaults: loop, overworld music", () => {
   assert.ok(factQuestSchema.safeParse(example).success);
   assert.equal(factQuestSchema.parse(base).loop, true);
+  assert.equal(factQuestSchema.parse(base).music, "music-overworld");
+  assert.equal(factQuestSchema.parse({ ...base, music: "none" }).music, "none");
 });
 
 test("schema rejects unknown keys, 2 or 6 facts, missing citations, bad voice lines", () => {
   const bad = (p: object) => assert.equal(factQuestSchema.safeParse(p).success, false, JSON.stringify(p));
   bad({ ...base, extra: 1 });
+  bad({ ...base, music: "sfx-coin" });
   bad({ ...base, facts: [{ text: "x", url: "y" }, fact(2), fact(3)] });
   bad({ ...base, facts: [1, 2].map(fact) });
   bad({ ...base, facts: [1, 2, 3, 4, 5, 6].map(fact) });

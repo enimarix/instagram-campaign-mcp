@@ -4,8 +4,8 @@ Python side of the Remotion templates in `motion/` (GOAL.md §3.1, §4.1, §5.6)
 - `motion/schemas.mjs` exports every template's props schema (JSON Schema, defaults) and
   validates props with the template's own Zod schema: the same check and message as a render.
 - `motion/render.mjs` renders a video or a still from a bundle. Bundling is slow and crashes
-  when two run at once (step 006a), so this process bundles once, under a lock, and every
-  render reuses that bundle.
+  when two run at once (step 006a), so this process bundles once, under a lock shared by every
+  process on the machine (the worker and the MCP server), and every render reuses that bundle.
 
 Recipes store the voice audio as a media path (`voice.audioSrc`, relative to the media root);
 a render copies it into the bundle's `public/` and hands Remotion that URL instead.
@@ -15,6 +15,7 @@ Node: `NODE_BIN` (a full path or a command name) overrides `node` on PATH.
 from __future__ import annotations
 
 import atexit
+import contextlib
 import functools
 import json
 import os
@@ -23,14 +24,20 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
 from . import ffmpeg, media, recipe, render  # render.py imports this module back
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 MOTION_DIR = Path(__file__).resolve().parents[2] / "motion"
 SCHEMA_TIMEOUT_S = 60.0
@@ -114,6 +121,37 @@ def build_props(template: str, props: Dict[str, Any], settings: InstagramMCPSett
 
 _bundle_lock = threading.Lock()
 _bundle: Optional[Path] = None
+# Next to the cache the bundler shares between processes (git-ignored with node_modules/).
+BUNDLE_LOCK_FILE = MOTION_DIR / "node_modules" / ".growth-studio-bundle.lock"
+
+
+@contextlib.contextmanager
+def file_lock(path: Path, timeout_s: float, poll_s: float = 0.2) -> Iterator[None]:
+    """Hold an exclusive OS lock on `path` across processes (and across handles in one
+    process); the OS drops it when the holder dies, so a crash leaves no stale lock.
+    MotionError when another holder keeps it past `timeout_s`."""
+    with open(path, "a+b") as f:
+        deadline = time.monotonic() + timeout_s
+        while True:
+            try:
+                if sys.platform == "win32":
+                    f.seek(0)
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise MotionError(f"{path.name} still locked after {timeout_s:g} s") from None
+                time.sleep(poll_s)
+        try:
+            yield
+        finally:
+            if sys.platform == "win32":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def bundle_dir() -> Path:
@@ -123,7 +161,11 @@ def bundle_dir() -> Path:
     with _bundle_lock:
         if _bundle is None or not (_bundle / "index.html").is_file():
             path = Path(tempfile.gettempdir()) / f"growth-studio-motion-{os.getpid()}"
-            _node("render.mjs", ["--bundle-only", "--bundle", path], timeout_s=BUNDLE_TIMEOUT_S)
+            find_node()  # clear error before touching node_modules/
+            # Another process may be bundling: wait for it (up to one bundle's time).
+            with file_lock(BUNDLE_LOCK_FILE, timeout_s=BUNDLE_TIMEOUT_S):
+                _node("render.mjs", ["--bundle-only", "--bundle", path],
+                      timeout_s=BUNDLE_TIMEOUT_S)
             atexit.register(shutil.rmtree, path, True)
             _bundle = path
         return _bundle

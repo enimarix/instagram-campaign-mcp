@@ -31,6 +31,8 @@ export const factQuestSchema = z
      * none = timings estimated from the text length. `audioSrc`: URL or `staticFile()` path.
      */
     voice: z.strictObject({ audioSrc: z.string().min(1).optional(), lines: z.array(voiceLine).optional() }).optional(),
+    /** Background loop under everything (src/assets.ts), or "none". */
+    music: z.enum(["music-overworld", "music-cave", "none"]).default("music-overworld"),
     /** Fade back into frame 0 at the end so the Reel loops seamlessly. */
     loop: z.boolean().default(true),
     /** Template colours (background, headings, wipes); the kit components keep the brand's. */

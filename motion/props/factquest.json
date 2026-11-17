@@ -14,6 +14,7 @@
     { "url": "https://en.wikipedia.org/wiki/Human_skin", "title": "Human skin" }
   ],
   "sourcesNote": "Sources dans la légende",
+  "music": "music-overworld",
   "loop": true,
   "safeZone": false
 }
