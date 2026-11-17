@@ -103,7 +103,7 @@ dropped (with a line under *Follow-ups* saying why).
 - [x] 008 — Website password — optional `UI_PASSWORD`; when set, every `/api/*` route except health and login needs a session cookie (`HttpOnly`, `SameSite=Strict`, `Secure` when served over HTTPS); state-changing requests are refused when the `Origin` header is not the site's own; login compares in constant time and locks for a while after repeated failures; the server refuses to bind a non-loopback host without a password; tests for both modes, for a cross-site POST and for the lock. — deps: 007 · touches: `src/api/`, `src/config.py`, `tests/`
 - [x] 009 — Website scaffold — `web/` (React, Vite, TypeScript, Tailwind) with app layout, navigation (Inbox, Calendar, Analytics, Learnings, Ads, Settings), typed API client, dev proxy to the API, Vitest set up with one test; a new CI job installs, lints, tests and builds `web/`. — deps: 001 · touches: `web/`, `.github/workflows/ci.yml`
 - [x] 010 — Serve the website from the API — the built `web/dist` is served by FastAPI with SPA fallback; `ig-campaign up` starts API and worker together; README gets a "Run the studio" section. — deps: 007, 009 · touches: `src/api/`, `src/scheduler.py`, `README.md`
-- [ ] 011 — Media storage and serving — helper for `data/media/<date>/<asset_id>/` paths; `GET /api/media/...` streams files with HTTP range support, needs the session like any other route, and rejects path traversal; tests for range, 404 and traversal. — deps: 008 · touches: `src/api/`, `src/studio/media.py`, `tests/`
+- [x] 011 — Media storage and serving — helper for `data/media/<date>/<asset_id>/` paths; `GET /api/media/...` streams files with HTTP range support, needs the session like any other route, and rejects path traversal; tests for range, 404 and traversal. — deps: 008 · touches: `src/api/`, `src/studio/media.py`, `tests/`
 
 ### Phase 2 — Review inbox and publishing from local files
 
@@ -242,6 +242,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 011 — Media storage and serving — https://github.com/enimarix/instagram-campaign-mcp/pull/28 (2026-11-17) — src/studio/media.py (relative POSIX paths, traversal-safe resolve), GET /api/media with Range, *_url fields in assets API, MEDIA_ROOT setting
 - [x] 022 — Slot planner v2 — https://github.com/enimarix/instagram-campaign-mcp/pull/25 (2026-11-17) — get_online_followers (None when Meta has no data; metric no longer in the docs table), audience_hours (migration 4), window_weights; worker job comes in 026
 - [x] 012 — Assets API — https://github.com/enimarix/instagram-campaign-mcp/pull/24 (2026-11-17) — /api/assets list/get/verdict/approve/unapprove/archive/PATCH caption+best_before via transition(owner)
 - [x] 014 — Dev seed — https://github.com/enimarix/instagram-campaign-mcp/pull/23 (2026-11-17) — `ig-campaign dev seed` (both tracks, all statuses via transition(), 30 KB sample mp4, --force guard)
