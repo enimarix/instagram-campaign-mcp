@@ -107,7 +107,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ### Phase 2 — Review inbox and publishing from local files
 
-- [ ] 012 — Assets API — list (by batch date, status, verdict, track; default order: agent `self_score` high to low), get, like / dislike (sets `verdict` only), approve / unapprove, archive, edit caption and best-before; status moves go through `transition()`; tests. — deps: 004, 008 · touches: `src/api/`, `src/studio/assets.py`, `tests/`
+- [x] 012 — Assets API — list (by batch date, status, verdict, track; default order: agent `self_score` high to low), get, like / dislike (sets `verdict` only), approve / unapprove, archive, edit caption and best-before; status moves go through `transition()`; tests. — deps: 004, 008 · touches: `src/api/`, `src/studio/assets.py`, `tests/`
 - [ ] 013 — Feedback API — add, list, edit and delete comments on an asset, with reason codes from the taxonomy and an optional video time; a comment with `wants_changes` moves a `ready` asset to `revision_requested`; no comment ever publishes anything; tests. — deps: 005, 012 · touches: `src/api/`, `src/studio/feedback.py`, `tests/`
 - [x] 014 — Dev seed — `ig-campaign dev seed` creates a fake batch (one tiny committed sample video under 50 KB that we generated ourselves, several statuses and verdicts, both tracks) so the website can be built before the pipeline exists; never runs against a non-empty production database without `--force`. — deps: 004, 005 · touches: `src/studio/seed.py`, `src/scheduler.py`, `tests/`
 - [ ] 015 — Inbox page — phone-first feed of one day's batch, best agent score first: inline player that plays the light preview copy (`muted`, `playsinline`, so iOS Safari plays it inline), like / dislike (also by swipe on touch screens), a one-tap reason sheet after a dislike (skippable), status chips, explore badge, the agent's score and one-line reason, date picker, filters (track, status, verdict), counters ("12 of 25 reviewed"); large touch targets and keyboard shortcuts on desktop; component tests. — deps: 009, 012, 014 · touches: `web/`
@@ -242,6 +242,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 012 — Assets API — https://github.com/enimarix/instagram-campaign-mcp/pull/24 (2026-11-17) — /api/assets list/get/verdict/approve/unapprove/archive/PATCH caption+best_before via transition(owner)
 - [x] 014 — Dev seed — https://github.com/enimarix/instagram-campaign-mcp/pull/23 (2026-11-17) — `ig-campaign dev seed` (both tracks, all statuses via transition(), 30 KB sample mp4, --force guard)
 - [x] 031 — ffmpeg wrapper — https://github.com/enimarix/instagram-campaign-mcp/pull/22 (2026-11-17) — src/studio/ffmpeg.py find/probe/run (timeout, log), installers hint, CI installs ffmpeg
 - [x] 010 — Serve the website from the API — https://github.com/enimarix/instagram-campaign-mcp/pull/21 (2026-11-17) — web/dist with SPA fallback, `ig-campaign up` (API + worker), loopback-only Host guard without password, README "Run the studio"
