@@ -3,6 +3,7 @@
 import asyncio
 
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 
 from src import scheduler
@@ -96,7 +97,6 @@ async def test_up_runs_worker_and_stops_it_with_the_server(settings, monkeypatch
         async def serve(self):  # stands in for uvicorn: returns as on Ctrl+C
             await asyncio.wait_for(ran.wait(), 5)
 
-    import uvicorn
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr(scheduler, "get_settings", lambda: settings)
     monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)
@@ -111,3 +111,12 @@ async def test_up_runs_worker_and_stops_it_with_the_server(settings, monkeypatch
 async def test_up_worker_idles_in_setup_mode(tmp_path, capsys):
     await asyncio.wait_for(scheduler._worker(_settings(tmp_path)), 1)
     assert "publishing is idle" in capsys.readouterr().err
+
+
+async def test_up_worker_failure_is_reported(settings, monkeypatch, capsys):
+    def broken_store(path):
+        raise RuntimeError("database is newer than this code")
+
+    monkeypatch.setattr(scheduler, "CampaignStore", broken_store)
+    await asyncio.wait_for(scheduler._worker(settings), 1)
+    assert "worker stopped" in capsys.readouterr().err

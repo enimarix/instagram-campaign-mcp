@@ -62,12 +62,16 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
     if not settings.instagram_configured:
         print(f"worker: {NOT_CONFIGURED}; publishing is idle.", file=sys.stderr, flush=True)
         return
-    store = CampaignStore(settings.database_path)
     try:
-        async with InstagramClient(settings) as client:
-            await _daemon(client, store, interval, stories_every)
-    finally:
-        store.close()
+        store = CampaignStore(settings.database_path)
+        try:
+            async with InstagramClient(settings) as client:
+                await _daemon(client, store, interval, stories_every)
+        finally:
+            store.close()
+    except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: say so, keep the API up
+        print(f"worker stopped: {e!r}; publishing is off until restart.", file=sys.stderr,
+              flush=True)
 
 
 async def _up(host: str, port: int) -> None:
