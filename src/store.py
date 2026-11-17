@@ -851,6 +851,37 @@ class CampaignStore:
             out.setdefault(d["media_id"], []).append(d)
         return out
 
+    def media_snapshots(self, media_id: str) -> List[Dict[str, Any]]:
+        """One post's snapshots, oldest first (indexed on media_id, captured_at)."""
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT * FROM insight_snapshots WHERE media_id=? ORDER BY captured_at, id",
+                (media_id,),
+            ).fetchall()
+        return [{**dict(r), "metrics": json.loads(r["metrics"])} for r in rows]
+
+    def snapshots_near_age(
+        self, media_ids: Sequence[str], age_hours: float, min_age_hours: float
+    ) -> Dict[str, Dict[str, Any]]:
+        """Per media: the snapshot aged >= min_age_hours whose age is closest to age_hours
+        (ties: the earliest captured). One query on the (media_id, captured_at) index."""
+        if not media_ids:
+            return {}
+        marks = ",".join("?" * len(media_ids))
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY media_id"
+                " ORDER BY ABS(age_hours - ?), captured_at, id) AS rn FROM insight_snapshots"
+                f" WHERE media_id IN ({marks}) AND age_hours >= ?) WHERE rn = 1",
+                (age_hours, *media_ids, min_age_hours),
+            ).fetchall()
+        out = {}
+        for r in rows:
+            d = {k: r[k] for k in r.keys() if k != "rn"}
+            d["metrics"] = json.loads(d["metrics"])
+            out[d["media_id"]] = d
+        return out
+
     def latest_snapshots(self) -> List[Dict[str, Any]]:
         """Most recent snapshot per media, newest posts first."""
         with self._tx() as c:

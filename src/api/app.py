@@ -28,6 +28,7 @@ from ..store import CampaignStore
 from . import agent, assets, bench, context, feedback, media, render, research, worker
 from . import settings as settings_routes
 from . import token as token_routes
+from .analytics import router as analytics_router
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 from .calendar import router as calendar_router
 
@@ -155,6 +156,7 @@ def create_app(
     app.include_router(context.router)
     app.include_router(worker.router)
     app.include_router(render.router)
+    app.include_router(analytics_router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 

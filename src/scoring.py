@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from statistics import mean, median
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 DEFAULT_WEIGHTS: Dict[str, float] = {
     "shares": 3.0,
@@ -33,6 +33,9 @@ RATIO_CAP = 5.0          # one freak metric can't carry a post
 SMOOTHING = 0.0005       # avoids divide-by-zero when the baseline rate is ~0
 STORY_MIN_AGE_HOURS = 20.0
 STORY_LIFETIME = timedelta(hours=24)
+# near_age(media_ids, age_hours, min_age_hours) -> {media_id: snapshot}: per media, the
+# matured snapshot whose age is closest (CampaignStore.snapshots_near_age).
+NearAge = Callable[[Sequence[str], float, float], Dict[str, Dict[str, Any]]]
 # Second way to win: reach this many times the median with at least median
 # engagement (a post that travelled far without diluting engagement).
 REACH_WINNER_INDEX = 2.0
@@ -73,12 +76,13 @@ def _signal_value(metrics: Dict[str, Any], signal: str) -> Optional[float]:
     return value / reach if reach > 0 else None
 
 
+def _min_age(group: str, cfg: ScoringConfig) -> float:
+    return STORY_MIN_AGE_HOURS if group == "STORY" else cfg.min_age_hours
+
+
 def _is_matured(snap: Dict[str, Any], cfg: ScoringConfig) -> bool:
     age = snap.get("age_hours")
-    if age is None:
-        return False
-    limit = STORY_MIN_AGE_HOURS if group_of(snap) == "STORY" else cfg.min_age_hours
-    return age >= limit
+    return age is not None and age >= _min_age(group_of(snap), cfg)
 
 
 def _story_expired(snap: Dict[str, Any], now: datetime) -> bool:
@@ -120,11 +124,13 @@ def score_posts(
     labels: Optional[Dict[str, Dict[str, Any]]] = None,
     history: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     now: Optional[datetime] = None,
+    near_age: Optional[NearAge] = None,
 ) -> List[Dict[str, Any]]:
     """Score the latest snapshot of each post. Returns newest-first list.
 
-    history: all snapshots per media_id (optional). When given, each baseline
-    post is read at the age closest to the scored post's age.
+    Each baseline post is read at the age closest to the scored post's age, from
+    `near_age` (one indexed query per matured post) or else `history` (all snapshots
+    per media_id, in memory). Without either, baselines use their latest snapshot.
     """
     cfg = cfg or ScoringConfig()
     labels = labels or {}
@@ -140,10 +146,14 @@ def score_posts(
         grp = group_of(snap)
         metrics = snap.get("metrics") or {}
         reach = _num(metrics.get("reach"))
-        baseline = [
-            _at_age(b, history, snap.get("age_hours"), cfg)
-            for b in matured_by_group.get(grp, []) if b["media_id"] != snap["media_id"]
-        ][: cfg.baseline_window]
+        others = [b for b in matured_by_group.get(grp, [])
+                  if b["media_id"] != snap["media_id"]][: cfg.baseline_window]
+        age = snap.get("age_hours")
+        if near_age is not None and others and _is_matured(snap, cfg):
+            found = near_age([b["media_id"] for b in others], age, _min_age(grp, cfg))
+            baseline = [found.get(b["media_id"], b) for b in others]
+        else:  # unmatured posts only count their baseline: no query needed
+            baseline = [_at_age(b, history, age, cfg) for b in others]
 
         res: Dict[str, Any] = {
             "media_id": snap["media_id"],
