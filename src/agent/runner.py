@@ -223,9 +223,9 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     timeout_s = timeout_s or settings.agent_timeout_minutes * 60
     held = store.running_agent_run(name)
     if held:
-        # A run left `running` by a crash or power cut would hold the lock forever.
+        # A run left `running` by a crash or power cut would hold the lock forever. Its own
+        # --timeout is unknown here: past a day (or this timeout) it is surely dead.
         # ponytail: check-then-insert, two starts in the same instant could both pass.
-        # Its own --timeout is unknown here: a day (or this timeout) is surely dead.
         stale_after = timedelta(seconds=max(timeout_s + 600, 24 * 3600))
         if utcnow() - parse_iso(held["started_at"]) < stale_after:
             raise AgentRunRefused(f"playbook {name!r} is already running (run {held['id']})")
@@ -234,19 +234,20 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     log_dir.mkdir(parents=True, exist_ok=True)
     run = store.start_agent_run(name)
     log = log_dir / f"{run['id']}.log"
-    status, summary, usage = "failed", "", None
+    status, summary, usage = "failed", "interrupted", None
     try:
         exe = preflight(settings)
         config = prepare_workspace(settings, name, agent_dir=agent_dir)
+        ws = config.parent.parent
         cmd = [exe, *build_command(settings, name, config, max_turns=max_turns,
                                    dry_run=dry_run)[1:]]
         env = {**os.environ, "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
         with log.open("w", encoding="utf-8") as err, tempfile.TemporaryFile() as out:
-            err.write(f"run {run['id']} playbook {name}\ncwd {config.parent.parent}\n"
+            err.write(f"run {run['id']} playbook {name}\ncwd {ws}\n"
                       f"command {json.dumps(cmd)}\n--- stderr\n")
             err.flush()
             with keep_awake():
-                proc = subprocess.Popen(cmd, cwd=config.parent.parent, stdin=subprocess.DEVNULL,
+                proc = subprocess.Popen(cmd, cwd=ws, stdin=subprocess.DEVNULL,
                                         stdout=out, stderr=err, env=env,
                                         start_new_session=sys.platform != "win32")
                 try:
