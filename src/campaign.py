@@ -94,21 +94,21 @@ def validate_payload(kind: str, payload: Dict[str, Any]) -> None:
         raise ValueError(problem)
 
 
-def _asset_outcome(store: CampaignStore, post: Dict[str, Any], to_status: str) -> None:
+def _asset_outcome(store: CampaignStore, asset_id: Optional[int], to_status: str) -> None:
     """Keep a queued studio asset's status truthful after its publish (GOAL.md §4.3).
     Never raises: the post's own outcome is already recorded."""
-    if post["asset_id"] is None:
+    if asset_id is None:
         return
     try:
-        transition(store, post["asset_id"], to_status, actor="worker")
+        transition(store, asset_id, to_status, actor="worker")
     except InvalidTransition as e:
-        logger.warning("asset_outcome_not_applied", post_id=post["id"], error=str(e))
+        logger.warning("asset_outcome_not_applied", asset_id=asset_id, error=str(e))
 
 
 async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10) -> Dict[str, Any]:
     stuck = store.recover_stuck()
     for asset_id in store.unsettled_assets():  # interrupted publishes: outcome unknown
-        _asset_outcome(store, {"id": None, "asset_id": asset_id}, "publish_check")
+        _asset_outcome(store, asset_id, "publish_check")
     published, failed, retrying = [], [], []
     for _ in range(limit):
         # Claim one at a time so nothing is left in 'publishing' if we stop early.
@@ -130,7 +130,7 @@ async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10
             )
             store.mark_published(post["id"], result["media_id"], result.get("permalink"))
             published.append({"id": post["id"], **result})
-            _asset_outcome(store, post, "published")
+            _asset_outcome(store, post["asset_id"], "published")
         except RateLimitExceeded as e:
             store.mark_failed(post["id"], f"Rate limited: {e.message}",
                               retry_in_minutes=BACKOFF_MINUTES, count_attempt=False)
@@ -149,7 +149,7 @@ async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10
                 msg = f"{e.message} - check Instagram before retrying (reschedule_post)"
                 store.mark_failed(post["id"], msg, retry_in_minutes=None)
                 failed.append({"id": post["id"], "error": msg})
-                _asset_outcome(store, post, "publish_check")
+                _asset_outcome(store, post["asset_id"], "publish_check")
                 continue
             permanent = isinstance(e, InvalidMedia) or e.error_subcode in PERMANENT_SUBCODES
             if not permanent and post["attempts"] < MAX_ATTEMPTS:
@@ -158,11 +158,11 @@ async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10
             else:
                 store.mark_failed(post["id"], e.message, retry_in_minutes=None)
                 failed.append({"id": post["id"], "error": e.message})
-                _asset_outcome(store, post, "approved")  # failed for good, not on Instagram
+                _asset_outcome(store, post["asset_id"], "approved")  # failed for good, not on Instagram
         except Exception as e:  # noqa: BLE001 - never leave a post stuck in 'publishing'
             store.mark_failed(post["id"], f"Unexpected: {e}", retry_in_minutes=None)
             failed.append({"id": post["id"], "error": str(e)})
-            _asset_outcome(store, post, "publish_check")  # may have reached Instagram
+            _asset_outcome(store, post["asset_id"], "publish_check")  # may have reached Instagram
     return {
         "published": published,
         "retrying": retrying,
