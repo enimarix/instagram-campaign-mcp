@@ -37,7 +37,7 @@ function Bars({ tag, groups, metric }: { tag: string; groups: BreakdownGroup[]; 
         const v = value(g, metric)
         const range = metric === 'engagement_index' ? g.engagement_index : null
         return (
-          <li key={String(g.tag_value)} className={`text-sm ${g.small_sample ? 'text-gray-400' : ''}`}>
+          <li key={String(g.tag_value)} className={`text-sm ${g.small_sample ? 'text-gray-500' : ''}`}>
             <div className="flex justify-between gap-2">
               <span className="truncate">{label(tag, g.tag_value)}</span>
               <span className="font-semibold tabular-nums">{format(v)}</span>

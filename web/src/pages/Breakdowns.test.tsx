@@ -56,8 +56,8 @@ describe('Breakdowns', () => {
     expect(items.map((li) => li.firstElementChild?.textContent)).toEqual(['question1.5×', 'bold_claim1.25×', 'untagged0.75×'])
     expect(within(items[0]).getByText('n = 5 · middle half 1.25×–1.75×')).toBeTruthy()
     expect(within(items[1]).getByText(/n = 2, too few to trust/)).toBeTruthy()
-    expect(items[1].className).toContain('text-gray-400')
-    expect(items[0].className).not.toContain('text-gray-400')
+    expect(items[1].className).toContain('text-gray-500')
+    expect(items[0].className).not.toContain('text-gray-500')
   })
 
   it('refetches when the tag or post type changes', async () => {
