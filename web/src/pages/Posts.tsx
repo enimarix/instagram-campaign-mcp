@@ -54,7 +54,9 @@ export default function Posts() {
   const loadMore = () => {
     setMore({ ...extra, busy: true, error: undefined })
     listAnalyticsPosts({ ...query, offset: posts.length, limit: PAGE }).then(
-      (r) => setMore((m) => (m.key === key ? { key, posts: [...m.posts, ...r.posts] } : m)),
+      // a post published meanwhile shifts the offsets: skip rows already shown
+      (r) => setMore((m) => (m.key === key
+        ? { key, posts: [...m.posts, ...r.posts.filter((p) => !posts.some((q) => q.media_id === p.media_id))] } : m)),
       (e: unknown) => setMore((m) => (m.key === key ? { ...m, busy: false, error: errorMessage(e) } : m)))
   }
 
