@@ -9,13 +9,13 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 import respx
+import structlog
 from fastapi.testclient import TestClient
 
 from src import config, scheduler
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.instagram_client import InstagramClient
-from src.logging_setup import configure_logging
 from src.studio import token as token_mod
 from src.studio.token import RefreshRefused, refresh_token, token_status
 
@@ -83,7 +83,7 @@ async def test_status_invalid_token_and_self_inspection():
 
 @respx.mock
 def test_bad_app_credentials_are_an_error_not_an_invalid_token(
-        real_logging, env_file, monkeypatch, capsys):
+        cli_logging, env_file, monkeypatch, capsys):
     respx.get(f"{API}/debug_token").mock(return_value=httpx.Response(
         400, json={"error": {"code": 190, "message": "Invalid OAuth access token"}}))
     assert _cli(["token", "status"], _settings(), env_file, monkeypatch) == 1
@@ -159,11 +159,16 @@ async def test_refresh_refuses(env_file, monkeypatch, kw, env, why):
 
 
 @pytest.fixture
-def real_logging():
-    """The CLI's configure_logging binds loggers to capsys's stream, closed after the test:
-    rebind to the session's stderr. Request it before capsys so it tears down after it."""
-    yield
-    configure_logging()
+def cli_logging(monkeypatch, caplog):
+    """Run the CLI's real configure_logging, minus the global rebinding other tests rely on
+    (root handlers, structlog's stream); the httpx/httpcore levels it sets are put back."""
+    monkeypatch.setattr(logging, "basicConfig", lambda **kw: None)
+    monkeypatch.setattr(structlog, "configure", lambda **kw: None)
+    levels = {n: logging.getLogger(n).level for n in ("httpx", "httpcore")}
+    caplog.set_level(logging.DEBUG)
+    yield caplog
+    for name, level in levels.items():
+        logging.getLogger(name).setLevel(level)
 
 
 def _cli(argv, settings, env_file, monkeypatch):
@@ -175,7 +180,7 @@ def _cli(argv, settings, env_file, monkeypatch):
 
 
 @respx.mock
-def test_cli_never_prints_or_logs_the_token(real_logging, env_file, monkeypatch, capsys):
+def test_cli_never_prints_or_logs_the_token(cli_logging, env_file, monkeypatch, capsys):
     _debug(is_valid=True, expires_at=int(time.time() + 5 * DAY + 60), scopes=["instagram_basic"])
     _exchange()
     s = _settings(log_level="DEBUG")
@@ -183,13 +188,13 @@ def test_cli_never_prints_or_logs_the_token(real_logging, env_file, monkeypatch,
     assert _cli(["token", "refresh"], s, env_file, monkeypatch) == 0
     out = capsys.readouterr()
     assert '"days_left": 5' in out.out and "refreshed, expires on " in out.out
-    for text in (out.out, out.err):  # logs go to stderr (LOG_LEVEL=DEBUG)
+    for text in (out.out, out.err, cli_logging.text):  # every log record, DEBUG up
         assert TOKEN not in text and NEW not in text and "shh" not in text
     assert logging.getLogger("httpx").level >= logging.WARNING
     assert NEW in env_file.read_text()
 
 
-def test_cli_setup_mode_and_refusal(real_logging, env_file, monkeypatch, capsys):
+def test_cli_setup_mode_and_refusal(cli_logging, env_file, monkeypatch, capsys):
     assert _cli(["token", "status"], _settings(instagram_access_token=None),
                 env_file, monkeypatch) == 0
     assert "setup mode" in capsys.readouterr().err
