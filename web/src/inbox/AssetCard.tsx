@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { Link } from 'react-router'
 import type { Asset, Verdict } from '../api/client'
+import { ScheduledSlot } from './ScheduleSheet'
 import { button, chip } from './ui'
 
 const SWIPE_PX = 80 // horizontal travel that counts as a like / dislike
@@ -17,10 +18,12 @@ type Props = {
   current: boolean
   onVerdict: (v: Verdict) => void
   onApprove: () => void
+  onSchedule: () => void
+  onChange: (a: Asset) => void
   onFocus: () => void
 }
 
-export default function AssetCard({ asset: a, current, onVerdict, onApprove, onFocus }: Props) {
+export default function AssetCard({ asset: a, current, onVerdict, onApprove, onSchedule, onChange, onFocus }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
   const [dx, setDx] = useState(0)
@@ -137,7 +140,13 @@ export default function AssetCard({ asset: a, current, onVerdict, onApprove, onF
               Approve
             </button>
           )}
+          {a.status === 'approved' && (
+            <button type="button" onClick={onSchedule} className={`${button} bg-blue-600 text-white`}>
+              Schedule
+            </button>
+          )}
         </div>
+        {a.status === 'scheduled' && <ScheduledSlot assetId={a.id} onUnscheduled={onChange} />}
       </div>
     </article>
   )

@@ -15,6 +15,7 @@ import {
   type Taxonomy,
 } from '../api/client'
 import CommentThread from './CommentThread'
+import ScheduleSheet, { ScheduledSlot } from './ScheduleSheet'
 import { button, chip } from './ui'
 
 /** Only http(s) links are rendered: agent-written URLs could carry `javascript:`. */
@@ -61,6 +62,7 @@ function AssetPage({ id }: { id: number }) {
   const [caption, setCaption] = useState('')
   const [bestBefore, setBestBefore] = useState('')
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
+  const [scheduling, setScheduling] = useState(false)
 
   useEffect(() => {
     getTaxonomy().then(setTaxonomy, () => {}) // no labels: ids are shown instead
@@ -87,9 +89,15 @@ function AssetPage({ id }: { id: number }) {
     setError(null)
     try {
       setAsset(await fn())
+      return true
     } catch (e) {
       setError(errorMessage(e))
+      return false
     }
+  }
+
+  async function approve() {
+    if (await act(() => approveAsset(id))) setScheduling(true) // then the explicit second step
   }
 
   async function save(e: FormEvent) {
@@ -154,7 +162,7 @@ function AssetPage({ id }: { id: number }) {
           </button>
           {asset.status === 'ready' && (
             <>
-              <button type="button" onClick={() => act(() => approveAsset(id))} className={`${button} bg-blue-600 text-white`}>
+              <button type="button" onClick={approve} className={`${button} bg-blue-600 text-white`}>
                 Approve
               </button>
               <button type="button" onClick={() => act(() => archiveAsset(id))} className={`${button} bg-gray-100`}>
@@ -163,11 +171,27 @@ function AssetPage({ id }: { id: number }) {
             </>
           )}
           {asset.status === 'approved' && (
+            <button type="button" onClick={() => setScheduling(true)} className={`${button} bg-blue-600 text-white`}>
+              Schedule
+            </button>
+          )}
+          {(asset.status === 'approved' || asset.status === 'scheduled') && (
             <button type="button" onClick={() => act(() => unapproveAsset(id))} className={`${button} bg-gray-100`}>
               Unapprove
             </button>
           )}
         </div>
+        {asset.status === 'scheduled' && <ScheduledSlot assetId={id} onUnscheduled={setAsset} />}
+        {scheduling && (
+          <ScheduleSheet
+            assetId={id}
+            onClose={() => setScheduling(false)}
+            onScheduled={(a) => {
+              setAsset(a)
+              setScheduling(false)
+            }}
+          />
+        )}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         <form onSubmit={save} className="space-y-2">
           <label className="block text-sm font-medium">

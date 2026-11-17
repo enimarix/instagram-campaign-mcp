@@ -11,13 +11,13 @@ from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
-from ..store import CampaignStore
-from ..studio import assets
+from ..store import CampaignStore, utcnow
+from ..studio import assets, scheduling
 from ..studio.assets import InvalidTransition
 from ..studio.media import media_url
-from ..studio.publish import release_publish_check
+from ..studio.publish import QueueRefused, release_publish_check
 
 OWNER = "owner"
 
@@ -41,6 +41,8 @@ def call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     except InvalidTransition as e:
         return JSONResponse(status_code=409,
                             content={"error": "invalid_transition", "message": str(e)})
+    except QueueRefused as e:  # before ValueError: it is one
+        return JSONResponse(status_code=409, content={"error": e.code, "message": str(e)})
     except ValueError as e:
         return JSONResponse(status_code=422, content={"error": "invalid", "message": str(e)})
 
@@ -53,6 +55,11 @@ def with_urls(asset: dict) -> dict:
 
 class VerdictIn(BaseModel):
     verdict: str
+
+
+class ScheduleIn(BaseModel):
+    publish_at: AwareDatetime  # with an offset: a naive time would be guessed
+    confirmed: bool = False
 
 
 class AssetEdit(BaseModel):
@@ -87,13 +94,38 @@ def set_verdict(asset_id: int, body: VerdictIn, store: CampaignStore = Depends(g
 
 @router.post("/{asset_id}/approve")
 def approve(asset_id: int, store: CampaignStore = Depends(get_store)):
-    # Approve only opens the door to publishing; slots are planned elsewhere (019/023).
+    # Approve only opens the door to publishing; scheduling is the next, explicit step.
     return _call(assets.transition, store, asset_id, "approved", actor=OWNER)
 
 
 @router.post("/{asset_id}/unapprove")
 def unapprove(asset_id: int, store: CampaignStore = Depends(get_store)):
-    return _call(assets.transition, store, asset_id, "ready", actor=OWNER)
+    return _call(scheduling.unapprove, store, asset_id)
+
+
+@router.get("/{asset_id}/proposed-slot")
+def proposed_slot(asset_id: int, request: Request, store: CampaignStore = Depends(get_store)):
+    return call(scheduling.propose_slot, store, request.app.state.settings, asset_id, utcnow())
+
+
+@router.get("/{asset_id}/slot")
+def slot(asset_id: int, request: Request, store: CampaignStore = Depends(get_store)):
+    return call(scheduling.slot, store, request.app.state.settings, asset_id)
+
+
+@router.post("/{asset_id}/schedule")
+def schedule(asset_id: int, body: ScheduleIn, request: Request,
+             store: CampaignStore = Depends(get_store)):
+    def run():
+        out = scheduling.schedule_asset(store, request.app.state.settings, asset_id,
+                                        body.publish_at, body.confirmed)
+        return {**out, "asset": with_urls(out["asset"])}
+    return call(run)
+
+
+@router.post("/{asset_id}/unschedule")
+def unschedule(asset_id: int, store: CampaignStore = Depends(get_store)):
+    return _call(scheduling.unschedule, store, asset_id)
 
 
 @router.post("/{asset_id}/archive")
