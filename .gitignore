@@ -343,3 +343,7 @@ dev_settings.py
 .local/ 
 # Campaign data (schedule, labels, insight snapshots)
 data/
+
+# instagram-campaign-mcp: machine-specific / private files
+mcp-config.json
+data/
