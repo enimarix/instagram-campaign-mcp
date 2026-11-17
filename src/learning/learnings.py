@@ -131,8 +131,7 @@ def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
     items = _feedback_evidence(store, evidence_feedback_ids) + list(evidence or [])
     note = None
     if owner_instruction:
-        if origin != "taste" or kind not in ("do", "dont") or len(items) != 1 \
-                or not items[0].get("feedback_id"):
+        if origin != "taste" or kind not in ("do", "dont") or len(items) != 1:
             raise ValueError("an owner instruction is a taste do/dont citing exactly one"
                              " feedback id")
         if not (store.get_feedback(items[0]["feedback_id"])["text"] or "").strip():
@@ -149,7 +148,6 @@ def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
             note = (f"one piece of evidence: stored as a low-confidence hypothesis"
                     f" (asked {kind}/{confidence})")
             kind, confidence = "hypothesis", "low"
-        _check_caps(kind, confidence, items)
     row = store.add_learning(statement, kind, origin, scope=scope or {}, evidence=items,
                              confidence=confidence)
     return {"learning": row, "note": note}
