@@ -189,6 +189,22 @@ class InstagramMCPSettings(BaseSettings):
         240.0, gt=0, description="Longest wait_for_renders call (MCP clients time out long calls)"
     )
 
+    # --- Agent runs ---------------------------------------------------------
+    # `ig-campaign agent run <playbook>` (src/agent/runner.py): Claude Code headless, locked
+    # down (GOAL.md §4, third rule). The workspace must be outside the repo and APP_HOME.
+    agent_workspace: str = Field(
+        str(Path.home() / ".ig-campaign-agent"),
+        description="Agent working folder (playbook, skills, MCP config); refreshed each run",
+    )
+    agent_log_dir: str = Field(
+        str(APP_HOME / "data" / "logs" / "agent"), description="One log file per agent run"
+    )
+    claude_bin: str = Field("claude", description="Claude Code CLI executable")
+    agent_max_turns: int = Field(100, ge=1, description="Default --max-turns of a run")
+    agent_timeout_minutes: float = Field(
+        90.0, gt=0, description="Wall-clock limit of a run; the CLI is killed after it"
+    )
+
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(
         48.0, description="Posts younger than this are not judged yet"

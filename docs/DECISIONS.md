@@ -8,6 +8,19 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: The agent runner pre-approves only MCP and web tools; reads stay in the workspace
+`ig-campaign agent run` (src/agent/runner.py) keeps the built-ins to Read, Glob, Grep,
+WebSearch, WebFetch, Skill and ToolSearch (`--tools`), disallows every shell, write,
+subagent, publish and message tool by name, and pre-approves (`--allowedTools`) only
+`mcp__studio__*`, WebSearch and WebFetch. Read, Glob and Grep are not pre-approved: in
+`dontAsk` mode they run inside the workspace and are denied everywhere else.
+`--setting-sources project` keeps the owner's user settings, user CLAUDE.md, user skills and
+user-enabled plugins out; auto memory is off. Workspace default `~/.ig-campaign-agent`; it is
+refused inside the repo, APP_HOME or any git repository.
+Reason: GOAL.md §4 lists Read/Glob/Grep as allowed; a bare `Read` allow rule would approve
+reads anywhere on disk (other repos, `~/.claude`). Skill is needed for the project skills;
+ToolSearch for MCP tools Claude Code defers.
+
 ## 2026-11-17: Motion videos get a music bed and an 8 s freeze limit
 Every script template (FactQuest, BossBattle, QuizChest) plays a background music loop
 (`music`, default `music-overworld`, `none` to opt out), so a video without a voice still has
