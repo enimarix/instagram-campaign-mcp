@@ -99,7 +99,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ### Phase 1 — API and website shell
 
-- [ ] 007 — FastAPI skeleton — `src/api/app.py` with `GET /api/health` and `GET /api/account` (profile, token validity, publishing limit, all through existing client methods); `ig-campaign serve` starts it on `127.0.0.1`; tested with the FastAPI test client and a mocked Graph client. **Setup mode:** today `instagram_access_token` is a required setting, so nothing starts without a token, yet the token is gate H5 and the website, the dev seed (014), the render pipeline and the CI smoke test (099) must all work before it. Make the token optional at load time: the API, worker and website start without it, Graph-backed routes answer `503 {"error": "instagram_not_configured"}`, the worker skips publishing and insight jobs with one clear log line, and the MCP server starts too, its Graph-backed tools returning the same clear "not configured" error instead of the server failing to start. Tests for both modes. — deps: — · touches: `src/api/`, `src/config.py`, `src/scheduler.py`, `src/instagram_mcp_server.py`, `pyproject.toml`, `tests/`
+- [x] 007 — FastAPI skeleton — `src/api/app.py` with `GET /api/health` and `GET /api/account` (profile, token validity, publishing limit, all through existing client methods); `ig-campaign serve` starts it on `127.0.0.1`; tested with the FastAPI test client and a mocked Graph client. **Setup mode:** today `instagram_access_token` is a required setting, so nothing starts without a token, yet the token is gate H5 and the website, the dev seed (014), the render pipeline and the CI smoke test (099) must all work before it. Make the token optional at load time: the API, worker and website start without it, Graph-backed routes answer `503 {"error": "instagram_not_configured"}`, the worker skips publishing and insight jobs with one clear log line, and the MCP server starts too, its Graph-backed tools returning the same clear "not configured" error instead of the server failing to start. Tests for both modes. — deps: — · touches: `src/api/`, `src/config.py`, `src/scheduler.py`, `src/instagram_mcp_server.py`, `pyproject.toml`, `tests/`
 - [ ] 008 — Website password — optional `UI_PASSWORD`; when set, every `/api/*` route except health and login needs a session cookie (`HttpOnly`, `SameSite=Strict`, `Secure` when served over HTTPS); state-changing requests are refused when the `Origin` header is not the site's own; login compares in constant time and locks for a while after repeated failures; the server refuses to bind a non-loopback host without a password; tests for both modes, for a cross-site POST and for the lock. — deps: 007 · touches: `src/api/`, `src/config.py`, `tests/`
 - [ ] 009 — Website scaffold — `web/` (React, Vite, TypeScript, Tailwind) with app layout, navigation (Inbox, Calendar, Analytics, Learnings, Ads, Settings), typed API client, dev proxy to the API, Vitest set up with one test; a new CI job installs, lints, tests and builds `web/`. — deps: 001 · touches: `web/`, `.github/workflows/ci.yml`
 - [ ] 010 — Serve the website from the API — the built `web/dist` is served by FastAPI with SPA fallback; `ig-campaign up` starts API and worker together; README gets a "Run the studio" section. — deps: 007, 009 · touches: `src/api/`, `src/scheduler.py`, `README.md`
@@ -242,6 +242,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 007 — FastAPI skeleton — https://github.com/enimarix/instagram-campaign-mcp/pull/9 (2026-11-17) — src/api (health, account), `ig-campaign serve`, token optional (setup mode) in API/CLI/MCP
 - [x] 001 — Agent docs and layout — https://github.com/enimarix/instagram-campaign-mcp/pull/8 (2026-11-17) — CLAUDE.md, agent/ brand/ docs/ folders, docs/DECISIONS.md, .gitignore
 
 ## Blocked / needs human
@@ -261,6 +262,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 
 ## Follow-ups (parked from reviews)
 <!-- - <idea> (from step <id>) -->
+- API: map Instagram rate-limit errors to 429 (today 502); `validate_access_token` treats any Graph error as an invalid token (from step 007)
 - Other networks (TikTok, Shorts) reusing the same assets and review flow.
 - A third track with AI-generated footage.
 - More motion styles after 8-bit (the template registry already allows it).
