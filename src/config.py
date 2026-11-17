@@ -192,6 +192,15 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "data" / "cache" / "stt"), description="Transcript cache"
     )
 
+    # --- Clip intake ------------------------------------------------------
+    # src/studio/sources.py. The inbox is a drop zone: each file gets its rights on the
+    # website before it becomes a clip; nothing is imported automatically.
+    inbox_dir: str = Field(
+        str(APP_HOME / "data" / "inbox"), description="Clips waiting for their rights"
+    )
+    max_clip_mb: float = Field(300.0, gt=0, description="Largest clip accepted (MB, 10^6 B)")
+    max_clip_seconds: float = Field(300.0, gt=0, description="Longest clip accepted (seconds)")
+
     # --- Production tools -------------------------------------------------
     # src/studio/production.py (the agent's batch tools).
     best_before_default_days: int = Field(

@@ -379,3 +379,34 @@ export type PostDetail = Omit<AnalyticsPost, 'metrics' | 'verdict' | 'why'> & {
 }
 export const getAnalyticsPost = (mediaId: string) =>
   request<PostDetail>(`/api/analytics/posts/${encodeURIComponent(mediaId)}`)
+
+// --- Clip intake (step 063; src/api/sources.py) ---
+export type RightsBasis = 'own' | 'licensed' | 'public_domain' | 'cc' | 'permission' | 'commentary'
+export type AudioRights = 'covered' | 'not_covered' | 'no_audio'
+/** A clip of GET /api/sources?role=clip; `attribution`: the credit its posts must carry. */
+export type Clip = {
+  id: number
+  provider: string
+  url: string | null
+  author: string | null
+  rights_basis: RightsBasis
+  rights_note: string | null
+  audio_rights: AudioRights | null
+  stats: { duration_s?: number; original_name?: string }
+  licence: string | null
+  attribution: string | null
+}
+/** A file of GET /api/sources/inbox, waiting for its rights. */
+export type InboxFile = { name: string; size_bytes: number; modified_at: string }
+export type ClipIntake = {
+  rights_basis: RightsBasis
+  rights_note: string
+  audio_rights: AudioRights
+  author: string | null
+  url: string | null
+  licence: string | null
+}
+export const listClips = () => request<Clip[]>('/api/sources?role=clip')
+export const listInbox = () => request<InboxFile[]>('/api/sources/inbox')
+export const addInboxClip = (name: string, body: ClipIntake) =>
+  post<Clip>(`/api/sources/inbox/${encodeURIComponent(name)}`, body)
