@@ -7,6 +7,8 @@ import { dialogStorySchema } from "./templates/DialogStory/schema";
 import { FactQuest, timelineOf as factQuestTimeline } from "./templates/FactQuest/FactQuest";
 import { factQuestSchema } from "./templates/FactQuest/schema";
 import { Hello, helloSchema } from "./templates/Hello";
+import { PixelSkit, timelineOf as pixelSkitTimeline } from "./templates/PixelSkit/PixelSkit";
+import { pixelSkitSchema } from "./templates/PixelSkit/schema";
 import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
 import { QuizChest, timelineOf as quizChestTimeline } from "./templates/QuizChest/QuizChest";
 import { quizChestSchema } from "./templates/QuizChest/schema";
@@ -150,5 +152,27 @@ export const templates = {
     },
     durationInFrames: (p) => dialogStoryTimeline(p, FPS).totalFrames,
     coverFrame: (p) => dialogStoryTimeline(p, FPS).hookFrame,
+  }),
+  PixelSkit: template({
+    component: PixelSkit,
+    schema: pixelSkitSchema,
+    defaultProps: {
+      hook: "POV: you open the fridge for the 5th time",
+      cast: [{ name: "YOU" }],
+      beats: [
+        { line: "Still nothing to eat in here.", action: "stare" },
+        { line: "Closes it. Opens it again.", action: "shake" },
+        { line: "A new snack has not appeared.", action: "facepalm" },
+      ],
+      tag: false,
+      holdBeforePunchline_s: 0.6,
+      freezeOnPunchline: true,
+      sting: "hit",
+      citations: [],
+      music: "music-overworld",
+      loop: true,
+    },
+    durationInFrames: (p) => pixelSkitTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => pixelSkitTimeline(p, FPS).timeline.hookFrame,
   }),
 };

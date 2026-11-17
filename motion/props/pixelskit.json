@@ -1,0 +1,21 @@
+{
+  "hook": "POV: you said \"just one more episode\"",
+  "cast": [
+    { "name": "You", "sprite": "mascot" },
+    { "name": "Alarm", "sprite": "slime" }
+  ],
+  "beats": [
+    { "speaker": 0, "line": "One more episode, then straight to bed.", "action": "walk_in", "sfx": "select" },
+    { "line": "3:47 AM. The season finale just ended.", "action": "stare" },
+    { "speaker": 1, "line": "BEEP BEEP! Rise and shine, work day!", "action": "jump", "sfx": "jump" },
+    { "speaker": 0, "line": "Okay. ONE more episode.", "action": "fall", "sfx": "hit" }
+  ],
+  "tag": true,
+  "holdBeforePunchline_s": 0.6,
+  "freezeOnPunchline": true,
+  "sting": "hit",
+  "citations": [],
+  "music": "music-overworld",
+  "loop": true,
+  "safeZone": false
+}

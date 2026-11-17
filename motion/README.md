@@ -67,6 +67,22 @@
   `moral?`, `citations`, `sourcesNote?`, `voice` {audioSrc?, lines?: hook, each line, moral when
   given}, `music` (as QuizChest), `loop`, `palette`, `safeZone`. Scene roles: `sceneRoles()`; talk
   span: `talkSpan()` (typed or voiced, whichever is later). Still: `npm run still:dialogstory`.
+- `PixelSkit` (`src/templates/PixelSkit/`): the humour template, a 10–20 s "POV:" sketch. Hook
+  card with the cast standing on grass under it (the cover), then one scene per beat: the cast on
+  stage in the top half, the beat's actor playing its action while the line types into a
+  `DialogBox` (speaker's name tag, if any). Comic timing (`comicTiming()`): the beat before the
+  punchline holds `holdBeforePunchline_s`, the `sting` sfx plays when the punchline lands (typed or
+  voiced, whichever is later) and, with `freezeOnPunchline`, the picture freezes there for 1 s
+  behind a flash; an optional tag beat follows. Props in `schema.ts` (example
+  `props/pixelskit.json`): `hook`, `cast` (1–2 × {name ≤16, sprite?: mascot|slime|coin|heart};
+  first left, second right), `beats` (2–4 × {speaker?: 0|1 (none = no tag, cast[0] acts), line ≤80,
+  action: idle|walk_in|jump|shake|fall|stare|facepalm (default idle), sfx?:
+  hit|jump|select|confirm|coin}), `tag` (default false: the last beat is a tag after the
+  punchline, 3+ beats), `holdBeforePunchline_s` (0–2, default 0.6), `freezeOnPunchline` (default
+  true), `sting` (sfx or `none`, default `hit`), `citations` (usually empty), `sourcesNote?`,
+  `voice` {audioSrc?, lines?: hook, then one per beat; played in parts around the hold and the
+  freeze, so its timings are those of the plain audio}, `music` (as QuizChest), `loop` (default
+  true), `palette`, `safeZone`. Still: `npm run still:pixelskit` (beat 2, stare).
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
 - 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading,
   game maths in `game.ts`, code-drawn sprites in `sprites.ts`), `src/components/` (`PixelText`,
