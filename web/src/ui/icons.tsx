@@ -26,6 +26,7 @@ export const MoreIcon = icon(<><circle cx="5" cy="12" r="1.5" /><circle cx="12" 
 export const BackIcon = icon(<path d="m15 18-6-6 6-6" />)
 export const CheckIcon = icon(<path d="M20 6 9 17l-5-5" />)
 export const EditIcon = icon(<><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>)
+export const BookmarkIcon = icon(<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />)
 export const CloseIcon = icon(<path d="M18 6 6 18M6 6l12 12" />)
 export const InfoIcon = icon(<><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></>)
 export const SoundOnIcon = icon(<><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" /></>)

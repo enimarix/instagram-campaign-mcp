@@ -71,6 +71,20 @@
     --shadow-card: 0 1px 2px rgb(26 28 44 / 0.06), 0 1px 8px rgb(26 28 44 / 0.04);
     --shadow-overlay: 0 12px 40px -8px rgb(26 28 44 / 0.3);
   }
+  /* A dark island inside the light theme (the review feed's video): same values as @theme. */
+  :root[data-theme='light'] [data-theme='dark'] {
+    --color-surface-2: #2c3049;
+    --color-line: #3a4363;
+    --color-fg: #f4f4f4;
+    --color-muted: #a3bccb;
+    --color-accent: #ffcd75;
+    --color-on-accent: #1a1c2c;
+    --color-success: #4cc775;
+    --color-warn: #f28a64;
+    --color-danger: #ff7f90;
+    --color-info: #73eff7;
+    --color-explore: #c08fe0;
+  }
   body {
     @apply bg-bg text-fg antialiased;
   }

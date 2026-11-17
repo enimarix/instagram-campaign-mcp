@@ -17,7 +17,7 @@ const HELP = {
   trends: 'Daily account values saved by the worker. The 7-day reach and views tiles add up the daily values, so someone reached on two days counts twice.',
   streak: 'Posts this week: published in the last 7 days. Streak: days in a row (your time zone) with at least one published post, up to today or yesterday.',
   funnel: 'Videos whose batch day is in the last 30 days. Produced: rendered and checked. Reviewed: you liked, disliked, commented, approved or sent it back (an archive alone does not count). Liked: your verdict. Approved: cleared for publishing. Published: on Instagram. Winner: the post scores "winner" against the account\'s other posts.',
-  likeRate: 'Like-rate = liked / reviewed per batch day: the taste metric. The 7-day value adds up the day and the 6 before. Approval rate is capped by MAX_POSTS_PER_DAY, so it says more about the posting limit than about taste.',
+  likeRate: 'Like-rate = liked / reviewed per batch day: the taste metric. The 7-day value adds up the day and the 6 before. Approval rate is capped by the posts-per-day limit, so it says more about the posting limit than about taste.',
   calibration: 'Per batch day with at least 5 reviewed videos the agent scored: how many of its top 5 (by its own score) you liked. Plus its mean score of the videos you liked vs disliked.',
   waste: 'Liked videos archived without ever being approved, after their best-before date, and the render minutes spent on them. Reasons: how often each feedback reason was given on the last 30 days\' videos.',
 }

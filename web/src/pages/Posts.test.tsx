@@ -104,11 +104,11 @@ describe('PostPage', () => {
     const snaps = within(screen.getByRole('table', { name: 'Snapshots' })).getAllByRole('row')
     expect(snaps.slice(1).map((r) => r.textContent)).toEqual(['1 h10050', '24 h200100', '3 d300150'])
     expect(within(screen.getByRole('list', { name: 'Tags' })).getAllByRole('listitem').map((li) => li.textContent))
-      .toEqual(['track: motion', 'pillar: myths', 'hook_type: question', 'template: FactQuest'])
+      .toEqual(['Track: Motion', 'Pillar: Myths', 'Hook type: Question', 'Template: FactQuest'])
     expect(screen.getByText('Hypothesis: questions hook better')).toBeTruthy()
     expect(screen.getByText('love the ending')).toBeTruthy()
     expect(screen.getByLabelText('Studio video').getAttribute('src')).toBe('/api/media/7/preview.mp4')
-    expect(screen.getByRole('link', { name: 'Studio asset' }).getAttribute('href')).toBe('/assets/7')
+    expect(screen.getByRole('link', { name: 'Open in the studio' }).getAttribute('href')).toBe('/assets/7')
     expect(screen.queryByRole('link', { name: 'Open on Instagram' })).toBeNull()
   })
 

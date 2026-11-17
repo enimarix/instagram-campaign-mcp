@@ -47,7 +47,9 @@ export default function ReactionReelSection() {
         One long recording of you reacting. Each reaction video uses the next piece of it, in a loop.
       </p>
       {reels === undefined && !error && <Skeleton className="mt-3 h-12" />}
-      {reels && !active && <p className="mt-2 text-sm">No reel yet: upload one.</p>}
+      {reels && !active && (
+        <p className="mt-2 text-sm">{others.length ? 'No reel in use: activate one below or upload a new one.' : 'No reel yet: upload one.'}</p>
+      )}
       {active && (
         <div className="mt-2 text-sm">
           <p>

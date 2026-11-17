@@ -58,6 +58,12 @@ describe('ReactionReelSection', () => {
     expect(calls).toContain('POST /api/reactions/1/reset')
   })
 
+  it('with only inactive reels, it says to activate one', async () => {
+    stubApi([[reel({ active: false })]])
+    render(<ReactionReelSection />)
+    expect(await screen.findByText('No reel in use: activate one below or upload a new one.')).toBeTruthy()
+  })
+
   it('uploads the file as the body with progress, then reloads', async () => {
     const calls = stubApi([[], [reel({ cursor_s: 0, pieces_used: 0, used_pct: 0 })]])
     vi.stubGlobal('XMLHttpRequest', FakeXHR)

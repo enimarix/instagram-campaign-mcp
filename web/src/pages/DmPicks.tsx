@@ -9,6 +9,7 @@ import { Card, EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { CloseIcon } from '../ui/icons'
 import { field, link, type Tone } from '../ui/styles'
+import { dateTime } from './load'
 
 const STATUS_TONE: Record<DmPickStatus, Tone> = {
   new: 'accent', downloaded: 'info', in_production: 'explore', posted: 'success', skipped: 'neutral',
@@ -139,14 +140,14 @@ export default function DmPicksSection() {
                   <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2">
                     <Chip tone={STATUS_TONE[p.status]}>{p.status.replace('_', ' ')}</Chip>
                     <span className="font-medium">@{p.sender_username}</span>
-                    <span className="text-muted">{new Date(p.received_at).toLocaleString()}</span>
+                    <span className="ml-auto text-muted">{dateTime(p.received_at)}</span>
+                    {p.sender_note && <q className="w-full break-words italic">{p.sender_note}</q>}
+                    {p.skip_reason && <p className="w-full text-muted">Skipped: {p.skip_reason}</p>}
                     {href && (
                       <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>
                         Open Reel
                       </a>
                     )}
-                    {p.sender_note && <q className="w-full break-words italic">{p.sender_note}</q>}
-                    {p.skip_reason && <p className="w-full text-muted">Skipped: {p.skip_reason}</p>}
                     {p.status === 'new' && <SkipForm pick={p} onDone={reload} />}
                   </li>
                 )
