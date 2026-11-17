@@ -1,5 +1,7 @@
 import type { ComponentType } from "react";
 import type { z } from "zod";
+import { BossBattle, timelineOf as bossBattleTimeline } from "./templates/BossBattle/BossBattle";
+import { bossBattleSchema } from "./templates/BossBattle/schema";
 import { FactQuest, timelineOf as factQuestTimeline } from "./templates/FactQuest/FactQuest";
 import { factQuestSchema } from "./templates/FactQuest/schema";
 import { Hello, helloSchema } from "./templates/Hello";
@@ -61,7 +63,8 @@ export const templates = {
     },
     durationInFrames: (p) => timelineOf(p, FPS).totalFrames,
     coverFrame: (p) => timelineOf(p, FPS).hookFrame,
-  }),  FactQuest: template({
+  }),
+  FactQuest: template({
     component: FactQuest,
     schema: factQuestSchema,
     defaultProps: {
@@ -77,5 +80,24 @@ export const templates = {
     },
     durationInFrames: (p) => factQuestTimeline(p, FPS).totalFrames,
     coverFrame: (p) => factQuestTimeline(p, FPS).hookFrame,
+  }),
+  BossBattle: template({
+    component: BossBattle,
+    schema: bossBattleSchema,
+    defaultProps: {
+      hook: "Cracking your knuckles causes arthritis?",
+      left: { name: "MYTH", sprite: "slime" },
+      right: { name: "FACT", sprite: "mascot" },
+      rounds: [
+        { attacker: "left", text: "Grandma said it ruins your joints." },
+        { attacker: "right", text: "The pop is just gas bubbles in the joint fluid." },
+        { attacker: "right", text: "A doctor cracked one hand for 60 years: no arthritis in either." },
+      ],
+      verdict: { winner: "right", text: "No link found: crack away, it's harmless." },
+      citations: [],
+      loop: true,
+    },
+    durationInFrames: (p) => bossBattleTimeline(p, FPS).totalFrames,
+    coverFrame: (p) => bossBattleTimeline(p, FPS).hookFrame,
   }),
 };
