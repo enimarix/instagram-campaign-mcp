@@ -19,9 +19,10 @@ Every metric below is about the assets of the window (feedback reasons too).
 - calibration: per batch day with at least 5 reviewed assets carrying a self_score, how many
   of the agent's top 5 (by self_score) the owner liked; plus the mean self_score of liked
   vs disliked assets.
-- waste: liked assets archived without ever being approved, after their best_before (the
-  archive date is the owner-local date of the last status change). Count and the render
-  minutes spent on them (sum of render_jobs.render_ms).
+- waste: liked assets archived without ever being approved, after their best_before. No
+  archive actor or date is stored: the archive date is the owner-local date of updated_at,
+  minus DELETE_ARCHIVED_FILES_DAYS once housekeeping purged the files (that edit moves
+  updated_at). Count and the render minutes spent on them (sum of render_jobs.render_ms).
 - reasons: how often each feedback reason code was given, with its taxonomy label.
 """
 
@@ -48,6 +49,7 @@ APPROVAL_NOTE = "capped by MAX_POSTS_PER_DAY"
 _ASSETS_SQL = """
 SELECT a.id, a.batch_date AS day, i.track, i.hook_type, a.status, a.verdict, a.self_score,
        a.best_before, a.updated_at, a.approved_at IS NOT NULL AS approved,
+       a.file_path IS NULL AS purged,
        CASE WHEN json_extract(a.recipe, '$.kind') = 'motion'
             THEN json_extract(a.recipe, '$.template') END AS template,
        a.qc IS NOT NULL AS produced,
@@ -155,11 +157,17 @@ def taste(store: CampaignStore, settings: InstagramMCPSettings, *, days: int = 3
              if r["verdict"] == verdict and r["self_score"] is not None]
         return round(sum(s) / len(s), 2) if s else None
 
-    tz = ZoneInfo(settings.timezone)
+    def archived_on(r: Dict[str, Any]) -> str:
+        day = parse_dt(r["updated_at"]).astimezone(ZoneInfo(settings.timezone)).date()
+        # ponytail: purge runs ~delete_archived_files_days after the archive; an archive
+        # date column would make this exact.
+        if r["purged"]:
+            day -= timedelta(days=settings.delete_archived_files_days)
+        return day.isoformat()
+
     wasted = [r for r in window
               if r["liked"] and r["status"] == "archived" and not r["approved"]
-              and r["best_before"]
-              and r["best_before"] < parse_dt(r["updated_at"]).astimezone(tz).date().isoformat()]
+              and r["best_before"] and r["best_before"] < archived_on(r)]
 
     return {
         "since": since.isoformat(), "until": until.isoformat(),

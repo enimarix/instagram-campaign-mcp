@@ -24,12 +24,12 @@ def settings():
 
 def _asset(store, day, *, track="motion", hook="question", template="FactQuest", qc=True,
            status="ready", verdict="none", approved=False, score=None, best_before=None,
-           updated_at=None, reasons=(), render_ms=()):
+           updated_at=None, reasons=(), render_ms=(), file_path="d/video.mp4"):
     idea = store.add_idea(track, hook_type=hook, batch_date=day)
     recipe = {"kind": "motion", "template": template} if track == "motion" else {"kind": "ffmpeg"}
     a = store.add_asset(idea["id"], batch_date=day, recipe=recipe,
                         qc={"passed": True} if qc else None, self_score=score,
-                        best_before=best_before)
+                        best_before=best_before, file_path=file_path)
     with store._tx() as c:  # tests set the end state directly
         c.execute("UPDATE assets SET status=?, verdict=?, approved_at=?, updated_at=? WHERE id=?",
                   (status, verdict, to_iso(NOW) if approved else None,
@@ -125,6 +125,9 @@ def test_waste_and_reasons(store, settings):
     _asset(store, "2026-11-14", verdict="liked", status="archived", best_before="2026-11-15",
            updated_at="2026-11-16T03:00:00Z", render_ms=(60000,))
     _asset(store, "2026-11-14", verdict="liked", status="archived", best_before="2026-11-30")
+    # archived early by the owner, files purged 14 days later (the default): updated_at is the purge
+    _asset(store, "2026-11-14", verdict="liked", status="archived",
+                   best_before="2026-11-20", updated_at="2026-12-02T12:00:00Z", file_path=None)
     _asset(store, "2026-11-14", verdict="disliked", status="archived", best_before="2026-11-01",
            reasons=["weak_hook"])
     _asset(store, "2026-11-10", reasons=["off_brand"])  # outside the window
