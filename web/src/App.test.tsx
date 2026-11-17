@@ -51,7 +51,7 @@ describe('App', () => {
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
   })
 
-  it('links Trends from the Analytics placeholder', async () => {
+  it('links Trends from the Analytics page', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
       url.startsWith('/api/trends') ? { accounts: [], hashtags: {}, generated_at: '' } : []))))
     render(
