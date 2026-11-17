@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { z } from "zod";
 import { Hello, helloSchema } from "./templates/Hello";
+import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
@@ -22,6 +23,20 @@ export const templates = {
     component: Hello,
     schema: helloSchema,
     defaultProps: { title: "Hello", subtitle: "8-bit pipeline online", seconds: 3, safeZone: false },
+    durationInFrames: (p) => Math.round(p.seconds * FPS),
+  }),
+  Preview8bit: template({
+    component: Preview8bit,
+    schema: preview8bitSchema,
+    defaultProps: {
+      title: "8-BIT KIT",
+      text: "Café, crème brûlée, ñandú, Straße",
+      name: "Señor Müller",
+      dialog: "Où est la crème brûlée? Ça alors, Œdipe l'a mangée!",
+      speed: 15,
+      seconds: 8,
+      safeZone: false,
+    },
     durationInFrames: (p) => Math.round(p.seconds * FPS),
   }),
 };

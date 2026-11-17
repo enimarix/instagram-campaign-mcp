@@ -1,16 +1,17 @@
-import type { ComponentType } from "react";
 import { Composition } from "remotion";
 import { z } from "zod";
-import { FPS, HEIGHT, templates, WIDTH } from "./registry";
+import { FPS, HEIGHT, type Template, templates, WIDTH } from "./registry";
+
+// ponytail: registry entries are typed one by one; the loop only sees them as plain-props templates.
+const entries = Object.entries(templates) as unknown as [string, Template<z.ZodType<Record<string, unknown>>>][];
 
 export const Root = () => (
   <>
-    {Object.entries(templates).map(([id, t]) => (
+    {entries.map(([id, t]) => (
       <Composition
         key={id}
         id={id}
-        // ponytail: registry entries are typed one by one; the loop only sees the union.
-        component={t.component as ComponentType<Record<string, unknown>>}
+        component={t.component}
         schema={t.schema}
         defaultProps={t.defaultProps}
         width={WIDTH}

@@ -68,4 +68,6 @@ jobs:
           key: remotion-browser-${{ runner.os }}-${{ hashFiles('motion/package-lock.json') }}
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
       - run: npm run still
+      - run: npm run still:preview
