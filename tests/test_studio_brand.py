@@ -11,6 +11,7 @@ GOOD = {
     "name": "Test",
     "handle": "@test",
     "logo": "logo.svg",
+    "logo_png": "logo.png",
     "colors": {
         "primary": "#FFCD75",
         "secondary": "#38b764",
@@ -29,6 +30,7 @@ GOOD = {
 
 def _write(tmp_path, data):
     (tmp_path / "logo.svg").write_text("<svg/>", encoding="utf-8")
+    (tmp_path / "logo.png").write_bytes(b"png")
     path = tmp_path / "brand.json"
     path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
     return path
@@ -45,6 +47,7 @@ def test_committed_file_loads():
     assert DEFAULT_PATH.is_file()
     assert brand["placeholder"] is True
     assert (DEFAULT_PATH.parent / brand["logo"]).is_file()
+    assert (DEFAULT_PATH.parent / brand["logo_png"]).read_bytes()[:4] == b"\x89PNG"
     assert len(brand["colors"]["palette"]) >= 8
     assert brand["safe_zone"]["width"] == 1080 and brand["safe_zone"]["height"] == 1920
     assert "_source" in brand
@@ -95,6 +98,9 @@ def _set(*keys, value):
         (_set("placeholder", value="yes"), "'placeholder'"),
         (_set("name", value=" "), "'name'"),
         (_set("logo", value="missing.svg"), "'logo' file not found"),
+        (_del("logo_png"), "missing key(s): logo_png"),
+        (_set("logo_png", value="missing.png"), "'logo_png' file not found"),
+        (_set("logo_png", value="logo.svg"), "'logo_png' must be a .png"),
         (_del("colors", "accent"), "missing 'accent'"),
         (_set("colors", "primary", value="#FFF"), "colour 'primary' must be #RRGGBB"),
         (_set("colors", "text", value="red"), "colour 'text'"),

@@ -3,6 +3,7 @@ Brand kit (GOAL.md §3.1): `brand/brand.json`.
 
 Plain JSON so the agent and `motion/` (TypeScript) read the same file. Shape:
 `version`, `placeholder`, `name`, `handle`, `logo` (path relative to the JSON file),
+`logo_png` (a PNG of the logo: the local ffmpeg has no SVG reader),
 `colors` (`#RRGGBB` for primary/secondary/accent/background/text, plus a `palette`
 list), `fonts` (`display`/`body` family names, `files` paths relative to the JSON file),
 `safe_zone` (pixel insets on a `width` x `height` canvas: top/bottom/left/right and an
@@ -47,8 +48,8 @@ def _check(data: Any, path: Path) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise fail("top level must be an object")
     missing = [
-        k for k in ("version", "placeholder", "name", "handle", "logo", "colors", "fonts",
-                    "safe_zone") if k not in data
+        k for k in ("version", "placeholder", "name", "handle", "logo", "logo_png", "colors",
+                    "fonts", "safe_zone") if k not in data
     ]
     if missing:
         raise fail(f"missing key(s): {', '.join(missing)}")
@@ -67,6 +68,9 @@ def _check(data: Any, path: Path) -> Dict[str, Any]:
             raise fail(f"{what} file not found: {path.parent / rel}")
 
     file_exists(data["logo"], "'logo'")
+    file_exists(data["logo_png"], "'logo_png'")
+    if not data["logo_png"].lower().endswith(".png"):
+        raise fail("'logo_png' must be a .png file")
 
     colors = data["colors"]
     if not isinstance(colors, dict):
