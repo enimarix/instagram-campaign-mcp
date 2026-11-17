@@ -95,7 +95,7 @@ export default function AssetCard({ asset: a, current, showBestBefore, onVerdict
           label={muted ? 'Sound on' : 'Mute'}
           icon={muted ? <SoundOffIcon /> : <SoundOnIcon />}
           onClick={() => setMuted((m) => !m)}
-          className="absolute top-3 right-3 rounded-full bg-black/55 text-white backdrop-blur hover:bg-black/70"
+          className="absolute top-3 right-3 rounded-full bg-black/55! text-white! backdrop-blur hover:bg-black/70!"
         />
       </div>
       <div className="space-y-3 p-4">

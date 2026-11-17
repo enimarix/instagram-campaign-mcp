@@ -126,7 +126,7 @@ export default function Settings() {
         </p>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="gap-4 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
       <Card as="section" aria-label="Appearance">
         <h2 className="font-semibold">Appearance</h2>
         <p className="mt-1 text-sm text-muted">Dark suits reviewing video; the choice is kept in this browser.</p>

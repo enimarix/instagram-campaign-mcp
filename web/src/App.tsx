@@ -35,8 +35,12 @@ const sideLink = ({ isActive }: { isActive: boolean }) =>
   `flex min-h-11 items-center gap-3 rounded-control px-3 text-sm font-medium transition ${
     isActive ? 'bg-accent/12 text-accent' : 'text-muted hover:bg-surface-2 hover:text-fg'}`
 const tabLink = (active: boolean) =>
-  `flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition ${
-    active ? 'text-accent' : 'text-muted hover:text-fg'}`
+  `flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] transition ${
+    active ? 'font-semibold text-accent' : 'font-medium text-muted hover:text-fg'}`
+// The icon sits in a pill that fills while its tab is current.
+const tabIcon = (Icon: typeof InboxIcon, active: boolean) => (
+  <span className={`rounded-full px-4 py-0.5 transition ${active ? 'bg-accent/15' : ''}`}><Icon /></span>
+)
 
 // Phone: pages + a bottom tab bar with icons. From lg (1024 px): a left sidebar.
 export default function App() {
@@ -84,9 +88,13 @@ export default function App() {
         <nav aria-label="Tabs"
           className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/90 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur-md lg:hidden">
           {NAV.filter((n) => n.tab).map(({ path, label, Icon }) => (
-            <NavLink key={path} to={path} className={({ isActive }) => tabLink(isActive)}><Icon />{label}</NavLink>
+            <NavLink key={path} to={path} className={({ isActive }) => tabLink(isActive)}>
+              {({ isActive }) => <>{tabIcon(Icon, isActive)}{label}</>}
+            </NavLink>
           ))}
-          <Link to="/more" aria-current={inMore ? 'page' : undefined} className={tabLink(inMore)}><MoreIcon />More</Link>
+          <Link to="/more" aria-current={inMore ? 'page' : undefined} className={tabLink(inMore)}>
+            {tabIcon(MoreIcon, inMore)}More
+          </Link>
         </nav>
       </div>
     </ToastProvider>
