@@ -582,7 +582,9 @@ class CampaignStore:
     # ------------------------------------------------------------------
     # Studio: sources, ideas, assets
     # ------------------------------------------------------------------
-    def _insert(self, table: str, allowed: Sequence[str], fields: Dict[str, Any]) -> Dict[str, Any]:
+    def _insert(
+        self, table: str, allowed: Sequence[str], fields: Dict[str, Any]
+    ) -> Dict[str, Any]:
         row = _encode(allowed, fields)
         row["created_at"] = to_iso(utcnow())
         if table == "assets":
@@ -602,7 +604,9 @@ class CampaignStore:
             raise KeyError(f"No {table[:-1]} with id {row_id}")
         return _decode(row)
 
-    def _select(self, q: str, filters: Dict[str, Any], order: str, limit: int) -> List[Dict[str, Any]]:
+    def _select(
+        self, q: str, filters: Dict[str, Any], order: str, limit: int
+    ) -> List[Dict[str, Any]]:
         args = [v for v in filters.values() if v is not None]
         where = " AND ".join(f"{k}=?" for k, v in filters.items() if v is not None)
         q += (f" WHERE {where}" if where else "") + f" ORDER BY {order} LIMIT ?"
@@ -643,7 +647,9 @@ class CampaignStore:
     def add_asset(self, idea_id: int, **fields: Any) -> Dict[str, Any]:
         status = fields.setdefault("status", "rendering")
         if status not in ASSET_INITIAL_STATUSES:
-            raise ValueError(f"a new asset starts as one of {ASSET_INITIAL_STATUSES}, not {status!r}")
+            raise ValueError(
+                f"a new asset starts as one of {ASSET_INITIAL_STATUSES}, not {status!r}"
+            )
         fields.setdefault("batch_date", utcnow().date())
         return self._insert("assets", ASSET_FIELDS, {"idea_id": idea_id, **fields})
 

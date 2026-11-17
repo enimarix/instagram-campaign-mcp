@@ -75,7 +75,8 @@ def test_create_get_list_and_json_columns(store):
                           batch_date=date(2026, 11, 17))
     store.add_idea("motion", batch_date="2026-11-18")
     assert store.get_idea(idea["id"])["citations"] == [{"url": "https://w"}]
-    assert [i["id"] for i in store.list_ideas(track="remix", batch_date=date(2026, 11, 17))] == [idea["id"]]
+    remix_17 = store.list_ideas(track="remix", batch_date=date(2026, 11, 17))
+    assert [i["id"] for i in remix_17] == [idea["id"]]
 
     a = store.add_asset(idea["id"], recipe={"template": "FactQuest"}, batch_date="2026-11-17")
     assert a["status"] == "rendering" and a["verdict"] == "none"
@@ -94,8 +95,9 @@ def test_list_assets_filters_and_order(store):
     high = store.add_asset(motion["id"], self_score=9, batch_date="2026-11-17")
     store.add_asset(motion["id"], self_score=10, batch_date="2026-11-16")
     ids = lambda rows: [r["id"] for r in rows]  # noqa: E731
-    assert ids(store.list_assets(batch_date="2026-11-17")) == [high["id"], low["id"], unscored["id"]]
-    assert ids(store.list_assets(batch_date="2026-11-17", track="remix")) == [low["id"], unscored["id"]]
+    day = "2026-11-17"
+    assert ids(store.list_assets(batch_date=day)) == [high["id"], low["id"], unscored["id"]]
+    assert ids(store.list_assets(batch_date=day, track="remix")) == [low["id"], unscored["id"]]
     transition(store, low["id"], "ready", actor="worker")
     set_verdict(store, low["id"], "liked")
     assert ids(store.list_assets(status="ready", verdict="liked")) == [low["id"]]

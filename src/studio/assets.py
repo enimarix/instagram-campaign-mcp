@@ -48,7 +48,9 @@ class InvalidTransition(ValueError):
     """A status move the lifecycle table does not allow (or a stale one)."""
 
 
-def transition(store: CampaignStore, asset_id: int, to_status: str, *, actor: str) -> Dict[str, Any]:
+def transition(
+    store: CampaignStore, asset_id: int, to_status: str, *, actor: str
+) -> Dict[str, Any]:
     """Move an asset to `to_status` if the table allows it for `actor`; return the asset."""
     if actor not in ACTORS:
         raise ValueError(f"actor must be one of {ACTORS}, not {actor!r}")
@@ -71,7 +73,8 @@ def transition(store: CampaignStore, asset_id: int, to_status: str, *, actor: st
         stamp["approved_at"] = None
     if not store._set_asset_status(asset_id, frm, to_status, **stamp):
         raise InvalidTransition(
-            f"asset {asset_id} is no longer {frm} (changed meanwhile); {frm} -> {to_status} not applied"
+            f"asset {asset_id} is no longer {frm} (changed meanwhile);"
+            f" {frm} -> {to_status} not applied"
         )
     return store.get_asset(asset_id)
 
