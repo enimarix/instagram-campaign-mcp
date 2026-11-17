@@ -124,12 +124,21 @@ The Graph API publishes immediately — it has no "post at 18:00". Keep this run
 on a machine that's on at posting time (it also snapshots live Stories hourly;
 `--stories-every 0` turns that off):
 ```bash
-.venv/bin/ig-campaign daemon   # Windows: .venv\Scripts\ig-campaign.exe daemon
+.venv/bin/ig-campaign worker   # Windows: .venv\Scripts\ig-campaign.exe worker
 # or, with the venv activated:
-ig-campaign daemon            # checks every 60s
+ig-campaign worker            # checks every 60s (`daemon` is the old name, still works)
 # or from cron / Task Scheduler every 5 min:
 ig-campaign run-due
 ```
+A post more than `MAX_LATE_MINUTES` (default 30) late, for example because the PC was
+asleep, is moved to the next free slot instead of being published late, and two posts
+never go out closer than `MIN_SLOT_GAP_MINUTES`. `PUBLISHING_PAUSED=true` holds the whole
+queue; the website's pause switch (`POST /api/worker/pause` / `resume`) overrides it.
+
+On Windows the worker registers one Task Scheduler task, `IGCampaignWake`, that wakes
+the PC 5 minutes before the next queued post. Windows only honours it when wake timers
+are allowed: Control Panel → Power Options → Change plan settings → Change advanced
+power settings → Sleep → Allow wake timers → Enable (on battery too, for a laptop).
 Also run `ig-campaign collect` once a day (or ask Claude to call `collect_insights`).
 If a publish fails because the daily quota is reached, the post waits an hour and
 tries again without using up its retries. If Instagram might have published it

@@ -6,7 +6,7 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from src import scheduler
+from src import scheduler, worker
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 
@@ -82,7 +82,7 @@ async def test_up_runs_worker_and_stops_it_with_the_server(settings, monkeypatch
     calls = []
     ran = asyncio.Event()
 
-    async def fake_run_due(client, store):
+    async def fake_run_due(client, store, **kw):
         calls.append("run_due")
         ran.set()
         return {"published": [], "retrying": [], "failed": [], "recovered_stuck": []}
@@ -100,8 +100,8 @@ async def test_up_runs_worker_and_stops_it_with_the_server(settings, monkeypatch
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr(scheduler, "get_settings", lambda: settings)
     monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)
-    monkeypatch.setattr(scheduler, "run_due", fake_run_due)
-    monkeypatch.setattr(scheduler, "collect_insights", fake_collect)
+    monkeypatch.setattr(worker, "run_due", fake_run_due)
+    monkeypatch.setattr(worker, "collect_insights", fake_collect)
     tasks_before = asyncio.all_tasks()
     await asyncio.wait_for(scheduler._up("127.0.0.1", 0), 5)
     assert calls[:2] == ["run_due", ("collect", 0)]

@@ -11,6 +11,7 @@ organic posts, so this store keeps:
 - feedback / learnings / daily_reports / agent_runs: the learning loop's memory
   (GOAL.md §3.5)
 - audience_hours: followers online per UTC hour, weights for the slot planner
+- worker_state: the worker's key/value state (heartbeat, pause switch, last result)
 """
 
 from __future__ import annotations
@@ -218,10 +219,19 @@ ALTER TABLE post_labels ADD COLUMN asset_id INTEGER REFERENCES assets(id);
 CREATE INDEX idx_sched_asset ON scheduled_posts(asset_id);
 """
 
+# Migration 6: the publishing worker's small state, JSON values by key (025).
+WORKER_STATE_SCHEMA = """
+CREATE TABLE worker_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
-                         ASSET_LINK_SCHEMA]
+                         ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version")
@@ -544,6 +554,28 @@ class CampaignStore:
                 if cur.rowcount == 1:
                     ids.append(r["id"])
         return [self.get_scheduled(pid) for pid in ids]
+
+    def move_pending(self, post_id: int, publish_at: datetime, note: str) -> bool:
+        """The worker moves a pending row to a new slot (late or too close; attempts kept)."""
+        with self._tx() as c:
+            cur = c.execute(
+                "UPDATE scheduled_posts SET publish_at=?, error=?, updated_at=?"
+                " WHERE id=? AND status='pending'",
+                (to_iso(publish_at), note, to_iso(utcnow()), post_id),
+            )
+        return cur.rowcount == 1
+
+    def queue_times(self, since: datetime) -> List[Dict[str, Any]]:
+        """id/status/publish_at/updated_at of pending and in-flight rows, and of rows
+        published since `since` (their updated_at is the publish time)."""
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT id, status, publish_at, updated_at FROM scheduled_posts"
+                " WHERE status IN ('pending','publishing')"
+                " OR (status='published' AND updated_at>=?)",
+                (to_iso(since),),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def mark_published(self, post_id: int, media_id: str, permalink: Optional[str]) -> None:
         post = self.get_scheduled(post_id)
@@ -1010,6 +1042,24 @@ class CampaignStore:
                 " WHERE date > ? GROUP BY hour_utc", (since,),
             ).fetchall()
         return {h: avg for h, avg in rows}
+
+    # ------------------------------------------------------------------
+    # Worker state
+    # ------------------------------------------------------------------
+    def get_state(self, key: str) -> Any:
+        """A worker_state value (JSON-decoded), or None when never set."""
+        with self._tx() as c:
+            row = c.execute("SELECT value FROM worker_state WHERE key=?", (key,)).fetchone()
+        return None if row is None else json.loads(row[0])
+
+    def set_state(self, key: str, value: Any) -> None:
+        with self._tx() as c:
+            c.execute(
+                "INSERT INTO worker_state (key, value, updated_at) VALUES (?,?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value,"
+                " updated_at=excluded.updated_at",
+                (key, json.dumps(value), to_iso(utcnow())),
+            )
 
 
 def _sql_value(v: Any) -> Any:

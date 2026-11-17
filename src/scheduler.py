@@ -4,17 +4,18 @@ Command-line runner for the publishing queue and insight collection.
 Meta's API publishes immediately; it has no "post at 18:00" option. Something
 has to be awake at 18:00 to publish. Use one of:
 
-  python -m src.scheduler daemon              # keeps running, checks every minute
+  python -m src.scheduler worker              # keeps running, checks every minute
+                                              # (`daemon` is the old name, still works)
   python -m src.scheduler run-due             # one pass (for cron / Task Scheduler)
   python -m src.scheduler collect --limit 30  # snapshot insights (run daily)
   python -m src.scheduler collect --stories-only  # live Stories (run hourly)
   python -m src.scheduler rank                # print the winner ranking
   python -m src.scheduler serve               # studio REST API on 127.0.0.1:8765
-  python -m src.scheduler up                  # website + API + daemon in one process
+  python -m src.scheduler up                  # website + API + worker in one process
   python -m src.scheduler dev seed --days 3   # fake demo batch for website work
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
-so they must be snapshotted often; the daemon does it every hour.
+so they must be snapshotted often; the worker does it every hour (src/worker.py).
 """
 
 from __future__ import annotations
@@ -23,9 +24,9 @@ import argparse
 import asyncio
 import json
 import sys
-import time
 from contextlib import suppress
 
+from . import worker
 from .campaign import collect_insights, rank, run_due
 from .config import InstagramMCPSettings, get_settings
 from .instagram_client import InstagramClient
@@ -34,27 +35,6 @@ from .store import CampaignStore
 
 NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
                   "and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env)")
-
-
-async def _daemon(client: InstagramClient, store: CampaignStore, interval: int,
-                  stories_every: int) -> None:
-    """Publish due posts every `interval` s and snapshot live Stories; runs until cancelled."""
-    last_stories = float("-inf")
-    while True:
-        try:
-            result = await run_due(client, store)
-        except Exception as e:  # noqa: BLE001 - keep the daemon alive
-            print(f"run_due failed: {e!r}", file=sys.stderr, flush=True)
-        else:
-            if any(result[k] for k in ("published", "retrying", "failed", "recovered_stuck")):
-                print(json.dumps(result), flush=True)
-        if stories_every and time.monotonic() - last_stories >= stories_every * 60:
-            last_stories = time.monotonic()
-            try:
-                await collect_insights(client, store, limit=0)
-            except Exception as e:  # noqa: BLE001
-                print(f"story snapshot failed: {e!r}", file=sys.stderr, flush=True)
-        await asyncio.sleep(interval)
 
 
 async def _worker(settings: InstagramMCPSettings, interval: int = 60,
@@ -67,7 +47,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
         store = CampaignStore(settings.database_path)
         try:
             async with InstagramClient(settings) as client:
-                await _daemon(client, store, interval, stories_every)
+                await worker.run(client, store, settings, interval, stories_every)
         finally:
             store.close()
     except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: say so, keep the API up
@@ -84,13 +64,13 @@ async def _up(host: str, port: int) -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     server = uvicorn.Server(uvicorn.Config(create_app(settings), host=host, port=port))
-    worker = asyncio.create_task(_worker(settings))
+    task = asyncio.create_task(_worker(settings))
     try:
         await server.serve()
     finally:
-        worker.cancel()
+        task.cancel()
         with suppress(asyncio.CancelledError):
-            await worker
+            await task
 
 
 async def _run(args: argparse.Namespace) -> int:
@@ -103,19 +83,19 @@ async def _run(args: argparse.Namespace) -> int:
             return 0
         if not settings.instagram_configured:
             # Setup mode: nothing to publish or measure yet. Exit 0 so cron and
-            # Task Scheduler don't flag a failure; the daemon exits too.
+            # Task Scheduler don't flag a failure; the worker exits too.
             print(f"{args.command}: {NOT_CONFIGURED}; skipping.", file=sys.stderr)
             return 0
         async with InstagramClient(settings) as client:
             if args.command == "run-due":
-                print(json.dumps(await run_due(client, store), indent=2))
+                print(json.dumps(await run_due(client, store, settings=settings), indent=2))
             elif args.command == "collect":
                 limit = 0 if args.stories_only else args.limit
                 print(json.dumps(await collect_insights(client, store, limit=limit), indent=2))
-            elif args.command == "daemon":
-                print(f"Scheduler running, checking every {args.interval}s. Ctrl+C to stop.",
+            elif args.command in ("worker", "daemon"):
+                print(f"Worker running, checking every {args.interval}s. Ctrl+C to stop.",
                       file=sys.stderr)
-                await _daemon(client, store, args.interval, args.stories_every)
+                await worker.run(client, store, settings, args.interval, args.stories_every)
         return 0
     finally:
         store.close()
@@ -150,7 +130,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ig-campaign")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("run-due", help="Publish queued posts that are due, then exit")
-    d = sub.add_parser("daemon", help="Publish queued posts as they come due")
+    d = sub.add_parser("worker", aliases=["daemon"],
+                       help="Publish queued posts as they come due (heartbeat, wake task)")
     d.add_argument("--interval", type=int, default=60)
     d.add_argument("--stories-every", type=int, default=60, metavar="MINUTES",
                    help="Snapshot live Stories this often (0 = off). Default 60.")
@@ -161,7 +142,7 @@ def main(argv: list[str] | None = None) -> None:
     r = sub.add_parser("rank", help="Print winner ranking from stored snapshots")
     r.add_argument("--campaign")
     for name, help_ in (("serve", "Run the studio REST API"),
-                        ("up", "Run the studio: website, API and publishing daemon together")):
+                        ("up", "Run the studio: website, API and publishing worker together")):
         s = sub.add_parser(name, help=help_)
         s.add_argument("--host", default="127.0.0.1")
         s.add_argument("--port", type=int, default=8765)
@@ -176,9 +157,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.command == "dev" and args.days < 1:
         parser.error("--days must be >= 1")
-    if args.command == "daemon" and args.interval <= 0:
+    if args.command in ("worker", "daemon") and args.interval <= 0:
         parser.error("--interval must be > 0")
-    if args.command == "daemon" and args.stories_every < 0:
+    if args.command in ("worker", "daemon") and args.stories_every < 0:
         parser.error("--stories-every must be >= 0")
     configure_logging()
     if args.command == "dev":

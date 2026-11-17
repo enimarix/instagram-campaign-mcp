@@ -2,7 +2,8 @@
 Campaign layer: ties the Graph API client to the local store.
 
 - publish(kind, payload): one entry point for image/carousel/reel/story
-- run_due(): publish everything in the queue whose time has come
+- run_due(): publish what is due, after the late-slot and gap rules (hold_queue) and
+  unless the pause switch is on (is_paused)
 - collect_insights(): snapshot insights of recent posts (and live Stories)
 - collect_online_followers(): store today's followers-online-per-hour (slot weights)
 - rank(): score posts against the account baseline
@@ -11,12 +12,13 @@ Campaign layer: ties the Graph API client to the local store.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 import structlog
 
-from .config import InstagramMCPSettings
+from .config import InstagramMCPSettings, get_settings
 from .instagram_client import (
     PUBLISH_QUOTA_SUBCODE,
     InstagramAPIError,
@@ -25,8 +27,9 @@ from .instagram_client import (
     RateLimitExceeded,
     caption_problem,
 )
+from .learning.slots import plan_slots_from_settings
 from .scoring import ScoringConfig, compare_variants, score_posts
-from .store import CampaignStore, parse_dt, utcnow
+from .store import CampaignStore, parse_dt, to_iso, utcnow
 from .studio.assets import InvalidTransition, transition
 
 logger = structlog.get_logger(__name__)
@@ -38,6 +41,7 @@ BACKOFF_MINUTES = 60      # rate limit or daily publishing quota reached
 HEARTBEAT_SECONDS = 60    # keeps a long publish from looking "stuck"
 # Meta error subcodes that will never succeed on retry (bad media, bad ratio...).
 PERMANENT_SUBCODES = {2207026, 2207004, 2207005, 2207009, 2207010, 2207052, 2207053}
+REPLAN_LOOKAHEAD_DAYS = 7
 
 
 async def _with_heartbeat(store: CampaignStore, post_id: int, coro: Any) -> Any:
@@ -105,14 +109,77 @@ def _asset_outcome(store: CampaignStore, asset_id: Optional[int], to_status: str
         logger.warning("asset_outcome_not_applied", asset_id=asset_id, error=str(e))
 
 
-async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10) -> Dict[str, Any]:
+def is_paused(store: CampaignStore, settings: InstagramMCPSettings) -> bool:
+    """The pause switch: the website's flag in the database wins over PUBLISHING_PAUSED."""
+    flag = store.get_state("paused")
+    return settings.publishing_paused if flag is None else bool(flag)
+
+
+def _next_free_slot(store: CampaignStore, settings: InstagramMCPSettings,
+                    taken: List[datetime], now: datetime) -> datetime:
+    day = now.astimezone(ZoneInfo(settings.timezone)).date()
+    profile = store.online_followers_profile()
+    for d in range(REPLAN_LOOKAHEAD_DAYS):
+        slots = plan_slots_from_settings(settings, day + timedelta(days=d), 1, taken, now=now,
+                                         hourly_profile=profile)
+        if slots:
+            return slots[0]
+    # ponytail: a week full of posts is not a real case; then just go after the last one.
+    return max(taken + [now]) + timedelta(minutes=settings.min_slot_gap_minutes)
+
+
+def hold_queue(store: CampaignStore, settings: InstagramMCPSettings,
+               now: datetime) -> List[Dict[str, Any]]:
+    """Late slots are re-planned, not fired (GOAL.md §3.3). Before anything is claimed, a
+    due post more than max_late_minutes late, or within min_slot_gap_minutes of a publish
+    (done, in flight or this run's), moves to the next free slot. So at most one due post
+    goes out per run. Returns the moves."""
+    gap = timedelta(minutes=settings.min_slot_gap_minutes)
+    max_late = timedelta(minutes=settings.max_late_minutes)
+    rows = store.queue_times(since=now - timedelta(days=1))
+    sent = [parse_dt(r["updated_at"]) for r in rows if r["status"] != "pending"]
+    pending = sorted((parse_dt(r["publish_at"]), r["id"]) for r in rows
+                     if r["status"] == "pending")
+    planned = [at for at, _ in pending if at > now]
+    moved = []
+    for at, post_id in pending:
+        if at > now:
+            break
+        late = now - at > max_late
+        if not late and all(abs(now - t) >= gap for t in sent):
+            sent.append(now)  # this one goes out now
+            continue
+        new = _next_free_slot(store, settings, sent + planned, now)
+        reason = (f"{int((now - at).total_seconds() // 60)} min late" if late
+                  else f"less than {settings.min_slot_gap_minutes} min after another post")
+        if store.move_pending(post_id, new, f"Re-planned: {reason}"):
+            planned.append(new)
+            moved.append({"id": post_id, "from": to_iso(at), "to": to_iso(new),
+                          "reason": reason})
+            logger.info("post_replanned", post_id=post_id, to=to_iso(new), reason=reason)
+    return moved
+
+
+async def run_due(
+    client: InstagramClient,
+    store: CampaignStore,
+    limit: int = 10,
+    *,
+    settings: Optional[InstagramMCPSettings] = None,
+    now: Callable[[], datetime] = utcnow,
+) -> Dict[str, Any]:
+    settings = settings or get_settings()
     stuck = store.recover_stuck()
     for asset_id in store.unsettled_assets():  # interrupted publishes: outcome unknown
         _asset_outcome(store, asset_id, "publish_check")
-    published, failed, retrying = [], [], []
-    for _ in range(limit):
+    published, failed, retrying, replanned = [], [], [], []
+    paused = is_paused(store, settings)
+    t = now()
+    if not paused:
+        replanned = hold_queue(store, settings, t)
+    for _ in range(0 if paused else limit):
         # Claim one at a time so nothing is left in 'publishing' if we stop early.
-        claimed = store.claim_due(limit=1)
+        claimed = store.claim_due(now=t, limit=1)
         if not claimed:
             break
         post = claimed[0]
@@ -168,6 +235,8 @@ async def run_due(client: InstagramClient, store: CampaignStore, limit: int = 10
         "retrying": retrying,
         "failed": failed,
         "recovered_stuck": stuck,
+        "replanned": replanned,
+        "paused": paused,
     }
 
 
