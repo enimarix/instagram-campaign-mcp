@@ -314,8 +314,8 @@ async def schedule_post(
     video_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Queue a post for later. A reel takes video_url or video_path (relative to the
-    media root; a studio asset's video is refused). publish_at is ISO 8601; without an offset it is read
-    in the configured time zone (default Europe/Paris), e.g. "2026-11-20T18:30".
+    media root; a studio asset's video is refused). publish_at is ISO 8601; without an
+    offset it is read in the configured time zone (default Europe/Paris), e.g. "2026-11-20T18:30".
     Needs the scheduler running (python -m src.scheduler daemon) or run_due_posts."""
     _not_an_asset(video_path)
     payload: Dict[str, Any]
