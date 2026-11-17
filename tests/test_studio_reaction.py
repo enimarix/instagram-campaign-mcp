@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.studio import ffmpeg, recipe
-from src.studio.recipe import Recipe, ReactionCollage, render
+from src.studio.recipe import ReactionCollage, Recipe, render
 from tests.test_studio_audio import mean_db
 from tests.test_studio_brand_ops import SH, SW, SX, SY, W, assert_in_safe_area, gray
 from tests.test_studio_ffmpeg import H264, needs_ffmpeg
