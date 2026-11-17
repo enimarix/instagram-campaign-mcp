@@ -109,6 +109,15 @@ printf '\033[32mDone.\033[0m\n'
 if grep -Eq '^INSTAGRAM_ACCESS_TOKEN=(your_long_lived_access_token)?[[:space:]]*$' "$ROOT/.env"; then
   echo "Next: edit .env and set INSTAGRAM_ACCESS_TOKEN (and INSTAGRAM_BUSINESS_ACCOUNT_ID)."
 fi
+# ffmpeg renders and probes the videos; we print the command instead of running sudo.
+if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+  case "$(uname -s)" in
+    Darwin)               FFMPEG_CMD="brew install ffmpeg" ;;
+    MINGW*|MSYS*|CYGWIN*) FFMPEG_CMD="winget install --id Gyan.FFmpeg -e" ;;
+    *)                    FFMPEG_CMD="sudo apt install ffmpeg (or your package manager)" ;;
+  esac
+  echo "Next: install ffmpeg (video rendering): $FFMPEG_CMD"
+fi
 echo "MCP server:      $SERVER"
 echo "Claude Code:     claude mcp add --scope user $NAME -- \"$SERVER\""
 case "$(uname -s)" in
