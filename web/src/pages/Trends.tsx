@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
-  addWatch, errorMessage, getTrends, listWatchlist, removeWatch,
-  type TrendItem, type TrendReport, type Watch,
+  addInspiration, addWatch, deleteInspiration, errorMessage, getTrends, listInspirations,
+  listWatchlist, removeWatch, setInspirationStatus,
+  type Inspiration, type TrendItem, type TrendReport, type Watch,
 } from '../api/client'
 import { button, chip, safeUrl } from '../inbox/ui'
 
@@ -43,15 +44,14 @@ function TrendCard({ item }: { item: TrendItem }) {
   )
 }
 
-function Watchlist() {
-  const [items, setItems] = useState<Watch[] | null>(null)
-  const [kind, setKind] = useState<Watch['kind']>('hashtag')
-  const [value, setValue] = useState('')
+/** A list the box edits: `act` runs a change, then reloads (or shows the error). */
+function useEditableList<T>(fetchAll: () => Promise<T[]>) {
+  const [items, setItems] = useState<T[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    listWatchlist().then(setItems, (e: unknown) => setError(errorMessage(e)))
-  }, [])
+    fetchAll().then(setItems, (e: unknown) => setError(errorMessage(e)))
+  }, [fetchAll])
   useEffect(load, [load])
 
   async function act(fn: () => Promise<unknown>) {
@@ -63,6 +63,92 @@ function Watchlist() {
       setError(errorMessage(e))
     }
   }
+  return { items, error, act }
+}
+
+const STATUS_CHIP: Record<Inspiration['status'], string> = {
+  new: 'bg-blue-100 text-blue-900',
+  used: 'bg-green-100 text-green-900',
+  dismissed: 'bg-gray-100 text-gray-600',
+}
+
+// Reels the owner pastes from the phone (step 051b); the agent reads the new ones.
+function Inspirations() {
+  const { items, error, act } = useEditableList(listInspirations)
+  const [url, setUrl] = useState('')
+  const [note, setNote] = useState('')
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (url.trim()) {
+      void act(() => addInspiration(url.trim(), note.trim()).then(() => {
+        setUrl('')
+        setNote('')
+      }))
+    }
+  }
+
+  return (
+    <section aria-label="Inspirations" className="mt-4">
+      <h3 className="font-semibold">Inspirations</h3>
+      <p className="text-xs text-gray-500">Paste a Reel link and say what you like about it. The agent learns the format, never copies it.</p>
+      <form onSubmit={submit} className="mt-2 flex flex-col gap-2">
+        <input aria-label="Reel link" type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://www.instagram.com/reel/…"
+          className="min-h-11 min-w-0 rounded-lg border border-gray-300 px-3 text-sm" />
+        <div className="flex gap-2">
+          <input aria-label="Note" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)}
+            placeholder="this format is funny"
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-gray-300 px-3 text-sm" />
+          <button type="submit" className={`${button} bg-blue-600 text-white`}>Add</button>
+        </div>
+      </form>
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      {items === null ? (
+        !error && <p className="mt-2 text-sm text-gray-500">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="mt-2 text-sm text-gray-500">No inspirations yet</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {items.map((i) => {
+            const href = safeUrl(i.url)
+            return (
+              <li key={i.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <p className="min-w-0 flex-1 break-words">{i.note ?? <span className="text-gray-500">No note</span>}</p>
+                  <span className={`${chip} ${STATUS_CHIP[i.status]}`}>{i.status}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {href && (
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex min-h-11 items-center text-blue-600 underline">
+                      Open
+                    </a>
+                  )}
+                  {i.status !== 'dismissed' && (
+                    <button type="button" className={`${button} bg-gray-100`}
+                      onClick={() => void act(() => setInspirationStatus(i.id, 'dismissed'))}>
+                      Dismiss
+                    </button>
+                  )}
+                  <button type="button" className={`${button} bg-gray-100 text-red-700`}
+                    onClick={() => void act(() => deleteInspiration(i.id))}>
+                    Delete
+                  </button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function Watchlist() {
+  const { items, error, act } = useEditableList(listWatchlist)
+  const [kind, setKind] = useState<Watch['kind']>('hashtag')
+  const [value, setValue] = useState('')
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -119,6 +205,7 @@ export default function Trends() {
     <section>
       <h2 className="text-2xl font-semibold">Trends</h2>
       <p className="text-sm text-gray-500">Last 14 days. ×N = the post against its account's (or hashtag's) median.</p>
+      <Inspirations />
       <Watchlist />
       <section aria-label="Trend report" className="mt-6">
         {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}

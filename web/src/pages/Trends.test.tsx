@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { TrendItem, TrendReport, Watch } from '../api/client'
+import type { Inspiration, TrendItem, TrendReport, Watch } from '../api/client'
 import Trends from './Trends'
 
 const ITEM: TrendItem = {
@@ -20,6 +20,12 @@ const REPORT: TrendReport = {
   generated_at: '2026-11-17T12:00:00+00:00',
 }
 const WATCH: Watch[] = [{ id: 3, kind: 'hashtag', value: 'fitness', note: null }]
+const INSP: Inspiration[] = [
+  { id: 7, url: 'https://www.instagram.com/reel/C1/', note: 'this format is funny', status: 'new',
+    created_at: '2026-11-17T08:00:00+00:00', used_at: null },
+  { id: 6, url: 'javascript:alert(1)', note: null, status: 'dismissed',
+    created_at: '2026-11-16T08:00:00+00:00', used_at: null },
+]
 
 function stubApi(overrides: Record<string, [number, unknown]> = {}) {
   const calls: { key: string; body?: unknown }[] = []
@@ -28,6 +34,10 @@ function stubApi(overrides: Record<string, [number, unknown]> = {}) {
     'GET /api/watchlist': [200, WATCH],
     'POST /api/watchlist': [200, { id: 4, kind: 'account', value: 'rival', note: null }],
     'DELETE /api/watchlist/3': [204, null],
+    'GET /api/inspirations': [200, INSP],
+    'POST /api/inspirations': [200, INSP[0]],
+    'PATCH /api/inspirations/7': [200, { ...INSP[0], status: 'dismissed' }],
+    'DELETE /api/inspirations/6': [204, null],
     ...overrides,
   }
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -94,5 +104,47 @@ describe('Trends', () => {
     fireEvent.change(within(list).getByLabelText('Hashtag or username'), { target: { value: 'two words' } })
     fireEvent.click(within(list).getByRole('button', { name: 'Add' }))
     expect((await within(list).findByRole('alert')).textContent).toBe('not a valid hashtag')
+  })
+
+  it('lists inspirations with a safe Open link, dismiss and delete', async () => {
+    const calls = stubApi()
+    render(<Trends />)
+    const box = await screen.findByRole('region', { name: 'Inspirations' })
+    const [first, second] = await within(box).findAllByRole('listitem')
+    expect(within(first).getByText('this format is funny')).toBeTruthy()
+    expect(within(first).getByText('new')).toBeTruthy()
+    const open = within(first).getByRole('link', { name: 'Open' })
+    expect(open.getAttribute('href')).toBe(INSP[0].url)
+    expect(open.getAttribute('target')).toBe('_blank')
+    expect(open.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(within(second).queryByRole('link')).toBeNull() // javascript: is never a link
+    expect(within(second).queryByRole('button', { name: 'Dismiss' })).toBeNull()
+    fireEvent.click(within(first).getByRole('button', { name: 'Dismiss' }))
+    await vi.waitFor(() => expect(calls.find((c) => c.key === 'PATCH /api/inspirations/7')?.body)
+      .toEqual({ status: 'dismissed' }))
+    fireEvent.click(within(second).getByRole('button', { name: 'Delete' }))
+    await vi.waitFor(() => expect(calls.map((c) => c.key)).toContain('DELETE /api/inspirations/6'))
+  })
+
+  it('adds an inspiration', async () => {
+    const calls = stubApi()
+    render(<Trends />)
+    const box = await screen.findByRole('region', { name: 'Inspirations' })
+    fireEvent.change(within(box).getByLabelText('Reel link'), { target: { value: ' https://www.instagram.com/reel/C2/?igsh=x ' } })
+    fireEvent.change(within(box).getByLabelText('Note'), { target: { value: 'react to this' } })
+    fireEvent.click(within(box).getByRole('button', { name: 'Add' }))
+    await vi.waitFor(() => expect(calls.find((c) => c.key === 'POST /api/inspirations')?.body)
+      .toEqual({ url: 'https://www.instagram.com/reel/C2/?igsh=x', note: 'react to this' }))
+    await vi.waitFor(() => expect((within(box).getByLabelText('Reel link') as HTMLInputElement).value).toBe(''))
+    expect((within(box).getByLabelText('Note') as HTMLInputElement).value).toBe('')
+  })
+
+  it('shows a refused inspiration link', async () => {
+    stubApi({ 'POST /api/inspirations': [422, { error: 'invalid', message: 'paste an Instagram Reel or post link' }] })
+    render(<Trends />)
+    const box = await screen.findByRole('region', { name: 'Inspirations' })
+    fireEvent.change(within(box).getByLabelText('Reel link'), { target: { value: 'https://x.com/a' } })
+    fireEvent.click(within(box).getByRole('button', { name: 'Add' }))
+    expect((await within(box).findByRole('alert')).textContent).toBe('paste an Instagram Reel or post link')
   })
 })
