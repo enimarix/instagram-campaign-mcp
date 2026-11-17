@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "tracks": {
+    "note": "Content track of an idea or asset (GOAL.md §3.1).",
+    "values": [
+      {"id": "remix", "label": "Remix", "description": "Track A: a reaction to or remix of someone else's clip, made ours by the owner's take and a credit."},
+      {"id": "motion", "label": "Motion", "description": "Track B: an original 8-bit motion video rendered from a code template."}
+    ]
+  },
+  "pillars": {
+    "placeholder": true,
+    "note": "Placeholders until the channel bible (gate H2, step 049) defines the real pillars.",
+    "values": [
+      {"id": "fun_facts", "label": "Fun facts", "description": "Surprising, checkable facts."},
+      {"id": "myths", "label": "Myths", "description": "Common beliefs that turn out wrong."},
+      {"id": "stories", "label": "Stories", "description": "A short story that explains one idea."},
+      {"id": "everyday_humor", "label": "Everyday humor", "description": "Relatable POV moments played for laughs."}
+    ]
+  },
+  "hook_types": {
+    "note": "How the first second grabs attention. The agent picks one per idea.",
+    "values": [
+      {"id": "question", "label": "Question", "description": "Opens with a direct question the viewer wants answered."},
+      {"id": "bold_claim", "label": "Bold claim", "description": "States something surprising or strong as fact, then backs it up."},
+      {"id": "curiosity_gap", "label": "Curiosity gap", "description": "Teases an answer or reveal that only comes later in the video."},
+      {"id": "pov", "label": "POV", "description": "\"POV:\" sets up a relatable situation the viewer is put into."},
+      {"id": "myth_bust", "label": "Myth bust", "description": "Names a common belief and promises to prove it wrong."},
+      {"id": "number_list", "label": "Number list", "description": "Promises a countable list (\"3 things...\", \"5 facts...\")."},
+      {"id": "story", "label": "Story", "description": "Drops the viewer into the middle of a short story."},
+      {"id": "challenge", "label": "Challenge", "description": "Dares the viewer to guess, answer or beat something before the reveal."}
+    ]
+  },
+  "templates": {
+    "note": "Track B (motion) code templates only. Track A assets are described by their recipe, not a template. Ids are PascalCase (component names in motion/).",
+    "values": [
+      {"id": "FactQuest", "label": "Fact Quest", "description": "Hook screen, 3-5 facts as game levels, end card."},
+      {"id": "BossBattle", "label": "Boss Battle", "description": "A versus B, or myth versus fact, as a boss fight with a verdict."},
+      {"id": "QuizChest", "label": "Quiz Chest", "description": "Question, choices, countdown, reveal; invites comments."},
+      {"id": "DialogStory", "label": "Dialog Story", "description": "RPG-style dialogue between the mascot and a character."},
+      {"id": "PixelSkit", "label": "Pixel Skit", "description": "Humour: a 10-20 s relatable POV sketch with a punchline."}
+    ]
+  },
+  "feedback_reasons": {
+    "note": "Reason chips in the review inbox (GOAL.md §3.2). Labels are what the chip shows.",
+    "values": [
+      {"id": "weak_hook", "label": "Weak hook"},
+      {"id": "too_long", "label": "Too long"},
+      {"id": "too_slow", "label": "Too slow"},
+      {"id": "wrong_tone", "label": "Wrong tone"},
+      {"id": "wrong_topic", "label": "Wrong topic"},
+      {"id": "factual_error", "label": "Wrong fact"},
+      {"id": "bad_audio", "label": "Bad audio"},
+      {"id": "ugly_visual", "label": "Ugly"},
+      {"id": "off_brand", "label": "Off-brand"},
+      {"id": "repetitive", "label": "Repetitive"},
+      {"id": "not_funny", "label": "Not funny"},
+      {"id": "caption", "label": "Caption"},
+      {"id": "other", "label": "Other"}
+    ]
+  }
+}
