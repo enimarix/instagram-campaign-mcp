@@ -70,6 +70,7 @@ def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: 
             "group": s["group"], "age_hours": snap["age_hours"], "metrics": snap["metrics"],
             "caption": (snap["caption"] or "")[:CAPTION_CHARS],
             "deleted": bool((s["label"] or {}).get("deleted_at")),
+            "asset_id": (s["label"] or {}).get("asset_id"),
             **{k: s.get(k) for k in SCORE_KEYS},
         })
 
@@ -79,9 +80,8 @@ def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: 
     rows = (sorted((r for r in rows if value(r) is not None), key=value, reverse=desc)
             + [r for r in rows if value(r) is None])
     page = rows[offset:offset + limit]
-    labels = store.labels()
     for row in page:  # only the page's assets are read
-        row.update(studio_side(store, (labels.get(row["media_id"]) or {}).get("asset_id")))
+        row.update(studio_side(store, row["asset_id"]))
         row.pop("asset", None)
     return {"total": len(rows), "limit": limit, "offset": offset, "sort": sort, "posts": page}
 
