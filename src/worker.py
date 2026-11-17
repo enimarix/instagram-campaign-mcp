@@ -3,12 +3,12 @@ The publishing worker (GOAL.md §3.3): `ig-campaign worker` (alias `daemon`) and
 
 Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late-slot and
 gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
-(data_jobs: publish-check reconcile, insight age schedule, daily account snapshot and
-followers online), and snapshots live Stories hourly. On Windows it keeps one one-shot
-Task Scheduler task that wakes the PC a few minutes before the next pending slot (its
-action, `run-due --wait-until-next`, holds the PC awake and publishes even when no worker
-runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the run handled it;
-elsewhere that part does nothing.
+(data_jobs: publish-check reconcile, insight age schedule, daily account snapshot,
+followers online and the daily facts), and snapshots live Stories hourly. On Windows it
+keeps one one-shot Task Scheduler task that wakes the PC a few minutes before the next
+pending slot (its action, `run-due --wait-until-next`, holds the PC awake and publishes
+even when no worker runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the
+run handled it; elsewhere that part does nothing.
 
 render_loop() runs beside it (and alone in setup mode: renders need no Instagram): it
 renders queued render jobs (src/studio/render.py) in threads, keeping the PC awake meanwhile,
@@ -40,6 +40,7 @@ from .campaign import (
 )
 from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
+from .learning import facts
 from .store import CampaignStore, parse_dt, to_iso, utcnow
 from .studio import housekeeping, power, render
 from .studio.power import keep_awake
@@ -168,9 +169,15 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
     if _every(store, "insights_at", INSIGHTS_EVERY, t):
         await job("insights", lambda: collect_due_insights(client, store, t,
                                                            lambda: data_budget_left(client)))
+
+    async def daily_facts() -> Dict[str, Any]:  # after the snapshots: yesterday's facts
+        return {"report_date": (await facts.build_and_store(store, settings, client, t))
+                ["report_date"]}
+
     for key, make in (("account_day", lambda: snapshot_account(client, store, today)),
                       ("online_followers_day",
-                       lambda: collect_online_followers(client, store, today))):
+                       lambda: collect_online_followers(client, store, today)),
+                      ("facts_day", daily_facts)):
         if (store.get_state(key) != today.isoformat()
                 and _every(store, f"{key}_tried_at", DAILY_RETRY, t) and await job(key, make)):
             store.set_state(key, today.isoformat())

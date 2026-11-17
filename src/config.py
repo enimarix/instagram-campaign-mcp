@@ -278,6 +278,10 @@ class InstagramMCPSettings(BaseSettings):
     baseline_window: int = Field(
         30, description="How many recent matured posts form the account baseline"
     )
+    experiment_min_sample: int = Field(
+        5, ge=1, description="Published assets an experiment needs before the daily facts"
+                             " list it as reached"
+    )
 
     # --- Website ----------------------------------------------------------
     # Optional; required before `serve` binds a non-loopback host. Never logged or returned.
