@@ -329,6 +329,30 @@ describe('InboxPage feed', () => {
       await waitFor(() => expect(posts(calls)).toEqual([['/api/assets/1/verdict', { verdict: 'liked' }]]))
     })
 
+    it('opening the Saved tab right after loads the bench once the save landed', async () => {
+      const calls = stubApi()
+      const stubbed = fetch
+      let release = () => {}
+      const held = new Promise<void>((r) => { release = r })
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          await held // the save is still on its way
+          return new Response(JSON.stringify(asset(1, { verdict: 'liked' })), { status: 200 })
+        }
+        return stubbed(url, init)
+      }))
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      press(1, 'Save for later')
+      const benchGets = () => calls.filter((c) => c.url === '/api/bench').length
+      const before = benchGets()
+      fireEvent.click(screen.getByRole('tab', { name: /Saved/ }))
+      await act(() => new Promise((r) => setTimeout(r, 20)))
+      expect(benchGets()).toBe(before)
+      release()
+      await waitFor(() => expect(benchGets()).toBeGreaterThan(before))
+    })
+
     it('key s saves; undo sends nothing', async () => {
       const calls = stubApi()
       renderPage()

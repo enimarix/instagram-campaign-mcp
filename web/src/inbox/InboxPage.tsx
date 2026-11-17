@@ -65,6 +65,7 @@ export default function InboxPage() {
   const [confirmFor, setConfirmFor] = useState<Asset | null>(null)
   const [why, setWhy] = useState<{ id: number; codes: string[] } | null>(null) // decline reasons
   const pending = useRef(new Map<number, Pending>())
+  const inflight = useRef<Promise<unknown>>(Promise.resolve()) // committed decisions still saving
   const declineCodes = useRef(new Map<number, string[]>())
   const scroller = useRef<HTMLDivElement>(null)
   const toast = useToast()
@@ -79,7 +80,10 @@ export default function InboxPage() {
     let live = true
     const failed = (what: string) => (e: unknown) =>
       live && setError(`Could not load the ${what} (${errorMessage(e)})`)
-    getBench().then(
+    // After the decisions still saving (a tab or day switch flushes them): a video saved
+    // for later a moment ago is then on the bench.
+    const settled = inflight.current
+    settled.then(() => getBench()).then(
       (b) => {
         if (!live) return
         setBench(b)
@@ -88,7 +92,7 @@ export default function InboxPage() {
       tab === 'bench' ? failed('saved videos') : () => {}, // Today still works without the banner
     )
     if (tab === 'today')
-      listAssets({ batch_date: date }).then((list) => live && setAssets(list), failed('batch'))
+      settled.then(() => listAssets({ batch_date: date })).then((list) => live && setAssets(list), failed('batch'))
     return () => {
       live = false
     }
@@ -145,12 +149,13 @@ export default function InboxPage() {
     patch(a.id, as) // out of the feed
     const run = () => {
       clearTimeout(timer)
-      commit()
+      const saving = commit()
         .catch((e: unknown) => {
           patch(a.id, a) // back in the feed
           setError(`Could not save video ${a.id} (${errorMessage(e)})`)
         })
         .finally(() => getBench().then(setBench, () => {}))
+      inflight.current = Promise.all([inflight.current, saving])
       forget(a.id) // after commit() started: decline reads its reasons synchronously
     }
     const timer = setTimeout(run, UNDO_MS)
