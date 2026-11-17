@@ -313,11 +313,38 @@ CREATE TABLE inspirations (
 );
 """
 
+# Migration 11: the reaction reel (071). One long owner recording; pieces are cut from it
+# in order (cursor_s = where the next one starts). silences: [[start_s, end_s], ...] found
+# once at upload. One reel is active at a time (the partial unique index).
+REACTION_REEL_SCHEMA = """
+CREATE TABLE reaction_reels (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    path        TEXT NOT NULL,
+    duration_s  REAL NOT NULL,
+    has_audio   INTEGER NOT NULL DEFAULT 1,
+    silences    TEXT NOT NULL DEFAULT '[]',
+    cursor_s    REAL NOT NULL DEFAULT 0,
+    pieces_used INTEGER NOT NULL DEFAULT 0,
+    active      INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_reaction_reels_active ON reaction_reels(active) WHERE active = 1;
+CREATE TABLE reaction_pieces (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    reel_id    INTEGER NOT NULL REFERENCES reaction_reels(id),
+    start_s    REAL NOT NULL,
+    end_s      REAL NOT NULL,
+    asset_id   INTEGER REFERENCES assets(id),
+    created_at TEXT NOT NULL
+);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
-                         RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA]
+                         RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
+                         REACTION_REEL_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -342,7 +369,7 @@ RENDER_JOB_FIELDS = ("state", "progress", "attempts", "failure", "started_at", "
 FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
 LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "origin", "status")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
-               "facts", "usage")
+               "facts", "usage", "silences")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),
@@ -1090,6 +1117,67 @@ class CampaignStore:
         with self._tx() as c:
             c.execute("DELETE FROM inspirations WHERE id=?", (inspiration_id,))
         return row
+
+    # ------------------------------------------------------------------
+    # Reaction reel (service rules: src/studio/reactions.py)
+    # ------------------------------------------------------------------
+    def add_reaction_reel(self, suffix: str, duration_s: float, has_audio: bool,
+                          silences: List[List[float]]) -> Dict[str, Any]:
+        """A new inactive reel; its path is `reactions/<id>/reel<suffix>`."""
+        with self._tx() as c:
+            cur = c.execute("INSERT INTO reaction_reels (path, duration_s, has_audio, silences,"
+                            " created_at) VALUES ('', ?, ?, ?, ?)",
+                            (duration_s, int(has_audio), json.dumps(silences),
+                             to_iso(utcnow())))
+            c.execute("UPDATE reaction_reels SET path=? WHERE id=?",
+                      (f"reactions/{cur.lastrowid}/reel{suffix}", cur.lastrowid))
+        return self._get("reaction_reels", cur.lastrowid)
+
+    def get_reaction_reel(self, reel_id: int) -> Dict[str, Any]:
+        return self._get("reaction_reels", reel_id)
+
+    def list_reaction_reels(self) -> List[Dict[str, Any]]:
+        return self._select("SELECT * FROM reaction_reels", {}, "id DESC", 1000)
+
+    def active_reaction_reel(self) -> Optional[Dict[str, Any]]:
+        rows = self._select("SELECT * FROM reaction_reels", {"active": 1}, "id", 1)
+        return rows[0] if rows else None
+
+    def activate_reaction_reel(self, reel_id: int) -> Dict[str, Any]:
+        """Make this reel the only active one; KeyError when there is none."""
+        self._get("reaction_reels", reel_id)
+        with self._tx() as c:
+            c.execute("UPDATE reaction_reels SET active=0 WHERE active=1 AND id<>?", (reel_id,))
+            c.execute("UPDATE reaction_reels SET active=1 WHERE id=?", (reel_id,))
+        return self._get("reaction_reels", reel_id)
+
+    def delete_reaction_reel(self, reel_id: int) -> None:
+        with self._tx() as c:
+            c.execute("DELETE FROM reaction_pieces WHERE reel_id=?", (reel_id,))
+            c.execute("DELETE FROM reaction_reels WHERE id=?", (reel_id,))
+
+    def reset_reaction_cursor(self, reel_id: int) -> Dict[str, Any]:
+        with self._tx() as c:
+            c.execute("UPDATE reaction_reels SET cursor_s=0, pieces_used=0 WHERE id=?",
+                      (reel_id,))
+        return self._get("reaction_reels", reel_id)
+
+    def claim_reaction_piece(self, reel_id: int, cursor_s: float, start_s: float, end_s: float,
+                             pieces_used: int, asset_id: Optional[int] = None
+                             ) -> Optional[Dict[str, Any]]:
+        """Record piece [start_s, end_s), move the cursor to end_s and set pieces_used, only
+        if the reel is still active with its cursor at `cursor_s` (compare-and-set: of two
+        concurrent callers one wins, the other gets None and reads again). One write
+        transaction."""
+        with self._tx() as c:
+            if c.execute("UPDATE reaction_reels SET cursor_s=?, pieces_used=?"
+                         " WHERE id=? AND active=1 AND cursor_s=?",
+                         (end_s, pieces_used, reel_id, cursor_s)).rowcount != 1:
+                return None
+            cur = c.execute("INSERT INTO reaction_pieces (reel_id, start_s, end_s, asset_id,"
+                            " created_at) VALUES (?,?,?,?,?)",
+                            (reel_id, start_s, end_s, asset_id, to_iso(utcnow())))
+        return self._get("reaction_pieces", cur.lastrowid)
 
     def add_idea(self, track: str, **fields: Any) -> Dict[str, Any]:
         """Tags are checked against brand/taxonomy.json (TaxonomyError lists valid values)."""
