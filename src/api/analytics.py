@@ -23,9 +23,10 @@ def account(request: Request, days: int = Query(30, ge=1, le=3660),
 @router.get("/posts")
 def posts(request: Request, limit: int = Query(50, ge=1, le=500),
           offset: int = Query(0, ge=0), sort: str = "-posted_at",
-          type: Optional[str] = None, store: CampaignStore = Depends(get_store)):
-    return call(analytics.posts_table, store, request.app.state.settings,
-                limit=limit, offset=offset, sort=sort, post_type=type)
+          type: Optional[str] = None, verdict: Optional[str] = None,
+          tagged: Optional[bool] = None, store: CampaignStore = Depends(get_store)):
+    return call(analytics.posts_table, store, request.app.state.settings, limit=limit,
+                offset=offset, sort=sort, post_type=type, verdict=verdict, tagged=tagged)
 
 
 @router.get("/posts/{media_id}")

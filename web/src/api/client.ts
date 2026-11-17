@@ -333,6 +333,13 @@ export type AnalyticsPost = {
   verdict: string // src/scoring.py: winner, promising, average, weak, too_early, ...
   why: string | null
   asset_id: number | null
+  thumbnail_url?: string | null // studio posts only (079)
+  preview_url?: string | null
+  engagement_index?: number | null
+  reach_index?: number | null
+  watch_ratio?: number | null
+  view_rate?: number | null
+  tags?: Record<string, string | null> | null
 }
 export const getAnalyticsPosts = (limit = 100) =>
   request<{ total: number; posts: AnalyticsPost[] }>(`/api/analytics/posts?limit=${limit}`)
@@ -356,3 +363,19 @@ export type Taste = {
   reasons: { code: string; label: string; count: number }[]
 }
 export const getTaste = (days = 30) => request<Taste>(`/api/analytics/taste?days=${days}`)
+
+// --- Posts pages (step 079) ---
+/** Filters and sort of GET /api/analytics/posts; empty values are left out of the URL. */
+export type PostsQuery = { sort: string; type: string; verdict: string; tagged: string; offset: number; limit: number }
+export const listAnalyticsPosts = (q: PostsQuery) =>
+  request<{ total: number; posts: AnalyticsPost[] }>(`/api/analytics/posts?${new URLSearchParams(
+    Object.entries(q).flatMap(([k, v]) => (v === '' ? [] : [[k, String(v)]])))}`)
+
+/** GET /api/analytics/posts/{media_id}: the snapshot series oldest first, plus the studio side. */
+export type PostDetail = Omit<AnalyticsPost, 'metrics' | 'verdict' | 'why'> & {
+  hypothesis: string | null
+  feedback: Comment[]
+  series: { captured_at: string; age_hours: number; metrics: Record<string, number | null> }[]
+}
+export const getAnalyticsPost = (mediaId: string) =>
+  request<PostDetail>(`/api/analytics/posts/${encodeURIComponent(mediaId)}`)

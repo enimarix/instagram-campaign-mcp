@@ -138,3 +138,28 @@ def test_posts_table_rows_carry_watch_ratio_and_view_rate(tc, store):
     rows = {p["media_id"]: p for p in tc.get("/api/analytics/posts").json()["posts"]}
     assert rows["ours"]["watch_ratio"] == 0.3 and rows["ours"]["view_rate"] == 1.5
     assert rows["ext"]["watch_ratio"] is None and rows["ext"]["view_rate"] == 1.5
+
+
+def test_posts_table_urls_and_verdict_tagged_filters(tc, store):
+    _post(store, "ext", 100, reach=3000, seed=1)
+    _post(store, "ours", 200, "REELS", reach=2000, seed=2)
+    _post(store, "young", 2, reach=10, seed=3)
+    asset = _studio_post(store, "ours")
+    store.update_asset(asset["id"], thumbnail_path="2026-11-01/1/thumb.jpg")
+
+    rows = {p["media_id"]: p for p in tc.get("/api/analytics/posts").json()["posts"]}
+    assert rows["ours"]["thumbnail_url"] == "/api/media/2026-11-01/1/thumb.jpg"
+    assert rows["ours"]["preview_url"] == "/api/media/2026-11-01/1/preview.mp4"
+    assert rows["ext"]["thumbnail_url"] is None and rows["ext"]["preview_url"] is None
+    assert "asset" not in rows["ours"]
+
+    def ids(query):
+        body = tc.get(f"/api/analytics/posts?{query}").json()
+        return sorted(p["media_id"] for p in body["posts"]), body["total"]
+
+    assert ids("tagged=true") == (["ours"], 1)
+    assert ids("tagged=false") == (["ext", "young"], 2)
+    assert ids("verdict=too_early") == (["young"], 1)
+    assert ids("verdict=too_early&tagged=true") == ([], 0)
+    assert tc.get("/api/analytics/posts?verdict=nope").status_code == 422
+    assert tc.get("/api/analytics/posts?sort=-watch_ratio").status_code == 200

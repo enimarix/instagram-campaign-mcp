@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccountDay, AnalyticsPost, Funnel, Taste } from '../api/client'
@@ -22,7 +22,7 @@ const post = (n: number, extra: Partial<AnalyticsPost> = {}): AnalyticsPost => (
 })
 const ACCOUNT = { since: '', until: '', days: [day(8, 1000), day(1, 1070), day(0, 1080)] }
 // today, yesterday, two days ago: a 3-day streak; 9 days ago is not this week
-const POSTS = { total: 4, posts: [post(0, { verdict: 'winner', asset_id: 7 }), post(1), post(2), post(9)] }
+const POSTS = { total: 4, posts: [post(0, { verdict: 'winner', asset_id: 7, thumbnail_url: '/api/media/7/thumb.jpg' }), post(1), post(2), post(9)] }
 const FUNNEL: Funnel = {
   since: '', until: '', approval_rate_note: 'capped by MAX_POSTS_PER_DAY',
   totals: { produced: 12, reviewed: 10, liked: 6, approved: 3, published: 2, winner: 1, like_rate: 0.6, approval_rate: 0.3 },
@@ -53,7 +53,6 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     '/api/analytics/posts?limit=100': POSTS,
     '/api/analytics/funnel?days=30': FUNNEL,
     '/api/analytics/taste?days=30': TASTE,
-    '/api/assets/7': { id: 7, thumbnail_url: '/api/media/7/thumb.jpg' },
     ...overrides,
   }
   const fetchMock = vi.fn(async (url: string) =>
@@ -88,8 +87,8 @@ describe('Analytics', () => {
     expect(within(posts).getAllByRole('listitem')).toHaveLength(3)
     expect(within(posts).getByText('winner')).toBeTruthy()
     expect(within(posts).getAllByRole('link', { name: 'Details' })[0].getAttribute('href')).toBe('/analytics/posts/m0')
-    // ours shows its thumbnail, the others link to Instagram
-    await waitFor(() => expect(posts.querySelector('img')?.getAttribute('src')).toBe('/api/media/7/thumb.jpg'))
+    // ours shows the row's thumbnail (no per-card asset fetch), the others link to Instagram
+    expect(posts.querySelector('img')?.getAttribute('src')).toBe('/api/media/7/thumb.jpg')
     expect(within(posts).getAllByRole('link', { name: 'Open on Instagram' })).toHaveLength(2)
 
     const funnel = within(screen.getByRole('list', { name: 'Funnel' })).getAllByRole('listitem')
