@@ -25,6 +25,15 @@
   with the asset; `sourcesNote` shows on the end card when there are some), `voice` {audioSrc?,
   lines?: one timing per line: hook, each fact, outro}, `loop` (default true), `palette`,
   `safeZone`. Length = script timeline. Still: `npm run still:factquest` (mid level 1).
+- `BossBattle` (`src/templates/BossBattle/`): A vs B (or myth vs fact) as an 8-bit fight. Hook card
+  with "A VS B" under it, 2–4 "ROUND n" scenes (the attacker dashes in, hit flash + `sfx-hit`, the
+  foe's HUD health bar drops; the argument types into the caption band), then the verdict (the
+  winner knocks the loser out, or "DRAW!", `sfx-confirm`; verdict text in the band, `sourcesNote`
+  under it when there are citations). Props in `schema.ts` (example `props/bossbattle.json`):
+  `hook`, `left`/`right` {name ≤16, sprite?: mascot|slime|coin|heart}, `rounds` [{attacker:
+  left|right, text}], `verdict` {winner: left|right|draw, text}, `citations`, `sourcesNote?`,
+  `voice` {audioSrc?, lines?: hook, each round, verdict}, `loop`, `palette`, `safeZone`. Health per
+  scene: `healthSteps()` (each hit takes 1/(rounds+1)). Still: `npm run still:bossbattle` (round 2).
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
 - 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading,
   game maths in `game.ts`, code-drawn sprites in `sprites.ts`), `src/components/` (`PixelText`,
