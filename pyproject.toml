@@ -26,6 +26,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21", "ruff>=0.15"]
+# Local transcription (src/studio/stt.py). Not in dev: CI never downloads models.
+stt = ["faster-whisper==1.2.1"]
 
 [project.scripts]
 ig-campaign-mcp = "src.instagram_mcp_server:main"

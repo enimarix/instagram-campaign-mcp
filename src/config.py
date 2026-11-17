@@ -180,6 +180,18 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "data" / "cache" / "tts"), description="Synthesized audio cache"
     )
 
+    # --- Transcription ----------------------------------------------------
+    # src/studio/stt.py. `none` = no transcript. `faster_whisper` = local CPU model (int8),
+    # optional extra `pip install -e .[stt]`; the model downloads on first use.
+    stt_provider: Literal["none", "faster_whisper"] = Field(
+        "none", description="Speech-to-text engine"
+    )
+    stt_model: str = Field("small", description="faster-whisper model: tiny, base, small, ...")
+    stt_language: Optional[str] = Field(None, description="Language code; empty = auto-detect")
+    stt_cache_dir: str = Field(
+        str(APP_HOME / "data" / "cache" / "stt"), description="Transcript cache"
+    )
+
     # --- Production tools -------------------------------------------------
     # src/studio/production.py (the agent's batch tools).
     best_before_default_days: int = Field(

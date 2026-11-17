@@ -973,6 +973,13 @@ class CampaignStore:
     def get_source(self, source_id: int) -> Dict[str, Any]:
         return self._get("sources", source_id)
 
+    def patch_source_stats(self, source_id: int, patch: Dict[str, Any]) -> None:
+        """Merge `patch` into the source's stats key by key (JSON merge patch)."""
+        with self._tx() as c:
+            if c.execute("UPDATE sources SET stats=json_patch(stats, ?) WHERE id=?",
+                         (json.dumps(patch), source_id)).rowcount != 1:
+                raise KeyError(f"No source with id {source_id}")
+
     def list_sources(
         self, rights_basis: Optional[str] = None, provider: Optional[str] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
