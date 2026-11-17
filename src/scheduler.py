@@ -12,6 +12,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler collect --limit 30  # snapshot insights (run daily)
   python -m src.scheduler collect --stories-only  # live Stories (run hourly)
   python -m src.scheduler rank                # print the winner ranking
+  python -m src.scheduler facts [--date D]    # yesterday's (or D's) daily facts as JSON
   python -m src.scheduler serve               # studio REST API on 127.0.0.1:8765
   python -m src.scheduler up                  # website + API + worker in one process
   python -m src.scheduler dev seed --days 3   # fake demo batch for website work
@@ -33,14 +34,15 @@ import asyncio
 import json
 import subprocess
 import sys
-from contextlib import suppress
+from contextlib import nullcontext, suppress
+from datetime import date
 
 from . import worker
 from .campaign import collect_insights, rank, run_due
 from .config import InstagramMCPSettings, get_settings
 from .instagram_client import InstagramAPIError, InstagramClient
 from .logging_setup import configure_logging
-from .store import CampaignStore
+from .store import CampaignStore, utcnow
 
 NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
                   "and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env)")
@@ -109,6 +111,8 @@ async def _run(args: argparse.Namespace) -> int:
             return 0
         if args.command == "token":
             return await _token(args, settings, store)
+        if args.command == "facts":
+            return await _facts(args, settings, store)
         if not settings.instagram_configured:
             # Setup mode: nothing to publish or measure yet. Exit 0 so cron and
             # Task Scheduler don't flag a failure.
@@ -126,6 +130,23 @@ async def _run(args: argparse.Namespace) -> int:
         return 0
     finally:
         store.close()
+
+
+async def _facts(args: argparse.Namespace, settings: InstagramMCPSettings,
+                 store: CampaignStore) -> int:
+    """`facts [--date]`: the stored facts, computed when missing (comments need Instagram)."""
+    from .learning.facts import facts_for
+
+    async with (InstagramClient(settings, store=store) if settings.instagram_configured
+                else nullcontext()) as client:
+        try:
+            result = await facts_for(store, settings, day=args.date, client=client,
+                                     now=utcnow())
+        except ValueError as e:
+            print(f"facts: {e}", file=sys.stderr)
+            return 1
+    print(json.dumps(result, indent=2, default=str))
+    return 0
 
 
 async def _token(args: argparse.Namespace, settings: InstagramMCPSettings,
@@ -239,6 +260,9 @@ def main(argv: list[str] | None = None) -> None:
                    help="Only snapshot live Stories (cheap; run hourly)")
     r = sub.add_parser("rank", help="Print winner ranking from stored snapshots")
     r.add_argument("--campaign")
+    f = sub.add_parser("facts", help="Print the daily facts (no AI) as JSON")
+    f.add_argument("--date", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                   help="Owner-local day (default: yesterday)")
     for name, help_ in (("serve", "Run the studio REST API"),
                         ("up", "Run the studio: website, API and publishing worker together")):
         s = sub.add_parser(name, help=help_)
