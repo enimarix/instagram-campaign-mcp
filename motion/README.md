@@ -56,6 +56,17 @@
   `palette`, `safeZone`. `withCountdown()` inserts countdown + 1.5 s reveal after the question line;
   the voice track plays in two parts around it, so its timings are those of the plain audio. Still:
   `npm run still:quizchest` (countdown).
+- `DialogStory` (`src/templates/DialogStory/`): an RPG-style dialogue that tells a short story or
+  explains one idea. Hook card with both portraits under it, then one scene per line: the two
+  portraits in the top half (the speaker's frame lit, bouncing and animating while it talks, the
+  listener dimmed), the line typed into a `DialogBox` with the speaker's name tag after a short
+  beat (`sfx-select`), then the optional moral in a box without a tag (`sfx-confirm`, `sourcesNote`
+  under it when there are citations). Props in `schema.ts` (example `props/dialogstory.json`):
+  `hook`, `characters` (2 × {name ≤16, sprite?: mascot|slime|coin|heart, side: left|right}, one per
+  side; default portraits mascot, slime), `lines` (3–8 × {speaker: 0|1, text ≤100}, both speak),
+  `moral?`, `citations`, `sourcesNote?`, `voice` {audioSrc?, lines?: hook, each line, moral when
+  given}, `music` (as QuizChest), `loop`, `palette`, `safeZone`. Scene roles: `sceneRoles()`; talk
+  span: `talkSpan()` (typed or voiced, whichever is later). Still: `npm run still:dialogstory`.
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
 - 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading,
   game maths in `game.ts`, code-drawn sprites in `sprites.ts`), `src/components/` (`PixelText`,

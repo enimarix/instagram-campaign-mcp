@@ -1,0 +1,22 @@
+{
+  "hook": "Les bananes sont radioactives ?!",
+  "characters": [
+    { "name": "Pixel", "sprite": "mascot", "side": "left" },
+    { "name": "Slimy", "sprite": "slime", "side": "right" }
+  ],
+  "lines": [
+    { "speaker": 1, "text": "Il paraît que les bananes sont radioactives !" },
+    { "speaker": 0, "text": "C'est vrai : elles contiennent un peu de potassium 40." },
+    { "speaker": 1, "text": "Alors je dois arrêter d'en manger ?" },
+    { "speaker": 0, "text": "Non ! La dose d'une banane est minuscule, bien moins qu'une journée de radioactivité naturelle." },
+    { "speaker": 1, "text": "Ouf, je garde mon goûter." }
+  ],
+  "moral": "Radioactif ne veut pas dire dangereux : c'est la dose qui compte.",
+  "citations": [
+    { "url": "https://en.wikipedia.org/wiki/Banana_equivalent_dose", "title": "Banana equivalent dose" }
+  ],
+  "sourcesNote": "Sources dans la légende",
+  "music": "music-overworld",
+  "loop": true,
+  "safeZone": false
+}
