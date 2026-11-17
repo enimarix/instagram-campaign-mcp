@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import {
-  errorMessage, getAccountSeries, getAnalyticsPosts, getAsset, getFunnel, getTaste,
-  type AnalyticsPost, type FunnelStats,
+  getAccountSeries, getAnalyticsPosts, getFunnel, getTaste, type AnalyticsPost, type FunnelStats,
 } from '../api/client'
 import { button, chip, localDate, safeUrl } from '../inbox/ui'
+import { num, pct, useLoad, VERDICT_STYLE, type Load } from './load'
 
 // The definitions of src/learning/funnel.py's docstring, behind the ⓘ toggles.
 const HELP = {
@@ -17,12 +17,7 @@ const HELP = {
 }
 const RANGES = [7, 30, 90]
 const STAGES = ['produced', 'reviewed', 'liked', 'approved', 'published', 'winner'] as const
-const VERDICT_STYLE: Record<string, string> = {
-  winner: 'bg-green-100 text-green-900', promising: 'bg-amber-100 text-amber-900', weak: 'bg-red-100 text-red-900',
-}
 
-const num = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString('en'))
-const pct = (r: number | null | undefined) => (r == null ? '–' : `${Math.round(r * 100)} %`)
 const signed = (n: number, format: (n: number) => string) => `${n < 0 ? '−' : '+'}${format(Math.abs(n))}`
 const sum = (xs: (number | null)[]) => (xs.some((x) => x !== null) ? xs.reduce<number>((a, x) => a + (x ?? 0), 0) : null)
 const postDay = (p: AnalyticsPost) => (p.posted_at ? localDate(new Date(p.posted_at)) : null)
@@ -32,31 +27,15 @@ const daysAgo = (n: number) => {
   return d
 }
 
-type Load<T> = { data?: T; error?: string }
-/** Fetches on mount and whenever `key` changes; a late answer for an old key is dropped. */
-function useLoad<T>(load: () => Promise<T>, key: unknown): Load<T> {
-  const [state, setState] = useState<Load<T>>({})
-  useEffect(() => {
-    let live = true
-    load().then((data) => live && setState({ data }), (e: unknown) => live && setState({ error: errorMessage(e) }))
-    return () => {
-      live = false
-    }
-    // `load` is a fresh closure each render; it only depends on `key`
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
-  return state
-}
-
 /** Loading, error and empty states in one place: a friendly line, never a crash. */
-function Body<T>({ s, empty, children }: { s: Load<T>; empty: (d: T) => string | false; children: (d: T) => ReactNode }) {
+export function Body<T>({ s, empty, children }: { s: Load<T>; empty: (d: T) => string | false; children: (d: T) => ReactNode }) {
   if (s.error) return <p role="alert" className="mt-2 text-sm text-red-700">Couldn't load: {s.error}</p>
   if (s.data === undefined) return <p className="mt-2 text-sm text-gray-500">Loading…</p>
   const message = empty(s.data)
   return message ? <p className="mt-2 text-sm text-gray-500">{message}</p> : <>{children(s.data)}</>
 }
 
-function Section({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
+export function Section({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
     <section aria-label={title} className="mt-6">
@@ -74,7 +53,7 @@ function Section({ title, help, children }: { title: string; help?: string; chil
 }
 
 /** A small inline SVG line; null values are skipped. The numbers are also shown as text. */
-function Line({ label, values, format = num }: { label: string; values: (number | null)[]; format?: (n: number) => string }) {
+export function Line({ label, values, format = num }: { label: string; values: (number | null)[]; format?: (n: number) => string }) {
   const pts = values.flatMap((v, i) => (v === null ? [] : [[i, v] as const]))
   if (pts.length === 0) return <p className="text-sm text-gray-500">{label}: no data yet</p>
   const ys = pts.map(([, v]) => v)
@@ -119,8 +98,7 @@ function Funnel({ totals, note }: { totals: FunnelStats; note: string }) {
 }
 
 function PostCard({ post }: { post: AnalyticsPost }) {
-  const asset = useLoad(() => (post.asset_id === null ? Promise.resolve(null) : getAsset(post.asset_id)), post.asset_id)
-  const thumb = asset.data?.thumbnail_url
+  const thumb = post.thumbnail_url
   const href = safeUrl(post.permalink)
   return (
     <li className="flex gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm">
@@ -221,6 +199,7 @@ export default function Analytics() {
       </Section>
 
       <Section title="This week's posts">
+        <Link to="/analytics/posts" className="inline-flex min-h-11 items-center text-blue-600 underline">All posts</Link>
         <Body s={posts} empty={() => week.length === 0 && 'No posts in the last 7 days.'}>
           {() => <ul className="mt-2 space-y-2">{week.map((p) => <PostCard key={p.media_id} post={p} />)}</ul>}
         </Body>

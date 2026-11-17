@@ -19,10 +19,13 @@ from ..studio.seed import local_today
 
 SCORE_KEYS = ("verdict", "why", "engagement_index", "reach_index", "confidence",
               "baseline_posts", "drivers", "watch_ratio", "view_rate")
-ROW_SORTS = ("posted_at", "age_hours", "engagement_index", "reach_index")
+ROW_SORTS = ("posted_at", "age_hours", "engagement_index", "reach_index", "watch_ratio",
+             "view_rate")
 METRIC_SORTS = ("views", "reach", "likes", "comments", "saved", "shares",
                 "ig_reels_avg_watch_time")
 POST_TYPES = ("FEED", "REELS", "STORY")
+VERDICTS = ("winner", "promising", "average", "weak", "inconclusive", "no_signal", "too_early",
+            "incomplete", "no_baseline")  # src/scoring.py
 IDEA_TAGS = ("track", "pillar", "hook_type", "strategy")
 CAPTION_CHARS = 120
 
@@ -50,19 +53,26 @@ def recent_account_series(store: CampaignStore, settings: InstagramMCPSettings, 
 
 def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: int = 50,
                 offset: int = 0, sort: str = "-posted_at",
-                post_type: Optional[str] = None) -> Dict[str, Any]:
+                post_type: Optional[str] = None, verdict: Optional[str] = None,
+                tagged: Optional[bool] = None) -> Dict[str, Any]:
     """One row per post: latest metrics, score, deletion mark, and the studio asset's owner
-    verdict and tags (None for posts made outside the studio). sort: a key of ROW_SORTS or
-    METRIC_SORTS, '-' first for descending; posts without the value go last.
-    ValueError: unknown sort or post type."""
+    verdict, tags and preview/thumbnail URLs (None for posts made outside the studio).
+    sort: a key of ROW_SORTS or METRIC_SORTS, '-' first for descending; posts without the
+    value go last. verdict: the score's verdict; tagged: made by the studio (has idea tags)
+    or not. ValueError: unknown sort, post type or verdict."""
     desc, key = sort.startswith("-"), sort.lstrip("-")
     if key not in ROW_SORTS + METRIC_SORTS:
         raise ValueError(f"sort must be one of {ROW_SORTS + METRIC_SORTS}, '-' for descending")
     if post_type is not None and post_type.upper() not in POST_TYPES:
         raise ValueError(f"type must be one of {POST_TYPES}")
+    if verdict is not None and verdict not in VERDICTS:
+        raise ValueError(f"verdict must be one of {VERDICTS}")
     rows = []
     for snap, s in scored_posts(store, settings):
-        if post_type and s["group"] != post_type.upper():
+        asset_id = (s["label"] or {}).get("asset_id")
+        if ((post_type and s["group"] != post_type.upper())
+                or (verdict and s.get("verdict") != verdict)
+                or (tagged is not None and tagged != (asset_id is not None))):
             continue
         rows.append({
             "media_id": snap["media_id"], "permalink": snap["permalink"],
@@ -70,7 +80,7 @@ def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: 
             "group": s["group"], "age_hours": snap["age_hours"], "metrics": snap["metrics"],
             "caption": (snap["caption"] or "")[:CAPTION_CHARS],
             "deleted": bool((s["label"] or {}).get("deleted_at")),
-            "asset_id": (s["label"] or {}).get("asset_id"),
+            "asset_id": asset_id,
             **{k: s.get(k) for k in SCORE_KEYS},
         })
 
@@ -82,7 +92,7 @@ def posts_table(store: CampaignStore, settings: InstagramMCPSettings, *, limit: 
     page = rows[offset:offset + limit]
     for row in page:  # only the page's assets are read
         row.update(studio_side(store, row["asset_id"]))
-        row.pop("asset", None)
+        row.update(_urls(row.pop("asset")))
     return {"total": len(rows), "limit": limit, "offset": offset, "sort": sort, "posts": page}
 
 
@@ -114,11 +124,18 @@ def post_detail(store: CampaignStore, media_id: str) -> Dict[str, Any]:
         "campaign": label.get("campaign"), "variant": label.get("variant"),
         **studio,
         "hypothesis": studio["hypothesis"] or label.get("hypothesis"),
-        "preview_url": media_url(asset and (asset["preview_path"] or asset["file_path"])),
+        **_urls(asset),
         "feedback": store.list_feedback(asset_id=asset["id"], limit=1000) if asset else [],
         "series": [{"captured_at": s["captured_at"], "age_hours": s["age_hours"],
                     "metrics": s["metrics"]} for s in snaps],
     }
+
+
+def _urls(asset: Optional[Dict[str, Any]]) -> Dict[str, Optional[str]]:
+    """The studio video (preview, else master) and thumbnail URLs; None outside the studio."""
+    asset = asset or {}
+    return {"preview_url": media_url(asset.get("preview_path") or asset.get("file_path")),
+            "thumbnail_url": media_url(asset.get("thumbnail_path"))}
 
 
 def studio_side(store: CampaignStore, asset_id: Optional[int]) -> Dict[str, Any]:
