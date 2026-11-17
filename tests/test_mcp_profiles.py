@@ -20,7 +20,7 @@ AGENT_ALLOWED = {
     "save_daily_report",
     "add_to_watchlist", "list_watchlist", "remove_from_watchlist", "research_trends",
     "get_trend_report", "list_inspirations", "mark_inspiration_used", "download_reel",
-    "list_dm_picks", "mark_dm_pick",
+    "list_dm_picks", "mark_dm_pick", "list_sources", "render_remix",
 }
 NEVER_FOR_AGENT = {
     "publish_image", "publish_carousel", "publish_reel", "publish_story",

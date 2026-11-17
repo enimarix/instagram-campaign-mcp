@@ -25,7 +25,7 @@ from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .learning import brief, facts, learnings, report
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
-from .studio import dm_picks, downloader, motion, production, research
+from .studio import dm_picks, downloader, motion, production, remix, research
 from .studio import frames as frames_
 from .studio.publish import cancel_post, refuse_asset_file
 
@@ -52,7 +52,8 @@ feedback, quotas, what today's batch holds, the bench). create_idea for each ide
 wait_for_renders(batch_date) to review renders as they land (get_render_status for one,
 get_asset_frames to look at it),
 submit_asset each QC-passed asset with a self_score, caption and best_before;
-list_assets shows the batch best first.
+list_assets shows the batch best first. Reactions (track remix): list_sources, then
+create_idea(source_id=...) and render_remix (rules in its description).
 
 Media must be at a public HTTPS URL; Instagram downloads it. Reels may instead use
 video_path (relative to the studio media root), uploaded directly. Scheduled posts are
@@ -679,6 +680,41 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
 
 
 # ----------------------------------------------------------------------
+# Studio: reaction remixes (src/studio/remix.py)
+# ----------------------------------------------------------------------
+@mcp.tool(annotations=LOCAL_READ)
+async def list_sources(role: Literal["clip"] = "clip", limit: int = 50) -> Dict[str, Any]:
+    """Downloaded clips that may be published, newest first: id, author, rights_basis,
+    audio_rights, duration_s, attribution (the credit to show), a transcript excerpt and
+    whether an idea already uses it. React to one with create_idea(track='remix',
+    source_id=id) and render_remix."""
+    return {"sources": await _studio(remix.list_sources, store(), role, min(limit, 100))}
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
+                       trim_start_s: Optional[float] = None, trim_end_s: Optional[float] = None,
+                       layout: Literal["pip", "split"] = "pip",
+                       captions: Optional[List[Dict[str, Any]]] = None,
+                       caption: Optional[str] = None) -> Dict[str, Any]:
+    """Queue a reaction remix of a clip for a remix idea of that source and return at once.
+    Commentary rules (refused otherwise): `script` is the voice-over, YOUR commentary on
+    this specific clip (what happens, why it works); a piece of the owner's reaction reel
+    is added; the creator is credited on screen, and the caption you submit must contain
+    @creator. Use only the part you react to: trim_start_s..trim_end_s (seconds of the
+    clip; capped at REMIX_MAX_CLIP_S). Unless its sound is covered, the clip is muted under
+    our music and its speech shown as captions from its transcript (captions: your own
+    [{start_s, end_s, text}] in seconds of the trimmed part instead). Never ask for mirror,
+    flip, speed or pitch changes: they do not exist."""
+    out = await _studio(remix.render_remix, store(), get_settings(), idea_id, source_id,
+                        hook=hook, script=script, trim=(trim_start_s, trim_end_s),
+                        layout=layout, captions=captions, caption=caption)
+    return {"asset_id": out["asset"]["id"], "job_id": out["job"]["id"],
+            "state": out["job"]["state"],
+            "reaction_piece": {k: out["piece"][k] for k in ("piece_id", "start_s", "end_s")}}
+
+
+# ----------------------------------------------------------------------
 # Studio: production batch (src/studio/production.py)
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=LOCAL_WRITE)
@@ -948,6 +984,10 @@ AGENT_TOOLS = frozenset({
     # DM picks (step 113): only the picks (link + pinned sender's note), never the DMs.
     "list_dm_picks",
     "mark_dm_pick",
+    # Remixes (step 069): local reads of publishable clips and queued renders; the rights
+    # rules are enforced in src/studio/remix.py, never left to the prompt.
+    "list_sources",
+    "render_remix",
 })
 
 

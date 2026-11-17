@@ -143,3 +143,16 @@ def attribution(source: Optional[Dict[str, Any]], *, licence: Optional[str] = No
         if _ATTRIBUTION_NOTE.search(src.get("rights_note") or "") and (author or url):
             return f"Credit: {author or url}"
     return None
+
+
+def caption_credit_problem(source: Optional[Dict[str, Any]], caption: Optional[str]
+                           ) -> Optional[str]:
+    """Why the caption of a post of this source is refused, or None: a `commentary` post
+    names the creator as @handle in its caption (§5.1)."""
+    if basis(source) != "commentary":
+        return None
+    credit = attribution(source)
+    # Not a prefix of a longer handle (@bob in @bobby or @bob.tv); a sentence's full stop is fine.
+    if credit and not re.search(re.escape(credit) + r"(?!\w|\.\w)", caption or "", re.I):
+        return f"commentary: the caption must credit the creator: add {credit}"
+    return None

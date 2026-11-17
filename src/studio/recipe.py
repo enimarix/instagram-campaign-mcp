@@ -159,6 +159,33 @@ def _fit(duration: float) -> str:
     return f"apad=whole_dur={duration},atrim=end={duration}"
 
 
+@register
+class Trim(Op):
+    """Keep only `start_s`..`end_s` of the clip (cut at its end): the part being reacted to
+    (GOAL.md §5.1). A plain cut: picture, speed and pitch are untouched."""
+
+    op: Literal["trim"] = "trim"
+    start_s: float = Field(0.0, ge=0)
+    end_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _window(self) -> "Trim":
+        if self.end_s <= self.start_s:
+            raise ValueError("end_s must be after start_s")
+        return self
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+        end = min(self.end_s, info.duration)
+        if end <= self.start_s:
+            raise ValueError(f"trim starts at {self.start_s} s, after the clip's end")
+        cut = f"start={self.start_s}:end={end}"
+        head = (f"[0:a:0]atrim={cut},asetpts=PTS-STARTPTS," if info.has_audio
+                else f"anullsrc=r={SAMPLE_RATE}:cl=stereo,")
+        encode(src, info, out, filter_complex=f"[0:v]trim={cut},setpts=PTS-STARTPTS,{VIDEO_TAIL}",
+               timeout_s=timeout_s, preset=preset,
+               audio=f"{head}{AUDIO_FORMAT},{_fit(end - self.start_s)}")
+
+
 def _source_audio(info: MediaInfo, duration: Optional[float] = None) -> str:
     """Filter chain for the source's audio (silence if it has none) at `duration` seconds,
     by default the video's length."""
