@@ -97,10 +97,14 @@ def _feedback_evidence(store: CampaignStore, ids: Sequence[int]) -> List[Dict[st
     return [{"feedback_id": i} for i in ids]
 
 
-def _check_caps(kind: str, confidence: str, evidence: Sequence[Any]) -> None:
-    """The agent's limits: no owner/high confidence; do/dont/medium need >= 2 items."""
+def _check_confidence(confidence: str) -> None:
     if confidence not in AGENT_CONFIDENCES:
         raise ValueError(f"confidence {confidence!r} is not for the agent: use low or medium")
+
+
+def _check_caps(kind: str, confidence: str, evidence: Sequence[Any]) -> None:
+    """The agent's limits: no owner/high confidence; do/dont/medium need >= 2 items."""
+    _check_confidence(confidence)
     if len(evidence) < 2 and (kind != "hypothesis" or confidence != "low"):
         raise ValueError("one piece of evidence makes a low-confidence hypothesis only:"
                          " do/dont or medium needs at least 2")
@@ -140,6 +144,7 @@ def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
         if not items:
             raise ValueError("cite evidence: feedback ids for taste, evidence dicts otherwise")
         confidence = confidence or "low"
+        _check_confidence(confidence)  # owner/high are refused, never silently forced
         if len(items) == 1 and (kind, confidence) != ("hypothesis", "low"):
             note = (f"one piece of evidence: stored as a low-confidence hypothesis"
                     f" (asked {kind}/{confidence})")

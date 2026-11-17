@@ -69,6 +69,8 @@ def test_one_comment_forces_low_hypothesis(store):
     assert (row["kind"], row["confidence"]) == ("hypothesis", "low")
     assert row["evidence"] == [{"feedback_id": f}] and "hypothesis" in out["note"]
     assert L.add_learning(store, "x", "hypothesis", "taste", [f])["note"] is None
+    with pytest.raises(ValueError, match="not for the agent"):  # refused, not forced
+        L.add_learning(store, "x", "hypothesis", "taste", [f], confidence="owner")
 
 
 def test_two_comments_allow_do_dont_up_to_medium(store):
