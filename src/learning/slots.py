@@ -156,7 +156,7 @@ def plan_slots(
     # 3. Snap each aim to the nearest free minute.
     placed: List[datetime] = []
     for aim in sorted(aims):
-        aim = aim.replace(second=0, microsecond=0)
+        aim = _ceil_minute(aim - _MINUTE / 2)  # nearest minute
         free = _free([(s[0], s[1]) for s in spans], taken + placed, min_gap)
         if not free:
             break
