@@ -126,12 +126,12 @@ def test_cli_refuses_non_empty_db_without_force(cli, tmp_path, capsys):
     db = str(tmp_path / "dev.db")
     assert run("--db", db, "--days", "1") == 0
     assert '"status"' in capsys.readouterr().out  # the summary
-    first = len(_count(db))
+    first = len(_assets_in(db))
     assert run("--db", db) == 1
     assert "--force" in capsys.readouterr().err
-    assert len(_count(db)) == first
+    assert len(_assets_in(db)) == first
     assert run("--db", db, "--days", "1", "--force") == 0
-    assert len(_count(db)) > first
+    assert len(_assets_in(db)) > first
 
 
 def test_cli_refuses_live_production_db(cli, capsys):
@@ -139,13 +139,13 @@ def test_cli_refuses_live_production_db(cli, capsys):
     assert settings.instagram_configured
     assert run() == 1
     assert "production" in capsys.readouterr().err
-    assert _count(str(prod)) == []
+    assert _assets_in(str(prod)) == []
     assert run("--force", "--days", "1") == 0
-    assert _count(str(prod))
+    assert _assets_in(str(prod))
     assert (prod.parent / "media").is_dir()
 
 
-def _count(db):
+def _assets_in(db):
     s = CampaignStore(db)
     try:
         return _all(s)
