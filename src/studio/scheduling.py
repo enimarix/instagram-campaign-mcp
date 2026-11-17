@@ -2,7 +2,8 @@
 Scheduling an approved asset from the website (GOAL.md §3.2): the planner proposes a
 slot, the owner accepts it or picks another time, the publish guard queues it.
 
-Approve stays its own owner action; scheduling is the second, explicit step.
+Approve and schedule are two owner steps on the detail page; the review feed's one-tap
+Approve (approve_and_queue, step 115) does both at once.
 """
 
 from __future__ import annotations
