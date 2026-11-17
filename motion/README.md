@@ -9,4 +9,8 @@
   (`--bundle <dir>` builds the bundle there once and reuses it; `--concurrency N`).
   Prints `{"out", "durationInFrames", "renderMs"}`; bad props exit 1 with every problem listed.
 - Still: `npm run still` (= `--still --frame 45`, writes `out/hello.png`).
-- Checks: `npm run lint`, `npm run typecheck`.
+- Still of the 8-bit kit: `npm run still:preview` (`Preview8bit`, writes `out/preview8bit.png`).
+- Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
+- 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading),
+  `src/components/` (`PixelText`, `DialogBox`, `SafeZoneGuide`). Pixel font sizes are whole
+  multiples of 8 px. Third-party files in `public/` are listed in `ASSETS_LICENSES.md`.

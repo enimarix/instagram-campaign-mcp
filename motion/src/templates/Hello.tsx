@@ -26,9 +26,8 @@ export const Hello = ({ title, subtitle, safeZone }: Props) => {
       style={{
         backgroundColor: colors.background,
         color: colors.text,
-        // ponytail: font files come with step 040; until then the family name falls back to monospace.
+        // The font itself is loaded by src/lib/font.ts (step 040). One weight only: no faux bold.
         fontFamily: `"${fonts.display}", monospace`,
-        fontWeight: 700,
       }}
     >
       <div

@@ -20,7 +20,7 @@
   "fonts": {
     "display": "Press Start 2P",
     "body": "Press Start 2P",
-    "files": []
+    "files": ["../motion/public/fonts/PressStart2P-Regular.ttf"]
   },
   "safe_zone": {
     "width": 1080,
@@ -33,7 +33,7 @@
   },
   "_source": {
     "placeholder": "Name, handle, logo, colours and fonts are placeholders until gate H1 / step 050 (real brand) and H9 (channel basics). Logo is drawn in-repo, no third-party art. palette = the free Sweetie 16 palette (GrafxKid); named colours are picked from it.",
-    "fonts": "Family names only. 'files' (paths relative to this file) stays empty until step 040 adds an open-licence pixel font.",
+    "fonts": "Family names only. 'files' are paths relative to this file. Press Start 2P (SIL OFL 1.1, step 040): Latin-1 and Latin Extended-A (all but ŉ Ţ ţ; Romanian Ș ș missing too), Greek, Cyrillic; licence and source in motion/ASSETS_LICENSES.md. motion/ loads files[0] as the display family.",
     "safe_zone": "Pixel insets on a 1080x1920 Reel. Top 14%, bottom 35%, sides 6% = Meta Ads Guide for Instagram Reels (https://www.facebook.com/business/ads-guide/update/video/instagram-reels), rounded up. right_rail 120 px = width of the like/comment/share/audio button column (https://www.revid.ai/instagram-reels-safe-zone, practical buffer, not a Meta figure). Checked 2026-11-17."
   }
 }
