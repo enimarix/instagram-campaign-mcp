@@ -1,5 +1,6 @@
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
+import { assetById } from "../assets";
 import { safeArea } from "../brand";
 import { CRTOverlay } from "../components/CRTOverlay";
 import { DialogBox } from "../components/DialogBox";
@@ -11,7 +12,7 @@ import { Flash, Wipe } from "../components/Transitions";
 import { colors, palette } from "../lib/palette";
 import { coin, slime } from "../lib/sprites";
 
-// Shows the 8-bit building blocks (steps 040, 041) on one screen; not a publishable template.
+// Shows the 8-bit building blocks (steps 040–042) on one screen; not a publishable template.
 export const preview8bitSchema = z.strictObject({
   title: z.string().min(1).max(20),
   text: z.string().min(1).max(120),
@@ -65,12 +66,17 @@ export const Preview8bit = ({ title, text, name, dialog, speed, safeZone, hud, s
         </div>
         {sprites && (
           <div style={{ display: "flex", alignItems: "flex-end", gap: GAP }}>
+            {/* Mascot sheet from public/ via the asset registry (placeholder art). */}
+            <Sprite {...assetById("mascot")} scale={6} fps={6} />
             <Sprite art={slime} scale={8} fps={3} />
             {/* Coins: looping at three phases, then one spin that holds its last frame. */}
             {[0, 2, 4].map((s) => (
               <Sprite key={s} art={coin} scale={6} startFrame={s} />
             ))}
             <Sprite art={coin} scale={6} fps={4} loop={false} startFrame={fps} />
+            {[0, 1, 2, 3].map((t) => (
+              <Sprite key={t} {...assetById("tiles")} scale={6} frame={t} />
+            ))}
           </div>
         )}
         <div style={{ display: "flex", gap: 8 }}>
@@ -87,6 +93,11 @@ export const Preview8bit = ({ title, text, name, dialog, speed, safeZone, hud, s
           <Wipe direction="right" color={colors.accent} startFrame={Math.round(durationInFrames / 2 - WIPE / 2)} duration={WIPE} />
         </>
       )}
+      {/* Music bed loops seamlessly; the coin sound plays when the one-shot coin spins (1 s). Stills are silent. */}
+      <Html5Audio src={assetById("music-overworld").src} loop volume={0.5} />
+      <Sequence from={fps} layout="none">
+        <Html5Audio src={assetById("sfx-coin").src} />
+      </Sequence>
       <CRTOverlay show={crt} flicker={0.08} seed={7} />
       <SafeZoneGuide show={safeZone} />
     </AbsoluteFill>
