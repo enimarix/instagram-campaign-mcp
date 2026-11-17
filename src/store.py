@@ -10,6 +10,7 @@ organic posts, so this store keeps:
   candidates (GOAL.md §4.3); asset status moves live in src/studio/assets.py
 - feedback / learnings / daily_reports / agent_runs: the learning loop's memory
   (GOAL.md §3.5)
+- audience_hours: followers online per UTC hour, weights for the slot planner
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import threading
 from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
 
 from .taxonomy import validate, validate_many
 
@@ -197,9 +198,22 @@ CREATE TABLE agent_runs (
 CREATE INDEX idx_agent_runs_playbook ON agent_runs(playbook, started_at);
 """
 
+# Migration 4: followers online per UTC hour, one row per capture date and hour (022).
+AUDIENCE_SCHEMA = """
+CREATE TABLE audience_hours (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    date             TEXT NOT NULL
+        CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    hour_utc         INTEGER NOT NULL CHECK (hour_utc BETWEEN 0 AND 23),
+    followers_online INTEGER NOT NULL CHECK (followers_online >= 0),
+    captured_at      TEXT NOT NULL,
+    UNIQUE (date, hour_utc)
+);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
-MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA]
+MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version")
@@ -930,6 +944,28 @@ class CampaignStore:
                             {"playbook": playbook, "status": "running"},
                             "started_at DESC, id DESC", 1)
         return rows[0] if rows else None
+
+    def save_online_followers(self, day: date, hours: Mapping[int, int]) -> int:
+        """Insert or replace followers online per UTC hour for one date; returns rows written."""
+        rows = [(_sql_value(day), int(h), int(n), to_iso(utcnow())) for h, n in hours.items()]
+        with self._tx() as c:
+            c.executemany(
+                "INSERT INTO audience_hours (date, hour_utc, followers_online, captured_at)"
+                " VALUES (?,?,?,?) ON CONFLICT(date, hour_utc) DO UPDATE SET"
+                " followers_online=excluded.followers_online, captured_at=excluded.captured_at",
+                rows,
+            )
+        return len(rows)
+
+    def online_followers_profile(self, days: int = 28) -> Dict[int, float]:
+        """Average followers online per UTC hour over the dates of the last `days` days."""
+        since = (utcnow().date() - timedelta(days=days)).isoformat()
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT hour_utc, AVG(followers_online) FROM audience_hours"
+                " WHERE date > ? GROUP BY hour_utc", (since,),
+            ).fetchall()
+        return {h: avg for h, avg in rows}
 
 
 def _sql_value(v: Any) -> Any:

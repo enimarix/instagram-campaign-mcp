@@ -19,9 +19,11 @@ import json
 import re
 import time
 from collections import deque
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import httpx
 import structlog
@@ -32,6 +34,8 @@ logger = structlog.get_logger(__name__)
 
 # Graph error codes that mean "slow down".
 RATE_LIMIT_CODES = {4, 17, 32, 613, 80002}
+# Meta's insights day (and online_followers hour keys) is Pacific time.
+META_INSIGHTS_TZ = ZoneInfo("America/Los_Angeles")
 # Media insights: metric set per media_product_type (Graph API v25+).
 # `impressions`, `video_views`, `plays` are deprecated and intentionally absent.
 INSIGHT_METRICS: Dict[str, List[str]] = {
@@ -304,6 +308,40 @@ class InstagramClient:
             "GET", f"{self.account_id}/insights", params=params
         )
         return data.get("data", [])
+
+    async def get_online_followers(self) -> Optional[Dict[int, int]]:
+        """Followers online per UTC hour (0-23) on the latest day Meta reports, or None.
+
+        Meta no longer lists `online_followers` in the IG User insights metric table; its
+        limitations still name it (accounts with 100+ followers, last 30 days only, empty
+        data set when unavailable). Hour keys are Meta's insights day, Pacific time, so
+        they are shifted to UTC here. None on an empty data set or "invalid metric" (#100).
+        """
+        try:
+            data = await self._make_request(
+                "GET",
+                f"{self.account_id}/insights",
+                params={"metric": "online_followers", "period": "lifetime"},
+            )
+        except InstagramAPIError as e:
+            if e.error_code != 100:
+                raise
+            logger.info("online_followers_unavailable", error=e.message)
+            return None
+        values = [
+            v for item in data.get("data", []) for v in item.get("values", [])
+            if isinstance(v.get("value"), dict) and v["value"]
+        ]
+        if not values:
+            return None
+        latest = max(values, key=lambda v: v.get("end_time", ""))
+        end = latest.get("end_time")
+        # ponytail: one offset for the whole day (noon of the day that ends at end_time);
+        # the hour around a DST switch lands one bucket off, harmless for an average.
+        ref = (datetime.strptime(end, "%Y-%m-%dT%H:%M:%S%z") - timedelta(hours=12)
+               if end else datetime.now(timezone.utc))
+        offset = int(ref.astimezone(META_INSIGHTS_TZ).utcoffset().total_seconds() // 3600)
+        return {(int(h) - offset) % 24: int(n) for h, n in latest["value"].items()}
 
     async def get_publishing_limit(self) -> Dict[str, Any]:
         data = await self._make_request(

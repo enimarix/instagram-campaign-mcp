@@ -18,8 +18,8 @@ How slots are placed (deliberately simple):
    after `now`, at least `min_gap` from everything placed or taken. If its own window
    is full it lands in the nearest window that still has room.
 
-Weights (default: all equal) are one number per window, for later steps that rank
-windows by audience data (022) or our own results (087).
+Weights (default: all equal) are one number per window. `window_weights` derives them
+from audience data (followers online per UTC hour, 022); our own results come in 087.
 
 Daylight saving: a window boundary that does not exist (spring gap) or exists twice
 (autumn overlap) is resolved to the reading that keeps every slot inside the local
@@ -31,13 +31,16 @@ from __future__ import annotations
 import random
 import re
 from datetime import date, datetime, time, timedelta, timezone
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import List, Mapping, Optional, Sequence, Tuple, Union
 from zoneinfo import ZoneInfo
 
 Window = Tuple[time, time]
 
 _WINDOW_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$")
 _MINUTE = timedelta(minutes=1)
+_HOUR = timedelta(hours=1)
+# window_weights: a quiet window still gets this share of the busiest one's weight.
+WEIGHT_FLOOR = 0.1
 
 
 def parse_windows(spec: str) -> List[Window]:
@@ -164,6 +167,40 @@ def plan_slots(
     return sorted(placed)
 
 
+def window_weights(
+    windows: Sequence[Window],
+    tz: Union[str, ZoneInfo],
+    day: date,
+    hourly_profile: Optional[Mapping[int, float]],
+    floor: float = WEIGHT_FLOOR,
+) -> List[float]:
+    """One weight per window: the average followers online over the window's real time on
+    local `day` (UTC hours, minute-weighted; a missing hour counts as 0).
+
+    A window never weighs less than `floor` x the busiest one. No profile or no audience
+    in any window → all 1.0 (v1 behaviour).
+    """
+    tz = ZoneInfo(tz) if isinstance(tz, str) else tz
+    profile = hourly_profile or {}
+    averages = []
+    for start, end in windows:
+        a, b = _utc(day, start, tz, latest=True), _utc(day, end, tz, latest=False)
+        total = weighted = 0.0
+        t = a
+        while t < b:
+            step = min(t.replace(minute=0, second=0, microsecond=0) + _HOUR, b)
+            minutes = (step - t).total_seconds() / 60
+            total += minutes
+            weighted += minutes * profile.get(t.hour, 0)
+            t = step
+        # A window shrunk to nothing by DST takes the hour it starts in.
+        averages.append(weighted / total if total else profile.get(a.hour, 0))
+    top = max(averages, default=0)
+    if top <= 0:
+        return [1.0] * len(windows)
+    return [max(avg, floor * top) for avg in averages]
+
+
 def plan_slots_from_settings(
     settings,
     day: date,
@@ -171,17 +208,25 @@ def plan_slots_from_settings(
     taken: Sequence[datetime],
     rng: Optional[random.Random] = None,
     now: Optional[datetime] = None,
+    hourly_profile: Optional[Mapping[int, float]] = None,
 ) -> List[datetime]:
-    """`plan_slots` with the posting settings; `now` defaults to the current time."""
+    """`plan_slots` with the posting settings; `now` defaults to the current time.
+
+    `hourly_profile` (UTC hour → followers online, e.g. store.online_followers_profile())
+    weights the windows; None keeps them equal.
+    """
+    windows = parse_windows(settings.posting_windows)
     return plan_slots(
         day,
         count,
         taken,
-        windows=parse_windows(settings.posting_windows),
+        windows=windows,
         tz=settings.timezone,
         max_per_day=settings.max_posts_per_day,
         min_gap=timedelta(minutes=settings.min_slot_gap_minutes),
         jitter_minutes=settings.slot_jitter_minutes,
         rng=rng or random.Random(),
         now=now or datetime.now(timezone.utc),
+        weights=None if hourly_profile is None
+        else window_weights(windows, settings.timezone, day, hourly_profile),
     )

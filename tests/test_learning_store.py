@@ -33,7 +33,7 @@ def test_migration_2_database_upgrades_to_3_keeping_data(tmp_path):
     finally:
         s.close()
     conn = sqlite3.connect(db)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     conn.close()
 
 
