@@ -92,6 +92,8 @@ def test_ads_only_when_allowed(b):
     assert not can_advertise(src(b), ads_allowed=False)
     assert can_advertise(src(b), ads_allowed=True)
     assert can_advertise(src(b, ads_allowed=True))
+    assert can_advertise(src(b, ads_allowed=1))  # SQLite boolean
+    assert not can_advertise(src(b, ads_allowed="no"))
     assert not can_advertise(src(b, ads_allowed=True), ads_allowed=False)
 
 

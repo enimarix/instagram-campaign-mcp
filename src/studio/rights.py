@@ -85,9 +85,10 @@ def can_publish(
         return Decision(False, f"{b}: no author recorded, so the required credit cannot be given")
     if b == "cc":
         lic = licence if licence is not None else src.get("licence")
-        if not cc_licence(lic):
+        canonical = cc_licence(lic)
+        if not canonical:
             return Decision(False, _cc_refusal(lic))
-        return Decision(True, f"cc: {cc_licence(lic)}, with attribution")
+        return Decision(True, f"cc: {canonical}, with attribution")
     if b == "commentary":
         if not confirmed:
             return Decision(False, "commentary: needs the owner's confirmation for this video")
@@ -106,7 +107,7 @@ def can_advertise(
         return Decision(True, f"{b}: allowed in ads")
     if b in ("licensed", "permission"):
         allowed = ads_allowed if ads_allowed is not None else (source or {}).get("ads_allowed")
-        if allowed is True:
+        if allowed in (True, 1):  # SQLite stores booleans as 0/1
             return Decision(True, f"{b}: ads allowed")
         who = "the licence" if b == "licensed" else "the creator in writing"
         return Decision(False, f"{b}: ads not allowed unless {who} allows advertising")
