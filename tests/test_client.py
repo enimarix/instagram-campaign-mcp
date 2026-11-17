@@ -116,6 +116,20 @@ async def test_insights_pick_reels_metrics_and_fall_back_per_metric(client):
 
 
 @respx.mock
+async def test_reels_insights_ask_the_retention_metrics(client):
+    route = respx.get(f"{API}/M1/insights").respond(json={"data": [
+        {"name": "reels_skip_rate", "values": [{"value": 31.5}]},
+        {"name": "ig_reels_video_view_total_time", "values": [{"value": 120000}]},
+        {"name": "reposts", "values": [{"value": 2}]}]})
+    res = await client.get_media_insights("M1", media_product_type="REELS")
+    asked = route.calls.last.request.url.params["metric"].split(",")
+    assert {"ig_reels_video_view_total_time", "reels_skip_rate", "reposts",
+            "ig_reels_avg_watch_time"} <= set(asked)
+    assert res["metrics"] == {"reels_skip_rate": 31.5, "ig_reels_video_view_total_time": 120000,
+                              "reposts": 2}
+
+
+@respx.mock
 async def test_insights_total_value_shape(client):
     respx.get(f"{API}/M1/insights").respond(json={"data": [
         {"name": "reach", "total_value": {"value": 42}}]})
