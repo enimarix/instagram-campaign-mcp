@@ -20,8 +20,9 @@ import os
 import re
 import tempfile
 import textwrap
+import unicodedata
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Literal, Mapping, Sequence, Tuple, Type
+from typing import Annotated, Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, Type
 
 from pydantic import (
     BaseModel,
@@ -101,19 +102,18 @@ class Recipe(BaseModel):
 
 
 def encode(src: Path, info: MediaInfo, out: Path, *, filter_complex: str, timeout_s: float,
-           preset: str, extra_inputs: Sequence[PathLike] = ()) -> None:
+           preset: str, extra_inputs: Sequence[PathLike] = (), extend_s: float = 0.0) -> None:
     """Encode `src` through `filter_complex` (input [0:v], output [v]) into the output spec.
-    `extra_inputs` are files for inputs 1, 2, ... The source's first audio track is
-    re-encoded; a source without audio gets silence."""
+    `extra_inputs` are files for inputs 1, 2, ... The source's first audio track (silence
+    if it has none) is re-encoded at exactly the source's length plus `extend_s` seconds
+    of silence (for an op that makes the video longer): no AAC padding creeps in per op."""
+    # ponytail: `apad` + `-shortest` would follow the video by itself, but -shortest never
+    # ends an infinite pad inside -filter_complex (ffmpeg 7.1 hangs), so the length is explicit.
     args: List[PathLike] = ["-i", src]
     for path in extra_inputs:
         args += ["-i", path]
-    if info.has_audio:
-        audio_map = "0:a:0"
-    else:
-        args += ["-f", "lavfi", "-i", f"anullsrc=r={SAMPLE_RATE}:cl=stereo", "-shortest"]
-        audio_map = f"{1 + len(extra_inputs)}:a:0"
-    args += ["-filter_complex", filter_complex, "-map", "[v]", "-map", audio_map,
+    audio = _source_audio(info, info.duration + extend_s)
+    args += ["-filter_complex", f"{filter_complex};{audio}[a]", "-map", "[v]", "-map", "[a]",
              *VIDEO_ARGS, "-preset", preset, *AUDIO_ARGS, *CONTAINER_ARGS, out]
     ffmpeg.run(args, timeout_s=timeout_s)
 
@@ -148,10 +148,11 @@ def _fit(duration: float) -> str:
     return f"apad=whole_dur={duration},atrim=end={duration}"
 
 
-def _source_audio(info: MediaInfo) -> str:
-    """Filter chain for the source's audio (silence if it has none) at the video's length."""
+def _source_audio(info: MediaInfo, duration: Optional[float] = None) -> str:
+    """Filter chain for the source's audio (silence if it has none) at `duration` seconds,
+    by default the video's length."""
     head = "[0:a:0]" if info.has_audio else f"anullsrc=r={SAMPLE_RATE}:cl=stereo,"
-    return f"{head}{AUDIO_FORMAT},{_fit(info.duration)}"
+    return f"{head}{AUDIO_FORMAT},{_fit(info.duration if duration is None else duration)}"
 
 
 def _input_audio(index: int, info: MediaInfo, gain_db: float) -> str:
@@ -249,26 +250,35 @@ def _filter_value(value: str) -> str:
     return re.sub(r"([\\'\[\],;])", r"\\\1", value)
 
 
+def _brand_font(kit: Dict[str, Any], root: Path) -> Path:
+    """The brand font file (fonts.files[0])."""
+    if not kit["fonts"].get("files"):
+        raise ValueError("the brand kit has no font file (fonts.files)")
+    return (root / kit["fonts"]["files"][0]).resolve()
+
+
+def _wrap_width(width: int, size: int) -> int:
+    """Characters per line in `width` px less the box padding. Press Start 2P is
+    monospaced with a 1 em advance (`size` px per character)."""
+    return (width - 2 * TEXT_PAD) // size
+
+
 def _drawtext(text: str, info: MediaInfo, out: Path, *, size: int, x: str, y: str,
               enable: str = "") -> str:
     """A drawtext filter: `text` wrapped to the safe width in the brand font and text
     colour on a semi-transparent background box. `x`/`y` pick from "left", "right",
     "center" / "top", "center", "bottom" inside the safe area."""
     kit, root = _brand_kit(info)
-    if not kit["fonts"].get("files"):
-        raise ValueError("the brand kit has no font file (fonts.files)")
     sx, sy, sw, sh = brand.safe_area(kit)
-    # Press Start 2P: monospaced, 1 em advance (`size` px per character), 2 em line height.
-    lines = textwrap.wrap(text, (sw - 2 * TEXT_PAD) // size)
+    lines = textwrap.wrap(text, _wrap_width(sw, size))
     textfile = out.with_suffix(".txt")  # in render()'s work dir; no drawtext text escaping
     textfile.write_text("\n".join(lines), encoding="utf-8")
     xs = {"left": f"{sx + TEXT_PAD}", "right": f"{sx + sw - TEXT_PAD}-text_w",
           "center": f"{sx}+({sw}-text_w)/2"}
     ys = {"top": f"{sy + TEXT_PAD}", "bottom": f"{sy + sh - TEXT_PAD}-text_h",
           "center": f"{sy}+({sh}-text_h)/2"}
-    font = (root / kit["fonts"]["files"][0]).resolve().as_posix()
     colors = kit["colors"]
-    graph = (f"drawtext=fontfile={_filter_value(font)}"
+    graph = (f"drawtext=fontfile={_filter_value(_brand_font(kit, root).as_posix())}"
              f":textfile={_filter_value(textfile.resolve().as_posix())}:expansion=none"
              f":fontsize={size}:line_spacing={-size // 4}:fontcolor=0x{colors['text'][1:]}"
              f":box=1:boxcolor=0x{colors['background'][1:]}@0.6:boxborderw={TEXT_PAD}"
@@ -338,10 +348,152 @@ class Credit(Op):
                timeout_s=timeout_s, preset=preset)
 
 
+MAX_CAPTION = 80  # characters per caption line
+
+
+def _strip_emoji(text: str) -> str:
+    """Drop emoji and pictographs: the pixel font has none, and a fallback emoji font is
+    not on every machine (CI has none), so they would render as boxes or not at all.
+    Letters the font lacks (e.g. Romanian Ș) still fall back to a system font."""
+    # ponytail: Unicode-category heuristic, not the font's real cmap; read the cmap if a
+    # symbol the font does have (e.g. ™) ever needs to survive.
+    return "".join(c for c in text if not (
+        ord(c) >= 0x1F000 or c in "‍⃣︎️"
+        or (ord(c) > 0xFF and unicodedata.category(c) == "So")))
+
+
+def _ass_text(text: str) -> str:
+    """User text as literal ASS text: braces can't open an override block ({\\b1} etc.),
+    and a word joiner after each backslash keeps "\\N" / "\\h" literal."""
+    text = text.replace("\\", "\\⁠")
+    return text.replace("{", "\\{").replace("}", "\\}")
+
+
+def _ass_time(seconds: float) -> str:
+    cs = round(seconds * 100)
+    return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
+
+
+def _ass_color(hex_color: str, opacity: float = 1.0) -> str:
+    """#RRGGBB -> ASS &HAABBGGRR (alpha 00 = opaque)."""
+    r, g, b = hex_color[1:3], hex_color[3:5], hex_color[5:7]
+    return f"&H{round(255 * (1 - opacity)):02X}{b}{g}{r}".upper()
+
+
+class CaptionLine(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    start_s: float = Field(ge=0)
+    end_s: float = Field(gt=0)
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def _clean(cls, value: str) -> str:
+        value = " ".join(_strip_emoji(value).split())
+        if not value:
+            raise ValueError("text is empty (emoji are removed)")
+        if len(value) > MAX_CAPTION:
+            raise ValueError(f"text must be at most {MAX_CAPTION} characters")
+        return value
+
+    @model_validator(mode="after")
+    def _window(self) -> "CaptionLine":
+        if self.end_s <= self.start_s:
+            raise ValueError("end_s must be after start_s")
+        return self
+
+
+@register
+class Captions(Op):
+    """Timed caption lines burned in with libass in the brand font and text colour on a
+    semi-transparent box, wrapped to the safe width. bottom: just above the bottom safe
+    inset; center: the middle of the safe area. Emoji are dropped (see _strip_emoji)."""
+
+    op: Literal["captions"] = "captions"
+    lines: List[CaptionLine] = Field(min_length=1)
+    position: Literal["bottom", "center"] = "bottom"
+    size: int = Field(40, ge=24, le=64)
+
+    @field_validator("lines")
+    @classmethod
+    def _sorted(cls, lines: List[CaptionLine]) -> List[CaptionLine]:
+        for a, b in zip(lines, lines[1:]):
+            if b.start_s < a.end_s:
+                raise ValueError("lines must be sorted by start_s and must not overlap")
+        return lines
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+        kit, root = _brand_kit(info)
+        font = _brand_font(kit, root)
+        sx, sy, sw, sh = brand.safe_area(kit)
+        if self.position == "bottom":
+            anchor = f"\\an2\\pos({sx + sw // 2},{sy + sh - TEXT_PAD})"
+        else:
+            anchor = f"\\an5\\pos({sx + sw // 2},{sy + sh // 2})"
+        text, box = _ass_color(kit["colors"]["text"]), _ass_color(kit["colors"]["background"], 0.6)
+        # WrapStyle 2: no libass wrapping, the lines are wrapped here. BorderStyle 3: an
+        # opaque box (OutlineColour) padded by Outline px around each line.
+        events = [
+            f"Dialogue: 0,{_ass_time(line.start_s)},{_ass_time(line.end_s)},Brand,,0,0,0,,"
+            f"{{{anchor}}}"
+            + "\\N".join(_ass_text(t) for t in textwrap.wrap(line.text, _wrap_width(sw, self.size)))
+            for line in self.lines
+        ]
+        ass = out.with_suffix(".ass")  # in render()'s work dir
+        ass.write_text("\n".join([
+            "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {WIDTH}", f"PlayResY: {HEIGHT}",
+            "WrapStyle: 2", "ScaledBorderAndShadow: yes", "",
+            "[V4+ Styles]",
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
+            "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
+            "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+            f"Style: Brand,{kit['fonts']['display']},{self.size},{text},{text},{box},{box},"
+            f"0,0,0,0,100,100,0,0,3,{TEXT_PAD},0,2,0,0,0,1", "",
+            "[Events]",
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+            *events, ""]), encoding="utf-8")
+        graph = (f"[0:v]ass=filename={_filter_value(ass.resolve().as_posix())}"
+                 f":fontsdir={_filter_value(font.parent.as_posix())},{VIDEO_TAIL}")
+        encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset)
+
+
+@register
+class EndCard(Op):
+    """A call-to-action card appended after the clip: the brand background, `text` in the
+    middle of the safe area and (with_logo) the logo at its top. The video gets
+    `duration_s` longer and the audio goes on under the card as silence; to run a music
+    bed under the card too, put `music` after `end_card` in the recipe."""
+
+    op: Literal["end_card"] = "end_card"
+    text: OverlayText
+    duration_s: float = Field(2.0, ge=1, le=4)
+    with_logo: bool = True
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+        kit, root = _brand_kit(info)
+        sx, sy, sw, sh = brand.safe_area(kit)
+        text = _drawtext(self.text, info, out, size=48, x="center", y="center")
+        card = (f"color=c=0x{kit['colors']['background'][1:]}:s={WIDTH}x{HEIGHT}:r={FPS}"
+                f":d={self.duration_s},{text}")
+        extra: List[PathLike] = []
+        if self.with_logo:
+            width = round(WIDTH * 0.24 / 2) * 2
+            card += f"[bg];[1:v]scale={width}:-2[logo];[bg][logo]overlay=(W-w)/2:{sy}"
+            extra = [root / kit["logo_png"]]
+        graph = (f"[0:v]setsar=1,fps={FPS},format=yuv420p[clip];"
+                 f"{card},setsar=1,format=yuv420p[card];"
+                 f"[clip][card]concat=n=2:v=1:a=0,{VIDEO_TAIL}")
+        encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
+               extra_inputs=extra, extend_s=self.duration_s)
+
+
 def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path) -> None:
     """Two-pass loudnorm to LOUDNESS_*: measure, then apply with the measured values
     (linear gain when the true-peak target allows it). The video is copied. Digital
-    silence (integrated loudness -inf) passes through unchanged."""
+    silence (integrated loudness -inf) passes through unchanged. The audio is cut back to
+    the source's length: loudnorm flushes ~0.1 s more than it was given."""
+    duration = ffmpeg.probe(src).duration
     ffmpeg.run(["-i", src, "-map", "0:a:0", "-af", f"{LOUDNORM}:print_format=json",
                 "-f", "null", "-"], timeout_s=timeout_s, log_path=log_path)
     text = log_path.read_text(encoding="utf-8")
@@ -352,8 +504,8 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
               f":offset={m['target_offset']}:linear=true")
     else:
         af = "anull"
-    ffmpeg.run(["-i", src, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af", af,
-                *AUDIO_ARGS, *CONTAINER_ARGS, out], timeout_s=timeout_s)
+    ffmpeg.run(["-i", src, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
+                "-af", f"{af},{AUDIO_FORMAT},{_fit(duration)}", *AUDIO_ARGS, *CONTAINER_ARGS, out], timeout_s=timeout_s)
 
 
 def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
