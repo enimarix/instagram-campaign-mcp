@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 import src.instagram_mcp_server as srv
 from src.config import InstagramMCPSettings
-from src.studio import motion, render
+from src.studio import motion, recipe, render
 from src.studio.assets import transition
 from src.studio.tts import LineTiming, Synthesis
 from tests.test_studio_ffmpeg import needs_ffmpeg
@@ -58,6 +58,19 @@ def test_validate_props_uses_the_templates_own_message():
     assert "facts" in str(e.value) and "one timing per script line" in str(e.value)
     with pytest.raises(ValueError, match="unknown template Nope"):
         motion.validate_props("Nope", {})
+
+
+@needs_motion
+@pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
+                                      "PixelSkit"])
+def test_schema_events_give_every_template_a_timeline(template):
+    v = motion.validate_props(template, _example(template.lower()))
+    timeline = recipe.compress_timeline(v["events"])
+    total = v["durationInFrames"] / v["fps"]
+    assert timeline[0]["t"] == 0 and timeline[0]["e"].startswith("hook card: '")
+    assert all(e["t"] + e["d"] <= total + 0.1 for e in timeline)
+    assert any(e["e"].startswith("music bed") for e in timeline)
+    assert len(json.dumps(timeline)) <= recipe.TIMELINE_BYTES
 
 
 def test_missing_node_is_a_clear_error(monkeypatch):
@@ -197,13 +210,15 @@ def test_queue_motion_render_stores_recipe_and_enqueues(store, tmp_path, monkeyp
 def test_render_queue_motion_branch_writes_all_files(store, tmp_path, monkeypatch):
     def fake_motion(template, props, out, media_root, *, timeout_s):
         make_clip(out, "1080x1920", duration=2)
-        return motion.ffmpeg.probe(out), 1500
+        return motion.ffmpeg.probe(out), 1500, [{"t": 0.0, "d": 2.0, "e": "hook card"}]
 
     monkeypatch.setattr(motion, "render_motion_asset", fake_motion)
     a = store.add_asset(store.add_idea("motion")["id"],
                         recipe={"kind": "motion", "template": "Hello", "props": {}})
     info, files = render.render_files(a, tmp_path, lambda p: None, preset="ultrafast")
     assert info.duration == pytest.approx(2.0, abs=0.1)
+    timeline = files.pop("timeline")
+    assert timeline == [{"t": 0.0, "d": 2.0, "e": "hook card"}]
     assert sorted(Path(f).name for f in files.values()) == [
         "poster.jpg", "preview.mp4", "thumb.jpg", "video.mp4"]
     assert all((tmp_path / f).is_file() for f in files.values())

@@ -23,7 +23,10 @@
   estimates without a voice, into scenes in frames. Each script template starts with `HookCard`
   (the hook, whole from frame 0, in the top half of the safe area; cover frame `HOOK_FRAME`),
   shows the other lines with `Captions` (band below it), and with `loop` fades the hook back in
-  over the outro so the last frame matches frame 0. Its registry entry sets `coverFrame`.
+  over the outro so the last frame matches frame 0. Its registry entry sets `coverFrame`, and
+  `events` (what happens when, `src/lib/events.ts` `scriptEvents`: one per scene with the
+  template's meaning, music bed, voice-over, outro, plus extras such as the countdown) which
+  `--validate` returns for the asset's timeline (step 110).
 - `FactQuest` (`src/templates/FactQuest/`): hook card, 3–5 facts as "LEVEL n" scenes (HUD level
   bar n/N, a hopping sprite, the fact typed into the caption band), wipes between them, end card
   with the outro. Props schema in `schema.ts` (example `props/factquest.json`): `hook`, `facts`

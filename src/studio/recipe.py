@@ -65,6 +65,11 @@ class Op(BaseModel):
               timeout_s: float, preset: str) -> None:
         raise NotImplementedError
 
+    def events(self, length: float) -> List[Dict[str, Any]]:
+        """What the op shows or plays in a clip of `length` seconds, for recipe_timeline():
+        [{t, d, e, text?}] (step 110). Ops that only reshape the picture add none."""
+        return []
+
 
 OPS: Dict[str, Type[Op]] = {}
 
@@ -185,6 +190,9 @@ class MuteOriginal(Op):
         graph = f"anullsrc=r={SAMPLE_RATE}:cl=stereo,{AUDIO_FORMAT},{_fit(info.duration)}[a]"
         remix_audio(src, out, filter_complex=graph, timeout_s=timeout_s)
 
+    def events(self, length):
+        return [{"t": 0, "d": length, "e": "original sound muted"}]
+
 
 @register
 class VoiceOver(Op):
@@ -211,6 +219,9 @@ class VoiceOver(Op):
         remix_audio(src, out, filter_complex=graph, timeout_s=timeout_s,
                     extra_inputs=["-i", inputs[self.input]])
 
+    def events(self, length):
+        return [{"t": 0, "d": length, "e": "voice-over over the clip"}]
+
 
 @register
 class Music(Op):
@@ -228,6 +239,9 @@ class Music(Op):
         loop = ["-stream_loop", "-1"] if self.loop else []
         remix_audio(src, out, filter_complex=graph, timeout_s=timeout_s,
                     extra_inputs=[*loop, "-i", inputs[self.input]])
+
+    def events(self, length):
+        return [{"t": 0, "d": length, "e": "music bed" + (" (looped)" if self.loop else "")}]
 
 
 # --- Brand overlays (GOAL.md §3.1 Track A steps 5-6, §5.1 credit). Styled from the brand
@@ -314,6 +328,9 @@ class Logo(Op):
         encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
                extra_inputs=[root / kit["logo_png"]])
 
+    def events(self, length):
+        return [{"t": 0, "d": length, "e": f"logo ({self.position})"}]
+
 
 @register
 class HookText(Op):
@@ -338,6 +355,9 @@ class HookText(Op):
         encode(src, info, out, filter_complex=f"[0:v]{text},{VIDEO_TAIL}",
                timeout_s=timeout_s, preset=preset)
 
+    def events(self, length):
+        return _window(self.start_s, self.end_s, length, "hook text", self.text)
+
 
 @register
 class Credit(Op):
@@ -353,6 +373,9 @@ class Credit(Op):
                          y="bottom")
         encode(src, info, out, filter_complex=f"[0:v]{text},{VIDEO_TAIL}",
                timeout_s=timeout_s, preset=preset)
+
+    def events(self, length):
+        return [{"t": 0, "d": length, "e": "credit", "text": self.text}]
 
 
 MAX_CAPTION = 80  # characters per caption line
@@ -464,6 +487,10 @@ class Captions(Op):
                  f":fontsdir={_filter_value(font.parent.as_posix())},{VIDEO_TAIL}")
         encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset)
 
+    def events(self, length):
+        return [e for line in self.lines
+                for e in _window(line.start_s, line.end_s, length, "caption", line.text)]
+
 
 @register
 class EndCard(Op):
@@ -493,6 +520,9 @@ class EndCard(Op):
                  f"[clip][card]concat=n=2:v=1:a=0,{VIDEO_TAIL}")
         encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
                extra_inputs=extra, extend_s=self.duration_s)
+
+    def events(self, length):  # appended: starts where the clip ends
+        return [{"t": length, "d": self.duration_s, "e": "end card", "text": self.text}]
 
 
 @register
@@ -547,6 +577,65 @@ class ReactionCollage(Op):
                      f"[ca][ra]amix=inputs=2:normalize=0")
         encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
                extra_inputs=[reaction], audio=audio)
+
+    def events(self, length):
+        where = ("the clip on top, the owner's reaction below" if self.layout == "split"
+                 else f"the owner's reaction in a box, {self.pip_corner.replace('_', ' ')}")
+        return [{"t": 0, "d": length, "e": f"reaction {self.layout}: {where}"}]
+
+
+# --- Timeline (step 110): what happens in the video, second by second, small enough to sit
+# in every asset row and in the agent's context: [{"t": start_s, "d": dur_s, "e": line}].
+TIMELINE_EVENTS = 40
+TIMELINE_BYTES = 2000  # as stored (json.dumps)
+EVENT_CHARS = 80
+
+
+def _window(start: float, end: float, length: float, label: str, text: str
+            ) -> List[Dict[str, Any]]:
+    """An event shown from `start` to `end`, cut at the clip's end (none if it starts after)."""
+    if start >= length:
+        return []
+    return [{"t": start, "d": min(end, length) - start, "e": label, "text": text}]
+
+
+def _clip(text: str, chars: int) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= chars else text[:chars - 1].rstrip() + "…"
+
+
+def compress_timeline(raw: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Events {t, d, e, text?} -> the stored timeline: t/d rounded to 0.1 s, one line per
+    event (`e: 'text'`, about EVENT_CHARS), sorted by t, at most TIMELINE_EVENTS and
+    TIMELINE_BYTES; what is cut becomes a last {"e": "+N more"}."""
+    events = []
+    for r in raw:
+        e = _clip(r["e"], EVENT_CHARS)
+        if r.get("text"):
+            e = f"{e}: '{_clip(r['text'], max(EVENT_CHARS - len(e) - 4, 12))}'"
+        events.append({"t": round(r["t"], 1), "d": round(r["d"], 1), "e": e})
+    events.sort(key=lambda x: x["t"])
+
+    def cut(k: int) -> List[Dict[str, Any]]:
+        return events[:k] + ([{"e": f"+{len(events) - k} more"}] if k < len(events) else [])
+
+    keep = min(len(events), TIMELINE_EVENTS)
+    while keep and len(json.dumps(cut(keep))) > TIMELINE_BYTES:
+        keep -= 1
+    return cut(keep)
+
+
+def recipe_timeline(recipe: Recipe, duration_s: float) -> List[Dict[str, Any]]:
+    """The compressed timeline of a render of `recipe` that came out `duration_s` long (the
+    final video), in its seconds. Ops without a time window span the clip as it is when they
+    run: an end card makes it longer for the ops after it."""
+    length = duration_s - sum(op.duration_s for op in recipe.ops if isinstance(op, EndCard))
+    raw: List[Dict[str, Any]] = []
+    for op in recipe.ops:
+        raw += op.events(length)
+        if isinstance(op, EndCard):
+            length += op.duration_s
+    return compress_timeline(raw)
 
 
 def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path) -> None:

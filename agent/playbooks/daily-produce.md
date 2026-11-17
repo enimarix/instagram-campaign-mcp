@@ -178,7 +178,8 @@ For each video you would show the owner, `submit_asset` with:
   say, ends with a question or call to comment when it fits, at most 5 hashtags; sources
   can go in the caption as "Source: <site name>";
 - `best_before`: leave it out (the pillar's default) unless the video rides a trend or a
-  date, then set the day it stops being relevant (YYYY-MM-DD).
+  date, then set the day it stops being relevant (YYYY-MM-DD);
+- `description`: 2–3 plain sentences on what happens in the video, its hook and its payoff.
 
 Only `ready` videos can be submitted. Submit the best version of each idea, not every
 version; do not submit a video you would score 1–2: drop it instead.

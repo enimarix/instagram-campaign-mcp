@@ -22,6 +22,7 @@ from ..learning.quotas import flagged_pillars, todays_quotas
 from ..store import CampaignStore
 from ..taxonomy import load_taxonomy, validate
 from .assets import edit_asset
+from .render import auto_description
 from .seed import local_today
 
 FINISHED = ("done", "failed")
@@ -123,14 +124,19 @@ def qc_summary(qc: Optional[Dict[str, Any]]) -> Optional[str]:
     return "failed: " + ("; ".join(qc.get("reasons") or []) or qc.get("reason") or "unknown")
 
 
+def _excerpt(text: Optional[str]) -> str:
+    text = text or ""
+    return text[:EXCERPT_CHARS] + ("…" if len(text) > EXCERPT_CHARS else "")
+
+
 def compact_asset(asset: Dict[str, Any]) -> Dict[str, Any]:
-    """The row the agent needs: no recipe props, media paths relative."""
-    caption = asset.get("caption") or ""
+    """The row the agent needs: no recipe props or timeline, media paths relative."""
     return {
         "id": asset["id"], "idea_id": asset["idea_id"], "batch_date": asset["batch_date"],
         "status": asset["status"], "verdict": asset["verdict"],
         "template": (asset.get("recipe") or {}).get("template"),
-        "caption": caption[:EXCERPT_CHARS] + ("…" if len(caption) > EXCERPT_CHARS else ""),
+        "caption": _excerpt(asset.get("caption")),
+        "description": _excerpt(asset.get("description")),
         "self_score": asset["self_score"], "qc": qc_summary(asset["qc"]),
         "best_before": asset["best_before"], "file_path": asset["file_path"],
     }
@@ -228,10 +234,13 @@ def default_best_before(store: CampaignStore, settings: InstagramMCPSettings,
 
 def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id: int, *,
                  self_score: int, self_score_reason: str, caption: str,
-                 best_before: Optional[str] = None) -> Dict[str, Any]:
-    """Attach the agent's self-score (1-10, one line on why), caption and best_before to a
-    QC-passed (`ready`) asset the owner has not judged yet. Re-submitting overwrites.
-    Everything is checked before anything is written; ValueError names the problem."""
+                 best_before: Optional[str] = None,
+                 description: Optional[str] = None) -> Dict[str, Any]:
+    """Attach the agent's self-score (1-10, one line on why), caption, best_before and
+    description (2-3 plain sentences: what happens, the hook, the payoff; default: the one
+    already stored, else an automatic one) to a QC-passed (`ready`) asset the owner has not
+    judged yet. Re-submitting overwrites. Everything is checked before anything is written;
+    ValueError names the problem."""
     asset = store.get_asset(asset_id)
     status = asset["status"]
     if status == "rendering":
@@ -253,6 +262,10 @@ def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
         raise ValueError("a caption is required")
     if best_before is None:
         best_before = default_best_before(store, settings, asset)
-    edit_asset(store, asset_id, caption=caption, best_before=best_before)  # checks both
+    if description is None:
+        description = asset["description"] or auto_description(
+            store.get_idea(asset["idea_id"]), asset)
+    edit_asset(store, asset_id, caption=caption, best_before=best_before,  # checks them
+               description=description)
     return compact_asset(store.update_asset(asset_id, self_score=self_score,
                                             self_score_reason=reason))

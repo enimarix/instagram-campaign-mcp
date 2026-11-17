@@ -67,10 +67,16 @@ export type Asset = {
   duration?: number | null
   recipe?: { template?: string; edit?: string; ops?: { op: string }[] }
   qc?: { passed?: boolean; reason?: string; reasons?: string[]; warnings?: string[] } | null
+  // what happens in the video (110): 2-3 sentences, and events in seconds (t, d)
+  description?: string | null
+  timeline?: TimelineEvent[] | null
   // from the asset's idea; only the list carries them
   track?: string
   strategy?: 'explore' | 'exploit' | null
 }
+
+/** One event; the last may be only {e: "+N more"} when the timeline was cut. */
+export type TimelineEvent = { t?: number; d?: number; e: string }
 
 export type Vocabulary = { values: { id: string; label: string }[] }
 export type Taxonomy = {
@@ -125,7 +131,10 @@ const send = <T>(method: string, path: string, body?: unknown) =>
   })
 
 export const getAsset = (id: number) => request<Asset>(`/api/assets/${id}`)
-export const editAsset = (id: number, fields: { caption?: string; best_before?: string | null }) =>
+export const editAsset = (
+  id: number,
+  fields: { caption?: string; best_before?: string | null; description?: string },
+) =>
   send<Asset>('PATCH', `/api/assets/${id}`, fields)
 export const unapproveAsset = (id: number) => post<Asset>(`/api/assets/${id}/unapprove`)
 export const archiveAsset = (id: number) => post<Asset>(`/api/assets/${id}/archive`)

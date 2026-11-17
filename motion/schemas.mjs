@@ -2,7 +2,8 @@
 // Template schemas for Python (src/studio/motion.py), one JSON line on stdout:
 //   node schemas.mjs                       {"templates": [{id, jsonSchema, defaultProps, description}]}
 //   node schemas.mjs --validate <id>       props JSON on stdin ->
-//     {"ok": true, props, fps, durationInFrames, coverFrame} | {"ok": false, "error": <Zod's message>}
+//     {"ok": true, props, fps, durationInFrames, coverFrame, events} | {"ok": false, "error": <Zod's message>}
+//     events: [{t, d (seconds), e, text?}], what happens when (src/lib/events.ts, step 110)
 // Same parse and message as src/Root.tsx, without bundling for Chrome (a fraction of a second).
 // The registry imports .tsx components, so it is bundled for Node first with esbuild (from
 // @remotion/bundler); the font loader is stubbed: only schemas and timings run here.
@@ -69,7 +70,9 @@ try {
       print({ ok: false, error: `invalid props for ${a.validate}:\n${z.prettifyError(parsed.error)}` });
     } else {
       const props = parsed.data;
-      print({ ok: true, props, fps: FPS, durationInFrames: t.durationInFrames(props), coverFrame: t.coverFrame?.(props) ?? null });
+      const durationInFrames = t.durationInFrames(props);
+      const events = t.events?.(props) ?? [{ t: 0, d: durationInFrames / FPS, e: a.validate }];
+      print({ ok: true, props, fps: FPS, durationInFrames, coverFrame: t.coverFrame?.(props) ?? null, events });
     }
   }
 } catch (e) {
