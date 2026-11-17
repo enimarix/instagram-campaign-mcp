@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException
 from starlette.staticfiles import StaticFiles
@@ -23,6 +24,8 @@ from starlette.staticfiles import StaticFiles
 from .. import campaign
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
+from ..store import CampaignStore
+from . import assets
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 
 # Reachable without a session even when UI_PASSWORD is set.
@@ -40,16 +43,21 @@ def create_app(
     settings: Optional[InstagramMCPSettings] = None,
     client_factory: ClientFactory = InstagramClient,
     auth: Optional[Auth] = None,
+    store: Optional[CampaignStore] = None,
 ) -> FastAPI:
+    """`store`: injected (tests; the caller closes it), else opened from settings.database_path."""
     settings = settings or get_settings()
     auth = auth or Auth(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        app.state.store = store or CampaignStore(settings.database_path)
         app.state.client = client_factory(settings) if settings.instagram_configured else None
         try:
             yield
         finally:
+            if store is None:
+                app.state.store.close()
             if app.state.client is not None:
                 await app.state.client.close()
 
@@ -62,6 +70,12 @@ def create_app(
             content={"error": "instagram_api_error", "message": e.message,
                      "code": e.error_code, "subcode": e.error_subcode},
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, e: RequestValidationError) -> JSONResponse:
+        message = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}"
+                            for err in e.errors())
+        return JSONResponse(status_code=422, content={"error": "invalid", "message": message})
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -123,7 +137,8 @@ def create_app(
             return JSONResponse(status_code=503, content={"error": "instagram_not_configured"})
         return await campaign.account_status(client)
 
-    _serve_website(app, Path(settings.web_dist))
+    app.include_router(assets.router)
+    _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 
 
