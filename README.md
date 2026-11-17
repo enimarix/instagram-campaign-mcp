@@ -195,6 +195,14 @@ pages (they carry ads), and it gets no credential of ours. Set `DOWNLOADER_HEALT
 to a public Reel permalink for the daily health check (`up` / `down` / `broken`,
 `GET /api/downloader/status`); `update` needs it.
 
+`download_reel` (MCP, agent profile) and the "Download for reaction" button on Trends
+(`POST /api/sources/download`) save a public Reel to `data/media/sources/<id>/` as a
+`commentary` clip with its creator: the service first, then `yt-dlp` if installed
+(`pip install -e ".[download]"`, Python 3.11+). Limits: `MAX_DOWNLOADS_PER_DAY` (30),
+`DOWNLOAD_DELAY_S` (5), `MAX_DOWNLOAD_MB` (200). `DOWNLOADER_COOKIES_FILE` (yt-dlp only)
+must be a separate personal account, never the brand account. When both fail, the source
+says why; save the video yourself and drop it into `data/inbox/`.
+
 ## Tools (30)
 
 **Account** `validate_access_token`, `get_account_pages`, `get_profile_info`,

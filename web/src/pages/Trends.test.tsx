@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Inspiration, TrendItem, TrendReport, Watch } from '../api/client'
+import { ToastProvider } from '../ui/Toast'
 import Trends from './Trends'
 
 const ITEM: TrendItem = {
@@ -146,5 +147,36 @@ describe('Trends', () => {
     fireEvent.change(within(box).getByLabelText('Reel link'), { target: { value: 'https://x.com/a' } })
     fireEvent.click(within(box).getByRole('button', { name: 'Add' }))
     expect((await within(box).findByRole('alert')).textContent).toBe('paste an Instagram Reel or post link')
+  })
+
+  it('downloads a trend reference for a reaction and shows the result', async () => {
+    const calls = stubApi({ 'POST /api/sources/download': [200, { status: 'downloaded', source: { id: 1, author: 'rival' } }] })
+    render(<ToastProvider><Trends /></ToastProvider>)
+    const report = await screen.findByRole('region', { name: 'Trend report' })
+    const buttons = await within(report).findAllByRole('button', { name: 'Download for reaction' })
+    expect(buttons).toHaveLength(1) // not on the card whose link is unsafe
+    fireEvent.click(buttons[0])
+    expect((await screen.findByRole('status')).textContent).toBe('Downloaded for reaction (@rival)')
+    expect(calls.find((c) => c.key === 'POST /api/sources/download')?.body).toEqual({ source_id: 1 })
+  })
+
+  it('shows why an inspiration was not downloaded', async () => {
+    const calls = stubApi({ 'POST /api/sources/download': [200, { status: 'refused', reason: 'private account', source: null }] })
+    render(<ToastProvider><Trends /></ToastProvider>)
+    const box = await screen.findByRole('region', { name: 'Inspirations' })
+    const [first, second] = await within(box).findAllByRole('listitem')
+    expect(within(second).queryByRole('button', { name: 'Download for reaction' })).toBeNull()
+    fireEvent.click(within(first).getByRole('button', { name: 'Download for reaction' }))
+    expect((await screen.findByRole('status')).textContent).toBe('Not downloaded: private account')
+    expect(calls.find((c) => c.key === 'POST /api/sources/download')?.body).toEqual({ url: INSP[0].url })
+  })
+
+  it('shows an error from the download route', async () => {
+    stubApi({ 'POST /api/sources/download': [422, { error: 'invalid', message: 'not a Reel link' }] })
+    render(<ToastProvider><Trends /></ToastProvider>)
+    const box = await screen.findByRole('region', { name: 'Inspirations' })
+    const [first] = await within(box).findAllByRole('listitem')
+    fireEvent.click(within(first).getByRole('button', { name: 'Download for reaction' }))
+    expect((await screen.findByRole('status')).textContent).toBe('Not downloaded: not a Reel link')
   })
 })

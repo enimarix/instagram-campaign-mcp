@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
-  addInspiration, addWatch, deleteInspiration, errorMessage, getTrends, listInspirations,
+  addInspiration, addWatch, deleteInspiration, downloadReel, errorMessage, getTrends, listInspirations,
   listWatchlist, removeWatch, setInspirationStatus,
   type Inspiration, type TrendItem, type TrendReport, type Watch,
 } from '../api/client'
@@ -11,8 +11,34 @@ import { Chip } from '../ui/Chip'
 import { CloseIcon } from '../ui/icons'
 import { PageHeader } from '../ui/PageHeader'
 import { field, link, type Tone } from '../ui/styles'
+import { useToast } from '../ui/useToast'
 
 const label = (w: Pick<Watch, 'kind' | 'value'>) => (w.kind === 'hashtag' ? '#' : '@') + w.value
+
+/** Saves the Reel for a reaction (step 063b); the toast says downloaded, or refused and why. */
+function DownloadButton({ target }: { target: { source_id: number } | { url: string } }) {
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+
+  async function download() {
+    setBusy(true)
+    try {
+      const r = await downloadReel(target)
+      const by = r.source?.author ? ` (@${r.source.author})` : ''
+      toast({ message: r.status === 'downloaded' || r.status === 'exists'
+        ? `Downloaded for reaction${by}` : `Not downloaded: ${r.reason ?? r.status}` })
+    } catch (e) {
+      toast({ message: `Not downloaded: ${errorMessage(e)}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Button size="sm" variant="ghost" loading={busy} onClick={() => void download()}>
+      Download for reaction
+    </Button>
+  )
+}
 
 // Captions are other accounts' words: rendered as quoted text only, never as HTML.
 function TrendCard({ item }: { item: TrendItem }) {
@@ -38,12 +64,15 @@ function TrendCard({ item }: { item: TrendItem }) {
       {item.hashtags.length > 0 && (
         <p className="mt-1 break-words text-xs text-info">{item.hashtags.map((t) => `#${t}`).join(' ')}</p>
       )}
-      {href && (
-        <a href={href} target="_blank" rel="noopener noreferrer"
-          className={`mt-1 inline-flex min-h-11 items-center ${link}`}>
-          Open on Instagram
-        </a>
-      )}
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        {href && (
+          <a href={href} target="_blank" rel="noopener noreferrer"
+            className={`mr-auto inline-flex min-h-11 items-center ${link}`}>
+            Open on Instagram
+          </a>
+        )}
+        {href && <DownloadButton target={{ source_id: item.source_id }} />}
+      </div>
     </Card>
   )
 }
@@ -125,6 +154,7 @@ function Inspirations() {
                       Open
                     </a>
                   )}
+                  {href && <DownloadButton target={{ url: i.url }} />}
                   {i.status !== 'dismissed' && (
                     <Button size="sm" variant="ghost" onClick={() => void act(() => setInspirationStatus(i.id, 'dismissed'))}>
                       Dismiss
