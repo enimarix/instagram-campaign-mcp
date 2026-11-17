@@ -72,7 +72,7 @@ def validate_payload(kind: str, payload: Dict[str, Any]) -> None:
     required = {
         "image": ["image_url"],
         "carousel": ["items"],
-        "reel": ["video_url"],
+        "reel": [],
         "story": [],
     }.get(kind)
     if required is None:
@@ -84,6 +84,8 @@ def validate_payload(kind: str, payload: Dict[str, Any]) -> None:
         raise ValueError("A carousel needs 2 to 10 items")
     if kind == "story" and bool(payload.get("image_url")) == bool(payload.get("video_url")):
         raise ValueError("A story needs exactly one of image_url or video_url")
+    if kind == "reel" and bool(payload.get("video_url")) == bool(payload.get("video_path")):
+        raise ValueError("A reel needs exactly one of video_url or video_path")
     if kind == "reel" and payload.get("trial_graduation") not in (None, "MANUAL", "SS_PERFORMANCE"):
         raise ValueError("trial_graduation must be MANUAL or SS_PERFORMANCE")
     problem = caption_problem(payload.get("caption"))

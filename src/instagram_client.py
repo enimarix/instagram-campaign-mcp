@@ -21,14 +21,16 @@ import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import Any, Dict, Iterable, List, Optional
-from urllib.parse import urlencode
+from pathlib import Path
+from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
+from urllib.parse import urlencode, urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
 import structlog
 
 from .config import InstagramMCPSettings, get_settings
+from .studio import media
 
 logger = structlog.get_logger(__name__)
 
@@ -68,6 +70,12 @@ JPEG_FORMATS = {"JPEG", "MPO"}
 CONTAINER_SUBCODE_RE = re.compile(r"\b(220\d{4})\b")
 # Publishing-quota subcode: ~100 API posts per rolling 24h.
 PUBLISH_QUOTA_SUBCODE = 2207042
+# Reels from local files: resumable upload ("rupload") of the bytes, then the usual polling.
+RUPLOAD_URL = "https://rupload.facebook.com/ig-api-upload/{version}/{container_id}"
+RUPLOAD_HOSTS = (".facebook.com", ".instagram.com")  # where we send the OAuth token
+REEL_MAX_BYTES = 300 * 1024 * 1024  # IG User Media reference, Reel specs
+UPLOAD_ATTEMPTS = 3
+UPLOAD_CHUNK = 1024 * 1024
 
 
 class InstagramAPIError(Exception):
@@ -423,9 +431,65 @@ class InstagramClient:
     # Publishing
     # ------------------------------------------------------------------
     async def _create_container(self, payload: Dict[str, Any]) -> str:
+        return _require_id(await self._create_container_data(payload), "media container")
+
+    async def _create_container_data(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         clean = {k: v for k, v in payload.items() if v is not None}
-        data = await self._make_request("POST", f"{self.account_id}/media", data=clean)
-        return _require_id(data, "media container")
+        return await self._make_request("POST", f"{self.account_id}/media", data=clean)
+
+    def _local_video(self, rel: str) -> Path:
+        """A Reel file under the media root, checked before any network call."""
+        try:
+            path = media.resolve(self.settings.media_root, rel)
+        except ValueError as e:
+            raise InvalidMedia(f"video_path must be relative to the media root: {e}") from e
+        if not path.is_file():
+            raise InvalidMedia(f"video_path {rel!r} is not a file under the media root")
+        size = path.stat().st_size
+        if not 0 < size <= REEL_MAX_BYTES:
+            raise InvalidMedia(f"Reel file is {size} bytes; Instagram takes 1 byte to 300 MB")
+        return path
+
+    async def _upload_video(self, container_id: str, uri: Optional[str], path: Path) -> None:
+        """POST the file to the resumable-upload endpoint, retrying transient failures
+        (network, 5xx/429, debug_info.retriable) with the polling backoff."""
+        host = urlparse(uri or "").hostname or ""
+        if not (uri and uri.startswith("https://") and host.endswith(RUPLOAD_HOSTS)):
+            uri = RUPLOAD_URL.format(version=self.settings.instagram_api_version,
+                                     container_id=container_id)
+        size = path.stat().st_size
+        headers = {
+            "Authorization": f"OAuth {self.access_token}",
+            "offset": "0",
+            "file_size": str(size),
+            "Content-Length": str(size),
+        }
+        delay = max(self.settings.container_poll_interval_seconds, 0.0)
+        for attempt in range(1, UPLOAD_ATTEMPTS + 1):
+            await self.budget.acquire()
+            try:
+                resp = await self.client.post(uri, content=_read_chunks(path), headers=headers)
+            except httpx.RequestError as e:
+                message, retriable = f"{e!r}", True
+            else:
+                try:
+                    body = resp.json()
+                except ValueError:
+                    body = {}
+                body = body if isinstance(body, dict) else {}
+                if resp.is_success and body.get("success") is not False:
+                    return
+                info = body.get("debug_info") or {}
+                message = info.get("message") or f"HTTP {resp.status_code}"
+                retriable = (bool(info.get("retriable")) or resp.status_code == 429
+                             or resp.status_code >= 500)
+            if not retriable or attempt == UPLOAD_ATTEMPTS:
+                raise InstagramAPIError(
+                    f"Reel upload failed after {attempt} attempt(s): {message}")
+            logger.warning("reel_upload_retry", container_id=container_id,
+                           attempt=attempt, error=message)
+            await asyncio.sleep(delay)
+            delay = min(delay * 1.5, 30.0)
 
     async def get_container_status(self, container_id: str) -> Dict[str, Any]:
         return await self._make_request(
@@ -610,7 +674,7 @@ class InstagramClient:
 
     async def publish_reel(
         self,
-        video_url: str,
+        video_url: Optional[str] = None,
         caption: str = "",
         cover_url: Optional[str] = None,
         thumb_offset_ms: Optional[int] = None,
@@ -619,13 +683,19 @@ class InstagramClient:
         collaborators: Optional[List[str]] = None,
         location_id: Optional[str] = None,
         trial_graduation: Optional[str] = None,
+        video_path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Publish a Reel. trial_graduation=MANUAL|SS_PERFORMANCE makes it a
-        trial Reel shown to non-followers first (good for organic A/B tests)."""
+        """Publish a Reel from a public `video_url` or a local `video_path` (relative to
+        the media root, sent with the resumable upload). trial_graduation=MANUAL|
+        SS_PERFORMANCE makes it a trial Reel shown to non-followers first."""
+        if bool(video_url) == bool(video_path):
+            raise InvalidMedia("Give exactly one of video_url or video_path for a Reel.")
         _check_caption(caption)
+        path = self._local_video(video_path) if video_path else None
         payload: Dict[str, Any] = {
             "media_type": "REELS",
             "video_url": video_url,
+            "upload_type": "resumable" if path else None,
             "caption": caption,
             "cover_url": cover_url,
             "thumb_offset": thumb_offset_ms,
@@ -638,7 +708,11 @@ class InstagramClient:
             if trial_graduation not in ("MANUAL", "SS_PERFORMANCE"):
                 raise InvalidMedia("trial_graduation must be MANUAL or SS_PERFORMANCE")
             payload["trial_params"] = {"graduation_strategy": trial_graduation}
-        container = await self._create_container(payload)
+        if not path:
+            return await self._publish_container(await self._create_container(payload))
+        data = await self._create_container_data(payload)
+        container = _require_id(data, "media container")
+        await self._upload_video(container, data.get("uri"), path)
         return await self._publish_container(container)
 
     async def publish_story(
@@ -835,6 +909,13 @@ def _check_caption(caption: Optional[str]) -> None:
     problem = caption_problem(caption)
     if problem:
         raise InvalidMedia(problem)
+
+
+async def _read_chunks(path: Path) -> AsyncIterator[bytes]:
+    """Stream the file: a Reel can be 300 MB, never hold it in memory."""
+    with path.open("rb") as f:
+        while chunk := f.read(UPLOAD_CHUNK):
+            yield chunk
 
 
 def _require_id(data: Dict[str, Any], what: str) -> str:

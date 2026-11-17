@@ -53,6 +53,9 @@ def test_validate_payload():
     with pytest.raises(ValueError, match="2 to 10"):
         camp.validate_payload("carousel", {"items": [{"image_url": "a"}]})
     camp.validate_payload("story", {"image_url": "https://x/s.jpg"})
+    camp.validate_payload("reel", {"video_path": "2026-11-17/1/final.mp4"})
+    with pytest.raises(ValueError, match="exactly one"):
+        camp.validate_payload("reel", {"video_url": "https://x/r.mp4", "video_path": "r.mp4"})
 
 
 # ---------------------------------------------------------------- run_due
@@ -72,6 +75,19 @@ async def test_run_due_publishes_and_labels(client, store):
     assert res["published"][0]["media_id"] == "M1"
     assert store.get_scheduled(p["id"])["status"] == "published"
     assert store.get_label("M1")["campaign"] == "launch"
+
+
+@respx.mock
+async def test_run_due_publishes_local_reel(client, store, tmp_path):
+    client.settings.media_root = str(tmp_path)
+    (tmp_path / "r.mp4").write_bytes(b"video")
+    _publish_ok()
+    upload = respx.post(url__startswith="https://rupload.facebook.com/").respond(
+        json={"success": True})
+    store.schedule("reel", {"video_path": "r.mp4"}, utcnow() - timedelta(seconds=5))
+    res = await camp.run_due(client, store)
+    assert res["published"][0]["media_id"] == "M1"
+    assert upload.calls.last.request.content == b"video"
 
 
 @respx.mock

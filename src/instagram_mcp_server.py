@@ -38,7 +38,8 @@ Typical loop:
 4. Decide: rank_posts(only="winner") lists posts beating the account median;
    compare_variants(campaign) says which variant is ahead.
 
-Media must be at a public HTTPS URL; Instagram downloads it. Scheduled posts are
+Media must be at a public HTTPS URL; Instagram downloads it. Reels may instead use
+video_path (relative to the studio media root), uploaded directly. Scheduled posts are
 published by `python -m src.scheduler daemon` (or run_due_posts) - the API itself
 cannot schedule. Publishing is irreversible: confirm captions and media with the
 user before publishing on their behalf.
@@ -234,7 +235,7 @@ async def publish_carousel(
 
 @mcp.tool(annotations=PUBLISH)
 async def publish_reel(
-    video_url: str,
+    video_url: Optional[str] = None,
     caption: str = "",
     cover_url: Optional[str] = None,
     thumb_offset_ms: Optional[int] = None,
@@ -245,15 +246,17 @@ async def publish_reel(
     campaign: Optional[str] = None,
     variant: Optional[str] = None,
     hypothesis: Optional[str] = None,
+    video_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Publish a Reel now (MP4/MOV H.264+AAC, 9:16 recommended, public HTTPS URL).
+    """Publish a Reel now (MP4/MOV H.264+AAC, 9:16 recommended, max 300 MB). Give exactly
+    one of video_url (public HTTPS) or video_path (file relative to the media root).
     trial_graduation makes it a trial Reel shown to non-followers first:
     SS_PERFORMANCE = Instagram shares it to followers if it performs,
     MANUAL = you decide in the app. Waits for video processing (can take minutes)."""
     try:
         res = await client().publish_reel(
             video_url, caption, cover_url, thumb_offset_ms, share_to_feed,
-            audio_name, collaborators, None, trial_graduation,
+            audio_name, collaborators, None, trial_graduation, video_path=video_path,
         )
     except InstagramAPIError as e:
         raise _err(e)
@@ -297,8 +300,10 @@ async def schedule_post(
     campaign: Optional[str] = None,
     variant: Optional[str] = None,
     hypothesis: Optional[str] = None,
+    video_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Queue a post for later. publish_at is ISO 8601; without an offset it is read
+    """Queue a post for later. A reel takes video_url or video_path (relative to the
+    media root). publish_at is ISO 8601; without an offset it is read
     in the configured time zone (default Europe/Paris), e.g. "2026-11-20T18:30".
     Needs the scheduler running (python -m src.scheduler daemon) or run_due_posts."""
     payload: Dict[str, Any]
@@ -308,7 +313,8 @@ async def schedule_post(
     elif kind == "carousel":
         payload = {"items": items or [], "caption": caption, "collaborators": collaborators}
     elif kind == "reel":
-        payload = {"video_url": video_url, "caption": caption, "cover_url": cover_url,
+        payload = {"video_url": video_url, "video_path": video_path,
+                   "caption": caption, "cover_url": cover_url,
                    "share_to_feed": share_to_feed, "trial_graduation": trial_graduation,
                    "collaborators": collaborators}
     else:
