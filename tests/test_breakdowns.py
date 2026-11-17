@@ -1,4 +1,5 @@
-"""Step 076: tag breakdowns (src/learning/breakdowns.py) and GET /api/analytics/breakdown."""
+"""Step 076: tag breakdowns (src/learning/breakdowns.py) and GET /api/analytics/breakdown;
+step 080: watch ratio in the groups, GET /api/analytics/campaigns and /ab."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -21,10 +22,14 @@ def settings():
     return _settings(timezone="America/New_York")
 
 
-def _post(store, mid, posted, kind="REELS", reach=1000, saved=10, age=72, studio=None):
+def _post(store, mid, posted, kind="REELS", reach=1000, saved=10, age=72, studio=None,
+          watch_ms=None):
     """One snapshot `age` hours after `posted`; studio = (track, hook, template, duration)."""
-    store.add_snapshot(mid, {"reach": reach, "views": reach * 2, "saved": saved,
-                             "likes": reach // 20, "shares": saved // 2},
+    metrics = {"reach": reach, "views": reach * 2, "saved": saved,
+               "likes": reach // 20, "shares": saved // 2}
+    if watch_ms is not None:
+        metrics["ig_reels_avg_watch_time"] = watch_ms
+    store.add_snapshot(mid, metrics,
                        kind, "VIDEO", to_iso(posted), captured_at=posted + timedelta(hours=age))
     if studio:
         track, hook, template, duration = studio
@@ -120,3 +125,30 @@ def test_route(seeded, settings):
         assert tc.get("/api/analytics/breakdown?tag=nope").status_code == 422
         assert tc.get("/api/analytics/breakdown?tag=track&type=nope").status_code == 422
         assert tc.get("/api/analytics/breakdown").status_code == 422
+
+
+def test_watch_ratio_median_only_when_known(seeded, settings):
+    assert "watch_ratio" not in _groups(seeded, settings, "track")["motion"]
+    day = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
+    _post(seeded, "w1", day, watch_ms=5000, studio=("motion", "question", "FactQuest", 10))
+    _post(seeded, "w2", day, watch_ms=10000, studio=("motion", "question", "FactQuest", 10))
+    g = _groups(seeded, settings, "track")
+    assert g["motion"]["n"] == 5 and g["motion"]["watch_ratio"] == {"median": 0.75}
+    assert "watch_ratio" not in g["remix"]
+
+
+def test_campaign_and_ab_routes(seeded, settings):
+    with TestClient(create_app(settings, store=seeded), base_url=LOCAL) as tc:
+        assert tc.get("/api/analytics/campaigns").json() == []
+        for mid, variant in (("q1", "A"), ("q2", "A"), ("q3", "A"), ("b1", "B"), ("ext1", "B")):
+            seeded.label_post(mid, campaign="hooks", variant=variant)
+        seeded.label_post("ext2", campaign="colours", variant="A")
+        assert tc.get("/api/analytics/campaigns").json() == ["colours", "hooks"]
+
+        ab = tc.get("/api/analytics/ab?campaign=hooks").json()
+        assert ab["campaign"] == "hooks" and [v["variant"] for v in ab["variants"]] == ["A", "B"]
+        assert [v["posts"] for v in ab["variants"]] == [3, 2]
+        assert ab["leader"] is None and "Fewer than 3" in ab["note"]  # B is too small
+        assert tc.get("/api/analytics/ab?campaign=nope").json()["variants"] == []
+        assert tc.get("/api/analytics/ab").status_code == 422
+        assert tc.get("/api/analytics/ab?campaign=").status_code == 422

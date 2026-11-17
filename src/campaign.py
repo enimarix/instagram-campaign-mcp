@@ -462,6 +462,11 @@ def variants(store: CampaignStore, settings: InstagramMCPSettings, campaign: str
     return compare_variants(_score_all(store, settings), campaign)
 
 
+def campaigns(store: CampaignStore) -> List[str]:
+    """The distinct campaign names in post_labels, sorted (the A/B page's picker)."""
+    return sorted({lb["campaign"] for lb in store.labels().values() if lb["campaign"]})
+
+
 async def account_status(client: InstagramClient) -> Dict[str, Any]:
     """Profile, token validity and publishing quota, for the studio's account page.
     An invalid token is reported, not raised; other Graph errors propagate."""

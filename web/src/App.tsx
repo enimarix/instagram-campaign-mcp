@@ -4,6 +4,7 @@ import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
 import Agent from './pages/Agent'
 import Analytics from './pages/Analytics'
+import Breakdowns from './pages/Breakdowns'
 import Placeholder from './pages/Placeholder'
 import Posts, { PostPage } from './pages/Posts'
 import Settings from './pages/Settings'
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/assets/:id" element={<AssetPage />} />
             <Route path="/trends" element={<Trends />} />
             <Route path="/analytics/posts" element={<Posts />} />
+            <Route path="/analytics/breakdowns" element={<Breakdowns />} />
             <Route path="/analytics/posts/:id" element={<PostPage />} />
             <Route path="*" element={<Placeholder title="Not found" />} />
           </Routes>

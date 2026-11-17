@@ -213,7 +213,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 - [x] 077 — Studio funnel — service and API: produced → reviewed → liked → approved → published → winner per day, track, template and hook type; the **like-rate** trend (the taste metric; approval rate is shown but is capped by the posts-per-day limit, GOAL.md §2.1); the agent's **calibration** (self-score against the owner's verdict: how often its top 5 were liked); **waste** (liked videos that expired on the bench, render minutes spent on them); and the most frequent feedback reasons; tests.
 - [x] 078 — Analytics overview page — follower, reach and views trends, this week's posts, winners, publishing streak, the funnel, the like-rate trend and the agent's calibration.
 - [x] 079 — Posts table and post detail pages — sortable, filterable table; detail shows the growth curve, tags, hypothesis, the owner's feedback and the video.
-- [ ] 080 — Breakdowns and A/B page — charts per tag with sample sizes shown; A/B comparison using existing `compare_variants`.
+- [x] 080 — Breakdowns and A/B page — charts per tag with sample sizes shown; A/B comparison using existing `compare_variants`.
 
 ### Phase 8 — The learning loop
 
@@ -261,6 +261,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 080 — Breakdowns and A/B page — https://github.com/enimarix/instagram-campaign-mcp/pull/85 (2026-11-17) — per-tag breakdown charts with sample sizes, A/B comparison of two tag values
 - [x] Plan — Owner priorities (2026-11-17) — Phase 5b (110–116, 113b) added; GOAL.md and DECISIONS updated for the reaction reel, DM picks, scroll-and-decide inbox, video timelines and work packets
 - [x] 063 — Clip intake with rights — https://github.com/enimarix/instagram-campaign-mcp/pull/84 (2026-11-17) — SourceProvider interface, local_inbox provider (data/inbox/), Clips section on Settings: no clip without a rights basis, note and sound answer
 - [x] 079 — Posts table and post detail pages — https://github.com/enimarix/instagram-campaign-mcp/pull/83 (2026-11-17) — sortable/filterable posts (cards on phone, table on desktop), post detail with growth curve, tags, hypothesis, feedback and video; thumbnails on the posts rows
