@@ -208,6 +208,14 @@ class InstagramMCPSettings(BaseSettings):
     downloader_health_url: str = Field(
         "", description="A public Reel permalink for the daily health check; empty = no check"
     )
+    # src/studio/downloader.py: Reels downloaded for a reaction (GOAL.md §5.1).
+    max_downloads_per_day: int = Field(30, ge=0, description="Reel downloads per owner-local day")
+    download_delay_s: float = Field(5.0, ge=0, description="Least seconds between two downloads")
+    max_download_mb: float = Field(200.0, gt=0, description="Largest Reel file (MB, 10^6 B)")
+    downloader_cookies_file: str = Field(
+        "", description="yt-dlp fallback only: a cookies.txt of a SEPARATE personal Instagram "
+        "account, never the brand account; empty = logged out"
+    )
 
     # --- Production tools -------------------------------------------------
     # src/studio/production.py (the agent's batch tools).

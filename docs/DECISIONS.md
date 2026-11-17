@@ -8,6 +8,26 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: Reel downloads: rules in code, yt-dlp fallback, field check pending (063b)
+`src/studio/downloader.py` asks the local service first, then yt-dlp (optional extra
+`download`, pinned `yt-dlp==2026.10.26`, which needs Python 3.11+, so the extra is
+skipped on 3.10). Either one only finds the video URL; our code fetches it from
+`*.cdninstagram.com` / `*.fbcdn.net` over https (no redirects), at most `MAX_DOWNLOAD_MB`
+(200). `MAX_DOWNLOADS_PER_DAY` (30, owner-local day, counted from `sources.downloaded_at`)
+and `DOWNLOAD_DELAY_S` (5) between downloads. Only yt-dlp may read
+`DOWNLOADER_COOKIES_FILE` (a separate personal account, never the brand account). A
+downloaded Reel is a `clip` with `rights_basis = commentary`, the creator's username as
+author and `audio_rights = not_covered` (its music is never ours). The service's 401
+"not public" also appears when Instagram blocks it, so it falls through to yt-dlp; a
+private account or a post with no video is final. A failure is kept on the source
+(`stats.download_error`, no new column) and the owner can drop the file into the inbox.
+DM picks of that Reel are marked `downloaded` (with the source) or `skipped` on a
+refusal; a failure leaves them `new` for the next run. The file is not probed (duration
+and size come from the answer).
+**Pending (owner, H4/H5):** the field check of how many of 20 recent viral Reels each
+provider downloads needs the owner's machine and real network; not run yet.
+Reason: GOAL.md §5.1, step 063b.
+
 ## 2026-11-17: Reel downloader vendored as a loopback-only service (063a)
 Okramjimmy/Instagram-reels-downloader (owner's choice, MIT licence) is a git submodule in
 `vendor/instagram-reels-downloader`, pinned to `c36c205` (upstream's latest commit on

@@ -467,6 +467,14 @@ export const listClips = () => request<Clip[]>('/api/sources?role=clip')
 export const listInbox = () => request<InboxFile[]>('/api/sources/inbox')
 export const addInboxClip = (name: string, body: ClipIntake) =>
   post<Clip>(`/api/sources/inbox/${encodeURIComponent(name)}`, body)
+/** POST /api/sources/download (step 063b): a public Reel saved for a reaction; `reason` says why not. */
+export type ReelDownload = {
+  status: 'downloaded' | 'exists' | 'refused' | 'failed'
+  reason?: string
+  source?: { id: number; author: string | null } | null
+}
+export const downloadReel = (target: { source_id: number } | { url: string }) =>
+  post<ReelDownload>('/api/sources/download', target)
 
 // --- Breakdowns and A/B (step 080) ---
 type Median = { median: number | null }

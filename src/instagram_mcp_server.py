@@ -25,7 +25,7 @@ from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .learning import brief, facts, learnings, report
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
-from .studio import dm_picks, motion, production, research
+from .studio import dm_picks, downloader, motion, production, research
 from .studio import frames as frames_
 from .studio.publish import cancel_post, refuse_asset_file
 
@@ -535,6 +535,20 @@ async def mark_inspiration_used(id: int) -> Dict[str, Any]:
     return await _studio(store().set_inspiration_status, id, "used")
 
 
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                      open_world_hint=True))
+async def download_reel(source_id_or_url: Union[int, str]) -> Dict[str, Any]:
+    """Download ONE public Reel picked for a reaction: a source id (get_trend_report) or a
+    Reel permalink (an inspiration, a DM pick). Only public Reels, for commentary use only:
+    the video made from it must add our reaction and credit the creator (source.author) on
+    screen and in the caption. Returns {status: downloaded | exists | refused | failed,
+    source, reason}: refused (private, not a video, daily cap) and failed (both
+    downloaders down; the owner can drop the file into the inbox) say why. Downloads are
+    capped per day: never download Reels you will not react to."""
+    return await _studio(downloader.download_reel, store(), get_settings(), source_id_or_url,
+                         now=utcnow())
+
+
 DmPickStatus = Literal["new", "downloaded", "in_production", "posted", "skipped"]
 
 
@@ -928,6 +942,9 @@ AGENT_TOOLS = frozenset({
     # Inspirations (step 051b): the owner's pasted Reels, local read + mark as used.
     "list_inspirations",
     "mark_inspiration_used",
+    # Reel downloads (step 063b): one public Reel for a reaction, capped per day; runs in
+    # our server, so the agent still has no shell and never gets a credential.
+    "download_reel",
     # DM picks (step 113): only the picks (link + pinned sender's note), never the DMs.
     "list_dm_picks",
     "mark_dm_pick",
