@@ -2,6 +2,7 @@
 
 import asyncio
 import sqlite3
+import threading
 from collections import namedtuple
 from contextlib import suppress
 from datetime import date, datetime, timedelta, timezone
@@ -197,3 +198,65 @@ def test_daily_housekeeping_once_a_day_retried_hourly(store, tmp_path, monkeypat
     assert worker.daily_housekeeping(store, s, now=lambda: T + timedelta(hours=5)) is None
     assert worker.daily_housekeeping(store, s, now=lambda: T + timedelta(days=1)) is not None
     assert len(calls) == 3
+
+
+@pytest.mark.parametrize("attempt", range(3))
+async def test_shutdown_waits_for_housekeeping_thread_before_store_closes(tmp_path, monkeypatch,
+                                                                          attempt):
+    store = CampaignStore(str(tmp_path / "studio.db"))
+    started, release, seen = threading.Event(), threading.Event(), []
+
+    def slow_housekeeping(store_, settings):
+        started.set()
+        release.wait(5)
+        seen.append(len(store_.list_assets()))  # the read that crashed once the store closed
+
+    monkeypatch.setattr(worker, "daily_housekeeping", slow_housekeeping)
+    loop = asyncio.create_task(worker.render_loop(store, _settings(tmp_path), interval=0.01))
+    assert await asyncio.to_thread(started.wait, 5)
+    loop.cancel()  # what scheduler._worker does before store.close()
+    await asyncio.sleep(0.05)
+    assert not loop.done()  # still waiting for the thread
+    release.set()
+    with suppress(asyncio.CancelledError):
+        await loop
+    assert seen == [0]
+    store.close()
+
+
+def test_close_waits_for_a_running_transaction_then_refuses_use(tmp_path):
+    store = CampaignStore(str(tmp_path / "studio.db"))
+    in_tx, go, seen = threading.Event(), threading.Event(), []
+
+    def reader():
+        with store._tx() as c:
+            in_tx.set()
+            go.wait(5)
+            seen.append(c.execute("SELECT count(*) FROM assets").fetchone()[0])
+        with pytest.raises(sqlite3.ProgrammingError):
+            store.list_assets()
+        seen.append("refused")
+
+    t = threading.Thread(target=reader)
+    t.start()
+    assert in_tx.wait(5)
+    closer = threading.Thread(target=store.close)
+    closer.start()
+    closer.join(0.1)
+    assert closer.is_alive()  # blocked until the reader's transaction ends
+    go.set()
+    closer.join(5)
+    t.join(5)
+    assert seen == [0, "refused"]
+    errors = []
+
+    def new_thread():  # gets no new connection either
+        try:
+            store.list_assets()
+        except sqlite3.ProgrammingError as e:
+            errors.append(e)
+
+    t = threading.Thread(target=new_thread)
+    t.start()
+    t.join(5)
+    assert len(errors) == 1

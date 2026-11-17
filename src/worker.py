@@ -257,26 +257,42 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
         except Exception as e:  # noqa: BLE001 - e.g. database locked: try next tick
             print(f"render queue: {e!r}", file=sys.stderr, flush=True)
 
-    while True:
-        try:
-            done_today = await asyncio.to_thread(daily_housekeeping, store, settings)
-            if done_today:
-                print(json.dumps({"housekeeping": done_today}), flush=True)
-        except Exception as e:  # noqa: BLE001 - retried within the hour
-            print(f"housekeeping failed: {e!r}", file=sys.stderr, flush=True)
-        claim()
-        if running:
-            with keep_awake():
-                while running:
-                    done, _ = await asyncio.wait(running.values(), timeout=interval)
-                    for job_id, task in list(running.items()):
-                        if task in done:
-                            del running[job_id]
-                            if task.exception():
-                                print(f"render job {job_id} failed: {task.exception()!r}",
-                                      file=sys.stderr, flush=True)
-                    claim()
-        await asyncio.sleep(interval)
+    housekeeper: Optional[asyncio.Task] = None
+    try:
+        while True:
+            # shielded: a thread can't be cancelled, so the task must stay awaitable below
+            housekeeper = asyncio.create_task(
+                asyncio.to_thread(daily_housekeeping, store, settings))
+            try:
+                done_today = await asyncio.shield(housekeeper)
+                if done_today:
+                    print(json.dumps({"housekeeping": done_today}), flush=True)
+            except Exception as e:  # noqa: BLE001 - retried within the hour
+                print(f"housekeeping failed: {e!r}", file=sys.stderr, flush=True)
+            claim()
+            if running:
+                with keep_awake():
+                    while running:
+                        done, _ = await asyncio.wait(running.values(), timeout=interval)
+                        for job_id, task in list(running.items()):
+                            if task in done:
+                                del running[job_id]
+                                if task.exception():
+                                    print(f"render job {job_id} failed: {task.exception()!r}",
+                                          file=sys.stderr, flush=True)
+                        claim()
+            await asyncio.sleep(interval)
+    finally:
+        # Cancelled: threads still running housekeeping or renders use the store, which the
+        # caller closes next. Let them finish (asyncio.run would wait for them anyway); a
+        # render then saves its result instead of being re-queued as stale.
+        pending = [t for t in (housekeeper, *running.values()) if t and not t.done()]
+        if pending:
+            await asyncio.wait(pending)
+        for t in pending:
+            if not t.cancelled() and t.exception():
+                print(f"worker thread failed during shutdown: {t.exception()!r}",
+                      file=sys.stderr, flush=True)
 
 
 def status(store: CampaignStore, settings: InstagramMCPSettings,

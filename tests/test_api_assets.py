@@ -151,4 +151,4 @@ def test_app_opens_and_closes_its_own_store(tmp_path):
         assert c.post(f"/api/assets/{a['id']}/approve").json()["status"] == "approved"
         opened = app.state.store
         assert opened._conns
-    assert opened._conns == []  # closed on shutdown
+    assert not opened._conns  # closed on shutdown
