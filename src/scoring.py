@@ -143,6 +143,40 @@ def _at_age(
     return min(candidates, key=lambda s: abs((s.get("age_hours") or 0) - target_age))
 
 
+def matured_by_group(snapshots: List[Dict[str, Any]],
+                     cfg: ScoringConfig) -> Dict[str, List[Dict[str, Any]]]:
+    """The matured snapshots per group, in input order (newest-first)."""
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for s in snapshots:
+        if _is_matured(s, cfg):
+            out.setdefault(group_of(s), []).append(s)
+    return out
+
+
+def baseline_for(
+    snap: Dict[str, Any],
+    matured: Dict[str, List[Dict[str, Any]]],
+    cfg: ScoringConfig,
+    history: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    near_age: Optional[NearAge] = None,
+) -> List[Dict[str, Any]]:
+    """`snap`'s baseline: the newest `baseline_window` other matured posts of its type
+    (`matured`: matured_by_group), each read at the age closest to snap's (see score_posts)."""
+    others = [b for b in matured.get(group_of(snap), [])
+              if b["media_id"] != snap["media_id"]][: cfg.baseline_window]
+    age = snap.get("age_hours")
+    if near_age is not None and others and _is_matured(snap, cfg):
+        found = near_age([b["media_id"] for b in others], age, _min_age(group_of(snap), cfg))
+        return [found.get(b["media_id"], b) for b in others]
+    # unmatured posts only count their baseline: no query needed
+    return [_at_age(b, history or {}, age, cfg) for b in others]
+
+
+def confidence(n: int) -> str:
+    """How far to trust a comparison with n baseline posts."""
+    return "low" if n < 5 else "medium" if n < 15 else "high"
+
+
 def score_posts(
     snapshots: List[Dict[str, Any]],
     cfg: Optional[ScoringConfig] = None,
@@ -162,24 +196,14 @@ def score_posts(
     history = history or {}
     now = now or datetime.now(timezone.utc)
     durations = {m: label.get("duration_s") for m, label in labels.items()}
-    matured_by_group: Dict[str, List[Dict[str, Any]]] = {}
-    for s in snapshots:  # snapshots arrive newest-first
-        if _is_matured(s, cfg):
-            matured_by_group.setdefault(group_of(s), []).append(s)
+    matured = matured_by_group(snapshots, cfg)
 
     results = []
     for snap in snapshots:
         grp = group_of(snap)
         metrics = snap.get("metrics") or {}
         reach = _num(metrics.get("reach"))
-        others = [b for b in matured_by_group.get(grp, [])
-                  if b["media_id"] != snap["media_id"]][: cfg.baseline_window]
-        age = snap.get("age_hours")
-        if near_age is not None and others and _is_matured(snap, cfg):
-            found = near_age([b["media_id"] for b in others], age, _min_age(grp, cfg))
-            baseline = [found.get(b["media_id"], b) for b in others]
-        else:  # unmatured posts only count their baseline: no query needed
-            baseline = [_at_age(b, history, age, cfg) for b in others]
+        baseline = baseline_for(snap, matured, cfg, history, near_age)
 
         own_ratio = watch_ratio(metrics, durations.get(snap["media_id"]))
         res: Dict[str, Any] = {
@@ -191,7 +215,7 @@ def score_posts(
             "caption": (snap.get("caption") or "")[:120],
             "reach": int(reach),
             "baseline_posts": len(baseline),
-            "confidence": "low" if len(baseline) < 5 else "medium" if len(baseline) < 15 else "high",
+            "confidence": confidence(len(baseline)),
             "label": labels.get(snap["media_id"]),
             "watch_ratio": _round(own_ratio, 3),
             "view_rate": _round(view_rate(metrics), 3),
