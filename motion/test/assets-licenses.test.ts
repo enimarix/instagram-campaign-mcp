@@ -20,7 +20,8 @@ const listed = (): Set<string> =>
   new Set([...readFileSync(join(root, "ASSETS_LICENSES.md"), "utf8").matchAll(/`(public\/[^`]+)`/g)].map((m) => m[1]));
 
 test("every file in public/ is listed in ASSETS_LICENSES.md", () => {
-  const unlisted = walk("public").filter((f) => !listed().has(f));
+  const names = listed();
+  const unlisted = walk("public").filter((f) => !names.has(f));
   assert.deepEqual(unlisted, [], "add these files to ASSETS_LICENSES.md with licence and source");
 });
 

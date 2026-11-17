@@ -77,7 +77,8 @@ const hz = (note: string): number => {
   const m = /^([A-G])(#?)(\d)$/.exec(note);
   if (!m) throw new Error(`bad note ${note}`);
   const midi = 12 * (Number(m[3]) + 1) + NOTES[m[1]] + (m[2] ? 1 : 0);
-  return 440 * 2 ** ((midi - 69) / 12);
+  // Rounded so a last-bit difference in `**` between platforms cannot change the bytes.
+  return Math.round(440 * 2 ** ((midi - 69) / 12) * 100) / 100;
 };
 
 type Track = { wave: Wave; volume: number; duty?: number; decay?: boolean; steps: string };
