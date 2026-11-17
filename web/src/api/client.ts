@@ -278,6 +278,22 @@ export const listWatchlist = () => request<Watch[]>('/api/watchlist')
 export const addWatch = (kind: Watch['kind'], value: string) => post<Watch>('/api/watchlist', { kind, value })
 export const removeWatch = (id: number) => request<null>(`/api/watchlist/${id}`, { method: 'DELETE' })
 
+/** A row of GET /api/inspirations (step 051b): url is the canonical Reel / post link. */
+export type Inspiration = {
+  id: number
+  url: string
+  note: string | null
+  status: 'new' | 'used' | 'dismissed'
+  created_at: string
+  used_at: string | null
+}
+export const listInspirations = () => request<Inspiration[]>('/api/inspirations')
+export const addInspiration = (url: string, note: string) =>
+  post<Inspiration>('/api/inspirations', { url, note: note || null })
+export const setInspirationStatus = (id: number, status: Inspiration['status']) =>
+  send<Inspiration>('PATCH', `/api/inspirations/${id}`, { status })
+export const deleteInspiration = (id: number) => request<null>(`/api/inspirations/${id}`, { method: 'DELETE' })
+
 /** A post of GET /api/trends (src/studio/research.py trend_report). Quotes are other people's words. */
 export type TrendItem = {
   source_id: number

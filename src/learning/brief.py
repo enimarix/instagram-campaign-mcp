@@ -20,6 +20,7 @@ BIBLE_CHARS = 8000
 REPORT_CHARS = 2000
 NO_BIBLE = "no channel bible yet: follow brand/taxonomy.json and the learnings"
 EXPERIMENT_DAYS = 14
+INSPIRATIONS = 20
 IDEA_KEYS = ("id", "track", "pillar", "hook_type", "strategy", "hook")
 _EXPERIMENTS = (
     "SELECT i.experiment, COUNT(DISTINCT i.id) AS ideas,"
@@ -73,9 +74,9 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
         "recent_hooks": [r["hook"] for r in _rows(
             store, "SELECT hook FROM ideas WHERE batch_date >= ? AND hook IS NOT NULL"
                    " AND hook != '' ORDER BY id DESC LIMIT 60", since_hooks)],
-        # Owner inspirations: the `inspirations` table comes with a later step (GOAL.md
-        # data model); the key stays so the playbook can rely on it.
-        "inspirations": [],
+        # Reels the owner pasted with a note, not used or dismissed yet (step 051b).
+        "inspirations": [{k: r[k] for k in ("id", "url", "note", "created_at")}
+                         for r in store.list_inspirations("new", limit=INSPIRATIONS)],
         "bench": {"count": len(on_bench["assets"]), "supply_days": on_bench["supply_days"],
                   "hooks": [store.get_idea(a["idea_id"])["hook"]
                             for a in on_bench["assets"][:10]]},

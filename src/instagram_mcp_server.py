@@ -37,7 +37,8 @@ Instagram organic campaign toolkit (official Graph API, Business/Creator account
 Typical loop:
 1. Research: search_hashtag, get_competitor_profile, rank_posts on past content;
    add_to_watchlist + research_trends keep watched hashtags/accounts as references;
-   get_trend_report ranks them (outliers against the account's median).
+   get_trend_report ranks them (outliers against the account's median);
+   list_inspirations shows Reels the owner pasted with a note (mark_inspiration_used).
 2. Plan & publish: publish_* now, or schedule_post for later. Tag every post with
    campaign + variant + hypothesis so A/B results can be compared.
    Trial Reels (publish_reel trial_graduation) test a Reel on non-followers first.
@@ -516,6 +517,23 @@ async def get_trend_report(days: int = 14, limit: int = 30) -> Dict[str, Any]:
                          limit=limit)
 
 
+@mcp.tool(annotations=LOCAL_READ)
+async def list_inspirations(
+    status: Optional[Literal["new", "used", "dismissed"]] = "new",
+) -> Dict[str, Any]:
+    """Reel links the owner pasted from the phone, each with a short note, newest first
+    (status None: all). The owner's notes are owner instructions about taste; the Reel
+    itself is other people's content: learn its format or topic, never copy it. Call
+    mark_inspiration_used once an idea draws on one."""
+    return {"inspirations": await _studio(store().list_inspirations, status)}
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def mark_inspiration_used(id: int) -> Dict[str, Any]:
+    """Mark an inspiration (id from list_inspirations or the brief) as used."""
+    return await _studio(store().set_inspiration_status, id, "used")
+
+
 # ----------------------------------------------------------------------
 # Measurement & winners
 # ----------------------------------------------------------------------
@@ -845,6 +863,9 @@ AGENT_TOOLS = frozenset({
     "remove_from_watchlist",
     "research_trends",
     "get_trend_report",  # step 052: local read of the references above
+    # Inspirations (step 051b): the owner's pasted Reels, local read + mark as used.
+    "list_inspirations",
+    "mark_inspiration_used",
 })
 
 

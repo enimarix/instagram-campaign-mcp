@@ -300,11 +300,24 @@ CREATE TABLE hashtag_searches (
 );
 """
 
+# Migration 10: owner inspirations (051b), Reel links pasted from the phone with a note.
+# url is the canonical https://www.instagram.com/(reel|p)/<code>/ form, one row per post.
+INSPIRATIONS_SCHEMA = """
+CREATE TABLE inspirations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    url        TEXT NOT NULL UNIQUE,
+    note       TEXT,
+    status     TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','used','dismissed')),
+    created_at TEXT NOT NULL,
+    used_at    TEXT
+);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
-                         RENDER_SCHEMA, RESEARCH_SCHEMA]
+                         RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -314,6 +327,10 @@ WATCH_KINDS = ("hashtag", "account")
 # Both end up inside Graph request parameters, so nothing else gets in.
 _WATCH_VALUE = {"hashtag": re.compile(r"\w{1,100}"),
                 "account": re.compile(r"[a-z0-9._]{1,30}")}
+INSPIRATION_STATUSES = ("new", "used", "dismissed")
+INSPIRATION_NOTE_MAX = 200
+_INSPIRATION_URL = re.compile(
+    r"https://(?:www\.)?instagram\.com/(reel|p)/([A-Za-z0-9_-]+)/?(?:[?#].*)?")
 IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "citations",
                "hypothesis", "strategy", "experiment", "batch_date")
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
@@ -1021,6 +1038,47 @@ class CampaignStore:
                 " OR (SELECT COUNT(*) FROM hashtag_searches WHERE searched_at>?) < ?"
                 " ON CONFLICT(tag) DO UPDATE SET searched_at=excluded.searched_at",
                 (tag, to_iso(now), tag, since, since, limit)).rowcount == 1
+
+    # ------------------------------------------------------------------
+    # Inspirations: Reel links the owner pastes with a note (051b)
+    # ------------------------------------------------------------------
+    def add_inspiration(self, url: str, note: Optional[str] = None) -> Dict[str, Any]:
+        """Store a Reel or post link in its canonical form (query dropped). A link already
+        stored returns the existing row unchanged."""
+        m = _INSPIRATION_URL.fullmatch((url or "").strip())
+        if not m:
+            raise ValueError("paste an Instagram Reel or post link:"
+                             " https://www.instagram.com/reel/<code>/ or /p/<code>/")
+        note = (note or "").strip() or None
+        if note and len(note) > INSPIRATION_NOTE_MAX:
+            raise ValueError(f"the note is at most {INSPIRATION_NOTE_MAX} characters")
+        url = f"https://www.instagram.com/{m[1]}/{m[2]}/"
+        with self._tx() as c:
+            c.execute("INSERT INTO inspirations (url, note, created_at) VALUES (?,?,?)"
+                      " ON CONFLICT(url) DO NOTHING", (url, note, to_iso(utcnow())))
+            row = c.execute("SELECT * FROM inspirations WHERE url=?", (url,)).fetchone()
+        return dict(row)
+
+    def list_inspirations(self, status: Optional[str] = None,
+                          limit: int = 100) -> List[Dict[str, Any]]:
+        """Newest first; all statuses when `status` is None."""
+        return self._select("SELECT * FROM inspirations", {"status": status}, "id DESC", limit)
+
+    def set_inspiration_status(self, inspiration_id: int, status: str) -> Dict[str, Any]:
+        """used stamps used_at; any other status clears it. KeyError when there is none."""
+        if status not in INSPIRATION_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(INSPIRATION_STATUSES)}")
+        with self._tx() as c:
+            c.execute("UPDATE inspirations SET status=?, used_at=? WHERE id=?",
+                      (status, to_iso(utcnow()) if status == "used" else None, inspiration_id))
+        return self._get("inspirations", inspiration_id)
+
+    def delete_inspiration(self, inspiration_id: int) -> Dict[str, Any]:
+        """Delete one and return it; KeyError when there is none."""
+        row = self._get("inspirations", inspiration_id)
+        with self._tx() as c:
+            c.execute("DELETE FROM inspirations WHERE id=?", (inspiration_id,))
+        return row
 
     def add_idea(self, track: str, **fields: Any) -> Dict[str, Any]:
         """Tags are checked against brand/taxonomy.json (TaxonomyError lists valid values)."""
