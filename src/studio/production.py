@@ -10,13 +10,17 @@ submit_asset attaches the agent's score and caption while the owner has not judg
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from datetime import date, timedelta
-from typing import Any, Dict, List, Optional, Sequence
+from difflib import SequenceMatcher
+from typing import Any, Dict, List, Optional, Sequence, Set
+from urllib.parse import urlsplit
 
 from ..config import InstagramMCPSettings
+from ..learning.quotas import flagged_pillars, todays_quotas
 from ..store import CampaignStore
-from ..taxonomy import load_taxonomy
+from ..taxonomy import load_taxonomy, validate
 from .assets import edit_asset
 from .seed import local_today
 
@@ -31,10 +35,83 @@ _JOBS = ("SELECT j.id AS job_id, j.asset_id, j.state, j.progress, j.failure, a.s
 def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str,
                 **fields: Any) -> Dict[str, Any]:
     """Store an idea in today's batch (owner-local date); None fields are left unset.
-    TaxonomyError lists the valid tags."""
+    Everything is checked before writing; the ValueError says what to change: unknown tags
+    (TaxonomyError lists the valid ones), today's quotas (src/learning/quotas.py), a
+    near-duplicate of a recent idea, a fact pillar without citations."""
     fields = {k: v for k, v in fields.items() if v is not None}
     fields.setdefault("batch_date", local_today(settings.timezone))
+    validate("tracks", track)
+    pillar = fields.get("pillar") and validate("pillars", fields["pillar"])
+    _check_citations(pillar, fields.get("citations"))
+    _check_quotas(todays_quotas(store, settings, fields["batch_date"]), track, pillar,
+                  fields.get("strategy"))
+    _check_duplicates(store, settings, fields)
     return store.add_idea(track, **fields)
+
+
+def _check_citations(pillar: Optional[str], citations: Any) -> None:
+    """Any citations must be [{url (http/https), title?}]; fact pillars need at least one.
+    Only the URL's shape is checked (no network)."""
+    if not citations:
+        if pillar in flagged_pillars("needs_citations"):
+            raise ValueError(f"fact pillar '{pillar}' needs citations: add [{{url, title}}]")
+        return
+    if not isinstance(citations, list):
+        raise ValueError("citations must be a list of {url, title}")
+    for c in citations:
+        url = c.get("url") if isinstance(c, dict) else None
+        parts = urlsplit(url) if isinstance(url, str) else None
+        if not parts or parts.scheme not in ("http", "https") or not parts.netloc:
+            raise ValueError(f"citation {c!r} needs an http(s) url: {{url, title}}")
+
+
+def _check_quotas(q: Dict[str, Any], track: str, pillar: Optional[str],
+                  strategy: Optional[str]) -> None:
+    limits, counts = q["limits"], q["counts"]
+    if counts["ideas"] >= limits["ideas"]:
+        raise ValueError(f"batch full: {counts['ideas']}/{limits['ideas']} ideas today")
+    if strategy == "explore" and counts["explore"] >= limits["explore"]:
+        raise ValueError(f"explore quota used: {counts['explore']}/{limits['explore']};"
+                         " make it exploit")
+    if pillar in flagged_pillars("humour"):
+        kind, other = "humour", "pick an informative pillar"
+    else:
+        kind, other = "informative", "pick a humour pillar"
+    if counts[kind] >= limits[kind]:
+        raise ValueError(f"{kind} {counts[kind] + 1}/{limits[kind]}: {other}")
+    if track == "remix" and counts["reactions"] >= limits["reactions"]:
+        raise ValueError(f"reaction quota used: {counts['reactions']}/{limits['reactions']}"
+                         f" ({q['clips_available']} downloaded clips left); make it motion")
+
+
+def _normalise(text: Optional[str]) -> str:
+    return " ".join(re.sub(r"[^\w\s]|_", " ", (text or "").lower()).split())
+
+
+def _texts(idea: Dict[str, Any]) -> Set[str]:
+    """Normalised hook and first sentence of the script, without empties."""
+    first = re.split(r"[.!?\n]", (idea.get("script") or "").strip(), maxsplit=1)[0]
+    return {t for t in (_normalise(idea.get("hook")), _normalise(first)) if t}
+
+
+def _check_duplicates(store: CampaignStore, settings: InstagramMCPSettings,
+                      fields: Dict[str, Any]) -> None:
+    """Refuse an idea whose hook or opening line is close to one of the last dedupe_days.
+    ponytail: O(n) scan with difflib, fine at ~25 ideas a day."""
+    new = _texts(fields)
+    if not new:
+        return
+    day = date.fromisoformat(str(fields["batch_date"]))
+    since = (day - timedelta(days=settings.dedupe_days)).isoformat()
+    with store._tx() as c:
+        recent = c.execute("SELECT id, hook, script, batch_date FROM ideas"
+                           " WHERE batch_date >= ? ORDER BY id DESC", (since,)).fetchall()
+    for old in recent:
+        for a in new:
+            for b in _texts(dict(old)):
+                if SequenceMatcher(None, a, b).ratio() >= settings.dedupe_threshold:
+                    raise ValueError(f"near-duplicate of idea {old['id']} ({old['batch_date']}):"
+                                     f" {old['hook']!r}; change the angle")
 
 
 def qc_summary(qc: Optional[Dict[str, Any]]) -> Optional[str]:

@@ -189,6 +189,26 @@ class InstagramMCPSettings(BaseSettings):
         240.0, gt=0, description="Longest wait_for_renders call (MCP clients time out long calls)"
     )
 
+    # --- Daily quotas -----------------------------------------------------
+    # create_idea guards (src/learning/quotas.py, GOAL.md §3.1-3.2).
+    batch_size: int = Field(10, ge=1, description="Ideas per daily batch")
+    explore_share: float = Field(
+        0.3, ge=0, le=1, description="Max share of explore ideas in a batch (rounded up)"
+    )
+    humour_share: float = Field(
+        0.5, ge=0, le=1, description="Target share of humour ideas in a batch (+/- 1 idea)"
+    )
+    max_reactions_per_day: int = Field(
+        3, ge=0, description="Reactions the owner can record per day (Track A volume)"
+    )
+    reaction_margin: int = Field(
+        2, ge=0, description="Extra reaction ideas prepared above MAX_REACTIONS_PER_DAY"
+    )
+    dedupe_days: int = Field(30, ge=0, description="How far back create_idea looks for duplicates")
+    dedupe_threshold: float = Field(
+        0.85, gt=0, le=1, description="Hook similarity (difflib ratio) that counts as a duplicate"
+    )
+
     # --- Agent runs ---------------------------------------------------------
     # `ig-campaign agent run <playbook>` (src/agent/runner.py): Claude Code headless, locked
     # down (GOAL.md §4, third rule). The workspace must be outside the repo and APP_HOME.
