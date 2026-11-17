@@ -33,7 +33,7 @@ export type Action = (typeof ACTIONS)[number];
 const beat = z.strictObject({
   /** Index in `cast`: the name tag on the box and the actor. None = no tag, `cast[0]` acts. */
   speaker: z.literal([0, 1]).optional(),
-  /** 80 chars fit the box in three lines. */
+  /** 80 chars fit the box (about 4 lines at scale 4). */
   line: z.string().min(1).max(80),
   action: z.enum(ACTIONS).default("idle"),
   /** Played as the action starts. */
