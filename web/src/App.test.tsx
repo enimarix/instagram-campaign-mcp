@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, getAccount } from './api/client'
@@ -49,5 +49,17 @@ describe('App', () => {
       'Inbox', 'Calendar', 'Analytics', 'Learnings', 'Ads', 'Agent', 'Settings',
     ])
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
+  })
+
+  it('links Trends from the Analytics placeholder', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
+      url.startsWith('/api/trends') ? { accounts: [], hashtags: {}, generated_at: '' } : []))))
+    render(
+      <MemoryRouter initialEntries={['/analytics']}>
+        <App />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('link', { name: /^Trends/ }))
+    expect(await screen.findByRole('heading', { name: 'Trends' })).toBeTruthy()
   })
 })

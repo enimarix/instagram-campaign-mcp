@@ -16,10 +16,7 @@ import {
 } from '../api/client'
 import CommentThread from './CommentThread'
 import ScheduleSheet, { ScheduledSlot } from './ScheduleSheet'
-import { button, chip } from './ui'
-
-/** Only http(s) links are rendered: agent-written URLs could carry `javascript:`. */
-const safeUrl = (url?: string | null) => (url && /^https?:\/\//i.test(url) ? url : null)
+import { button, chip, safeUrl } from './ui'
 
 function ExternalLink({ url, children }: { url?: string | null; children: ReactNode }) {
   const href = safeUrl(url)
