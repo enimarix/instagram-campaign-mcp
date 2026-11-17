@@ -13,8 +13,8 @@ ORIGIN = {"Origin": LOCAL}
 
 
 def _settings(**kw):
-    return InstagramMCPSettings(_env_file=None, database_path=":memory:",
-                                instagram_access_token=None, **kw)
+    kw.setdefault("database_path", ":memory:")
+    return InstagramMCPSettings(_env_file=None, instagram_access_token=None, **kw)
 
 
 @pytest.fixture
@@ -144,10 +144,11 @@ def test_cross_site_post_refused(tc, store):
     assert store.get_asset(a["id"])["status"] == "ready"
 
 
-def test_app_opens_and_closes_its_own_store():
-    app = create_app(_settings())
+def test_app_opens_and_closes_its_own_store(tmp_path):
+    app = create_app(_settings(database_path=str(tmp_path / "studio.db")))
     with TestClient(app, base_url=LOCAL) as c:
-        assert c.get("/api/assets").json() == []
+        a = _asset(app.state.store)
+        assert c.post(f"/api/assets/{a['id']}/approve").json()["status"] == "approved"
         opened = app.state.store
         assert opened._conns
     assert opened._conns == []  # closed on shutdown
