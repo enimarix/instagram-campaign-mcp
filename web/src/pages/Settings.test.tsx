@@ -20,6 +20,10 @@ const ROUTES: Record<string, [number, unknown]> = {
   }],
   'GET /api/worker/status': [200, WORKER],
   'GET /api/storage': [200, { media_bytes: 2_500_000_000, db_bytes: 12_000_000, free_bytes: 2e9, last_backup: null }],
+  'GET /api/token': [200, {
+    configured: true, valid: true, expires_at: '2027-01-10T12:00:00+00:00', days_left: 40,
+    can_refresh: true, scopes: [],
+  }],
   'POST /api/worker/pause': [200, { ...WORKER, paused: true }],
 }
 
@@ -55,7 +59,7 @@ describe('Settings', () => {
     expect(within(ig).getByText('Valid')).toBeTruthy()
     expect(within(ig).getByText('macrobody')).toBeTruthy()
     expect(within(ig).getByText('3 / 100 in 24 h')).toBeTruthy()
-    expect(within(ig).getByText('unknown until token care')).toBeTruthy()
+    expect(await within(ig).findByText(/\(40 days left\)$/)).toBeTruthy()
 
     const storage = section('Storage')
     expect(within(storage).getByText('2.5 GB')).toBeTruthy()
@@ -81,11 +85,13 @@ describe('Settings', () => {
     stubApi({
       'GET /api/health': [200, { status: 'ok', instagram_configured: false, version: '1.2' }],
       'GET /api/account': [503, { error: 'instagram_not_configured' }],
+      'GET /api/token': [200, { configured: false, valid: null, expires_at: null, days_left: null, can_refresh: false, scopes: [] }],
     })
     render(<Settings />)
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
     const ig = section('Instagram')
     expect(within(ig).getByText('No')).toBeTruthy()
     expect(within(ig).queryByRole('alert')).toBeNull()
+    expect(await within(ig).findByText('No token')).toBeTruthy()
   })
 })

@@ -4,6 +4,7 @@ import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
 import Placeholder from './pages/Placeholder'
 import Settings from './pages/Settings'
+import TokenBanner from './TokenBanner'
 
 const TABS = [
   { path: '/inbox', label: 'Inbox' },
@@ -40,6 +41,7 @@ export default function App() {
         <header className="border-b border-gray-200 bg-white px-4 py-3">
           <h1 className="text-lg font-bold">Growth Studio</h1>
         </header>
+        <TokenBanner />
         <main className="p-4">
           <Routes>
             <Route path="/" element={<Navigate to="/inbox" replace />} />

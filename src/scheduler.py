@@ -15,6 +15,8 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler serve               # studio REST API on 127.0.0.1:8765
   python -m src.scheduler up                  # website + API + worker in one process
   python -m src.scheduler dev seed --days 3   # fake demo batch for website work
+  python -m src.scheduler token status        # access token validity and expiry
+  python -m src.scheduler token refresh       # swap it for a new 60-day token (needs app id/secret)
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -95,6 +97,8 @@ async def _run(args: argparse.Namespace) -> int:
                   file=sys.stderr)
             await _worker(settings, args.interval, args.stories_every)
             return 0
+        if args.command == "token":
+            return await _token(args, settings, store)
         if not settings.instagram_configured:
             # Setup mode: nothing to publish or measure yet. Exit 0 so cron and
             # Task Scheduler don't flag a failure.
@@ -112,6 +116,33 @@ async def _run(args: argparse.Namespace) -> int:
         return 0
     finally:
         store.close()
+
+
+async def _token(args: argparse.Namespace, settings: InstagramMCPSettings,
+                 store: CampaignStore) -> int:
+    """`token status|refresh`. The token itself is never printed."""
+    from pathlib import Path
+
+    from .config import ENV_FILE
+    from .studio.token import RefreshRefused, refresh_token, token_status
+
+    if not settings.instagram_access_token:
+        print("token: no INSTAGRAM_ACCESS_TOKEN set (setup mode); nothing to check.",
+              file=sys.stderr)
+        return 0
+    async with InstagramClient(settings, store=store) as client:
+        if args.token_command == "status":
+            print(json.dumps(await token_status(client, settings), indent=2))
+            return 0
+        try:
+            result = await refresh_token(client, settings, Path(ENV_FILE))
+        except RefreshRefused as e:
+            print(f"token refresh: refused, {e}.", file=sys.stderr)
+            return 1
+    expires = result["expires_at"]
+    print(f"refreshed, expires on {expires[:10] if expires else 'never'}"
+          " (restart the studio and MCP server to use it)")
+    return 0
 
 
 def _dev_seed(args: argparse.Namespace) -> int:
@@ -170,6 +201,10 @@ def main(argv: list[str] | None = None) -> None:
     ds.add_argument("--force", action="store_true",
                     help="Seed even a non-empty or live production database")
     ds.add_argument("--seed", type=int, help="Random seed, for a reproducible batch")
+    t = sub.add_parser("token", help="Access token: status or refresh").add_subparsers(
+        dest="token_command", required=True)
+    t.add_parser("status", help="Validity, expiry and scopes (the token is never printed)")
+    t.add_parser("refresh", help="Swap for a new long-lived token, rewrite it in .env")
     args = parser.parse_args(argv)
     if args.command == "dev" and args.days < 1:
         parser.error("--days must be >= 1")
