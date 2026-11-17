@@ -69,6 +69,14 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Python <-> template schemas (voice scripts): needs node_modules, so it runs here.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+        working-directory: .
+      - run: pytest -q tests/test_studio_motion.py -k "script or schema or validate_props"
+        working-directory: .
       - run: npm run still
       - run: npm run still:preview
       - run: npm run still:timeline

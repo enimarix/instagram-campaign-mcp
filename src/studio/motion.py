@@ -46,9 +46,15 @@ STILL_TIMEOUT_S = 120.0
 RENDER_CONCURRENCY = 4  # Chrome tabs per render; 2 renders in parallel (step 006a)
 TAIL_CHARS = 2000
 
-# Script lines (hook first) of templates with a voice, in the order of `voice.lines`.
+# Script lines (hook first) of templates with a voice, in the order of `voice.lines` (each
+# schema's refine). The voice reads the text the viewer sees, as is.
 SCRIPTS = {
     "FactQuest": lambda p: [p["hook"], *(f["text"] for f in p["facts"]), p["outro"]],
+    "BossBattle": lambda p: [p["hook"], *(r["text"] for r in p["rounds"]), p["verdict"]["text"]],
+    "QuizChest": lambda p: [p["hook"], p["question"], p["explanation"], p["cta"]],
+    "DialogStory": lambda p: [p["hook"], *(line["text"] for line in p["lines"]),
+                              *([p["moral"]] if p.get("moral") else [])],
+    "PixelSkit": lambda p: [p["hook"], *(b["line"] for b in p["beats"])],
 }
 
 

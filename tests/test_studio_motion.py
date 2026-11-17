@@ -19,8 +19,8 @@ from tests.test_studio_ffmpeg import needs_ffmpeg
 from tests.test_studio_recipe import make_clip
 from tests.test_studio_render import FAR_PAST
 
-# ponytail: local-only. CI's Python job has no motion/node_modules (nor Chrome for Remotion);
-# the motion CI job covers the templates themselves.
+# ponytail: CI's Python job has no motion/node_modules (nor Chrome for Remotion); the motion CI
+# job runs the schema-only tests below (`-k`), the real renders stay local.
 needs_motion = pytest.mark.skipif(
     not (shutil.which("node") and (motion.MOTION_DIR / "node_modules").is_dir()),
     reason="node or motion/node_modules missing (npm ci in motion/)")
@@ -94,6 +94,31 @@ def test_build_props_copies_the_voice_audio_into_the_media_root(tmp_path, monkey
     assert (tmp_path / "media" / "voice" / "abc.wav").read_bytes() == b"RIFF"
     assert said[0][1] == "nova" and said[0][0].splitlines()[0] == "Two lines?"
     assert len(out["voice"]["lines"]) == len(FACTQUEST["facts"]) + 2
+
+
+def _without_moral(props):
+    return {k: v for k, v in props.items() if k != "moral"}
+
+
+@needs_motion
+@pytest.mark.parametrize("template,props", [
+    *((t, _example(t.lower())) for t in sorted(motion.SCRIPTS)),
+    ("DialogStory", _without_moral(_example("dialogstory"))),
+])
+def test_script_gives_one_line_per_voice_timing(template, props):
+    lines = motion.SCRIPTS[template](props)
+    assert lines and all(isinstance(t, str) and t.strip() for t in lines)
+    timings = [{"text": t, "start_s": i, "end_s": i + 1} for i, t in enumerate(lines)]
+    motion.validate_props(template, {**props, "voice": {"lines": timings}})
+    with pytest.raises(ValueError, match="one timing per script line"):
+        motion.validate_props(template, {**props, "voice": {"lines": timings[:-1]}})
+
+
+@needs_motion
+def test_every_voiced_template_has_a_script():
+    voiced = {t["id"] for t in motion.list_templates()
+              if "voice" in t["jsonSchema"].get("properties", {})}
+    assert voiced == set(motion.SCRIPTS)  # a new voiced template needs a SCRIPTS entry
 
 
 def test_file_lock_makes_the_second_holder_wait(tmp_path):
