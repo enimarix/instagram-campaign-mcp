@@ -29,7 +29,7 @@ MOVES: Dict[Tuple[str, str], Set[str]] = {
     # owner; worker when unreviewed for N days, or liked and past best_before
     ("ready", "archived"): {"owner", "worker"},
     ("approved", "ready"): {"owner"},  # unapprove
-    # queue_asset() only: it will be the sole "system" caller of this move (step 019)
+    # studio.publish.queue_asset() only: the sole "system" caller of this move
     ("approved", "scheduled"): {"system"},
     # owner cancels the slot; worker when the publish failed for good and
     # certainly did not reach Instagram
@@ -101,6 +101,10 @@ def edit_asset(store: CampaignStore, asset_id: int, **fields: Any) -> Dict[str, 
         raise ValueError(f"only {' and '.join(EDITABLE)} can be edited,"
                          f" not {', '.join(sorted(unknown))}")
     if "caption" in fields:
+        status = store.get_asset(asset_id)["status"]
+        if status in ("scheduled", "publish_check", "published"):
+            raise ValueError(f"the caption can't change once the asset is {status}"
+                             " (cancel the queued post first)")
         problem = caption_problem(fields["caption"])
         if problem:
             raise ValueError(problem)
