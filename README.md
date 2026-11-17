@@ -83,7 +83,8 @@ The installer:
   (user scope) so Claude Code sees the server right away.
 
 Options: `-Dev` / `--dev` also installs test dependencies and runs the 67 tests
-(no network); `-Name` / `--name` changes the server name (default `instagram`).
+(no network); `-Name` / `--name` changes the server name (default `instagram`);
+`-Schedule` / `--schedule` starts the studio by itself (see "Run the studio").
 Re-running the installer is safe and upgrades the install.
 
 Then fill in `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_BUSINESS_ACCOUNT_ID` in `.env`.
@@ -159,6 +160,16 @@ To review from your phone, set `UI_PASSWORD` in `.env`, then
 the studio only answers on 127.0.0.1 / localhost. Plain `http://` on Wi-Fi is enough
 to watch and approve; recording on the phone needs HTTPS (Tailscale serve or a
 tunnel, gate H7).
+
+**Autostart and daily agent runs.** `ig-campaign agent install-schedule` (or the
+installer's `-Schedule` / `--schedule`) starts `ig-campaign up` at logon and runs the
+playbooks of `AGENT_SCHEDULE` (default `daily-produce@03:00`, comma-separated
+`playbook@HH:MM` in `TIMEZONE`) every day with `ig-campaign agent run-due`. On Windows
+these are Task Scheduler tasks of your user (`IGCampaignUp`, `IGCampaignAgent-<playbook>`;
+the run tasks wake the PC when wake timers are allowed, see above); elsewhere a block
+between `# ig-campaign begin/end` in your crontab. A run missed while the PC was off
+starts when the studio comes up the same day. Re-run after changing `AGENT_SCHEDULE`;
+`--remove` takes it all out. The Settings page shows each playbook's next and last run.
 
 ## Tools (30)
 

@@ -9,6 +9,7 @@
   3. Writes mcp-config.json with this machine's paths, ready to paste into
      Claude Desktop (or any MCP client).
   4. Optionally registers the server with Claude Code and runs the tests.
+  5. Optionally starts the studio at logon and schedules the daily agent runs.
 
   Safe to re-run: it upgrades the install and never overwrites .env.
 
@@ -17,6 +18,11 @@
 
 .PARAMETER RegisterClaudeCode
   Register the server with Claude Code (user scope) via `claude mcp add`.
+
+.PARAMETER Schedule
+  Register Task Scheduler tasks (current user, no admin): `ig-campaign up` at logon
+  and the daily agent runs of AGENT_SCHEDULE, which wake the PC. Remove them with
+  `ig-campaign agent install-schedule --remove`.
 
 .PARAMETER Name
   MCP server name used in the generated config (default: instagram).
@@ -27,6 +33,7 @@
 param(
     [switch]$Dev,
     [switch]$RegisterClaudeCode,
+    [switch]$Schedule,
     [string]$Name = "instagram"
 )
 
@@ -138,6 +145,13 @@ if ($Dev) {
     Write-Step "Running tests"
     Push-Location $Root
     try { & $Py -m pytest -q; Assert-Ok "pytest" } finally { Pop-Location }
+}
+
+# --- 5. Optional: autostart and daily agent runs -------------------------
+if ($Schedule) {
+    Write-Step "Registering autostart (IGCampaignUp) and daily agent runs"
+    Push-Location $Root
+    try { & $Py -m src.scheduler agent install-schedule; Assert-Ok "install-schedule" } finally { Pop-Location }
 }
 
 # --- Summary -------------------------------------------------------------

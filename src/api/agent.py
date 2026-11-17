@@ -1,4 +1,4 @@
-"""Agent page routes (thin doors onto src/agent/runs.py)."""
+"""Agent routes (thin doors onto src/agent/runs.py and schedule.py)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ..agent import runs
+from ..agent import runs, schedule
 from ..agent.runner import AgentError, AgentRunRefused
+from ..store import utcnow
 
 router = APIRouter(prefix="/api/agent")
 
@@ -19,6 +20,11 @@ class RunIn(BaseModel):
 @router.get("/playbooks")
 def playbooks():
     return runs.list_playbooks()
+
+
+@router.get("/schedule")
+def agent_schedule(request: Request):
+    return schedule.overview(request.app.state.store, request.app.state.settings, utcnow())
 
 
 @router.get("/runs")

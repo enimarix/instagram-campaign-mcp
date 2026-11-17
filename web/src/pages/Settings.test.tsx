@@ -25,6 +25,13 @@ const ROUTES: Record<string, [number, unknown]> = {
     can_refresh: true, scopes: [],
   }],
   'POST /api/worker/pause': [200, { ...WORKER, paused: true }],
+  'GET /api/agent/schedule': [200, [
+    {
+      playbook: 'daily-produce', time: '03:00', next_at: '2026-11-18T03:00:00+01:00', exists: true,
+      last_run: { id: 4, status: 'failed', started_at: new Date(Date.now() - 2 * 3600_000).toISOString(), finished_at: null },
+    },
+    { playbook: 'review', time: '14:30', next_at: '2026-11-17T14:30:00+01:00', exists: false, last_run: null },
+  ]],
 }
 
 function stubApi(overrides: Record<string, [number, unknown]> = {}) {
@@ -66,7 +73,19 @@ describe('Settings', () => {
     expect(within(storage).getByText('12.0 MB')).toBeTruthy()
     expect(within(storage).getByRole('alert').textContent).toMatch(/Low/)
     expect(within(section('Backups')).getByText('No backups yet')).toBeTruthy()
+
+    const agent = section('Agent schedule')
+    const next = new Date('2026-11-18T03:00:00+01:00').toLocaleString()
+    expect(within(agent).getByText('daily-produce at 03:00')).toBeTruthy()
+    expect(within(agent).getByText(`Next ${next} · last failed 2 hours ago`)).toBeTruthy()
+    expect(within(agent).getByText('Playbook not written yet · never ran')).toBeTruthy()
     expect(screen.queryByText('Setup mode: add your Instagram token')).toBeNull()
+  })
+
+  it('says so when no agent run is scheduled', async () => {
+    stubApi({ 'GET /api/agent/schedule': [200, []] })
+    render(<Settings />)
+    expect(await within(section('Agent schedule')).findByText('None (AGENT_SCHEDULE is empty)')).toBeTruthy()
   })
 
   it('pauses publishing after a confirm', async () => {

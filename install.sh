@@ -5,6 +5,7 @@
 #   ./install.sh --dev                 # + test dependencies and run the tests
 #   ./install.sh --register-claude-code  # + `claude mcp add` (user scope)
 #   ./install.sh --name ig             # MCP server name (default: instagram)
+#   ./install.sh --schedule            # + crontab: `up` at reboot, daily agent runs
 #
 # Uses uv if installed (it fetches Python 3.12 if needed), otherwise any
 # installed Python 3.10+. Safe to re-run; never overwrites .env.
@@ -16,12 +17,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
 NAME="instagram"
 DEV=0
 REGISTER=0
+SCHEDULE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dev) DEV=1 ;;
     --register-claude-code) REGISTER=1 ;;
+    --schedule) SCHEDULE=1 ;;
     --name) NAME="$2"; shift ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -102,6 +105,12 @@ fi
 if [ "$DEV" = 1 ]; then
   step "Running tests"
   (cd "$ROOT" && "$PY" -m pytest -q)
+fi
+
+# Optional: our marker block in the user's crontab (the rest of it is kept).
+if [ "$SCHEDULE" = 1 ]; then
+  step "Adding the ig-campaign block to your crontab"
+  (cd "$ROOT" && "$PY" -m src.scheduler agent install-schedule)
 fi
 
 echo
