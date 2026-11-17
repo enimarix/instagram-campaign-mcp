@@ -102,20 +102,28 @@ class Recipe(BaseModel):
 
 
 def encode(src: Path, info: MediaInfo, out: Path, *, filter_complex: str, timeout_s: float,
-           preset: str, extra_inputs: Sequence[PathLike] = (), extend_s: float = 0.0) -> None:
+           preset: str, extra_inputs: Sequence[PathLike] = (), extend_s: float = 0.0,
+           audio: Optional[str] = None) -> None:
     """Encode `src` through `filter_complex` (input [0:v], output [v]) into the output spec.
     `extra_inputs` are files for inputs 1, 2, ... The source's first audio track (silence
     if it has none) is re-encoded at exactly the source's length plus `extend_s` seconds
-    of silence (for an op that makes the video longer): no AAC padding creeps in per op."""
+    of silence (for an op that makes the video longer): no AAC padding creeps in per op.
+    `audio` replaces that with an unlabelled filter chain of the op's own (output -> [a])."""
     # ponytail: `apad` + `-shortest` would follow the video by itself, but -shortest never
     # ends an infinite pad inside -filter_complex (ffmpeg 7.1 hangs), so the length is explicit.
     args: List[PathLike] = ["-i", src]
     for path in extra_inputs:
         args += ["-i", path]
-    audio = _source_audio(info, info.duration + extend_s)
+    audio = audio or _source_audio(info, info.duration + extend_s)
     args += ["-filter_complex", f"{filter_complex};{audio}[a]", "-map", "[v]", "-map", "[a]",
              *VIDEO_ARGS, "-preset", preset, *AUDIO_ARGS, *CONTAINER_ARGS, out]
     ffmpeg.run(args, timeout_s=timeout_s)
+
+
+def _cover(width: int, height: int) -> str:
+    """Filter chain: fill a width x height box and cut the overflow from the centre."""
+    return (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}")
 
 
 @register
@@ -127,10 +135,8 @@ class FitVertical(Op):
     mode: Literal["blur", "crop"] = "blur"
 
     def apply(self, src, info, out, *, inputs, timeout_s, preset):
-        fill = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-                f"crop={WIDTH}:{HEIGHT}")
         if self.mode == "crop":
-            graph = f"[0:v]{fill},{VIDEO_TAIL}"
+            graph = f"[0:v]{_cover(WIDTH, HEIGHT)},{VIDEO_TAIL}"
         else:
             # Blur a quarter-size background, then scale it up: same look, far cheaper.
             graph = (
@@ -227,6 +233,7 @@ class Music(Op):
 # --- Brand overlays (GOAL.md §3.1 Track A steps 5-6, §5.1 credit). Styled from the brand
 # kit, every overlay inside its safe area. They add to the picture; they never move it.
 
+Corner = Literal["top_left", "top_right", "bottom_left", "bottom_right"]
 MAX_TEXT = 60  # characters, hook and credit
 TEXT_PAD = 16  # px of background box around text
 OverlayText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
@@ -292,7 +299,7 @@ class Logo(Op):
     `scale` = logo width as a fraction of the frame width."""
 
     op: Literal["logo"] = "logo"
-    position: Literal["top_left", "top_right", "bottom_left", "bottom_right"] = "bottom_right"
+    position: Corner = "bottom_right"
     opacity: float = Field(0.8, ge=0, le=1)
     scale: float = Field(0.12, gt=0, le=0.5)
 
@@ -488,6 +495,60 @@ class EndCard(Op):
                extra_inputs=extra, extend_s=self.duration_s)
 
 
+@register
+class ReactionCollage(Op):
+    """The clip (the source) and the owner's reaction video (`inputs[reaction_input]`) in
+    one frame. split: the clip on top (`split_ratio` of the height), the reaction below.
+    pip: the clip fills the frame, the reaction sits in a 9:16 box `pip_scale` of the frame
+    width in a corner of the safe area. Each part is scaled to cover its box and cut from
+    the centre: fitting a layout, not a detection-evasion edit (no mirror, flip, speed or
+    pitch change, GOAL.md §5.1).
+
+    The reaction starts `offset_s` after the clip (negative: its first -offset_s seconds
+    are skipped). Its first frame holds until it starts and its last frame after it ends;
+    it is cut at the clip's end, so the output is as long as the clip. Audio: the clip at
+    `clip_gain_db` (ducked under the reaction by default) mixed with the reaction's mic at
+    `reaction_gain_db`; render() normalises the loudness afterwards."""
+
+    op: Literal["reaction_collage"] = "reaction_collage"
+    layout: Literal["split", "pip"]
+    reaction_input: str = "reaction"
+    offset_s: float = Field(0.0, ge=-3600, le=3600)
+    split_ratio: float = Field(0.5, ge=0.4, le=0.7)
+    pip_corner: Corner = "bottom_right"
+    pip_scale: float = Field(0.3, ge=0.15, le=0.5)  # 0.5: 540x960 still fits the safe area
+    reaction_gain_db: float = Field(0.0, ge=-30, le=30)
+    clip_gain_db: float = Field(-6.0, ge=-60, le=0)
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+        reaction, length = inputs[self.reaction_input], info.duration
+        skip, delay = max(-self.offset_s, 0.0), max(self.offset_s, 0.0)
+        if self.layout == "split":
+            top = round(HEIGHT * self.split_ratio / 2) * 2
+            clip, (rw, rh) = _cover(WIDTH, top), (WIDTH, HEIGHT - top)
+            join = "vstack"
+        else:
+            sx, sy, sw, sh = brand.safe_area(brand.load_brand())
+            rw = round(WIDTH * self.pip_scale / 2) * 2
+            rh = round(rw * 16 / 9 / 2) * 2
+            x = sx if self.pip_corner.endswith("left") else sx + sw - rw
+            y = sy if self.pip_corner.startswith("top") else sy + sh - rh
+            clip, join = _cover(WIDTH, HEIGHT), f"overlay={x}:{y}"
+        graph = (f"[0:v]fps={FPS},{clip},setsar=1,format=yuv420p[clip];"
+                 f"[1:v]trim=start={skip},setpts=PTS-STARTPTS,fps={FPS},{_cover(rw, rh)},"
+                 f"setsar=1,format=yuv420p,tpad=start_duration={delay}:start_mode=clone"
+                 f":stop_mode=clone:stop_duration={length},trim=duration={length}[re];"
+                 f"[clip][re]{join},{VIDEO_TAIL}")
+        audio = f"{_source_audio(info)},volume={self.clip_gain_db}dB"
+        if ffmpeg.probe(reaction).has_audio:
+            audio = (f"{audio}[ca];[1:a:0]atrim=start={skip},asetpts=PTS-STARTPTS,"
+                     f"{AUDIO_FORMAT},adelay={round(delay * 1000)}:all=1,"
+                     f"volume={self.reaction_gain_db}dB,{_fit(length)}[ra];"
+                     f"[ca][ra]amix=inputs=2:normalize=0")
+        encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
+               extra_inputs=[reaction], audio=audio)
+
+
 def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path) -> None:
     """Two-pass loudnorm to LOUDNESS_*: measure, then apply with the measured values
     (linear gain when the true-peak target allows it). The video is copied. Digital
@@ -512,14 +573,16 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
 def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
            timeout_s: float = DEFAULT_TIMEOUT_S, preset: str = DEFAULT_PRESET) -> MediaInfo:
     """Run `recipe` on `inputs["source"]` and write `out`. Other named inputs (music,
-    voice-over) are for the ops that use them. Every output gets a final loudness
+    voice-over, reaction) are for the ops that use them. Every output gets a final loudness
     pass (LOUDNESS_*). Returns the output's MediaInfo. `timeout_s` applies to each
     ffmpeg run."""
     paths = {k: Path(v) for k, v in inputs.items()}
     if "source" not in paths:
         raise ValueError("inputs must contain 'source'")
-    missing = sorted({op.input for op in recipe.ops
-                      if getattr(op, "input", None) and op.input not in paths})
+    needed = {name for op in recipe.ops
+              for name in (getattr(op, "input", None), getattr(op, "reaction_input", None))
+              if name}
+    missing = sorted(needed - set(paths))
     if missing:
         raise ValueError(f"recipe needs input(s) {', '.join(missing)}; "
                          f"got {', '.join(sorted(paths))}")
