@@ -3,6 +3,7 @@
 import asyncio
 import sqlite3
 import threading
+import time
 from collections import namedtuple
 from contextlib import suppress
 from datetime import date, datetime, timedelta, timezone
@@ -165,16 +166,20 @@ def test_disk_ok_with_fake_usage(tmp_path, monkeypatch):
 
 
 async def test_disk_floor_blocks_claiming(store, tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: False)
+    checks = []
+    monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: checks.append(1) or False)
     a = store.add_asset(store.add_idea("motion")["id"])
     render.enqueue_render(store, a["id"])
     ran = []
     loop = asyncio.create_task(worker.render_loop(store, _settings(tmp_path), run=ran.append,
                                                   interval=0.02))
-    await asyncio.sleep(0.2)
+    deadline = time.monotonic() + 2  # poll, not a fixed sleep: slow CI runners (027b)
+    while len(checks) < 3 and time.monotonic() < deadline:
+        await asyncio.sleep(0.02)
     loop.cancel()
     with suppress(asyncio.CancelledError):
         await loop
+    assert len(checks) >= 3  # several ticks ran under the floor
     assert ran == [] and [j["state"] for j in store.list_render_jobs()] == ["queued"]
     assert capsys.readouterr().err.count("no render starts") == 1  # once per hour
 
