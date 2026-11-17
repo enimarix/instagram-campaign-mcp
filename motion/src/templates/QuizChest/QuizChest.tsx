@@ -45,6 +45,8 @@ const DIGIT_SCALE = 12;
 /** Largest choice font scale; the choices shrink in whole steps until all fit the band. */
 const MAX_CHOICE_SCALE = 5;
 const GAP = 24;
+/** Background music level: under the voice and the sfx. */
+const MUSIC_VOLUME = 0.25;
 
 /** Treasure chest, frame 0 closed, frame 1 open (gold inside). Colours: brand palette indices. */
 const chestBody = [
@@ -260,6 +262,7 @@ export const QuizChest = (props: QuizChestProps) => {
       <Flash startFrame={reveal} duration={FLASH} color={c.text} />
       <Sfx id="sfx-confirm" from={reveal} />
       <Sfx id="sfx-coin" from={reveal + COIN_DELAY} />
+      {props.music !== "none" && <Html5Audio src={assetById(props.music).src} loop volume={MUSIC_VOLUME} />}
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {/* The voice pauses through the countdown and reveal: its first part up to the end of the

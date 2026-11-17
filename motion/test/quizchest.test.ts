@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { buildTimeline } from "../src/lib/timeline.ts";
-import { countdownAt, countdownTicks, quizChestSchema, quizChestScript, REVEAL_S, withCountdown } from "../src/templates/QuizChest/schema.ts";
+import { ASSETS } from "../src/assets.ts";
+import { countdownAt, countdownTicks, MUSIC, quizChestSchema, quizChestScript, REVEAL_S, withCountdown } from "../src/templates/QuizChest/schema.ts";
 
 const example = JSON.parse(readFileSync(new URL("../props/quizchest.json", import.meta.url), "utf8"));
 const base = {
@@ -17,12 +18,18 @@ const base = {
   citations: [],
 };
 
-test("the example props parse; defaults: loop, 5 s countdown, cta", () => {
+test("the example props parse; defaults: loop, 5 s countdown, cta, overworld music", () => {
   assert.ok(quizChestSchema.safeParse(example).success);
   const p = quizChestSchema.parse(base);
   assert.equal(p.loop, true);
   assert.equal(p.countdownSeconds, 5);
   assert.equal(p.cta, "Comment your answer!");
+  assert.equal(p.music, "music-overworld");
+  assert.equal(quizChestSchema.parse({ ...base, music: "none" }).music, "none");
+});
+
+test("music choices are music loops in the asset registry", () => {
+  for (const id of MUSIC) if (id !== "none") assert.equal(ASSETS[id].kind, "music", id);
 });
 
 test("schema rejects unknown keys, 1 or 5 choices, a bad countdown, missing citations, bad voice lines", () => {
@@ -36,6 +43,7 @@ test("schema rejects unknown keys, 1 or 5 choices, a bad countdown, missing cita
   bad(uncited);
   bad({ ...base, citations: [{ url: "javascript:alert(1)" }] });
   bad({ ...base, voice: { lines: [{ text: "Hook?", start_s: 0, end_s: 1 }] } });
+  bad({ ...base, music: "sfx-coin" });
 });
 
 test("answer must index one of the choices", () => {

@@ -12,6 +12,9 @@ const voiceLine = z.strictObject({
   end_s: z.number().min(0),
 });
 
+/** Music loops in the asset registry a quiz can play (042). */
+export const MUSIC = ["music-overworld", "music-cave", "none"] as const;
+
 export const quizChestSchema = z
   .strictObject({
     /** Script line 0: big on the hook card from frame 0 (the Reel cover). */
@@ -42,6 +45,8 @@ export const quizChestSchema = z
      * are those of the plain audio file. `audioSrc`: URL or `staticFile()` path.
      */
     voice: z.strictObject({ audioSrc: z.string().min(1).optional(), lines: z.array(voiceLine).optional() }).optional(),
+    /** Background loop under everything (src/assets.ts), or "none". */
+    music: z.enum(MUSIC).default("music-overworld"),
     /** Fade back into frame 0 at the end so the Reel loops seamlessly. */
     loop: z.boolean().default(true),
     /** Template colours (background, titles, highlight, wipes); the kit components keep the brand's. */

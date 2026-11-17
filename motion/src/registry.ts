@@ -118,6 +118,7 @@ export const templates = {
       explanation: "206: a newborn has nearly 300, and many fuse together as it grows.",
       cta: "Comment your answer!",
       citations: [],
+      music: "music-overworld",
       loop: true,
     },
     durationInFrames: (p) => quizChestTimeline(p, FPS).timeline.totalFrames,

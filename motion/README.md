@@ -46,7 +46,8 @@
   (`sourcesNote` under it when there are citations). Props in `schema.ts` (example
   `props/quizchest.json`): `hook`, `question`, `choices` [{label ≤3, text ≤40}], `answer` (index),
   `countdownSeconds` (3–10, default 5), `explanation`, `cta` (default "Comment your answer!"),
-  `citations`, `sourcesNote?`, `voice` {audioSrc?, lines?: hook, question, explanation, cta}, `loop`,
+  `citations`, `sourcesNote?`, `voice` {audioSrc?, lines?: hook, question, explanation, cta}, `music`
+  (`music-overworld` default, `music-cave` or `none`; loops under everything at 25 %), `loop`,
   `palette`, `safeZone`. `withCountdown()` inserts countdown + 1.5 s reveal after the question line;
   the voice track plays in two parts around it, so its timings are those of the plain audio. Still:
   `npm run still:quizchest` (countdown).

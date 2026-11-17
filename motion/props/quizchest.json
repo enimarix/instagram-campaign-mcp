@@ -15,6 +15,7 @@
     { "url": "https://en.wikipedia.org/wiki/Human_skeleton", "title": "Human skeleton" }
   ],
   "sourcesNote": "Sources dans la légende",
+  "music": "music-overworld",
   "loop": true,
   "safeZone": false
 }
