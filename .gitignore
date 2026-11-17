@@ -347,3 +347,7 @@ data/
 # instagram-campaign-mcp: machine-specific / private files
 mcp-config.json
 data/
+
+# Node and render output (web/, motion/)
+node_modules/
+motion/out/
