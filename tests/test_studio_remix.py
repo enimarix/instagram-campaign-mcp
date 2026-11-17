@@ -176,7 +176,17 @@ def test_render_remix_claims_the_piece_with_the_asset_id(store, cfg, root, tts, 
     for rel in ("voice/voice-abc.wav", "music/music-overworld.wav", out["piece"]["path"]):
         assert (root / rel).is_file(), rel
     assert tts.said == [SCRIPT]
+    assert out["warnings"] == []
     assert Recipe.model_validate(env["recipe"]).ops[0] == Trim(start_s=10, end_s=30)
+
+
+def test_muted_speech_without_captions_is_a_warning(store, cfg, tts, reel):
+    out = go(store, cfg, _source(store, stats={"duration_s": 60.0}))  # no transcript
+    assert out["warnings"] == ["the clip's speech is muted and has no captions"
+                               " (STT not set up)"]
+    for quiet in (dict(audio_rights="no_audio"), dict(audio_rights="covered")):
+        assert go(store, cfg, _source(store, stats={"duration_s": 60.0}, **quiet))[
+            "warnings"] == []
 
 
 def test_no_reaction_reel_is_refused_before_any_asset(store, cfg, tts):
@@ -254,7 +264,7 @@ async def test_mcp_tools_call_the_services(monkeypatch):
         calls.update(kw, idea_id=idea_id, source_id=source_id)
         return {"asset": {"id": 7}, "job": {"id": 3, "state": "queued"},
                 "piece": {"piece_id": 2, "path": "reactions/1/pieces/2.mp4", "start_s": 0,
-                          "end_s": 20}}
+                          "end_s": 20}, "warnings": ["w"]}
 
     monkeypatch.setattr(remix, "render_remix", queue)
     monkeypatch.setattr(remix, "list_sources", lambda store, role, limit: [{"id": 1}])
@@ -262,7 +272,7 @@ async def test_mcp_tools_call_the_services(monkeypatch):
     assert await srv.list_sources() == {"sources": [{"id": 1}]}
     assert await srv.render_remix(1, 2, "hook", SCRIPT, trim_start_s=10) == {
         "asset_id": 7, "job_id": 3, "state": "queued",
-        "reaction_piece": {"piece_id": 2, "start_s": 0, "end_s": 20}}
+        "reaction_piece": {"piece_id": 2, "start_s": 0, "end_s": 20}, "warnings": ["w"]}
     assert calls["trim"] == (10, None) and calls["layout"] == "pip"
 
     def refused(*a, **kw):

@@ -18,7 +18,7 @@ from ..instagram_client import InstagramClient, caption_problem
 from ..store import CampaignStore, parse_dt, utcnow
 from . import media
 from .assets import InvalidTransition, transition
-from .rights import can_publish
+from .rights import can_publish, caption_credit_problem
 
 
 class QueueRefused(ValueError):
@@ -55,9 +55,14 @@ def queue_asset(
     asset = store.get_asset(asset_id)
     if asset["status"] != "approved":
         raise QueueRefused("not_approved", f"asset {asset_id} is {asset['status']}, not approved")
-    decision = can_publish(_source(store, store.get_idea(asset["idea_id"])), confirmed)
+    source = _source(store, store.get_idea(asset["idea_id"]))
+    decision = can_publish(source, confirmed)
     if not decision:
         raise QueueRefused("rights", decision.reason)
+    # Also checked at submit_asset; here because the owner can edit the caption afterwards.
+    problem = caption_credit_problem(source, asset["caption"])
+    if problem:
+        raise QueueRefused("caption", problem)
     try:
         ok = bool(asset["file_path"]) and media.resolve(
             settings.media_root, asset["file_path"]).is_file()

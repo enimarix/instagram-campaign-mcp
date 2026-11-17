@@ -94,9 +94,14 @@ def test_rights_refusals(store, cfg):  # DoD (2)
     _refused("rights", store, cfg, _asset(store, cfg, track="remix",
                                           source={"rights_basis": "unknown"})["id"])
     _refused("rights", store, cfg, _asset(store, cfg, track="remix")["id"])  # no source
-    comm = _asset(store, cfg, track="remix",
+    comm = _asset(store, cfg, track="remix", caption="hi @creator #demo",
                   source={"rights_basis": "commentary", "author": "@creator"})
     _refused("rights", store, cfg, comm["id"])  # not confirmed
+    uncredited = _asset(store, cfg, track="remix",  # the owner edited the handle away
+                        source={"rights_basis": "commentary", "author": "creator"})
+    with pytest.raises(QueueRefused, match="add @creator") as e:
+        queue_asset(store, cfg, uncredited["id"], utcnow() + LATER, confirmed=True)
+    assert e.value.code == "caption" and store.list_scheduled() == []
     post = queue_asset(store, cfg, comm["id"], utcnow() + LATER, confirmed=True)
     assert post["asset_id"] == comm["id"]
     assert queue_asset(store, cfg, _asset(store, cfg)["id"], utcnow() + LATER)  # motion = own

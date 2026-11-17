@@ -705,13 +705,15 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
     clip; capped at REMIX_MAX_CLIP_S). Unless its sound is covered, the clip is muted under
     our music and its speech shown as captions from its transcript (captions: your own
     [{start_s, end_s, text}] in seconds of the trimmed part instead). Never ask for mirror,
-    flip, speed or pitch changes: they do not exist."""
+    flip, speed or pitch changes: they do not exist. `warnings` (e.g. the clip's speech is
+    muted with no captions) may be a reason to pick another clip."""
     out = await _studio(remix.render_remix, store(), get_settings(), idea_id, source_id,
                         hook=hook, script=script, trim=(trim_start_s, trim_end_s),
                         layout=layout, captions=captions, caption=caption)
     return {"asset_id": out["asset"]["id"], "job_id": out["job"]["id"],
             "state": out["job"]["state"],
-            "reaction_piece": {k: out["piece"][k] for k in ("piece_id", "start_s", "end_s")}}
+            "reaction_piece": {k: out["piece"][k] for k in ("piece_id", "start_s", "end_s")},
+            "warnings": out["warnings"]}
 
 
 # ----------------------------------------------------------------------

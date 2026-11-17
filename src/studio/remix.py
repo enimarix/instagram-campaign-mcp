@@ -152,7 +152,7 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
                  caption: Optional[str] = None, music: Optional[str] = DEFAULT_MUSIC,
                  voice: Optional[str] = None) -> Dict[str, Any]:
     """Build the remix, voice the script, claim the next reaction piece for the new asset
-    and queue its render: {asset, job, piece}. Everything is checked before the asset is
+    and queue its render: {asset, job, piece, warnings}. Everything is checked before the asset is
     created; a piece that cannot be cut leaves the asset `failed` with the reason."""
     idea = store.get_idea(idea_id)
     if idea["track"] != "remix" or idea["source_id"] != source_id:
@@ -189,7 +189,19 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
         store.update_asset(asset["id"], qc={"passed": False, "reason": f"remix: {e}"})
         transition(store, asset["id"], "failed", actor="worker")
         raise
-    return {"asset": asset, "job": render.enqueue_render(store, asset["id"]), "piece": piece}
+    return {"asset": asset, "job": render.enqueue_render(store, asset["id"]), "piece": piece,
+            "warnings": _warnings(source, recipe, settings)}
+
+
+def _warnings(source: Dict[str, Any], recipe: Recipe, settings: InstagramMCPSettings
+              ) -> List[str]:
+    """What the agent should know before keeping this remix (it may pick another clip)."""
+    ops = {op.op for op in recipe.ops}
+    if "mute_original" in ops and "captions" not in ops and source["audio_rights"] != "no_audio":
+        why = ("STT not set up" if settings.stt_provider == "none"
+               else "no transcript lines in the trimmed part")
+        return [f"the clip's speech is muted and has no captions ({why})"]
+    return []
 
 
 def list_sources(store: CampaignStore, role: str = "clip", limit: int = 50
