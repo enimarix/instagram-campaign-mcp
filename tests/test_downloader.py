@@ -168,6 +168,14 @@ def test_only_ytdlp_gets_cookies_and_none_by_default(store, cfg, ytdlp):
 
 
 @respx.mock
+def test_ytdlp_dash_only_is_a_failure_not_a_refusal(store, cfg, ytdlp):
+    respx.get(API).mock(side_effect=httpx.ConnectError("refused"))
+    FakeYDL.info["formats"] = FakeYDL.info["formats"][:1]
+    r = run(store, cfg)
+    assert r["status"] == "failed" and "no single file" in r["reason"]
+
+
+@respx.mock
 def test_both_down_records_why_on_the_source(store, cfg, no_ytdlp):
     respx.get(API).mock(side_effect=httpx.ConnectError("refused"))
     r = run(store, cfg)
@@ -234,12 +242,12 @@ def test_daily_cap_and_delay(store, cfg, no_ytdlp):
 def test_same_url_reuses_the_source(store, cfg, no_ytdlp):
     ref, _ = store.upsert_reference_source("instagram", "1789", url=REEL, author=None,
                                            stats={"views": 10})
-    respx.get(API).mock(return_value=answer())
+    respx.get(API).mock(return_value=answer(view_count=None))
     respx.get(CDN).mock(return_value=httpx.Response(200, content=VIDEO))
     r = run(store, cfg, ref["id"])  # a trend result, by source id
     s = r["source"]
     assert s["id"] == ref["id"] and (s["role"], s["provider"]) == ("clip", "instagram")
-    assert s["stats"]["views"] == 120000
+    assert (s["stats"]["views"], s["stats"]["likes"]) == (10, 9000)  # research's views kept
     again = run(store, cfg, "https://www.instagram.com/p/ABC123/")
     assert (again["status"], again["source"]["id"]) == ("exists", ref["id"])
     assert len(respx.calls) == 2 and len(store.list_sources()) == 1

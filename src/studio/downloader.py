@@ -22,7 +22,8 @@ from __future__ import annotations
 import os
 import re
 import time
-from datetime import datetime, time as dtime, timedelta
+from datetime import datetime, timedelta
+from datetime import time as dtime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union
 from urllib.parse import urlsplit
@@ -165,11 +166,13 @@ class YtDlpProvider:
             raise Refused("private account" if info.get("availability") == "private"
                           else "not a single video (a carousel)")
         # One file with picture and sound (DASH parts would need a merge), best first.
-        formats = [f for f in info.get("formats") or [info]
-                   if f.get("url") and f.get("vcodec") not in (None, "none")
-                   and f.get("acodec") != "none"]
-        if not formats:
+        videos = [f for f in info.get("formats") or [info]
+                  if f.get("url") and f.get("vcodec") not in (None, "none")]
+        if not videos:
             raise Refused("not a video")
+        formats = [f for f in videos if f.get("acodec") != "none"]
+        if not formats:
+            raise ProviderFailed("yt-dlp found no single file with picture and sound")
         best = max(formats, key=lambda f: (f.get("height") or 0, f.get("tbr") or 0))
         if not info.get("channel"):
             raise ProviderFailed("yt-dlp found no creator username")
@@ -311,10 +314,11 @@ def download_reel(store: CampaignStore, settings: InstagramMCPSettings,
         note = (f"Public Reel by @{author} ({url}), downloaded for a reaction: commentary "
                 f"use only, credit @{author} on screen and in the caption.")
         check_rights("commentary", note, author=author)
-        stats = {"permalink": url, "caption": (reel.get("caption") or "")[:CAPTION_MAX] or None,
+        stats = {"permalink": url, "caption": (reel.get("caption") or "")[:CAPTION_MAX],
                  "views": reel.get("views"), "likes": reel.get("likes"),
-                 "duration_s": reel.get("duration_s"), "size_bytes": size,
-                 "download_error": None, "download_failed_at": None}  # null = key removed
+                 "duration_s": reel.get("duration_s"), "size_bytes": size}
+        stats = {k: v for k, v in stats.items() if v not in (None, "")}  # keep research's
+        stats.update(download_error=None, download_failed_at=None)  # null = key removed
         with store._tx() as c:  # ponytail: a store setter once store.py is free
             c.execute(
                 "UPDATE sources SET role='clip', author=?, rights_basis='commentary',"
