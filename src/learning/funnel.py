@@ -29,8 +29,8 @@ Every metric below is about the assets of the window (feedback reasons too).
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..campaign import scoring_config
@@ -65,14 +65,15 @@ WHERE a.batch_date >= ? AND a.batch_date <= ?
 """
 
 
-def _window(settings: InstagramMCPSettings, days: int, now: Optional[datetime]):
+def _window(settings: InstagramMCPSettings, days: int,
+            now: Optional[datetime]) -> Tuple[date, date]:
     if days < 1:
         raise ValueError("days must be at least 1")
     today = local_today(settings.timezone, now)
     return today - timedelta(days=days - 1), today
 
 
-def _assets(store: CampaignStore, since, until) -> List[Dict[str, Any]]:
+def _assets(store: CampaignStore, since: date, until: date) -> List[Dict[str, Any]]:
     with store._tx() as c:  # ponytail: one row per asset, a few thousand a year
         rows = [dict(r) for r in c.execute(_ASSETS_SQL, (since.isoformat(), until.isoformat()))]
     for r in rows:
@@ -136,11 +137,11 @@ def taste(store: CampaignStore, settings: InstagramMCPSettings, *, days: int = 3
         d = since + timedelta(days=n)
         past = [r for k in range(ROLLING_DAYS)
                 for r in by_day[(d - timedelta(days=k)).isoformat()] if r["reviewed"]]
-        today = [r for r in past if r["day"] == d.isoformat()]
+        day_rows = [r for r in past if r["day"] == d.isoformat()]
+        liked = sum(r["liked"] for r in day_rows)
         series.append({
-            "date": d.isoformat(), "reviewed": len(today),
-            "liked": sum(r["liked"] for r in today),
-            "like_rate": _rate(sum(r["liked"] for r in today), len(today)),
+            "date": d.isoformat(), "reviewed": len(day_rows), "liked": liked,
+            "like_rate": _rate(liked, len(day_rows)),
             "rolling_7d": _rate(sum(r["liked"] for r in past), len(past)),
         })
 
@@ -181,7 +182,7 @@ def taste(store: CampaignStore, settings: InstagramMCPSettings, *, days: int = 3
     }
 
 
-def _reasons(store: CampaignStore, since, until) -> List[Dict[str, Any]]:
+def _reasons(store: CampaignStore, since: date, until: date) -> List[Dict[str, Any]]:
     """Feedback reason codes given on the window's assets, most frequent first."""
     with store._tx() as c:
         rows = c.execute(
