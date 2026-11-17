@@ -263,6 +263,21 @@ def test_rerender_refusals(tc, store):
                    headers={"Origin": LOCAL}).status_code == 404
 
 
+def test_revision_request_gets_a_child_that_archives_it_once_ready(store, tmp_path):
+    sent_back = transition(store, _asset(store, status="ready")["id"], "revision_requested",
+                           actor="owner")
+    child = render.rerender(store, tmp_path, sent_back["id"], FFMPEG, actor="agent")["asset"]
+    assert child["parent_asset_id"] == sent_back["id"]
+    assert store.get_asset(sent_back["id"])["status"] == "revision_requested"
+    ok = partial(render.run_job, render_fn=lambda *a: (INFO, {"file_path": "video.mp4"}))
+    ok(store, tmp_path, _claim(store), qc_fn=lambda *a: {"passed": False})  # QC failed
+    assert store.get_asset(sent_back["id"])["status"] == "revision_requested"
+    render.rerender(store, tmp_path, child["id"], FFMPEG, actor="agent")
+    ok(store, tmp_path, _claim(store), qc_fn=lambda *a: {"passed": True})
+    assert store.get_asset(child["id"])["status"] == "ready"
+    assert store.get_asset(sent_back["id"])["status"] == "archived"  # the new version is in
+
+
 def test_seed_recipes_are_valid_envelopes(store, tmp_path):
     seed(store, tmp_path, days=1, rng=random.Random(1))
     for a in store.list_assets(limit=500):

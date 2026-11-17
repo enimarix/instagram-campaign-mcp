@@ -98,21 +98,21 @@ def enqueue_render(store: CampaignStore, asset_id: int, *, key: Optional[str] = 
 def rerender(store: CampaignStore, media_root: PathLike, asset_id: int, recipe: Any,
              *, actor: str = "owner") -> Dict[str, Any]:
     """Render an asset again with an edited recipe. From `failed` the asset itself goes back
-    to `rendering`; from `ready` a new child asset (parent_asset_id) is rendered, so the one
-    under review is never overwritten. Returns {asset, job}."""
+    to `rendering`; from `ready` or `revision_requested` a new child asset (parent_asset_id) is
+    rendered, so the one under review is never overwritten. Returns {asset, job}."""
     env = validate_recipe(recipe, media_root)
     asset = store.get_asset(asset_id)
     if asset["status"] == "failed":
         transition(store, asset_id, "rendering", actor=actor)
         asset = store.update_asset(asset_id, recipe=env)
-    elif asset["status"] == "ready":
+    elif asset["status"] in ("ready", "revision_requested"):
         asset = store.add_asset(
             asset["idea_id"], parent_asset_id=asset_id, recipe=env,
             batch_date=asset["batch_date"], caption=asset["caption"],
             audio_name=asset["audio_name"], best_before=asset["best_before"])
     else:
-        raise InvalidTransition(f"asset {asset_id} is {asset['status']}: only failed or ready"
-                                " assets can be re-rendered")
+        raise InvalidTransition(f"asset {asset_id} is {asset['status']}: only failed, ready or"
+                                " revision_requested assets can be re-rendered")
     return {"asset": asset, "job": enqueue_render(store, asset["id"])}
 
 
@@ -152,7 +152,8 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
             qc_fn: Callable[..., Dict[str, Any]] = run_qc,
             settings: Optional[InstagramMCPSettings] = None) -> Dict[str, Any]:
     """Render one claimed job (state running), then run the quality check (src/studio/qc.py):
-    the asset becomes `ready`, or `failed` with the reasons in `assets.qc`. Errors are retried
+    the asset becomes `ready` (and a `revision_requested` parent it replaces is archived), or
+    `failed` with the reasons in `assets.qc`. Errors are retried
     up to MAX_ATTEMPTS, except ValueError (a bad recipe: retrying gives the same result);
     then the job fails with the reason and the asset moves rendering -> failed. Returns the
     job. `settings` defaults to get_settings() (QC thresholds, hashtag cap)."""
@@ -176,6 +177,9 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
     render_ms = round((time.monotonic() - start) * 1000)
     store.update_asset(asset["id"], **files, duration=info.duration, qc=qc)
     transition(store, asset["id"], "ready" if qc["passed"] else "failed", actor="worker")
+    parent = asset["parent_asset_id"] and store.get_asset(asset["parent_asset_id"])
+    if qc["passed"] and parent and parent["status"] == "revision_requested":
+        transition(store, parent["id"], "archived", actor="system")  # the new version is in
     return _finish(store, job_id, "done", progress=1, render_ms=render_ms)
 
 
