@@ -17,12 +17,14 @@ export const CRTOverlay = ({ show = true, lineEvery = 6, flicker = 0, seed = 1 }
   const frame = useCurrentFrame();
   if (!show) return null;
   const dark = palette[0];
-  const line = Math.max(1, Math.floor(lineEvery / 2));
+  // Whole px, at least one lit and one dark row per period.
+  const period = Math.max(2, Math.round(lineEvery));
+  const lit = period - Math.floor(period / 2);
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       <AbsoluteFill
         style={{
-          backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 ${lineEvery - line}px, ${dark}55 ${lineEvery - line}px ${lineEvery}px)`,
+          backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 ${lit}px, ${dark}55 ${lit}px ${period}px)`,
         }}
       />
       <AbsoluteFill style={{ backgroundImage: `radial-gradient(ellipse at center, transparent 60%, ${dark}99 100%)` }} />
