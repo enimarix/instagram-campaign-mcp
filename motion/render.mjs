@@ -2,7 +2,7 @@
 // Render one template: node motion/render.mjs --template <id> --props <file> --out <file>
 //   [--still --frame N] [--bundle <dir>] [--concurrency N]
 // Prints one JSON line {out, durationInFrames, renderMs} on stdout; errors go to stderr, exit 1.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -11,8 +11,9 @@ import { renderMedia, renderStill, selectComposition } from "@remotion/renderer"
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+const report = (msg) => process.stderr.write(`render: ${msg}\n`);
 const fail = (msg) => {
-  process.stderr.write(`render: ${msg}\n`);
+  report(msg);
   process.exit(1);
 };
 
@@ -49,11 +50,15 @@ if (a.props) {
   } catch (e) {
     fail(`cannot read props ${a.props}: ${e.message}`);
   }
+  if (typeof inputProps !== "object" || inputProps === null || Array.isArray(inputProps)) {
+    fail(`props ${a.props} must hold a JSON object`);
+  }
 }
 
 const started = Date.now();
 const out = resolve(a.out);
 
+let tempBundle = null;
 try {
   // Bundle once per batch: reuse --bundle when it holds a bundle, otherwise build it there
   // (or in a temp dir). Never bundle in parallel (docs/DECISIONS.md, step 006a).
@@ -62,6 +67,7 @@ try {
     bundleDir && existsSync(join(bundleDir, "index.html"))
       ? bundleDir
       : await bundle({ entryPoint: join(here, "src", "index.ts"), outDir: bundleDir ?? null });
+  if (!bundleDir) tempBundle = serveUrl; // ~40 MB per render otherwise left in the temp dir
 
   // Throws on an unknown id or props that fail the template's Zod schema
   // (calculateMetadata in src/Root.tsx); composition.props are the parsed props.
@@ -75,5 +81,8 @@ try {
   const result = { out, durationInFrames: composition.durationInFrames, renderMs: Date.now() - started };
   process.stdout.write(JSON.stringify(result) + "\n");
 } catch (e) {
-  fail(e instanceof Error ? e.message : String(e));
+  report(e instanceof Error ? e.message : String(e));
+  process.exitCode = 1;
+} finally {
+  if (tempBundle) rmSync(tempBundle, { recursive: true, force: true });
 }
