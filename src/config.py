@@ -106,6 +106,12 @@ class InstagramMCPSettings(BaseSettings):
         description="SQLite file for schedule, labels and insight snapshots",
     )
 
+    # --- Media ------------------------------------------------------------
+    media_root: str = Field(
+        str(APP_HOME / "data" / "media"),
+        description="Asset files (<date>/<asset id>/...); the API serves them at /api/media",
+    )
+
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(
         48.0, description="Posts younger than this are not judged yet"

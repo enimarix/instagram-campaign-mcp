@@ -25,7 +25,7 @@ from .. import campaign
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
-from . import assets
+from . import assets, media
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 
 # Reachable without a session even when UI_PASSWORD is set.
@@ -137,7 +137,9 @@ def create_app(
             return JSONResponse(status_code=503, content={"error": "instagram_not_configured"})
         return await campaign.account_status(client)
 
+    app.state.media_root = settings.media_root
     app.include_router(assets.router)
+    app.include_router(media.router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 

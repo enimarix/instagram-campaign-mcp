@@ -191,7 +191,9 @@ tunnel, gate H7).
 ## Configuration
 See [env.example](env.example). Most useful: `TIMEZONE` (default Europe/Paris, used
 for schedule times without an offset), `WINNER_MIN_AGE_HOURS`, `WINNER_MIN_REACH`,
-`WINNER_THRESHOLD`, `DATABASE_PATH`.
+`WINNER_THRESHOLD`, `DATABASE_PATH`, `MEDIA_ROOT` (asset files, served at `/api/media`;
+`ig-campaign dev seed --db x.db` puts them in `media/` next to `x.db`, so point `MEDIA_ROOT`
+there too if you open that seed in the website).
 
 `.env` and the database live in the project folder for a clone or the installer's
 editable install. With a plain `pip install .` they go to `~/.instagram-campaign-mcp`

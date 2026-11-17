@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 
 from ..store import CampaignStore, utcnow
 from ..taxonomy import valid_values
+from . import media
 from .assets import set_verdict, transition
 
 SAMPLE = Path(__file__).parent / "samples" / "sample.mp4"
@@ -60,13 +61,11 @@ def refusal(store: CampaignStore, *, production_live: bool) -> Optional[str]:
 
 
 def _place_media(media_root: Path, batch_date: date, asset_id: int) -> Dict[str, str]:
-    # ponytail: private stand-in for the media layout helper of step 011
-    folder = Path(media_root) / batch_date.isoformat() / str(asset_id)
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = media.asset_dir(media_root, batch_date, asset_id)
     out = {}
     for field, name in (("file_path", "master.mp4"), ("preview_path", "preview.mp4")):
         shutil.copyfile(SAMPLE, folder / name)
-        out[field] = str((folder / name).resolve())
+        out[field] = media.relative(media_root, folder / name)
     return out
 
 

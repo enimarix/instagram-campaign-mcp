@@ -1,9 +1,9 @@
 """Dev seed (`ig-campaign dev seed`): fake demo batches, reached through legal moves only."""
 
+import os
 import random
 from collections import Counter
 from datetime import date, datetime, timezone
-from pathlib import Path
 
 import pytest
 
@@ -12,6 +12,7 @@ from src.config import InstagramMCPSettings
 from src.store import CampaignStore
 from src.studio import assets as lifecycle
 from src.studio import seed as seed_mod
+from src.studio.media import resolve
 from src.studio.seed import local_today, refusal, seed
 
 TODAY = date(2026, 11, 17)
@@ -71,9 +72,10 @@ def test_seed_batches_statuses_files_and_legal_moves(tmp_path, monkeypatch):
         with_files = [r for r in rows if r["file_path"]]
         assert with_files
         for r in with_files:
-            for p in (Path(r["file_path"]), Path(r["preview_path"])):
+            for rel in (r["file_path"], r["preview_path"]):
+                assert rel.startswith(f"{r['batch_date']}/{r['id']}/")  # relative, POSIX
+                p = resolve(tmp_path / "media", rel)
                 assert p.is_file() and p.stat().st_size < 50_000
-                assert p.parent == tmp_path / "media" / r["batch_date"] / str(r["id"])
     finally:
         store.close()
 
@@ -110,7 +112,8 @@ def cli(tmp_path, monkeypatch):
     prod = tmp_path / "prod.db"
     settings = InstagramMCPSettings(_env_file=None, instagram_access_token="t",
                                     instagram_business_account_id="1",
-                                    database_path=str(prod), timezone="Europe/Paris")
+                                    database_path=str(prod), timezone="Europe/Paris",
+                                    media_root=str(tmp_path / "prod-media"))
     monkeypatch.setattr(scheduler, "get_settings", lambda: settings)
 
     def run(*argv):
@@ -125,6 +128,7 @@ def test_cli_refuses_non_empty_db_without_force(cli, tmp_path, capsys):
     run, _, _ = cli
     db = str(tmp_path / "dev.db")
     assert run("--db", db, "--days", "1") == 0
+    assert (tmp_path / "media").is_dir()  # a scratch DB keeps its media next to it
     assert '"status"' in capsys.readouterr().out  # the summary
     first = len(_assets_in(db))
     assert run("--db", db) == 1
@@ -142,7 +146,7 @@ def test_cli_refuses_live_production_db(cli, capsys):
     assert _assets_in(str(prod)) == []
     assert run("--force", "--days", "1") == 0
     assert _assets_in(str(prod))
-    assert (prod.parent / "media").is_dir()
+    assert os.path.isdir(settings.media_root)  # the configured DB uses MEDIA_ROOT
 
 
 def _assets_in(db):

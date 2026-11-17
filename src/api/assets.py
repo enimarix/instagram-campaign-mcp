@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from ..store import CampaignStore
 from ..studio import assets
 from ..studio.assets import InvalidTransition
+from ..studio.media import media_url
 
 OWNER = "owner"
 
@@ -29,7 +30,7 @@ def get_store(request: Request) -> CampaignStore:
 def _call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Run a service call; translate its errors to the API's JSON errors."""
     try:
-        return fn(*args, **kwargs)
+        return _with_urls(fn(*args, **kwargs))
     except KeyError:  # the store's "no asset with id"
         return JSONResponse(status_code=404, content={"error": "not_found"})
     except InvalidTransition as e:
@@ -37,6 +38,12 @@ def _call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
                             content={"error": "invalid_transition", "message": str(e)})
     except ValueError as e:
         return JSONResponse(status_code=422, content={"error": "invalid", "message": str(e)})
+
+
+def _with_urls(asset: dict) -> dict:
+    """The asset plus file_url / preview_url / thumbnail_url (None when there is no file)."""
+    return {**asset, **{f"{k}_url": media_url(asset.get(f"{k}_path"))
+                        for k in ("file", "preview", "thumbnail")}}
 
 
 class VerdictIn(BaseModel):
@@ -54,8 +61,8 @@ def list_assets(batch_date: Optional[str] = None, status: Optional[str] = None,
                 verdict: Optional[str] = None, track: Optional[str] = None,
                 limit: int = Query(100, ge=1, le=500),
                 store: CampaignStore = Depends(get_store)):
-    return store.list_assets(batch_date=batch_date, status=status, verdict=verdict,
-                             track=track, limit=limit)
+    return [_with_urls(a) for a in store.list_assets(
+        batch_date=batch_date, status=status, verdict=verdict, track=track, limit=limit)]
 
 
 @router.get("/{asset_id}")
