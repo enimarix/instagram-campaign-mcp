@@ -52,7 +52,7 @@ export const Hello = ({ title, subtitle, safeZone }: Props) => {
         </div>
         <div style={{ fontSize: 48, color: colors.secondary, textShadow: `4px 4px 0 ${colors.palette[15]}` }}>
           {subtitle.toUpperCase()}
-      </div>
+        </div>
       </div>
     </AbsoluteFill>
   );
