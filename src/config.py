@@ -299,6 +299,18 @@ class InstagramMCPSettings(BaseSettings):
                              " list it as reached"
     )
 
+    # --- Evidence engine (learnings checked against the numbers) -----------
+    evidence_min_n_medium: int = Field(
+        5, ge=1, description="Matching matured Reels a learning needs for medium confidence"
+    )
+    evidence_min_n_high: int = Field(
+        15, ge=1, description="Matching matured Reels a learning needs for high confidence"
+    )
+    evidence_min_effect: float = Field(
+        0.15, ge=0, description="How far from 1.0 the index must be: a do needs > 1 + this,"
+                                " a dont < 1 - this"
+    )
+
     # --- Website ----------------------------------------------------------
     # Optional; required before `serve` binds a non-loopback host. Never logged or returned.
     ui_password: Optional[SecretStr] = Field(None, description="Website password")

@@ -115,6 +115,11 @@ async def _run(args: argparse.Namespace) -> int:
             return await _token(args, settings, store)
         if args.command == "facts":
             return await _facts(args, settings, store)
+        if args.command == "learnings":  # `learnings refresh`: no Instagram needed
+            from .learning.evidence import refresh_learnings
+
+            print(json.dumps(refresh_learnings(store, settings, utcnow()), indent=2))
+            return 0
         if not settings.instagram_configured:
             # Setup mode: nothing to publish or measure yet. Exit 0 so cron and
             # Task Scheduler don't flag a failure.
@@ -288,6 +293,10 @@ def main(argv: list[str] | None = None) -> None:
     f = sub.add_parser("facts", help="Print the daily facts (no AI) as JSON")
     f.add_argument("--date", type=date.fromisoformat, metavar="YYYY-MM-DD",
                    help="Owner-local day (default: yesterday)")
+    sub.add_parser("learnings", help="Learnings checked against the numbers").add_subparsers(
+        dest="learnings_command", required=True).add_parser(
+        "refresh", help="Re-evaluate every learning with a tag predicate now (the worker does"
+                        " it nightly)")
     for name, help_ in (("serve", "Run the studio REST API"),
                         ("up", "Run the studio: website, API and publishing worker together")):
         s = sub.add_parser(name, help=help_)
