@@ -64,7 +64,7 @@ def create_app(
         token = request.cookies.get(COOKIE)
         if not origin_ok(request.method, str(request.url), request.headers, token is not None):
             return JSONResponse(status_code=403, content={"error": "bad_origin"})
-        path = request.url.path
+        path = request.scope["path"]  # the decoded path the router matches on
         if (auth.required and (path == "/api" or path.startswith("/api/"))
                 and path not in PUBLIC_PATHS and not auth.valid(token)):
             return JSONResponse(status_code=401, content={"error": "login_required"})
