@@ -24,3 +24,14 @@ export const linePx = (scale: number) => (FONT_PX + LINE_GAP) * intScale(scale);
 
 /** No smoothing when a bitmap (sprite, canvas) is scaled up. */
 export const crisp: CSSProperties = { imageRendering: "pixelated" };
+
+/**
+ * Largest whole scale, at most `max`, at which a text fits `width` x `height`;
+ * `lineCount(cols)` says how many lines the text wraps to in `cols` columns.
+ */
+export const fitTextScale = (lineCount: (cols: number) => number, width: number, height: number, max: number) => {
+  for (let s = intScale(max); s > 1; s--) {
+    if (lineCount(Math.max(1, Math.floor(width / fontPx(s)))) * linePx(s) <= height) return s;
+  }
+  return 1;
+};

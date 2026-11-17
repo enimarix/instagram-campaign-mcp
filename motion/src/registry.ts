@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { z } from "zod";
 import { Hello, helloSchema } from "./templates/Hello";
 import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
+import { TimelineDemo, timelineDemoSchema, timelineOf } from "./templates/TimelineDemo";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
@@ -12,7 +13,12 @@ export type Template<S extends z.ZodType> = {
   schema: S;
   defaultProps: z.infer<S>;
   durationInFrames: (props: z.infer<S>) => number;
+  /** Frame to use as the Reel cover (thumb_offset); script templates use timeline.hookFrame. */
+  coverFrame?: (props: z.infer<S>) => number;
 };
+
+/** Key under which Root passes the cover frame out through the resolved props (render.mjs reads it). */
+export const COVER_FRAME_PROP = "__coverFrame";
 
 // Ties component, schema and defaults to one schema type per entry.
 const template = <S extends z.ZodType>(t: Template<S>) => t;
@@ -42,5 +48,16 @@ export const templates = {
       transitions: true,
     },
     durationInFrames: (p) => Math.round(p.seconds * FPS),
+  }),
+  TimelineDemo: template({
+    component: TimelineDemo,
+    schema: timelineDemoSchema,
+    defaultProps: {
+      lines: ["Your gut has more bacteria than you have cells?", "Not quite: about the same number.", "Roughly 38 trillion of them."],
+      loop: true,
+      safeZone: false,
+    },
+    durationInFrames: (p) => timelineOf(p, FPS).totalFrames,
+    coverFrame: (p) => timelineOf(p, FPS).hookFrame,
   }),
 };

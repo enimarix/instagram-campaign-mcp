@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Render one template: node motion/render.mjs --template <id> --props <file> --out <file>
 //   [--still --frame N] [--bundle <dir>] [--concurrency N]
-// Prints one JSON line {out, durationInFrames, renderMs} on stdout; errors go to stderr, exit 1.
+// Prints one JSON line {out, durationInFrames, renderMs[, coverFrame]} on stdout (coverFrame when
+// the template has one: the Reel cover, thumb_offset); errors go to stderr, exit 1.
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,13 +73,16 @@ try {
   // Throws on an unknown id or props that fail the template's Zod schema
   // (calculateMetadata in src/Root.tsx); composition.props are the parsed props.
   const composition = await selectComposition({ serveUrl, id: a.template, inputProps, logLevel: "error" });
-  const common = { composition, serveUrl, inputProps: composition.props, logLevel: "error" };
+  // src/Root.tsx adds the template's cover frame to the resolved props under this key
+  // (= COVER_FRAME_PROP in src/registry.ts); the strict schemas must not see it.
+  const { __coverFrame: coverFrame, ...props } = composition.props;
+  const common = { composition: { ...composition, props }, serveUrl, inputProps: props, logLevel: "error" };
   if (a.still) {
     await renderStill({ ...common, output: out, frame });
   } else {
     await renderMedia({ ...common, codec: "h264", outputLocation: out, concurrency });
   }
-  const result = { out, durationInFrames: composition.durationInFrames, renderMs: Date.now() - started };
+  const result = { out, durationInFrames: composition.durationInFrames, renderMs: Date.now() - started, coverFrame };
   process.stdout.write(JSON.stringify(result) + "\n");
 } catch (e) {
   report(e instanceof Error ? e.message : String(e));
