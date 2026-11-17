@@ -339,12 +339,19 @@ CREATE TABLE reaction_pieces (
 );
 """
 
+# Migration 12: what happens in each video (110). description: 2-3 plain sentences (the
+# agent's, or an automatic one); timeline: JSON [{t, d, e}] written at render time.
+ASSET_TIMELINE_SCHEMA = """
+ALTER TABLE assets ADD COLUMN description TEXT;
+ALTER TABLE assets ADD COLUMN timeline TEXT;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
-                         REACTION_REEL_SCHEMA]
+                         REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -363,13 +370,13 @@ IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "c
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
                 "caption", "audio_name", "recipe", "duration", "batch_date", "status",
                 "verdict", "qc", "self_score", "self_score_reason", "best_before",
-                "poster_path")
+                "poster_path", "description", "timeline")
 RENDER_JOB_FIELDS = ("state", "progress", "attempts", "failure", "started_at", "finished_at",
                      "render_ms", "heartbeat_at")
 FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
 LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "origin", "status")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
-               "facts", "usage", "silences")
+               "facts", "usage", "silences", "timeline")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),

@@ -197,13 +197,15 @@ def test_queue_motion_render_stores_recipe_and_enqueues(store, tmp_path, monkeyp
 def test_render_queue_motion_branch_writes_all_files(store, tmp_path, monkeypatch):
     def fake_motion(template, props, out, media_root, *, timeout_s):
         make_clip(out, "1080x1920", duration=2)
-        return motion.ffmpeg.probe(out), 1500
+        return motion.ffmpeg.probe(out), 1500, [{"t": 0.0, "d": 2.0, "e": "hook card"}]
 
     monkeypatch.setattr(motion, "render_motion_asset", fake_motion)
     a = store.add_asset(store.add_idea("motion")["id"],
                         recipe={"kind": "motion", "template": "Hello", "props": {}})
     info, files = render.render_files(a, tmp_path, lambda p: None, preset="ultrafast")
     assert info.duration == pytest.approx(2.0, abs=0.1)
+    timeline = files.pop("timeline")
+    assert timeline == [{"t": 0.0, "d": 2.0, "e": "hook card"}]
     assert sorted(Path(f).name for f in files.values()) == [
         "poster.jpg", "preview.mp4", "thumb.jpg", "video.mp4"]
     assert all((tmp_path / f).is_file() for f in files.values())

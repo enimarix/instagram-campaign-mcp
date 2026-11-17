@@ -25,10 +25,10 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, to_iso, utcnow
 from . import ffmpeg, media, motion
-from .assets import InvalidTransition, transition
+from .assets import DESCRIPTION_CHARS, InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
 from .qc import run_qc
-from .recipe import DEFAULT_PRESET, DEFAULT_TIMEOUT_S, Recipe, render
+from .recipe import DEFAULT_PRESET, DEFAULT_TIMEOUT_S, Recipe, recipe_timeline, render
 
 MAX_ATTEMPTS = 3
 FAILURE_CHARS = 2000
@@ -118,21 +118,22 @@ def rerender(store: CampaignStore, media_root: PathLike, asset_id: int, recipe: 
 
 def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress, *,
                  preset: str = DEFAULT_PRESET, timeout_s: float = DEFAULT_TIMEOUT_S
-                 ) -> Tuple[MediaInfo, Dict[str, str]]:
+                 ) -> Tuple[MediaInfo, Dict[str, Any]]:
     """Render the master, preview, poster and thumbnail; return the master's MediaInfo and
-    the asset fields (relative paths)."""
+    the asset fields (relative paths, and the timeline: what happens when, step 110)."""
     env = _ENVELOPE.validate_python(asset["recipe"])
     folder = media.asset_dir(media_root, asset["batch_date"], asset["id"])
     video, preview = folder / "video.mp4", folder / "preview.mp4"
     poster, thumb = folder / "poster.jpg", folder / "thumb.jpg"
     cover_ms = env.thumb_offset_ms
     if isinstance(env, MotionRecipe):
-        info, template_cover_ms = motion.render_motion_asset(
+        info, template_cover_ms, timeline = motion.render_motion_asset(
             env.template, env.props, video, media_root, timeout_s=timeout_s)
         cover_ms = template_cover_ms if cover_ms is None else cover_ms
     else:
         inputs = {k: media.resolve(media_root, v) for k, v in env.inputs.items()}
         info = render(env.recipe, inputs, video, timeout_s=timeout_s, preset=preset)
+        timeline = recipe_timeline(env.recipe, info.duration)
     progress(0.8)
     ffmpeg.run(["-i", video, *PREVIEW_ARGS, "-preset", preset, preview], timeout_s=timeout_s)
     progress(0.9)
@@ -144,16 +145,32 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
                timeout_s=timeout_s)
     paths: Dict[str, Path] = {"file_path": video, "preview_path": preview,
                               "poster_path": poster, "thumbnail_path": thumb}
-    return info, {k: media.relative(media_root, p) for k, p in paths.items()}
+    return info, {**{k: media.relative(media_root, p) for k, p in paths.items()},
+                  "timeline": timeline}
+
+
+def auto_description(idea: Dict[str, Any], asset: Dict[str, Any]) -> str:
+    """The description when the agent wrote none: the kind of video, its hook and angle."""
+    env = asset.get("recipe") or {}
+    if env.get("kind") == "motion":
+        kind = f"A {env.get('template')} video"
+    else:
+        ops = {op.get("op") for op in (env.get("recipe") or {}).get("ops", [])}
+        kind = "A reaction remix" if "reaction_collage" in ops else "A remix"
+    text = kind + (f" with the hook \"{idea['hook']}\"." if idea.get("hook") else ".")
+    if idea.get("hypothesis"):
+        text += f" Angle: {idea['hypothesis']}"
+    return text[:DESCRIPTION_CHARS]
 
 
 def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
-            render_fn: Callable[..., Tuple[MediaInfo, Dict[str, str]]] = render_files,
+            render_fn: Callable[..., Tuple[MediaInfo, Dict[str, Any]]] = render_files,
             qc_fn: Callable[..., Dict[str, Any]] = run_qc,
             settings: Optional[InstagramMCPSettings] = None) -> Dict[str, Any]:
     """Render one claimed job (state running), then run the quality check (src/studio/qc.py):
     the asset becomes `ready` (and a `revision_requested` parent it replaces is archived), or
-    `failed` with the reasons in `assets.qc`. Errors are retried
+    `failed` with the reasons in `assets.qc`; the asset keeps the render's timeline and gets
+    an automatic description if it has none (auto_description). Errors are retried
     up to MAX_ATTEMPTS, except ValueError (a bad recipe: retrying gives the same result);
     then the job fails with the reason and the asset moves rendering -> failed. Returns the
     job. `settings` defaults to get_settings() (QC thresholds, hashtag cap)."""
@@ -165,17 +182,18 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
         return _fail(store, job, f"gave up after {MAX_ATTEMPTS} attempts (worker stopped)")
     start = time.monotonic()
     try:
+        idea = store.get_idea(asset["idea_id"])
         info, files = render_fn(asset, media_root,
                                 lambda p: store.update_render_job(job_id, progress=p))
-        qc = qc_fn(asset, store.get_idea(asset["idea_id"]), files["file_path"], media_root,
-                   settings or get_settings())
+        qc = qc_fn(asset, idea, files["file_path"], media_root, settings or get_settings())
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason
         reason = f"{type(e).__name__}: {e}"[:FAILURE_CHARS]
         if isinstance(e, ValueError) or job["attempts"] >= MAX_ATTEMPTS:
             return _fail(store, job, reason)
         return store.update_render_job(job_id, state="queued", failure=reason)
     render_ms = round((time.monotonic() - start) * 1000)
-    store.update_asset(asset["id"], **files, duration=info.duration, qc=qc)
+    store.update_asset(asset["id"], **files, duration=info.duration, qc=qc,
+                       description=asset["description"] or auto_description(idea, asset))
     transition(store, asset["id"], "ready" if qc["passed"] else "failed", actor="worker")
     parent = asset["parent_asset_id"] and store.get_asset(asset["parent_asset_id"])
     if qc["passed"] and parent and parent["status"] == "revision_requested":

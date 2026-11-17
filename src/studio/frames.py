@@ -33,7 +33,8 @@ def _jpegs(inputs: Sequence[Sequence[Any]], outs: Sequence[Path], width: int) ->
 def asset_frames(store: CampaignStore, settings: InstagramMCPSettings, asset_id: int,
                  n: int = 4, width: int = WIDTH) -> Tuple[List[bytes], Dict[str, Any]]:
     """`n` JPEG frames of the asset's master (the cover, then the rest spread up to the end)
-    and {asset_id, status, qc, duration_s, frame_times_s}. ValueError without a master."""
+    and {asset_id, status, qc, duration_s, frame_times_s, description, timeline}. ValueError
+    without a master."""
     if not 1 <= n <= 8 or not 120 <= width <= 1080:
         raise ValueError("n must be 1..8 and width 120..1080")
     asset = store.get_asset(asset_id)
@@ -57,7 +58,8 @@ def asset_frames(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
         folder.mkdir(parents=True, exist_ok=True)
         _jpegs([["-ss", f"{t:.3f}", "-i", video] for t in times], outs, width)
     info = {"asset_id": asset_id, "status": asset["status"], "qc": qc_summary(asset["qc"]),
-            "duration_s": round(duration, 3), "frame_times_s": times}
+            "duration_s": round(duration, 3), "frame_times_s": times,
+            "description": asset["description"], "timeline": asset["timeline"]}
     return [p.read_bytes() for p in outs], info
 
 

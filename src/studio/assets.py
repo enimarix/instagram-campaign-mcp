@@ -88,11 +88,13 @@ def set_verdict(store: CampaignStore, asset_id: int, verdict: str) -> Dict[str, 
     return store.update_asset(asset_id, verdict=verdict)
 
 
-EDITABLE = ("caption", "best_before")
+EDITABLE = ("caption", "best_before", "description")
+DESCRIPTION_CHARS = 400
 
 
 def edit_asset(store: CampaignStore, asset_id: int, **fields: Any) -> Dict[str, Any]:
-    """Owner edits: caption (Instagram's limits) and best_before (local date YYYY-MM-DD or None).
+    """Owner edits: caption (Instagram's limits), best_before (local date YYYY-MM-DD or None)
+    and description (what happens in the video, 1-DESCRIPTION_CHARS characters).
 
     Only the keys given change; ValueError names the problem.
     """
@@ -116,4 +118,9 @@ def edit_asset(store: CampaignStore, asset_id: int, **fields: Any) -> Dict[str, 
             ok = False
         if not ok:
             raise ValueError(f"best_before must be a date YYYY-MM-DD, not {best_before!r}")
+    if "description" in fields:
+        text = fields["description"].strip() if isinstance(fields["description"], str) else ""
+        if not 1 <= len(text) <= DESCRIPTION_CHARS:
+            raise ValueError(f"description must be 1-{DESCRIPTION_CHARS} characters")
+        fields["description"] = text
     return store.update_asset(asset_id, **fields)

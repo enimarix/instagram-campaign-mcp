@@ -33,10 +33,14 @@ def _asset(store, media_root, *, file=True, status="ready"):
     if file:
         (media_root / "a").mkdir(exist_ok=True)
         make(media_root / "a" / "video.mp4", size="1080x1920", duration=3, audio=None)
-        store.update_asset(a["id"], file_path="a/video.mp4", duration=3.0, qc=QC_OK)
+        store.update_asset(a["id"], file_path="a/video.mp4", duration=3.0, qc=QC_OK,
+                           description="A hook card.", timeline=TIMELINE)
     if status != "rendering":
         transition(store, a["id"], status, actor="worker")
     return a["id"]
+
+
+TIMELINE = [{"t": 0.0, "d": 3.0, "e": "hook card: 'Hi'"}]
 
 
 def _no_ffmpeg(*a, **kw):
@@ -48,7 +52,8 @@ def test_asset_frames_are_small_jpegs_and_cached(store, media, monkeypatch):
     aid = _asset(store, Path(media.media_root))
     jpegs, info = frames.asset_frames(store, media, aid)
     assert info == {"asset_id": aid, "status": "ready", "qc": "passed", "duration_s": 3.0,
-                    "frame_times_s": [0.5, 0.967, 1.933, 2.9]}
+                    "frame_times_s": [0.5, 0.967, 1.933, 2.9],
+                    "description": "A hook card.", "timeline": TIMELINE}
     assert len(jpegs) == 4 and all(j[:2] == b"\xff\xd8" for j in jpegs)
     assert sum(map(len, jpegs)) < 400_000
     monkeypatch.setattr(ffmpeg, "run", _no_ffmpeg)

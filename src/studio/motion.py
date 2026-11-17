@@ -95,8 +95,8 @@ def list_templates() -> List[Dict[str, Any]]:
 
 
 def validate_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
-    """{props (parsed, defaults filled), fps, durationInFrames, coverFrame}; ValueError with
-    the template's own message for an unknown template or bad props."""
+    """{props (parsed, defaults filled), fps, durationInFrames, coverFrame, events}; ValueError
+    with the template's own message for an unknown template or bad props."""
     out = _node("schemas.mjs", ["--validate", template], timeout_s=SCHEMA_TIMEOUT_S,
                 stdin=json.dumps(props, ensure_ascii=False))
     if not out.pop("ok"):
@@ -227,9 +227,11 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
 
 
 def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
-                        media_root: PathLike, *, timeout_s: float) -> Tuple[MediaInfo, int]:
+                        media_root: PathLike, *, timeout_s: float
+                        ) -> Tuple[MediaInfo, int, List[Dict[str, Any]]]:
     """Render the master to `out`, then the shared finish (two-pass loudness when there is
-    audio). Returns its MediaInfo and the cover time in ms. ValueError for bad props."""
+    audio). Returns its MediaInfo, the cover time in ms and its timeline (the template's own
+    events, motion/src/lib/events.ts, compressed). ValueError for bad props."""
     out = Path(out)
     v = validate_props(template, props)
     staged = _stage_audio(bundle_dir(), v["props"], media_root)
@@ -242,7 +244,8 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
                                       log_path=Path(work) / "loudnorm.log")
         else:  # nothing to normalise; QC reports the missing audio
             os.replace(raw, out)
-    return ffmpeg.probe(out), round((v["coverFrame"] or 0) * 1000 / v["fps"])
+    return (ffmpeg.probe(out), round((v["coverFrame"] or 0) * 1000 / v["fps"]),
+            recipe.compress_timeline(v["events"]))
 
 
 def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,

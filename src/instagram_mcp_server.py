@@ -670,7 +670,8 @@ async def get_render_status(job_id: Optional[int] = None,
 @mcp.tool(annotations=LOCAL_READ)
 async def get_asset_frames(asset_id: int, n: int = 4) -> Images:
     """Look at a rendered asset: n frames (default 4: the cover, then spread to the end;
-    540 px JPEGs) plus {status, qc, duration_s, frame_times_s}. Fix or drop it before
+    540 px JPEGs) plus {status, qc, duration_s, frame_times_s, description, timeline (what
+    happens when: [{t, d, e}] in seconds)}. Fix or drop it before
     submit_asset. Errors while it is still rendering or failed before writing a file."""
     return _with_images(await _studio(frames_.asset_frames, store(), get_settings(),
                                       asset_id, n))
@@ -691,21 +692,23 @@ async def wait_for_renders(batch_date: Optional[str] = None, job_ids: Optional[L
 
 @mcp.tool(annotations=LOCAL_WRITE)
 async def submit_asset(asset_id: int, self_score: int, self_score_reason: str, caption: str,
-                       best_before: Optional[str] = None) -> Dict[str, Any]:
+                       best_before: Optional[str] = None,
+                       description: Optional[str] = None) -> Dict[str, Any]:
     """Submit a QC-passed (ready) asset for the owner's review: an honest self_score 1-10
-    with one line on why (best candidates come first), the caption, and best_before
-    (YYYY-MM-DD; default: batch date + the pillar's shelf life). Re-submitting overwrites
-    until the owner reacts."""
+    with one line on why (best candidates come first), the caption, best_before
+    (YYYY-MM-DD; default: batch date + the pillar's shelf life) and a description (2-3
+    plain sentences, up to 400 chars: what happens, the hook, the payoff; default: an
+    automatic one). Re-submitting overwrites until the owner reacts."""
     return await _studio(production.submit_asset, store(), get_settings(), asset_id,
                          self_score=self_score, self_score_reason=self_score_reason,
-                         caption=caption, best_before=best_before)
+                         caption=caption, best_before=best_before, description=description)
 
 
 @mcp.tool(annotations=LOCAL_READ)
 async def list_assets(status: Optional[str] = None, batch_date: Optional[str] = None,
                       limit: int = 50) -> Dict[str, Any]:
     """Assets, best self-score first (limit up to 100): status, verdict, template, caption
-    excerpt, QC summary, best_before."""
+    and description excerpts, QC summary, best_before."""
     return {"assets": await _studio(production.list_assets, store(), status=status,
                                     batch_date=batch_date, limit=limit)}
 

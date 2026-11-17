@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { z } from "zod";
+import { type Event, scriptEvents } from "./lib/events";
 import { BossBattle, timelineOf as bossBattleTimeline } from "./templates/BossBattle/BossBattle";
 import { bossBattleSchema } from "./templates/BossBattle/schema";
 import { DialogStory, timelineOf as dialogStoryTimeline } from "./templates/DialogStory/DialogStory";
@@ -11,7 +12,7 @@ import { PixelSkit, timelineOf as pixelSkitTimeline } from "./templates/PixelSki
 import { pixelSkitSchema } from "./templates/PixelSkit/schema";
 import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
 import { QuizChest, timelineOf as quizChestTimeline } from "./templates/QuizChest/QuizChest";
-import { quizChestSchema } from "./templates/QuizChest/schema";
+import { quizChestSchema, REVEAL_S } from "./templates/QuizChest/schema";
 import { TimelineDemo, timelineDemoSchema, timelineOf } from "./templates/TimelineDemo";
 
 export const WIDTH = 1080;
@@ -25,6 +26,8 @@ export type Template<S extends z.ZodType> = {
   durationInFrames: (props: z.infer<S>) => number;
   /** Frame to use as the Reel cover (thumb_offset); script templates use timeline.hookFrame. */
   coverFrame?: (props: z.infer<S>) => number;
+  /** What happens when (assets.timeline, step 110); none = the whole video as one event. */
+  events?: (props: z.infer<S>) => Event[];
 };
 
 /** Key under which Root passes the cover frame out through the resolved props (render.mjs reads it). */
@@ -87,6 +90,8 @@ export const templates = {
     },
     durationInFrames: (p) => factQuestTimeline(p, FPS).totalFrames,
     coverFrame: (p) => factQuestTimeline(p, FPS).hookFrame,
+    events: (p) =>
+      scriptEvents(factQuestTimeline(p, FPS), FPS, ["hook card", ...p.facts.map((_, i) => `fact ${i + 1}`), "outro card"], p),
   }),
   BossBattle: template({
     component: BossBattle,
@@ -107,6 +112,17 @@ export const templates = {
     },
     durationInFrames: (p) => bossBattleTimeline(p, FPS).totalFrames,
     coverFrame: (p) => bossBattleTimeline(p, FPS).hookFrame,
+    events: (p) =>
+      scriptEvents(
+        bossBattleTimeline(p, FPS),
+        FPS,
+        [
+          "hook card",
+          ...p.rounds.map((r, i) => `round ${i + 1} (${p[r.attacker].name} hits)`),
+          `verdict (${p.verdict.winner === "draw" ? "draw" : `${p[p.verdict.winner].name} wins`})`,
+        ],
+        p,
+      ),
   }),
   QuizChest: template({
     component: QuizChest,
@@ -129,6 +145,15 @@ export const templates = {
     },
     durationInFrames: (p) => quizChestTimeline(p, FPS).timeline.totalFrames,
     coverFrame: (p) => quizChestTimeline(p, FPS).timeline.hookFrame,
+    events: (p) => {
+      const { timeline, countdownStart, reveal } = quizChestTimeline(p, FPS);
+      const choice = p.choices[p.answer];
+      return [
+        ...scriptEvents(timeline, FPS, ["hook card", "question + choices", "explanation", "cta card"], p),
+        { t: countdownStart / FPS, d: p.countdownSeconds, e: `countdown ${p.countdownSeconds} s` },
+        { t: reveal / FPS, d: REVEAL_S, e: "chest opens: the answer", text: `${choice.label}: ${choice.text}` },
+      ];
+    },
   }),
   DialogStory: template({
     component: DialogStory,
@@ -152,6 +177,13 @@ export const templates = {
     },
     durationInFrames: (p) => dialogStoryTimeline(p, FPS).totalFrames,
     coverFrame: (p) => dialogStoryTimeline(p, FPS).hookFrame,
+    events: (p) =>
+      scriptEvents(
+        dialogStoryTimeline(p, FPS),
+        FPS,
+        ["hook card", ...p.lines.map((l) => `dialogue ${p.characters[l.speaker].name}`), "moral"],
+        p,
+      ),
   }),
   PixelSkit: template({
     component: PixelSkit,
@@ -174,5 +206,15 @@ export const templates = {
     },
     durationInFrames: (p) => pixelSkitTimeline(p, FPS).timeline.totalFrames,
     coverFrame: (p) => pixelSkitTimeline(p, FPS).timeline.hookFrame,
+    events: (p) => {
+      const { timeline, punch, land, freezeStart, freezeEnd } = pixelSkitTimeline(p, FPS);
+      const beat = (b: (typeof p.beats)[number], i: number) =>
+        `${i + 1 === punch ? "punchline" : i + 1 > punch ? "tag" : `beat ${i + 1}`} (${b.action})`;
+      return [
+        ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat)], p),
+        ...(p.sting !== "none" ? [{ t: land / FPS, d: 0, e: `sting: ${p.sting}` }] : []),
+        ...(freezeEnd > freezeStart ? [{ t: freezeStart / FPS, d: (freezeEnd - freezeStart) / FPS, e: "freeze on the punchline" }] : []),
+      ];
+    },
   }),
 };

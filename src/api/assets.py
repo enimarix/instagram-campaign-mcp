@@ -66,6 +66,7 @@ class AssetEdit(BaseModel):
     model_config = ConfigDict(extra="forbid")
     caption: Optional[str] = None
     best_before: Optional[str] = None
+    description: Optional[str] = None
 
 
 @router.get("")
