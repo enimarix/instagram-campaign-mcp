@@ -214,7 +214,7 @@ async def update(settings: InstagramMCPSettings, log_path: Path = LOG_PATH
             health = await _health_when_ready(settings)
         finally:
             stop(proc)
-    except DownloaderError as e:
+    except (DownloaderError, OSError) as e:  # OSError: e.g. node missing
         health["detail"] = str(e)[-TAIL_CHARS:]
     if health["status"] == "up":
         return {"updated": True, "commit": new, "previous": old, "health": health}
