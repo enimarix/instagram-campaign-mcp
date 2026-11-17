@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { assetById } from "../../assets";
 import { scriptAreas } from "../../brand";
@@ -174,10 +174,10 @@ export const BossBattle = (props: BossBattleProps) => {
       ))}
       {/* A hit per round, and the knockout; the verdict jingle after it (at once for a draw). */}
       {scenes.slice(1, knockout ? undefined : -1).map((s) => (
-        <Flash key={s.index} startFrame={s.startFrame + HIT} duration={FLASH} color={c.text} />
-      ))}
-      {scenes.slice(1, knockout ? undefined : -1).map((s) => (
-        <Sfx key={s.index} id="sfx-hit" from={s.startFrame + HIT} />
+        <Fragment key={s.index}>
+          <Flash startFrame={s.startFrame + HIT} duration={FLASH} color={c.text} />
+          <Sfx id="sfx-hit" from={s.startFrame + HIT} />
+        </Fragment>
       ))}
       <Sfx id="sfx-confirm" from={last.startFrame + HIT + (knockout ? JINGLE : 0)} />
       <CRTOverlay />
