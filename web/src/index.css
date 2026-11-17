@@ -1,1 +1,98 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens (step 114). Colours come from brand/brand.json (Sweetie 16). Dark is the
+ * default; [data-theme="light"] on <html> swaps the same variables (ui/theme.ts sets it).
+ * Utilities: bg-bg, bg-surface, bg-surface-2, border-line, text-fg, text-muted,
+ * bg-accent + text-on-accent, text-success / warn / danger (+ /12 for a soft fill).
+ * Spacing (4 px steps) and the type scale (text-xs … text-3xl) are Tailwind's defaults on
+ * purpose; radius, shadows and motion are ours.
+ */
+@theme {
+  --color-bg: #1a1c2c;          /* brand background */
+  --color-surface: #222539;     /* cards, sheets, bars */
+  --color-surface-2: #2c3049;   /* inputs, secondary buttons, hover */
+  --color-line: #3a4363;        /* borders, dividers */
+  --color-fg: #f4f4f4;          /* brand text */
+  --color-muted: #a3bccb;       /* secondary text (AA on surface-2) */
+  --color-accent: #ffcd75;      /* brand primary: main actions, active nav, links */
+  --color-on-accent: #1a1c2c;   /* text on accent / success / danger fills */
+  --color-success: #4cc775;
+  --color-warn: #f28a64;        /* brand accent, lifted for AA on soft fills */
+  --color-danger: #ff7f90;
+  --color-info: #73eff7;
+  --color-explore: #c08fe0;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius-control: 0.75rem;    /* buttons, inputs */
+  --radius-card: 1rem;
+  --radius-sheet: 1.5rem;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-overlay: 0 12px 40px -8px rgb(0 0 0 / 0.55);
+
+  --default-transition-duration: 150ms;
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --animate-page-in: page-in var(--duration-base) var(--ease-out-soft);
+  --animate-sheet-in: sheet-in 240ms var(--ease-out-soft);
+  --animate-toast-in: sheet-in var(--duration-base) var(--ease-out-soft);
+
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(4px); }
+  }
+  @keyframes sheet-in {
+    from { opacity: 0; transform: translateY(24px); }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --color-bg: #f3f4f7;
+    --color-surface: #ffffff;
+    --color-surface-2: #e8ebf1;
+    --color-line: #d3d9e3;
+    --color-fg: #1a1c2c;
+    --color-muted: #4f6480;
+    --color-accent: #29366f;
+    --color-on-accent: #ffffff;
+    --color-success: #1d6b56;
+    --color-warn: #a8481d;
+    --color-danger: #b13e53;
+    --color-info: #1f6f8b;
+    --color-explore: #6b3a8c;
+    --shadow-card: 0 1px 2px rgb(26 28 44 / 0.06), 0 1px 8px rgb(26 28 44 / 0.04);
+    --shadow-overlay: 0 12px 40px -8px rgb(26 28 44 / 0.3);
+  }
+  body {
+    @apply bg-bg text-fg antialiased;
+  }
+  /* One focus ring for everything focusable: visible on both themes. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  input[type='checkbox'], input[type='radio'] {
+    accent-color: var(--color-accent);
+  }
+  dialog::backdrop {
+    background: rgb(10 11 20 / 0.6);
+    backdrop-filter: blur(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,10 +1,10 @@
 // Shared by the analytics pages (078, 079): fetch state and number formats.
 import { useEffect, useState } from 'react'
 import { errorMessage } from '../api/client'
+import type { Tone } from '../ui/styles'
 
-export const VERDICT_STYLE: Record<string, string> = {
-  winner: 'bg-green-100 text-green-900', promising: 'bg-amber-100 text-amber-900', weak: 'bg-red-100 text-red-900',
-}
+// Chip tone per post verdict; the others are neutral.
+export const VERDICT_TONE: Record<string, Tone | undefined> = { winner: 'success', promising: 'warn', weak: 'danger' }
 
 export const num = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString('en'))
 export const pct = (r: number | null | undefined) => (r == null ? '–' : `${Math.round(r * 100)} %`)

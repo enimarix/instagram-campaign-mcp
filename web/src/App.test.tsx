@@ -34,7 +34,7 @@ describe('api client', () => {
 })
 
 describe('App', () => {
-  it('renders the seven tabs and the setup-mode banner on Settings', async () => {
+  it('renders the sidebar, the phone tab bar and the setup-mode banner on Settings', async () => {
     const health = { status: 'ok', instagram_configured: false, version: '1.0' }
     // every route answers the health body, except the lists the Settings page maps over
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
@@ -47,8 +47,13 @@ describe('App', () => {
     )
     const links = within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link')
     expect(links.map((l) => l.textContent)).toEqual([
-      'Inbox', 'Calendar', 'Analytics', 'Learnings', 'Ads', 'Agent', 'Settings',
+      'Inbox', 'Calendar', 'Analytics', 'Trends', 'Learnings', 'Ads', 'Agent', 'Settings',
     ])
+    expect(links.find((l) => l.textContent === 'Settings')?.getAttribute('aria-current')).toBe('page')
+    // phone: four tabs and "More", which is current for the pages behind it
+    const tabs = within(screen.getByRole('navigation', { name: 'Tabs' })).getAllByRole('link')
+    expect(tabs.map((l) => l.textContent)).toEqual(['Inbox', 'Calendar', 'Analytics', 'Agent', 'More'])
+    expect(tabs.filter((l) => l.getAttribute('aria-current')).map((l) => l.textContent)).toEqual(['More'])
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
   })
 
@@ -60,7 +65,18 @@ describe('App', () => {
         <App />
       </MemoryRouter>,
     )
-    fireEvent.click(screen.getByRole('link', { name: /^Trends/ }))
+    fireEvent.click(within(screen.getByRole('main')).getByRole('link', { name: /^Trends/ }))
     expect(await screen.findByRole('heading', { name: 'Trends' })).toBeTruthy()
+  })
+
+  it('lists the pages without a tab on the More page', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+    render(
+      <MemoryRouter initialEntries={['/more']}>
+        <App />
+      </MemoryRouter>,
+    )
+    const list = within(screen.getByRole('main')).getAllByRole('link')
+    expect(list.map((l) => l.textContent)).toEqual(['Trends', 'Learnings', 'Ads', 'Settings'])
   })
 })

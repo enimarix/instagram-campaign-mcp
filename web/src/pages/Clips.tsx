@@ -3,7 +3,9 @@ import {
   addInboxClip, errorMessage, listClips, listInbox, type AudioRights, type Clip, type InboxFile,
   type RightsBasis,
 } from '../api/client'
-import { button } from '../inbox/ui'
+import { Button } from '../ui/Button'
+import { Card, Skeleton } from '../ui/Card'
+import { field as fieldClass } from '../ui/styles'
 
 // GOAL.md §5.1; `unknown` is never offered: a clip without rights is never stored.
 const BASES: { id: RightsBasis; label: string }[] = [
@@ -20,7 +22,7 @@ const SOUND: { id: AudioRights; label: string }[] = [
   { id: 'not_covered', label: 'No (the original sound will be muted)' },
   { id: 'no_audio', label: 'The clip has no sound' },
 ]
-const field = 'mt-1 block min-h-11 w-full rounded-lg border border-gray-300 px-2 text-sm'
+const field = `${fieldClass} mt-1 block w-full`
 
 /** The Add-clip form of one inbox file: rights basis, note, author, URL, licence, sound. */
 function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void }) {
@@ -53,7 +55,7 @@ function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void })
 
   return (
     <form aria-label={`Add ${file.name}`} onSubmit={(e) => void submit(e)}
-      className="mt-2 grid gap-2 rounded-lg border border-gray-200 p-3 text-sm">
+      className="mt-3 grid gap-3 rounded-control border border-line bg-surface-2/40 p-4 text-sm">
       <p className="font-medium break-all">{file.name}</p>
       <label htmlFor={`${id}-basis`}>Rights basis
         <select id={`${id}-basis`} value={basis} onChange={(e) => setBasis(e.target.value as RightsBasis)}
@@ -84,10 +86,10 @@ function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void })
           </label>
         ))}
       </fieldset>
-      {error && <p role="alert" className="text-red-700">{error}</p>}
-      <button type="submit" disabled={busy} className={`${button} bg-blue-600 text-white md:w-auto`}>
+      {error && <p role="alert" className="text-danger">{error}</p>}
+      <Button type="submit" variant="primary" loading={busy} className="md:w-auto md:justify-self-start">
         Add clip
-      </button>
+      </Button>
     </form>
   )
 }
@@ -106,22 +108,22 @@ export default function ClipsSection() {
   useEffect(reload, [reload])
 
   return (
-    <section aria-label="Clips" className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="font-semibold">Clips</h3>
+    <Card as="section" aria-label="Clips">
+      <h2 className="font-semibold">Clips</h2>
       {error !== undefined ? (
-        <p role="alert" className="mt-2 text-sm text-red-700">{errorMessage(error)}</p>
+        <p role="alert" className="mt-2 text-sm text-danger">{errorMessage(error)}</p>
       ) : !inbox || !clips ? (
-        <p className="mt-2 text-sm text-gray-500">Loading…</p>
+        <Skeleton className="mt-3 h-12" />
       ) : (
         <>
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted">
             Drop videos into the inbox folder; each one needs its rights before the studio can use it.
           </p>
           {inbox.length === 0 && <p className="mt-2 text-sm">No files waiting.</p>}
           {inbox.map((f) => <IntakeForm key={f.name} file={f} onAdded={reload} />)}
-          <ul className="mt-3 space-y-1 text-sm">
+          <ul className="mt-3 divide-y divide-line/60 text-sm">
             {clips.map((c) => (
-              <li key={c.id} className="break-words">
+              <li key={c.id} className="py-2 break-words">
                 <span className="font-medium">#{c.id} {c.stats.original_name ?? c.provider}</span>
                 {' · '}{BASES.find((b) => b.id === c.rights_basis)?.label ?? c.rights_basis}
                 {' · '}{c.attribution ?? 'no credit needed'}
@@ -130,6 +132,6 @@ export default function ClipsSection() {
           </ul>
         </>
       )}
-    </section>
+    </Card>
   )
 }

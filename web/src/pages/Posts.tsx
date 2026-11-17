@@ -3,9 +3,14 @@ import { Link, useParams } from 'react-router'
 import {
   ApiError, errorMessage, getAnalyticsPost, listAnalyticsPosts, type AnalyticsPost, type PostDetail,
 } from '../api/client'
-import { button, chip, localDate, safeUrl } from '../inbox/ui'
+import { localDate, safeUrl } from '../inbox/ui'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Chip } from '../ui/Chip'
+import { PageHeader } from '../ui/PageHeader'
+import { card, field, link } from '../ui/styles'
 import { Body, Line, Section } from './Analytics'
-import { num, pct, useLoad, VERDICT_STYLE } from './load'
+import { num, pct, useLoad, VERDICT_TONE } from './load'
 
 const PAGE = 20
 const SORTS = [
@@ -21,15 +26,13 @@ const FILTERS = [
 ] as const
 type Filters = Record<(typeof FILTERS)[number][0], string>
 
-const select = 'min-h-11 rounded-lg border border-gray-300 bg-white px-2 text-sm'
-const link = 'text-blue-600 underline'
 const day = (iso: string | null) => (iso ? localDate(new Date(iso)) : '–')
 const ratio = (n: number | null | undefined) => (n == null ? '–' : `${num(n)}×`)
 const age = (h: number) => (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} d`)
 const detailPath = (id: string) => `/analytics/posts/${encodeURIComponent(id)}`
 
 function Verdict({ v }: { v: string }) {
-  return <span className={`${chip} ${VERDICT_STYLE[v] ?? 'bg-gray-100 text-gray-700'}`}>{v.replace('_', ' ')}</span>
+  return <Chip tone={VERDICT_TONE[v]}>{v.replace('_', ' ')}</Chip>
 }
 
 const COLUMNS: [string, (p: AnalyticsPost) => string][] = [
@@ -62,17 +65,14 @@ export default function Posts() {
 
   return (
     <section>
-      <Link to="/analytics" className={`inline-flex min-h-11 items-center ${link}`}>← Analytics</Link>
-      <h2 className="text-2xl font-semibold">Posts</h2>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <select aria-label="Sort by" className={select} value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+      <PageHeader title="Posts" back={{ to: '/analytics', label: 'Analytics' }} />
+      <div className="flex flex-wrap gap-2">
+        <select aria-label="Sort by" className={field} value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
           {SORTS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
         </select>
-        <button type="button" className={`${button} border border-gray-300 bg-white`} onClick={() => setDesc(!desc)}>
-          {desc ? 'High to low' : 'Low to high'}
-        </button>
+        <Button onClick={() => setDesc(!desc)}>{desc ? 'High to low' : 'Low to high'}</Button>
         {FILTERS.map(([param, label, options]) => (
-          <select key={param} aria-label={label} className={select} value={filters[param]}
+          <select key={param} aria-label={label} className={field} value={filters[param]}
             onChange={(e) => setFilters({ ...filters, [param]: e.target.value })}>
             {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
           </select>
@@ -82,28 +82,29 @@ export default function Posts() {
       <Body s={first} empty={(d) => d.total === 0 && 'No posts match.'}>
         {(d) => (
           <>
-            <ul aria-label="Posts" className="mt-3 space-y-2 md:hidden">
+            <ul aria-label="Posts" className="mt-4 space-y-2 md:hidden">
               {posts.map((p) => (
-                <li key={p.media_id} className="flex gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm">
-                  {p.thumbnail_url && <img src={p.thumbnail_url} alt="" className="h-16 w-9 shrink-0 rounded object-cover" />}
+                <Card as="li" key={p.media_id} className="flex gap-3 text-sm">
+                  {p.thumbnail_url && <img src={p.thumbnail_url} alt="" className="h-20 w-11 shrink-0 rounded-lg object-cover" />}
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><Verdict v={p.verdict} /><span className="text-gray-500">{day(p.posted_at)}</span></div>
-                    <Link to={detailPath(p.media_id)} className={`mt-1 block min-h-11 truncate ${link}`}>{p.caption || 'Untitled post'}</Link>
-                    <p className="text-xs text-gray-500">{COLUMNS.map(([k, v]) => `${k} ${v(p)}`).join(' · ')}</p>
+                    <div className="flex flex-wrap items-center gap-2"><Verdict v={p.verdict} /><span className="text-muted">{day(p.posted_at)}</span></div>
+                    <Link to={detailPath(p.media_id)} className={`mt-1 block min-h-11 truncate leading-[2.75rem] ${link}`}>{p.caption || 'Untitled post'}</Link>
+                    <p className="text-xs text-muted">{COLUMNS.map(([k, v]) => `${k} ${v(p)}`).join(' · ')}</p>
                   </div>
-                </li>
+                </Card>
               ))}
             </ul>
-            <table className="mt-3 hidden w-full border-collapse text-sm md:table">
+            <div className={`${card} mt-4 hidden overflow-hidden md:block`}>
+            <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-500">
+                <tr className="bg-surface-2 text-left text-xs text-muted">
                   <th className="p-2">Post</th><th className="p-2">Posted</th><th className="p-2">Verdict</th>
                   {COLUMNS.map(([k]) => <th key={k} className="p-2 text-right">{k}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {posts.map((p) => (
-                  <tr key={p.media_id} className="border-t border-gray-200 bg-white">
+                  <tr key={p.media_id} className="border-t border-line/60 hover:bg-surface-2/50">
                     <td className="max-w-xs p-2">
                       <Link to={detailPath(p.media_id)} className={`flex items-center gap-2 ${link}`}>
                         {p.thumbnail_url && <img src={p.thumbnail_url} alt="" className="h-10 w-6 shrink-0 rounded object-cover" />}
@@ -117,11 +118,11 @@ export default function Posts() {
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-xs text-gray-500">{posts.length} of {d.total}</p>
-            {extra.error && <p role="alert" className="text-sm text-red-700">Couldn't load more: {extra.error}</p>}
+            </div>
+            <p className="mt-2 text-xs text-muted">{posts.length} of {d.total}</p>
+            {extra.error && <p role="alert" className="text-sm text-danger">Couldn't load more: {extra.error}</p>}
             {posts.length < d.total && (
-              <button type="button" disabled={extra.busy} onClick={loadMore}
-                className={`${button} mt-2 border border-gray-300 bg-white`}>{extra.busy ? 'Loading…' : 'Load more'}</button>
+              <Button className="mt-2" loading={extra.busy} onClick={loadMore}>{extra.busy ? 'Loading…' : 'Load more'}</Button>
             )}
           </>
         )}
@@ -139,8 +140,7 @@ export function PostPage() {
   }), id)
   return (
     <section>
-      <Link to="/analytics/posts" className={`inline-flex min-h-11 items-center ${link}`}>← Posts</Link>
-      <h2 className="text-2xl font-semibold">Post</h2>
+      <PageHeader title="Post" back={{ to: '/analytics/posts', label: 'Posts' }} />
       <Body s={s} empty={(p) => p === null && 'Post not found.'}>{(p) => p && <Detail p={p} />}</Body>
     </section>
   )
@@ -151,7 +151,7 @@ function Detail({ p }: { p: PostDetail }) {
   const tags = Object.entries(p.tags ?? {}).filter(([, v]) => v)
   return (
     <>
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-muted">
         {day(p.posted_at)} · {p.group}{p.deleted && ' · deleted on Instagram'}
       </p>
       {p.caption && <p className="mt-1 whitespace-pre-line text-sm">{p.caption}</p>}
@@ -160,27 +160,27 @@ function Detail({ p }: { p: PostDetail }) {
         {p.preview_url ? (
           <>
             <video src={p.preview_url} poster={p.thumbnail_url ?? undefined} controls playsInline preload="metadata"
-              aria-label="Studio video" className="mt-2 max-h-[70vh] w-full max-w-xs rounded-lg bg-black" />
+              aria-label="Studio video" className="mt-2 max-h-[70vh] w-full max-w-xs rounded-card bg-black shadow-card" />
             {p.asset_id !== null && <Link to={`/assets/${p.asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Studio asset</Link>}
           </>
         ) : href ? (
           <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>Open on Instagram</a>
-        ) : <p className="mt-2 text-sm text-gray-500">No video link.</p>}
+        ) : <p className="mt-2 text-sm text-muted">No video link.</p>}
       </Section>
 
       <Section title="Growth by post age">
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
           <Line label="Views" values={p.series.map((x) => x.metrics.views ?? null)} />
           <Line label="Reach" values={p.series.map((x) => x.metrics.reach ?? null)} />
         </div>
-        <table aria-label="Snapshots" className="mt-2 w-full text-sm">
-          <thead><tr className="text-left text-xs text-gray-500"><th>Age</th><th className="text-right">Views</th><th className="text-right">Reach</th></tr></thead>
+        <table aria-label="Snapshots" className={`${card} mt-3 w-full overflow-hidden text-sm`}>
+          <thead><tr className="bg-surface-2 text-left text-xs text-muted"><th className="p-2">Age</th><th className="p-2 text-right">Views</th><th className="p-2 text-right">Reach</th></tr></thead>
           <tbody>
             {p.series.map((x) => (
-              <tr key={x.captured_at} className="border-t border-gray-200">
-                <td>{age(x.age_hours)}</td>
-                <td className="text-right tabular-nums">{num(x.metrics.views)}</td>
-                <td className="text-right tabular-nums">{num(x.metrics.reach)}</td>
+              <tr key={x.captured_at} className="border-t border-line/60">
+                <td className="p-2">{age(x.age_hours)}</td>
+                <td className="p-2 text-right tabular-nums">{num(x.metrics.views)}</td>
+                <td className="p-2 text-right tabular-nums">{num(x.metrics.reach)}</td>
               </tr>
             ))}
           </tbody>
@@ -188,20 +188,20 @@ function Detail({ p }: { p: PostDetail }) {
       </Section>
 
       <Section title="Tags and hypothesis">
-        {tags.length === 0 ? <p className="mt-1 text-sm text-gray-500">No tags: made outside the studio.</p> : (
+        {tags.length === 0 ? <p className="mt-1 text-sm text-muted">No tags: made outside the studio.</p> : (
           <ul aria-label="Tags" className="mt-1 flex flex-wrap gap-2">
-            {tags.map(([k, v]) => <li key={k} className={`${chip} bg-gray-100 text-gray-700`}>{k}: {v}</li>)}
+            {tags.map(([k, v]) => <li key={k}><Chip>{k}: {v}</Chip></li>)}
           </ul>
         )}
         {p.hypothesis && <p className="mt-1 text-sm">Hypothesis: {p.hypothesis}</p>}
       </Section>
 
       <Section title="Your feedback">
-        {p.feedback.length === 0 ? <p className="mt-1 text-sm text-gray-500">No feedback.</p> : (
+        {p.feedback.length === 0 ? <p className="mt-1 text-sm text-muted">No feedback.</p> : (
           <ul className="mt-1 space-y-1 text-sm">
             {p.feedback.map((f) => (
               <li key={f.id}>
-                <span className="text-gray-500">{day(f.created_at)}</span>{' '}
+                <span className="text-muted">{day(f.created_at)}</span>{' '}
                 {f.text ?? f.reason_codes.join(', ')}
               </li>
             ))}

@@ -14,7 +14,12 @@ import {
 import AssetCard from './AssetCard'
 import ReasonSheet from './ReasonSheet'
 import ScheduleSheet from './ScheduleSheet'
-import { button, wallClock } from './ui'
+import { Button } from '../ui/Button'
+import { EmptyState, Skeleton } from '../ui/Card'
+import { PageHeader } from '../ui/PageHeader'
+import { field } from '../ui/styles'
+import { Tabs } from '../ui/Tabs'
+import { wallClock } from './ui'
 
 const STATUSES = ['ready', 'needs_reaction', 'revision_requested', 'approved', 'scheduled',
   'published', 'rendering', 'failed', 'archived']
@@ -34,7 +39,6 @@ const supply = (b: Bench) =>
 // The banner stays dismissed for the browser session, per suggested video and slot.
 const DISMISSED = 'inbox.benchBannerDismissed'
 const bannerKey = (s: NonNullable<Bench['suggestion']>) => `${s.asset_id}@${s.publish_at}`
-const select = 'min-h-11 rounded-lg border border-gray-300 bg-white px-2 text-sm'
 
 export default function InboxPage() {
   const [date, setDate] = useState(localToday)
@@ -152,8 +156,6 @@ export default function InboxPage() {
   const reviewed = assets?.filter((a) => a.verdict !== 'none').length ?? 0
   const suggestion = bench?.suggestion
   const banner = suggestion && bannerKey(suggestion) !== dismissed ? suggestion : null
-  const tabClass = (t: typeof tab) =>
-    `${button} flex-1 ${tab === t ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`
   const setFilter = (k: keyof typeof filters) => (e: { target: { value: string } }) => {
     reload()
     setFilters((f) => ({ ...f, [k]: e.target.value }))
@@ -161,66 +163,48 @@ export default function InboxPage() {
 
   return (
     <section className="mx-auto max-w-md">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-2xl font-semibold">Inbox</h2>
-        {assets && tab === 'today' && (
-          <p role="status" className="text-sm text-gray-600">
+      <PageHeader
+        title="Inbox"
+        actions={assets && tab === 'today' && (
+          <p role="status" className="text-sm text-muted tabular-nums">
             {reviewed} of {assets.length} reviewed
           </p>
         )}
-      </div>
+      />
       {banner && (
         <div
           role="region"
           aria-label="Bench suggestion"
-          className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"
+          className="mb-3 rounded-card border border-warn/30 bg-warn/12 p-4 text-sm"
         >
           <p>
-            Free slot at {wallClock(banner.local)} and nothing for it yet: the freshest video on
-            the bench could take it.
+            Free slot at <strong>{wallClock(banner.local)}</strong> and nothing for it yet: the
+            freshest video on the bench could take it.
           </p>
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              className={`${button} bg-amber-600 text-white`}
-              onClick={() => review(banner.asset_id)}
-            >
-              Review it
-            </button>
-            <button
-              type="button"
-              className={`${button} bg-white text-amber-900`}
+          <div className="mt-3 flex gap-2">
+            <Button variant="primary" onClick={() => review(banner.asset_id)}>Review it</Button>
+            <Button
+              variant="ghost"
               onClick={() => {
                 sessionStorage.setItem(DISMISSED, bannerKey(banner))
                 setDismissed(bannerKey(banner))
               }}
             >
               Dismiss
-            </button>
+            </Button>
           </div>
         </div>
       )}
-      <div role="tablist" className="mt-3 flex gap-2 rounded-lg bg-gray-100 p-1">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'today'}
-          className={tabClass('today')}
-          onClick={() => showTab('today')}
-        >
-          Today
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'bench'}
-          className={tabClass('bench')}
-          onClick={() => showTab('bench')}
-        >
-          Bench{bench ? ` (${bench.assets.length})` : ''}
-        </button>
-      </div>
-      {tab === 'bench' && bench && <p className="mt-2 text-sm text-gray-600">{supply(bench)}</p>}
+      <Tabs
+        label="Inbox view"
+        value={tab}
+        onChange={showTab}
+        tabs={[
+          { id: 'today', label: 'Today' },
+          { id: 'bench', label: `Bench${bench ? ` (${bench.assets.length})` : ''}` },
+        ]}
+      />
+      {tab === 'bench' && bench && <p className="mt-2 text-sm text-muted">{supply(bench)}</p>}
       {tab === 'today' && (
         <div className="mt-3 grid grid-cols-2 gap-2">
           <input
@@ -232,21 +216,21 @@ export default function InboxPage() {
               reload()
               setDate(e.target.value)
             }}
-            className={select}
+            className={field}
           />
-          <select aria-label="Track" value={filters.track} onChange={setFilter('track')} className={select}>
+          <select aria-label="Track" value={filters.track} onChange={setFilter('track')} className={field}>
             <option value="">All tracks</option>
             {taxonomy?.tracks?.values.map((t) => (
               <option key={t.id} value={t.id}>{t.label}</option>
             ))}
           </select>
-          <select aria-label="Status" value={filters.status} onChange={setFilter('status')} className={select}>
+          <select aria-label="Status" value={filters.status} onChange={setFilter('status')} className={field}>
             <option value="">All statuses</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>{s.replace('_', ' ')}</option>
             ))}
           </select>
-          <select aria-label="Verdict" value={filters.verdict} onChange={setFilter('verdict')} className={select}>
+          <select aria-label="Verdict" value={filters.verdict} onChange={setFilter('verdict')} className={field}>
             <option value="">All verdicts</option>
             {VERDICTS.map(([v, label]) => (
               <option key={v} value={v}>{label}</option>
@@ -255,15 +239,17 @@ export default function InboxPage() {
         </div>
       )}
       {error && (
-        <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">
+        <p role="alert" className="mt-3 rounded-card bg-danger/12 p-3 text-sm text-danger">
           {error}
         </p>
       )}
-      {!assets && !error && <p className="mt-6 text-gray-500">Loading…</p>}
+      {!assets && !error && <Skeleton className="mt-4 aspect-[9/16] max-h-[70dvh]" />}
       {assets?.length === 0 && (
-        <p className="mt-6 text-gray-500">
-          {tab === 'bench' ? 'The bench is empty: no liked videos waiting.' : 'No videos for this day.'}
-        </p>
+        <div className="mt-4">
+          <EmptyState
+            title={tab === 'bench' ? 'The bench is empty: no liked videos waiting.' : 'No videos for this day.'}
+          />
+        </div>
       )}
       <div className="mt-4 space-y-6">
         {assets?.map((a, i) => (
@@ -280,7 +266,7 @@ export default function InboxPage() {
           />
         ))}
       </div>
-      <p className="mt-6 hidden text-xs text-gray-400 md:block">
+      <p className="mt-6 hidden text-xs text-muted md:block">
         Keys: j / k next / previous, l like, d dislike, a approve
       </p>
       {sheetFor !== null && (

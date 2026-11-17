@@ -3,7 +3,9 @@ import {
   activateReactionReel, errorMessage, listReactionReels, resetReactionReel, uploadReactionReel,
   type ReactionReel,
 } from '../api/client'
-import { button } from '../inbox/ui'
+import { Button } from '../ui/Button'
+import { Card, Skeleton } from '../ui/Card'
+import { buttonClass } from '../ui/styles'
 
 // Same list as VIDEO_SUFFIXES in src/studio/reactions.py.
 const ACCEPT = '.mp4,.mov,.m4v,.mkv,.webm'
@@ -47,12 +49,12 @@ export default function ReactionReelSection() {
   const others = reels?.filter((r) => !r.active) ?? []
 
   return (
-    <section aria-label="Reaction reel" className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="font-semibold">Reaction reel</h3>
-      <p className="mt-1 text-sm text-gray-500">
+    <Card as="section" aria-label="Reaction reel">
+      <h2 className="font-semibold">Reaction reel</h2>
+      <p className="mt-1 text-sm text-muted">
         One long recording of you reacting. Each reaction video uses the next piece of it, in a loop.
       </p>
-      {reels === undefined && !error && <p className="mt-2 text-sm text-gray-500">Loading…</p>}
+      {reels === undefined && !error && <Skeleton className="mt-3 h-12" />}
       {reels && !active && <p className="mt-2 text-sm">No reel yet: upload one.</p>}
       {active && (
         <div className="mt-2 text-sm">
@@ -61,18 +63,18 @@ export default function ReactionReelSection() {
             {active.pieces_used === 1 ? 'piece' : 'pieces'}
           </p>
           <div role="progressbar" aria-label="Reel used" aria-valuemin={0} aria-valuemax={100}
-            aria-valuenow={active.used_pct} className="mt-1 h-2 overflow-hidden rounded bg-gray-200">
-            <div className="h-full bg-blue-600" style={{ width: `${active.used_pct}%` }} />
+            aria-valuenow={active.used_pct} className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2">
+            <div className="h-full rounded-full bg-accent" style={{ width: `${active.used_pct}%` }} />
           </div>
-          <button type="button" className={`${button} mt-2 bg-gray-100`}
+          <Button size="sm" className="mt-3"
             onClick={() => {
               if (window.confirm('Start the reel over from the beginning?')) void act(() => resetReactionReel(active.id))
             }}>
             Reset
-          </button>
+          </Button>
         </div>
       )}
-      <label className={`${button} mt-3 flex w-full cursor-pointer items-center justify-center bg-blue-600 text-white md:inline-flex md:w-auto ${progress !== null ? 'opacity-60' : ''}`}>
+      <label className={`${buttonClass('primary')} mt-3 flex w-full cursor-pointer has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent md:inline-flex md:w-auto ${progress !== null ? 'opacity-60' : ''}`}>
         {progress === null ? 'Upload a reel' : progress < 1 ? `Uploading… ${Math.round(progress * 100)}%` : 'Processing…'}
         <input type="file" accept={ACCEPT} className="sr-only" disabled={progress !== null}
           onChange={(e) => {
@@ -81,22 +83,19 @@ export default function ReactionReelSection() {
             if (file) void upload(file)
           }} />
       </label>
-      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       {others.length > 0 && (
-        <ul aria-label="Other reels" className="mt-3 divide-y divide-gray-100 text-sm">
+        <ul aria-label="Other reels" className="mt-3 divide-y divide-line/60 text-sm">
           {others.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-2 py-2">
               <span>
                 Reel {r.id} · {clock(r.duration_s)} · {r.used_pct}% used
               </span>
-              <button type="button" className={`${button} bg-gray-100`}
-                onClick={() => void act(() => activateReactionReel(r.id))}>
-                Activate
-              </button>
+              <Button size="sm" onClick={() => void act(() => activateReactionReel(r.id))}>Activate</Button>
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   )
 }

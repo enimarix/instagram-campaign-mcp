@@ -3,7 +3,10 @@ import {
   ApiError, errorMessage, getAccount, getAgentSchedule, getHealth, getStorage, getToken,
   getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type RunResult, type TokenStatus,
 } from '../api/client'
-import { button } from '../inbox/ui'
+import { Button } from '../ui/Button'
+import { Card, Skeleton } from '../ui/Card'
+import { PageHeader } from '../ui/PageHeader'
+import { ThemeToggle } from '../ui/ThemeToggle'
 import ClipsSection from './Clips'
 import ReactionReelSection from './ReactionReel'
 
@@ -47,22 +50,22 @@ function runSummary(r: RunResult | null) {
 
 function Section({ title, load, children }: { title: string; load: Load<unknown>; children?: ReactNode }) {
   return (
-    <section aria-label={title} className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="font-semibold">{title}</h3>
+    <Card as="section" aria-label={title}>
+      <h2 className="font-semibold">{title}</h2>
       {load.error !== undefined ? (
-        <p role="alert" className="mt-2 text-sm text-red-700">{errorMessage(load.error)}</p>
+        <p role="alert" className="mt-2 text-sm text-danger">{errorMessage(load.error)}</p>
       ) : load.data === undefined ? (
-        <p className="mt-2 text-sm text-gray-500">Loading…</p>
+        <Skeleton className="mt-3 h-12" />
       ) : (
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">{children}</dl>
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">{children}</dl>
       )}
-    </section>
+    </Card>
   )
 }
 
 const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   <>
-    <dt className="text-gray-500">{label}</dt>
+    <dt className="text-muted">{label}</dt>
     <dd>{children}</dd>
   </>
 )
@@ -116,85 +119,95 @@ export default function Settings() {
 
   return (
     <section>
-      <h2 className="text-2xl font-semibold">Settings</h2>
+      <PageHeader title="Settings" />
       {setupMode && (
-        <p role="status" className="mt-4 rounded-lg bg-amber-100 p-4 text-amber-900">
+        <p role="status" className="mb-4 rounded-card border border-warn/30 bg-warn/12 p-4 font-medium text-warn">
           Setup mode: add your Instagram token
         </p>
       )}
 
-      <Section title="Worker" load={worker}>
-        {w && (
-          <>
-            <Row label="Status">
-              <span aria-hidden className={`mr-1 inline-block size-2 rounded-full ${w.alive ? 'bg-green-500' : 'bg-red-500'}`} />
-              {w.alive ? 'Running' : 'Not running'}
-            </Row>
-            <Row label="Heartbeat">{w.heartbeat_at ? relative(w.heartbeat_at) : 'Never'}</Row>
-            <Row label="Next slot">{w.next_slot ? new Date(w.next_slot).toLocaleString() : 'Nothing queued'}</Row>
-            <Row label="Last run">{runSummary(w.last_result)}</Row>
-            <Row label="Publishing">{w.paused ? 'Paused' : 'On'}</Row>
-          </>
-        )}
-      </Section>
-      {w && (
-        <div className="mt-2">
-          <button type="button" onClick={() => void togglePause(!w.paused)}
-            className={`${button} w-full md:w-auto ${w.paused ? 'bg-blue-600 text-white' : 'bg-amber-100 text-amber-900'}`}>
-            {w.paused ? 'Resume publishing' : 'Pause publishing'}
-          </button>
-          {toggleError && <p role="alert" className="mt-1 text-sm text-red-700">{toggleError}</p>}
+      <div className="gap-4 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
+        <Card as="section" aria-label="Appearance">
+          <h2 className="font-semibold">Appearance</h2>
+          <p className="mt-1 text-sm text-muted">Dark suits reviewing video; the choice is kept in this browser.</p>
+          <div className="mt-3"><ThemeToggle /></div>
+        </Card>
+
+        <div>
+          <Section title="Worker" load={worker}>
+            {w && (
+              <>
+                <Row label="Status">
+                  <span aria-hidden className={`mr-1.5 inline-block size-2 rounded-full ${w.alive ? 'bg-success' : 'bg-danger'}`} />
+                  {w.alive ? 'Running' : 'Not running'}
+                </Row>
+                <Row label="Heartbeat">{w.heartbeat_at ? relative(w.heartbeat_at) : 'Never'}</Row>
+                <Row label="Next slot">{w.next_slot ? new Date(w.next_slot).toLocaleString() : 'Nothing queued'}</Row>
+                <Row label="Last run">{runSummary(w.last_result)}</Row>
+                <Row label="Publishing">{w.paused ? 'Paused' : 'On'}</Row>
+              </>
+            )}
+          </Section>
+          {w && (
+            <div className="mt-2">
+              <Button variant={w.paused ? 'primary' : 'secondary'} className={`w-full md:w-auto ${w.paused ? '' : 'text-warn!'}`}
+                onClick={() => void togglePause(!w.paused)}>
+                {w.paused ? 'Resume publishing' : 'Pause publishing'}
+              </Button>
+              {toggleError && <p role="alert" className="mt-1 text-sm text-danger">{toggleError}</p>}
+            </div>
+          )}
         </div>
-      )}
 
-      <Section title="Instagram" load={setupMode ? { data: true } : account}>
-        <Row label="Configured">{setupMode ? 'No' : 'Yes'}</Row>
-        {!setupMode && (
-          <>
-            <Row label="Token">{account.data?.token_valid ? 'Valid' : 'Invalid'}</Row>
-            <Row label="Account">{str(profile?.username) ?? '—'}</Row>
-            <Row label="Publishing limit">
-              {str(limit?.quota_usage) ?? '?'} / {str(quotaTotal) ?? '?'} in 24 h
-            </Row>
-          </>
-        )}
-        <Row label="Token expiry">
-          {token.error !== undefined ? errorMessage(token.error) : token.data ? tokenExpiry(token.data) : 'Loading…'}
-        </Row>
-      </Section>
+        <Section title="Instagram" load={setupMode ? { data: true } : account}>
+          <Row label="Configured">{setupMode ? 'No' : 'Yes'}</Row>
+          {!setupMode && (
+            <>
+              <Row label="Token">{account.data?.token_valid ? 'Valid' : 'Invalid'}</Row>
+              <Row label="Account">{str(profile?.username) ?? '—'}</Row>
+              <Row label="Publishing limit">
+                {str(limit?.quota_usage) ?? '?'} / {str(quotaTotal) ?? '?'} in 24 h
+              </Row>
+            </>
+          )}
+          <Row label="Token expiry">
+            {token.error !== undefined ? errorMessage(token.error) : token.data ? tokenExpiry(token.data) : 'Loading…'}
+          </Row>
+        </Section>
 
-      <Section title="Storage" load={storage}>
-        {s && (
-          <>
-            <Row label="Media">{formatBytes(s.media_bytes)}</Row>
-            <Row label="Database">{formatBytes(s.db_bytes)}</Row>
-            <Row label="Free space">
-              {formatBytes(s.free_bytes)}
-              {s.free_bytes < LOW_FREE_BYTES && (
-                <span role="alert" className="ml-2 font-medium text-red-700">Low: free some space</span>
-              )}
-            </Row>
-          </>
-        )}
-      </Section>
+        <Section title="Storage" load={storage}>
+          {s && (
+            <>
+              <Row label="Media">{formatBytes(s.media_bytes)}</Row>
+              <Row label="Database">{formatBytes(s.db_bytes)}</Row>
+              <Row label="Free space">
+                {formatBytes(s.free_bytes)}
+                {s.free_bytes < LOW_FREE_BYTES && (
+                  <span role="alert" className="ml-2 font-medium text-danger">Low: free some space</span>
+                )}
+              </Row>
+            </>
+          )}
+        </Section>
 
-      <Section title="Backups" load={storage}>
-        <Row label="Last backup">{s?.last_backup ? new Date(s.last_backup).toLocaleString() : 'No backups yet'}</Row>
-      </Section>
+        <Section title="Backups" load={storage}>
+          <Row label="Last backup">{s?.last_backup ? new Date(s.last_backup).toLocaleString() : 'No backups yet'}</Row>
+        </Section>
 
-      <Section title="Agent schedule" load={schedule}>
-        {schedule.data?.length === 0 && <Row label="Runs">None (AGENT_SCHEDULE is empty)</Row>}
-        {schedule.data?.map((e) => (
-          <Row key={e.playbook} label={`${e.playbook} at ${e.time}`}>{scheduleLine(e)}</Row>
-        ))}
-      </Section>
+        <Section title="Agent schedule" load={schedule}>
+          {schedule.data?.length === 0 && <Row label="Runs">None (AGENT_SCHEDULE is empty)</Row>}
+          {schedule.data?.map((e) => (
+            <Row key={e.playbook} label={`${e.playbook} at ${e.time}`}>{scheduleLine(e)}</Row>
+          ))}
+        </Section>
 
-      <ClipsSection />
-      <ReactionReelSection />
+        <ClipsSection />
+        <ReactionReelSection />
 
-      <Section title="Server" load={health}>
-        <Row label="Version">{health.data ? `${health.data.status}, v${health.data.version}` : ''}</Row>
-      </Section>
+        <Section title="Server" load={health}>
+          <Row label="Version">{health.data ? `${health.data.status}, v${health.data.version}` : ''}</Row>
+        </Section>
+      </div>
     </section>
   )
 }
