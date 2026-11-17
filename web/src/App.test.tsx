@@ -38,7 +38,7 @@ describe('App', () => {
     const health = { status: 'ok', instagram_configured: false, version: '1.0' }
     // every route answers the health body, except the list the Settings page maps over
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
-      new Response(JSON.stringify(url === '/api/agent/schedule' ? [] : health))))
+      new Response(JSON.stringify(url === '/api/agent/schedule' || url.startsWith('/api/sources') ? [] : health))))
     render(
       <MemoryRouter initialEntries={['/settings']}>
         <App />
