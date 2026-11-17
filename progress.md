@@ -199,7 +199,7 @@ dropped (with a line under *Follow-ups* saying why).
 - [x] 076 — Tag breakdowns — service and API: engagement index, reach, views and watch ratio grouped by any tag (track, pillar, hook type, template, slot hour, duration bucket), with sample size and spread, matured posts only, same post type only; posts published outside the studio appear as "untagged"; tests.
 - [x] 077 — Studio funnel — service and API: produced → reviewed → liked → approved → published → winner per day, track, template and hook type; the **like-rate** trend (the taste metric; approval rate is shown but is capped by the posts-per-day limit, GOAL.md §2.1); the agent's **calibration** (self-score against the owner's verdict: how often its top 5 were liked); **waste** (liked videos that expired on the bench, render minutes spent on them); and the most frequent feedback reasons; tests.
 - [x] 078 — Analytics overview page — follower, reach and views trends, this week's posts, winners, publishing streak, the funnel, the like-rate trend and the agent's calibration.
-- [ ] 079 — Posts table and post detail pages — sortable, filterable table; detail shows the growth curve, tags, hypothesis, the owner's feedback and the video.
+- [x] 079 — Posts table and post detail pages — sortable, filterable table; detail shows the growth curve, tags, hypothesis, the owner's feedback and the video.
 - [ ] 080 — Breakdowns and A/B page — charts per tag with sample sizes shown; A/B comparison using existing `compare_variants`.
 
 ### Phase 8 — The learning loop
@@ -248,6 +248,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 079 — Posts table and post detail pages — https://github.com/enimarix/instagram-campaign-mcp/pull/83 (2026-11-17) — sortable/filterable posts (cards on phone, table on desktop), post detail with growth curve, tags, hypothesis, feedback and video; thumbnails on the posts rows
 - [x] 070 — Reaction collage op — https://github.com/enimarix/instagram-campaign-mcp/pull/82 (2026-11-17) — op reaction_collage: split (clip top, reaction bottom) or picture-in-picture, offset sync, mixed audio
 - [x] 068 — Clip transcription (backend) — https://github.com/enimarix/instagram-campaign-mcp/pull/81 (2026-11-17) — STTProvider none | faster-whisper (optional extra `stt`, CPU), timed caption lines stored on the source; correction UI moves to 072
 - [x] 075 — Retention metrics — https://github.com/enimarix/instagram-campaign-mcp/pull/80 (2026-11-17) — watch ratio (avg watch time ÷ length) replaces raw watch time for our own Reels, view rate added; collects total watch time, skip rate, reposts (v25+)
