@@ -1,15 +1,17 @@
-"""Watchlist routes (thin doors onto the store's watchlist, step 051): the hashtags and
-accounts research_trends looks up, for the owner to edit."""
+"""Research routes (thin doors): the watchlist (the store's, step 051), the hashtags and
+accounts research_trends looks up, for the owner to edit; GET /api/trends, the ranked
+trend report (studio/research.py trend_report, step 052)."""
 
 from __future__ import annotations
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
 from ..store import CampaignStore
+from ..studio import research
 from .assets import call, get_store
 
 router = APIRouter(prefix="/api")
@@ -36,3 +38,12 @@ def add_watch(body: WatchIn, store: CampaignStore = Depends(get_store)):
 def remove_watch(watch_id: int, store: CampaignStore = Depends(get_store)):
     out = call(store.remove_watch, watch_id)  # the removed row, or a JSON error response
     return out if isinstance(out, Response) else Response(status_code=204)
+
+
+@router.get("/trends")
+def trends(request: Request, days: int = Query(14, ge=1, le=365),
+           limit: int = Query(30, ge=1, le=200),
+           kind: Optional[Literal["account", "hashtag"]] = None,
+           store: CampaignStore = Depends(get_store)):
+    return research.trend_report(store, request.app.state.settings, days=days, limit=limit,
+                                 kind=kind)

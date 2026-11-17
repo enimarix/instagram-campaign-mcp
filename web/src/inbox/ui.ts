@@ -3,6 +3,9 @@ export const button =
   'min-h-11 rounded-lg px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-40'
 export const chip = 'rounded-full px-2 py-0.5 text-xs font-medium'
 
+/** Only http(s) links are rendered: agent-written URLs could carry `javascript:`. */
+export const safeUrl = (url?: string | null) => (url && /^https?:\/\//i.test(url) ? url : null)
+
 /** "2026-11-18T11:00:00+01:00" → "2026-11-18 11:00": the owner's wall-clock time as sent. */
 export const wallClock = (iso: string) => iso.slice(0, 16).replace('T', ' ')
 

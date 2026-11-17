@@ -271,3 +271,29 @@ export const getAgentLog = (id: number) => request<{ id: number; lines: string[]
 /** Starts `ig-campaign agent run` detached; 409 already_running, 404 unknown_playbook. */
 export const startAgentRun = (playbook: string) =>
   post<{ started: boolean; playbook: string }>('/api/agent/runs', { playbook })
+
+/** A row of GET /api/watchlist (step 051): value is normalised (lowercase, no #/@). */
+export type Watch = { id: number; kind: 'hashtag' | 'account'; value: string; note: string | null }
+export const listWatchlist = () => request<Watch[]>('/api/watchlist')
+export const addWatch = (kind: Watch['kind'], value: string) => post<Watch>('/api/watchlist', { kind, value })
+export const removeWatch = (id: number) => request<null>(`/api/watchlist/${id}`, { method: 'DELETE' })
+
+/** A post of GET /api/trends (src/studio/research.py trend_report). Quotes are other people's words. */
+export type TrendItem = {
+  source_id: number
+  ranked_within: 'account' | 'hashtag'
+  account?: string
+  hashtag?: string
+  url: string | null
+  posted_at: string
+  hour: number
+  duration_s: number | null
+  outlier: number | null
+  metric: 'views' | 'likes' | null
+  median: number | null
+  outlier_note: string | null
+  hook_quote: string | null
+  hashtags: string[]
+}
+export type TrendReport = { accounts: TrendItem[]; hashtags: Record<string, TrendItem[]>; generated_at: string }
+export const getTrends = (days = 14) => request<TrendReport>(`/api/trends?days=${days}`)
