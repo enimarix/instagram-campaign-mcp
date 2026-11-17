@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Yesterday's daily facts (learning.facts.facts_for)",
+  "type": "object",
+  "required": ["report_date", "timezone", "yesterday", "last_7_days", "experiments",
+               "audience_comments"],
+  "$defs": {
+    "posts": {"type": "object", "required": ["count", "posts"],
+              "properties": {"count": {"type": "integer", "minimum": 0},
+                             "posts": {"type": "array", "maxItems": 50}}},
+    "window": {
+      "type": "object",
+      "required": ["since", "until", "published", "matured", "winners", "losers", "slots",
+                   "movers", "funnel"],
+      "properties": {
+        "published": {"$ref": "#/$defs/posts"},
+        "matured": {"$ref": "#/$defs/posts"},
+        "winners": {"type": "array", "maxItems": 50},
+        "losers": {"type": "array", "maxItems": 50},
+        "movers": {"type": "array", "maxItems": 50}
+      }
+    }
+  },
+  "properties": {
+    "report_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "timezone": {"type": "string"},
+    "yesterday": {"$ref": "#/$defs/window"},
+    "last_7_days": {"$ref": "#/$defs/window"},
+    "experiments": {"type": "object"},
+    "audience_comments": {"type": "object", "required": ["untrusted", "posts"],
+                          "properties": {"untrusted": {"const": true}}}
+  }
+}

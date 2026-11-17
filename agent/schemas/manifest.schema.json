@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Work packet manifest (step 112)",
+  "type": "object",
+  "required": ["schema", "playbook", "run_kind", "created_at", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": 1},
+    "playbook": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+    "run_kind": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "sections": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z_]+$"},
+      "additionalProperties": {
+        "type": "object",
+        "required": ["file", "count", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "file": {"type": "string", "pattern": "^[a-z_]+[.]json$"},
+          "count": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}

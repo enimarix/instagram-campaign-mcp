@@ -38,6 +38,7 @@ from pydantic import SecretStr
 from ..config import APP_HOME, ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
 from ..studio.power import keep_awake
+from . import packet
 
 REPO = Path(__file__).resolve().parents[2]
 AGENT_DIR = REPO / "agent"  # playbooks/ and skills/
@@ -244,9 +245,12 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     log = log_dir / f"{run['id']}.log"
     status, summary, usage = "failed", "interrupted", None
     try:
-        exe = preflight(settings)
         config = prepare_workspace(settings, name, agent_dir=agent_dir)
         ws = config.parent.parent
+        work = packet.write_packet(store, settings, name, ws)
+        if work["skip"]:
+            raise packet.NothingToDo
+        exe = preflight(settings)
         cmd = [exe, *build_command(settings, name, config, max_turns=max_turns,
                                    dry_run=dry_run)[1:]]
         env = {**os.environ, "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
@@ -269,7 +273,12 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
             summary = f"timed out after {timeout_s / 60:g} min: killed"
         else:
             status, summary, usage = _outcome(code, stdout)
-    except AgentError as e:
+        missed = "" if dry_run else packet.gaps(store, work)
+        if missed:
+            summary = f"{summary}\nwork packet: {missed}"
+    except packet.NothingToDo:
+        status, summary = "succeeded", packet.SKIPPED
+    except (AgentError, packet.PacketError) as e:
         summary = str(e)
     except Exception as e:  # noqa: BLE001 - the row must not stay `running`
         summary = f"runner error: {e!r}"

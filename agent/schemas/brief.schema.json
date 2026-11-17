@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Creative brief (learning.brief.creative_brief)",
+  "type": "object",
+  "required": ["bible", "bible_note", "learnings", "feedback", "change_requests",
+               "last_daily_report", "experiments", "quotas", "today", "recent_hooks",
+               "inspirations", "bench"],
+  "properties": {
+    "bible": {"type": ["string", "null"]},
+    "bible_note": {"type": ["string", "null"]},
+    "learnings": {"type": "array", "maxItems": 50,
+                  "items": {"type": "object", "required": ["id", "statement", "kind",
+                                                           "confidence"]}},
+    "feedback": {"type": "array", "maxItems": 50},
+    "change_requests": {"type": "array", "maxItems": 50},
+    "last_daily_report": {"type": ["object", "null"]},
+    "experiments": {"type": "array", "maxItems": 50},
+    "quotas": {"type": "object", "required": ["date", "limits", "counts"]},
+    "today": {"type": "array", "maxItems": 50},
+    "recent_hooks": {"type": "array", "maxItems": 50, "items": {"type": "string"}},
+    "inspirations": {"type": "array", "maxItems": 50},
+    "bench": {"type": "object", "required": ["count", "supply_days", "hooks"]}
+  }
+}
