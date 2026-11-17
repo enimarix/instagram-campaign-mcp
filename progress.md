@@ -146,7 +146,7 @@ dropped (with a line under *Follow-ups* saying why).
 - [x] 039 — Remotion scaffold — `motion/` project, 1080×1920 at 30 fps, template registry, props validated by a schema, `node motion/render.mjs --template <id> --props <file> --out <file>`; CI typechecks and renders one still. **Verify in docs**: current Remotion version, render API, the headless browser it downloads, and licence terms (write the licence conclusion in `docs/DECISIONS.md`). — deps: 037 · touches: `motion/`, `.github/workflows/ci.yml`, `docs/DECISIONS.md`
 - [x] 040 — 8-bit foundations — palettes read from the brand kit, a pixel font with an open licence **whose glyphs cover the channel language(s)** (accents, or another script: check against H9, default Latin with accents), crisp integer scaling, components `PixelText` (typewriter) and `DialogBox`, the safe-zone guide, and a preview composition. — deps: 039 · touches: `motion/`
 - [x] 041 — 8-bit game kit — components `Sprite` (sprite-sheet animation), `HUD` (hearts, score, level bar), CRT / scanline overlay, transitions (wipe, flash); added to the preview composition. — deps: 040 · touches: `motion/src/components/`
-- [ ] 042 — Sprites and sound — a CC0 sprite and tile pack, a placeholder mascot, CC0 or code-generated chiptune loops and sound effects, all loadable by id; every third-party file listed with its licence in `motion/ASSETS_LICENSES.md`; a test fails when a file in the assets folder is missing from that list. — deps: 039 · touches: `motion/public/`, `motion/ASSETS_LICENSES.md`, `motion/src/assets.ts`
+- [x] 042 — Sprites and sound — a CC0 sprite and tile pack, a placeholder mascot, CC0 or code-generated chiptune loops and sound effects, all loadable by id; every third-party file listed with its licence in `motion/ASSETS_LICENSES.md`; a test fails when a file in the assets folder is missing from that list. — deps: 039 · touches: `motion/public/`, `motion/ASSETS_LICENSES.md`, `motion/src/assets.ts`
 - [x] 043 — Script timeline and captions — a shared helper that turns script lines plus voice timings (or estimated timings with the `none` voice) into scene durations and a `Captions` component; every template starts with a clean hook frame at a fixed offset that is used as the Reel cover, and the hook text is on screen within the first second, readable with the sound off; an optional `loop` prop makes the last frames lead back into the first (seamless replay); unit tests on the timeline maths. — deps: 040 · touches: `motion/src/timeline/`, `motion/src/components/Captions*`
 - [ ] 044 — Template `FactQuest` — hook screen, 3–5 facts as game levels, end card; length follows the timeline; props schema documented, with a `citations` field carried from the idea. — deps: 043 · touches: `motion/src/templates/FactQuest/`, `motion/src/registry.ts`
 - [ ] 045 — Template `BossBattle` — A versus B, or myth versus fact, as a boss fight with health bars and a verdict. — deps: 043, 041 · touches: `motion/src/templates/BossBattle/`, `motion/src/registry.ts`
@@ -244,6 +244,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 042 — Sprites and sound — https://github.com/enimarix/instagram-campaign-mcp/pull/48 (2026-11-17) — code-generated sprites/tiles/placeholder mascot, 2 chiptune loops + 5 SFX, assetById registry, licence-list test
 - [x] 036 — Voice provider interface — https://github.com/enimarix/instagram-campaign-mcp/pull/47 (2026-11-17) — src/studio/tts.py: none + http providers, line/word timings, cache by text hash
 - [x] 043 — Script timeline and captions — https://github.com/enimarix/instagram-campaign-mcp/pull/46 (2026-11-17) — buildTimeline (voice or estimated timings), Captions, HookCard, HOOK_FRAME cover in render JSON, loop outro
 - [x] 035 — Quality check — https://github.com/enimarix/instagram-campaign-mcp/pull/45 (2026-11-17) — spec/duration/audio/loudness/black/freeze/caption checks after every render, claim-wording warnings, max_hashtags setting (default 5)
@@ -312,6 +313,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - Add `collect_insights` to the MCP `agent` profile now that the shared budget exists (update the profile test lists) (from step 026)
 - Website: AssetPage recipe summary for the new `{kind: ffmpeg|motion}` recipe shape and use `poster_url` (from step 034)
 - `SetThreadExecutionState` is per thread: keep every hold/release on the worker's event-loop thread (comment in power.py) (from step 025a)
+- Optional real CC0 sprite pack (e.g. Kenney) — only after the owner approves the download (from step 042)
 - Other networks (TikTok, Shorts) reusing the same assets and review flow.
 - A third track with AI-generated footage.
 - More motion styles after 8-bit (the template registry already allows it).
