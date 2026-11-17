@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import {
   addFeedback,
   approveAsset,
@@ -86,8 +86,10 @@ export default function InboxPage() {
     }
   }
 
-  // Desktop shortcuts: j/k move, l like, d dislike, a approve.
-  useEffect(() => {
+  // Desktop shortcuts: j/k move, l like, d dislike, a approve. A layout effect: the listener
+  // with the fresh list is attached in the same commit that shows it (a passive effect runs
+  // later, so a key pressed right after the batch appears hit the stale, empty list).
+  useLayoutEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target
       if (e.ctrlKey || e.metaKey || e.altKey || sheetFor !== null || scheduleFor !== null || !assets?.length) return
