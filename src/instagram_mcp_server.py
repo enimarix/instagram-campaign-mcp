@@ -22,6 +22,7 @@ from mcp.types import ToolAnnotations
 from . import campaign as camp
 from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
+from .learning import learnings
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
 from .studio import motion, production
@@ -622,6 +623,69 @@ async def list_assets(status: Optional[str] = None, batch_date: Optional[str] = 
 
 
 # ----------------------------------------------------------------------
+# Learning: owner feedback and learnings (src/learning/learnings.py)
+# ----------------------------------------------------------------------
+@mcp.tool(annotations=LOCAL_READ)
+async def get_feedback(undigested: bool = True, limit: int = 50) -> Dict[str, Any]:
+    """The owner's comments, oldest first (limit up to 100; undigested=False includes ones
+    already read): text, reason codes with labels, video_time_s, wants_changes, and the
+    asset's context (status, template, hook, pillar, hook_type, track). Digest them into
+    learnings, then mark_feedback_digested."""
+    return {"feedback": await _studio(learnings.get_feedback, store(), undigested=undigested,
+                                      limit=limit)}
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def mark_feedback_digested(ids: List[int]) -> Dict[str, Any]:
+    """Mark comments as read; returns {digested: n} (already read ones are not counted)."""
+    return await _studio(learnings.mark_feedback_digested, store(), ids)
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def list_revision_requests() -> Dict[str, Any]:
+    """Assets the owner sent back for changes, with their comments (newest first). Make the
+    new version with render_motion(asset_id=...)."""
+    return {"assets": await _studio(learnings.list_revision_requests, store())}
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def add_learning(statement: str, kind: str, origin: str,
+                       evidence_feedback_ids: Optional[List[int]] = None,
+                       evidence: Optional[List[Dict[str, Any]]] = None,
+                       scope: Optional[Dict[str, Any]] = None, confidence: Optional[str] = None,
+                       owner_instruction: bool = False) -> Dict[str, Any]:
+    """Keep a learning: kind do|dont|hypothesis, origin taste|audience|ads, confidence
+    low|medium. Taste cites evidence_feedback_ids; one comment always makes a low
+    hypothesis, do/dont needs at least 2. owner_instruction=True: the owner explicitly said
+    "always/never X" in exactly one comment; stored as the owner's rule, which you can then
+    never change."""
+    return await _studio(learnings.add_learning, store(), statement, kind, origin,
+                         evidence_feedback_ids or (), evidence=evidence, scope=scope,
+                         confidence=confidence, owner_instruction=owner_instruction)
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def update_learning(learning_id: int, statement: Optional[str] = None,
+                          kind: Optional[str] = None, confidence: Optional[str] = None,
+                          status: Optional[str] = None,
+                          evidence_feedback_ids_to_add: Optional[List[int]] = None
+                          ) -> Dict[str, Any]:
+    """Edit a learning, add evidence, re-rate it (low|medium) or set status
+    active|retired|contradicted. Learnings at confidence owner are refused."""
+    return await _studio(learnings.update_learning, store(), learning_id, statement=statement,
+                         kind=kind, confidence=confidence, status=status,
+                         evidence_feedback_ids_to_add=evidence_feedback_ids_to_add or ())
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def list_learnings(kind: Optional[str] = None, status: Optional[str] = "active",
+                         origin: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
+    """Learnings, strongest first (owner rules first; limit up to 100). status=None: all."""
+    return {"learnings": await _studio(learnings.list_learnings, store(), kind=kind,
+                                       status=status, origin=origin, limit=limit)}
+
+
+# ----------------------------------------------------------------------
 # DMs (requires instagram_manage_messages)
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=READ)
@@ -687,6 +751,13 @@ AGENT_TOOLS = frozenset({
     "wait_for_renders",
     "submit_asset",
     "list_assets",
+    # Learning (step 054): local reads and writes; owner rules are guarded in the service.
+    "get_feedback",
+    "mark_feedback_digested",
+    "list_revision_requests",
+    "add_learning",
+    "update_learning",
+    "list_learnings",
 })
 
 
