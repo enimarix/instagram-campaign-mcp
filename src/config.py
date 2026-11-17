@@ -53,7 +53,8 @@ class InstagramMCPSettings(BaseSettings):
     )
     # App ID/secret are only needed for token exchange helpers; API calls work without them.
     facebook_app_id: Optional[str] = Field(None, description="Meta app ID")
-    facebook_app_secret: Optional[str] = Field(None, description="Meta app secret")
+    # Never logged or returned (token refresh, src/studio/token.py).
+    facebook_app_secret: Optional[SecretStr] = Field(None, description="Meta app secret")
 
     instagram_api_version: str = Field("v25.0", description="Graph API version")
     instagram_api_base_url: str = Field(

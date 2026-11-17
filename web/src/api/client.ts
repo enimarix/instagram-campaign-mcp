@@ -220,3 +220,14 @@ export const setPublishingPaused = (paused: boolean) =>
 /** GET /api/storage (src/studio/storage.py): sizes in bytes; `free_bytes` of the media disk. */
 export type Storage = { media_bytes: number; db_bytes: number; free_bytes: number; last_backup: string | null }
 export const getStorage = () => request<Storage>('/api/storage')
+
+/** GET /api/token. `valid`/`expires_at` null = unknown; valid with no expires_at = never expires. */
+export type TokenStatus = {
+  configured: boolean
+  valid: boolean | null
+  expires_at: string | null
+  days_left: number | null
+  can_refresh: boolean
+  scopes: string[]
+}
+export const getToken = () => request<TokenStatus>('/api/token')

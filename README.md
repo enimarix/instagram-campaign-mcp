@@ -194,8 +194,24 @@ tunnel, gate H7).
 - 30 unique hashtag searches per 7 days.
 - Client-side cap of 200 API calls/hour (`RATE_LIMIT_REQUESTS_PER_HOUR`): when it is
   reached, calls fail at once with "next slot in N min" instead of hanging.
-- Tokens expire after 60 days; regenerate before then.
+- Tokens expire after 60 days unless you use a system-user token (see Token below).
 - Insights count organic interactions only; ad interactions are excluded.
+
+## Token
+`INSTAGRAM_ACCESS_TOKEN` is a long-lived user token: it lasts about 60 days. When it
+expires every Graph call fails, so **nothing publishes** (queued posts wait, then show
+as failed) and insights stop until a new token is in `.env`.
+- `ig-campaign token status`: valid or not, expiry date, days left and scopes (asks
+  Meta's `debug_token`). The website shows the same on Settings and a banner on every
+  page from 10 days before expiry. The token itself is never printed or logged.
+- `ig-campaign token refresh`: swaps the token for a new 60-day one and rewrites only
+  the `INSTAGRAM_ACCESS_TOKEN=` line of `.env`. Needs `FACEBOOK_APP_ID` and
+  `FACEBOOK_APP_SECRET`, a token that has not expired yet, and the token set in `.env`
+  (not in the shell environment). Restart `ig-campaign up` and the MCP server afterwards.
+- No expiry at all: a **system-user token**. In Meta Business Suite → Business settings →
+  Users → System users, add an admin system user, assign it your Page, Instagram account
+  and app, then "Generate new token" with the scopes from env.example and no expiry. Put
+  it in `.env`; status then shows "never". Treat it like a password: it never expires.
 
 ## Configuration
 See [env.example](env.example). Most useful: `TIMEZONE` (default Europe/Paris, used

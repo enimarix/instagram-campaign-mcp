@@ -11,6 +11,9 @@ def configure_logging(level: str = "INFO") -> None:
     numeric = getattr(logging, str(level).upper(), logging.INFO)
     # force=True: basicConfig is otherwise a no-op after the first call.
     logging.basicConfig(stream=sys.stderr, level=numeric, force=True)
+    # httpx logs every request URL at INFO; token calls carry secrets in the query string.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(max(numeric, logging.WARNING))
     structlog.configure(
         processors=[
             structlog.processors.add_log_level,

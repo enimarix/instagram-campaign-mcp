@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  ApiError, errorMessage, getAccount, getHealth, getStorage, getWorkerStatus, setPublishingPaused,
-  type RunResult,
+  ApiError, errorMessage, getAccount, getHealth, getStorage, getToken, getWorkerStatus,
+  setPublishingPaused, type RunResult, type TokenStatus,
 } from '../api/client'
 import { button } from '../inbox/ui'
 
@@ -65,6 +65,14 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   </>
 )
 
+function tokenExpiry(t: TokenStatus) {
+  if (!t.configured) return 'No token'
+  if (t.valid === null) return 'Unknown'
+  if (!t.valid) return 'Expired or invalid'
+  if (!t.expires_at) return 'Never (system-user token)'
+  return `${new Date(t.expires_at).toLocaleDateString()} (${t.days_left} days left)`
+}
+
 const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : undefined)
 
 export default function Settings() {
@@ -72,6 +80,7 @@ export default function Settings() {
   const [account] = useLoad(getAccount)
   const [worker, setWorker] = useLoad(getWorkerStatus)
   const [storage] = useLoad(getStorage)
+  const [token] = useLoad(getToken)
   const [toggleError, setToggleError] = useState<string | null>(null)
 
   const setupMode = health.data?.instagram_configured === false ||
@@ -140,7 +149,9 @@ export default function Settings() {
             </Row>
           </>
         )}
-        <Row label="Token expiry">unknown until token care</Row>
+        <Row label="Token expiry">
+          {token.error !== undefined ? errorMessage(token.error) : token.data ? tokenExpiry(token.data) : 'Loading…'}
+        </Row>
       </Section>
 
       <Section title="Storage" load={storage}>
