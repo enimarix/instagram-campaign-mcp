@@ -134,6 +134,32 @@ class InstagramMCPSettings(BaseSettings):
     # reference still says 30, so we keep to the app's rule (docs/DECISIONS.md).
     max_hashtags: int = Field(5, ge=0, description="Most hashtags a caption may carry")
 
+    # --- Voice (TTS) -------------------------------------------------------
+    # src/studio/tts.py. `none` = no voice, captions only. `http` = a local TTS service:
+    # TTS_HTTP_BODY_TEMPLATE is JSON with {text} and {voice} placeholders (JSON-escaped), e.g.
+    # {"text": "{text}", "voice": "{voice}"}. The service answers either raw audio bytes
+    # (TTS_HTTP_RESPONSE=audio) or JSON (=json): {"<TTS_HTTP_AUDIO_FIELD>": "<base64 audio>",
+    # "words": [{"text": "Hi", "start_s": 0.0, "end_s": 0.4}, ...]} (words optional).
+    tts_provider: Literal["none", "http"] = Field("none", description="Voice engine")
+    tts_http_url: Optional[str] = Field(None, description="TTS service URL (http provider)")
+    tts_http_method: str = Field("POST", description="HTTP method of the TTS request")
+    tts_http_body_template: str = Field(
+        '{"text": "{text}", "voice": "{voice}"}', description="JSON request body template"
+    )
+    tts_http_response: Literal["audio", "json"] = Field(
+        "audio", description="audio = raw audio bytes; json = base64 audio + optional words"
+    )
+    tts_http_audio_field: str = Field("audio", description="JSON field holding base64 audio")
+    # Never logged or put into errors.
+    tts_http_auth_header: Optional[SecretStr] = Field(
+        None, description="Extra request header 'Name: value', e.g. 'Authorization: Bearer x'"
+    )
+    tts_voice: str = Field("", description="Voice id passed to the engine")
+    tts_timeout_s: float = Field(120.0, gt=0, description="TTS request timeout in seconds")
+    tts_cache_dir: str = Field(
+        str(APP_HOME / "data" / "cache" / "tts"), description="Synthesized audio cache"
+    )
+
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(
         48.0, description="Posts younger than this are not judged yet"
