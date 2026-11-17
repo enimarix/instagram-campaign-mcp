@@ -18,7 +18,7 @@ const DETAIL: PostDetail = {
   feedback: [{ id: 1, text: 'love the ending', reason_codes: [], video_time_s: null, wants_changes: 0, created_at: '2026-11-11T09:00:00Z' }],
   series: [1, 24, 72].map((h, i) => ({ captured_at: `t${h}`, age_hours: h, metrics: { views: 100 * (i + 1), reach: 50 * (i + 1) } })),
   description: 'A pixel knight busts three water myths.',
-  timeline: [{ t: 0, d: 3, e: 'hook: myth card' }, { t: 3, d: 12, e: 'fact 1' }, { t: 15, d: 15, e: 'fact 2: water' }],
+  timeline: [{ t: 0, d: 3, e: 'hook: myth card' }, { t: 3, d: 12, e: 'fact 1' }, { t: 15, d: 15, e: 'fact 2: water' }, { e: '+2 more' }],
   duration: 30,
   retention: [
     { kind: 'hook', at_s: 0, event: 'hook: myth card', evidence: { n: 6 }, confidence: 'medium', text: '60% skipped in the first 3 s.' },
@@ -129,9 +129,12 @@ describe('PostPage', () => {
     show('/analytics/posts/m0')
     const card = await screen.findByRole('region', { name: 'Why viewers left' })
     expect(within(card).getByText('A pixel knight busts three water myths.')).toBeTruthy()
-    expect(within(card).getAllByRole('listitem').length).toBe(6) // 3 events + 3 findings
+    expect(within(card).getAllByRole('listitem').length).toBe(7) // 4 events + 3 findings
     expect(within(within(card).getByRole('list', { name: 'Timeline events' })).getAllByRole('listitem').map((li) => li.textContent))
-      .toEqual(['0:00–0:03 hook: myth card', '0:03–0:15 fact 1', '0:15–0:30 fact 2: water'])
+      .toEqual(['0:00–0:03 hook: myth card', '0:03–0:15 fact 1', '0:15–0:30 fact 2: water', '+2 more'])
+    // a capped timeline's untimed tail is listed but not drawn
+    expect(within(card).queryByTitle('+2 more')).toBeNull()
+    expect(within(card).getByTitle('fact 1')).toBeTruthy()
     // markers sit at at_s / duration; a finding without at_s has none
     expect((within(card).getByTitle('Hook at 0:00') as HTMLElement).style.left).toBe('0%')
     expect(parseFloat((within(card).getByTitle('Exit at 0:15') as HTMLElement).style.left)).toBeCloseTo(50.67, 1)
