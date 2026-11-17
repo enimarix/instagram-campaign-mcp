@@ -38,6 +38,18 @@
   left|right, text}], `verdict` {winner: left|right|draw, text}, `citations`, `sourcesNote?`,
   `voice` {audioSrc?, lines?: hook, each round, verdict}, `loop`, `palette`, `safeZone`. Health per
   scene: `healthSteps()` (each hit takes 1/(rounds+1)). Still: `npm run still:bossbattle` (round 2).
+- `QuizChest` (`src/templates/QuizChest/`): a quiz that invites comments. Hook card, then the
+  question (top) over 2–4 choice buttons (band), a countdown ticking next to a closed chest
+  (`sfx-select` each second, the chest shakes), the reveal (flash + `sfx-confirm`, the chest opens
+  and a coin pops out with `sfx-coin`, the right choice lights up, the others dim), the explanation
+  typed into the band under the open chest and the right answer, then the end card with the `cta`
+  (`sourcesNote` under it when there are citations). Props in `schema.ts` (example
+  `props/quizchest.json`): `hook`, `question`, `choices` [{label ≤3, text ≤40}], `answer` (index),
+  `countdownSeconds` (3–10, default 5), `explanation`, `cta` (default "Comment your answer!"),
+  `citations`, `sourcesNote?`, `voice` {audioSrc?, lines?: hook, question, explanation, cta}, `loop`,
+  `palette`, `safeZone`. `withCountdown()` inserts countdown + 1.5 s reveal after the question line;
+  the voice track plays in two parts around it, so its timings are those of the plain audio. Still:
+  `npm run still:quizchest` (countdown).
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
 - 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading,
   game maths in `game.ts`, code-drawn sprites in `sprites.ts`), `src/components/` (`PixelText`,

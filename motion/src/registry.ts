@@ -6,6 +6,8 @@ import { FactQuest, timelineOf as factQuestTimeline } from "./templates/FactQues
 import { factQuestSchema } from "./templates/FactQuest/schema";
 import { Hello, helloSchema } from "./templates/Hello";
 import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
+import { QuizChest, timelineOf as quizChestTimeline } from "./templates/QuizChest/QuizChest";
+import { quizChestSchema } from "./templates/QuizChest/schema";
 import { TimelineDemo, timelineDemoSchema, timelineOf } from "./templates/TimelineDemo";
 
 export const WIDTH = 1080;
@@ -99,5 +101,26 @@ export const templates = {
     },
     durationInFrames: (p) => bossBattleTimeline(p, FPS).totalFrames,
     coverFrame: (p) => bossBattleTimeline(p, FPS).hookFrame,
+  }),
+  QuizChest: template({
+    component: QuizChest,
+    schema: quizChestSchema,
+    defaultProps: {
+      hook: "Only 1 in 5 gets this right!",
+      question: "How many bones does an adult human have?",
+      choices: [
+        { label: "A", text: "106" },
+        { label: "B", text: "206" },
+        { label: "C", text: "306" },
+      ],
+      answer: 1,
+      countdownSeconds: 5,
+      explanation: "206: a newborn has nearly 300, and many fuse together as it grows.",
+      cta: "Comment your answer!",
+      citations: [],
+      loop: true,
+    },
+    durationInFrames: (p) => quizChestTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => quizChestTimeline(p, FPS).timeline.hookFrame,
   }),
 };

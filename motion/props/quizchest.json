@@ -1,0 +1,20 @@
+{
+  "hook": "Seul 1 sur 5 trouve la bonne réponse !",
+  "question": "Combien d'os compte le squelette d'un adulte ?",
+  "choices": [
+    { "label": "A", "text": "106 os" },
+    { "label": "B", "text": "206 os" },
+    { "label": "C", "text": "306 os" },
+    { "label": "D", "text": "Ça dépend de la taille" }
+  ],
+  "answer": 1,
+  "countdownSeconds": 5,
+  "explanation": "206 os : un bébé en a près de 300, mais beaucoup se soudent en grandissant.",
+  "cta": "Écris ta réponse en commentaire !",
+  "citations": [
+    { "url": "https://en.wikipedia.org/wiki/Human_skeleton", "title": "Human skeleton" }
+  ],
+  "sourcesNote": "Sources dans la légende",
+  "loop": true,
+  "safeZone": false
+}
