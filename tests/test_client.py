@@ -4,7 +4,7 @@ import httpx
 import pytest
 import respx
 
-from src.instagram_client import InstagramAPIError, RateLimitExceeded
+from src.instagram_client import InstagramAPIError, InvalidMedia, RateLimitExceeded
 
 from .conftest import API
 
@@ -222,3 +222,91 @@ async def test_dm_uses_page_token_and_page_endpoint(client):
     req = send.calls.last.request
     assert req.headers["Authorization"] == "Bearer page_tok"
     assert _body(send.calls[0]) == {"recipient": {"id": "IGSID"}, "message": {"text": "hello"}}
+
+
+# ---------------------------------------------------------------- Reels from local files
+RUPLOAD = "https://rupload.facebook.com/ig-api-upload"
+
+
+@pytest.fixture
+def video(client, tmp_path):
+    client.settings.media_root = str(tmp_path)
+    (tmp_path / "2026-11-17" / "4").mkdir(parents=True)
+    (tmp_path / "2026-11-17" / "4" / "final.mp4").write_bytes(b"\x00mp4" * 1000)
+    return "2026-11-17/4/final.mp4"
+
+
+@respx.mock
+async def test_publish_local_reel_uses_resumable_upload(client, video):
+    uri = f"{RUPLOAD}/v27.0/C1"  # taken from the create response, not hard-coded
+    create = respx.post(f"{API}/1789/media").respond(json={"id": "C1", "uri": uri})
+    upload = respx.post(uri).respond(json={"success": True, "message": "Upload successful."})
+    respx.get(f"{API}/C1").mock(side_effect=[
+        httpx.Response(200, json={"status_code": "IN_PROGRESS"}),
+        httpx.Response(200, json={"status_code": "FINISHED"}),
+    ])
+    publish = respx.post(f"{API}/1789/media_publish").respond(json={"id": "M1"})
+    respx.get(f"{API}/M1").respond(json={"id": "M1"})
+
+    res = await client.publish_reel(caption="hi", thumb_offset_ms=1500, audio_name="Tune",
+                                    video_path=video)
+
+    body = _body(create.calls.last)
+    assert body["upload_type"] == "resumable" and body["media_type"] == "REELS"
+    assert body["thumb_offset"] == 1500 and body["audio_name"] == "Tune"
+    assert "video_url" not in body
+    req = upload.calls.last.request
+    assert req.headers["Authorization"] == "OAuth test_token"
+    assert req.headers["offset"] == "0" and req.headers["file_size"] == "4000"
+    assert "transfer-encoding" not in req.headers
+    assert req.content == b"\x00mp4" * 1000
+    assert _body(publish.calls.last) == {"creation_id": "C1"}
+    assert res["media_id"] == "M1"
+
+
+@respx.mock
+async def test_local_reel_processing_error_raises_meta_message(client, video):
+    respx.post(f"{API}/1789/media").respond(json={"id": "C2"})
+    respx.post(f"{RUPLOAD}/v25.0/C2").respond(json={"success": True})
+    respx.get(f"{API}/C2").respond(json={"status_code": "ERROR", "status": "Error: 2207026"})
+    publish = respx.post(f"{API}/1789/media_publish")
+    with pytest.raises(InstagramAPIError, match="2207026"):
+        await client.publish_reel(video_path=video)
+    assert not publish.called
+
+
+@respx.mock
+async def test_local_reel_upload_retried_after_transient_failure(client, video):
+    respx.post(f"{API}/1789/media").respond(json={"id": "C3"})
+    upload = respx.post(f"{RUPLOAD}/v25.0/C3").mock(side_effect=[
+        httpx.ConnectError("reset"),
+        httpx.Response(500, json={"debug_info": {"retriable": True, "message": "busy"}}),
+        httpx.Response(200, json={"success": True}),
+    ])
+    respx.get(f"{API}/C3").respond(json={"status_code": "FINISHED"})
+    respx.post(f"{API}/1789/media_publish").respond(json={"id": "M3"})
+    respx.get(f"{API}/M3").respond(json={"id": "M3"})
+    res = await client.publish_reel(video_path=video)
+    assert upload.call_count == 3
+    assert res["media_id"] == "M3"
+
+
+@respx.mock
+async def test_local_reel_non_retriable_upload_failure(client, video):
+    respx.post(f"{API}/1789/media").respond(json={"id": "C4"})
+    upload = respx.post(f"{RUPLOAD}/v25.0/C4").respond(400, json={"debug_info": {
+        "retriable": False, "type": "ProcessingFailedError", "message": "unauthorized"}})
+    with pytest.raises(InstagramAPIError, match="unauthorized"):
+        await client.publish_reel(video_path=video)
+    assert upload.call_count == 1
+
+
+@pytest.mark.parametrize("rel", ["../outside.mp4", "ABS", "missing.mp4", "2026-11-17", ""])
+@respx.mock
+async def test_local_reel_bad_path_rejected_before_network(client, video, tmp_path, rel):
+    (tmp_path.parent / "outside.mp4").write_bytes(b"x")
+    if rel == "ABS":
+        rel = str(tmp_path / video)  # exists inside the root, but absolute
+    with pytest.raises(InvalidMedia):
+        await client.publish_reel(video_path=rel)
+    assert not respx.calls
