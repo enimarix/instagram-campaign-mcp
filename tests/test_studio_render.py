@@ -56,7 +56,7 @@ def test_enqueue_is_idempotent(store):
     assert job["state"] == "queued" and job["idempotency_key"].startswith(f"{a['id']}:")
     assert render.enqueue_render(store, a["id"], key="k")["id"] != job["id"]
     store.update_asset(a["id"], recipe={**FFMPEG, "thumb_offset_ms": 500})
-    assert render.enqueue_render(store, a["id"])["id"] not in (job["id"],)
+    assert render.enqueue_render(store, a["id"])["id"] != job["id"]  # edited recipe: new job
     # a failed job stays failed while the asset is failed, re-queues once it renders again
     store.update_render_job(job["id"], state="failed", failure="x", attempts=3)
     store.update_asset(a["id"], recipe=FFMPEG)
@@ -65,6 +65,9 @@ def test_enqueue_is_idempotent(store):
     transition(store, a["id"], "rendering", actor="owner")
     again = render.enqueue_render(store, a["id"])
     assert (again["id"], again["state"], again["attempts"]) == (job["id"], "queued", 0)
+    # same after a render that finished but failed QC
+    store.update_render_job(job["id"], state="done")
+    assert render.enqueue_render(store, a["id"])["state"] == "queued"
 
 
 @needs_ffmpeg

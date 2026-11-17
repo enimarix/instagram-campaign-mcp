@@ -82,11 +82,12 @@ def recipe_hash(recipe: Any) -> str:
 def enqueue_render(store: CampaignStore, asset_id: int, *, key: Optional[str] = None
                    ) -> Dict[str, Any]:
     """Queue a render of the asset's current recipe; the same key gives the same job, so a
-    restarted batch never renders an asset twice. A failed job is queued again only when the
-    asset is back in `rendering` (a re-render of the same recipe)."""
+    restarted batch never renders an asset twice. A finished (failed or done) job is queued
+    again only when the asset is back in `rendering` (a re-render of the same recipe, e.g.
+    after a failed QC)."""
     asset = store.get_asset(asset_id)
     job = store.add_render_job(asset_id, key or f"{asset_id}:{recipe_hash(asset['recipe'])}")
-    if job["state"] == "failed" and asset["status"] == "rendering":
+    if job["state"] in ("failed", "done") and asset["status"] == "rendering":
         job = store.update_render_job(job["id"], state="queued", attempts=0, progress=0,
                                       failure=None, finished_at=None)
     return job
