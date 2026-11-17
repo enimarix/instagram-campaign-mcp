@@ -528,12 +528,48 @@ async def send_dm(recipient_id: str, message: str, page_id: Optional[str] = None
         raise _err(e)
 
 
+# ----------------------------------------------------------------------
+# Tool profiles
+# ----------------------------------------------------------------------
+# The ONLY tools the unattended agent sees (IG_MCP_PROFILE=agent), GOAL.md §4 second
+# rule and §5.2: nothing that publishes, schedules, messages, moderates, relabels or
+# reads private DMs. This is an allow-list, never a deny-list: every new tool is out of
+# `agent` until it is deliberately added here (tests/test_mcp_profiles.py pins the set).
+# collect_insights stays out until the shared request budget (step 026) exists.
+AGENT_TOOLS = frozenset({
+    "validate_access_token",
+    "get_profile_info",
+    "get_account_insights",
+    "get_publishing_limit",
+    "get_media_posts",
+    "get_media_insights",
+    "get_comments",
+    "search_hashtag",
+    "get_competitor_profile",
+    "list_scheduled_posts",
+    "rank_posts",
+    "compare_variants",
+})
+
+
+def build_server(profile: Literal["full", "agent"]) -> MCPServer:
+    """A server exposing the tools of `profile`. Tools left out are not registered at
+    all, so they are neither listed nor callable by name."""
+    if profile not in ("full", "agent"):
+        raise ValueError(f"Unknown MCP profile {profile!r} (use 'full' or 'agent')")
+    # ponytail: reads the SDK's private registry; tests/test_mcp_profiles.py breaks loudly
+    # if an mcp upgrade renames it.
+    tools = [t for t in mcp._tool_manager.list_tools()
+             if profile == "full" or t.name in AGENT_TOOLS]
+    return MCPServer(name=mcp.name, instructions=INSTRUCTIONS, version="2.0.0", tools=tools)
+
+
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     transport = settings.mcp_transport if settings.mcp_transport in (
         "stdio", "streamable-http") else "stdio"
-    mcp.run(transport=transport)
+    build_server(settings.ig_mcp_profile).run(transport=transport)
 
 
 if __name__ == "__main__":

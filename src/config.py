@@ -16,7 +16,7 @@ Set IG_MCP_ENV_FILE to use a different .env file.
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -117,6 +117,11 @@ class InstagramMCPSettings(BaseSettings):
     mcp_server_name: str = Field("instagram-campaign-mcp", description="MCP server name")
     mcp_server_version: str = Field("2.0.0", description="MCP server version")
     mcp_transport: str = Field("stdio", description="stdio | streamable-http")
+    # `agent` exposes only AGENT_TOOLS (src/instagram_mcp_server.py) for unattended runs.
+    # An unknown value fails validation; it never falls back to `full`.
+    ig_mcp_profile: Literal["full", "agent"] = Field(
+        "full", description="MCP tool profile: full (owner) | agent (allow-listed tools only)"
+    )
 
     @field_validator("log_level")
     @classmethod
