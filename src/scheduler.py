@@ -92,7 +92,6 @@ def main() -> None:
     r = sub.add_parser("rank", help="Print winner ranking from stored snapshots")
     r.add_argument("--campaign")
     s = sub.add_parser("serve", help="Run the studio REST API")
-    # step 008 adds the password guard required before binding a non-loopback host.
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
@@ -105,7 +104,11 @@ def main() -> None:
         import uvicorn
 
         from .api.app import create_app
+        from .api.auth import bind_error
 
+        error = bind_error(args.host, get_settings())
+        if error:
+            parser.exit(2, f"serve: {error}\n")
         uvicorn.run(create_app(), host=args.host, port=args.port)
         return
     try:
