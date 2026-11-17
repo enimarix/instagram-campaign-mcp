@@ -149,7 +149,7 @@ dropped (with a line under *Follow-ups* saying why).
 - [x] 042 — Sprites and sound — a CC0 sprite and tile pack, a placeholder mascot, CC0 or code-generated chiptune loops and sound effects, all loadable by id; every third-party file listed with its licence in `motion/ASSETS_LICENSES.md`; a test fails when a file in the assets folder is missing from that list. — deps: 039 · touches: `motion/public/`, `motion/ASSETS_LICENSES.md`, `motion/src/assets.ts`
 - [x] 043 — Script timeline and captions — a shared helper that turns script lines plus voice timings (or estimated timings with the `none` voice) into scene durations and a `Captions` component; every template starts with a clean hook frame at a fixed offset that is used as the Reel cover, and the hook text is on screen within the first second, readable with the sound off; an optional `loop` prop makes the last frames lead back into the first (seamless replay); unit tests on the timeline maths. — deps: 040 · touches: `motion/src/timeline/`, `motion/src/components/Captions*`
 - [x] 044 — Template `FactQuest` — hook screen, 3–5 facts as game levels, end card; length follows the timeline; props schema documented, with a `citations` field carried from the idea. — deps: 043 · touches: `motion/src/templates/FactQuest/`, `motion/src/registry.ts`
-- [ ] 045 — Template `BossBattle` — A versus B, or myth versus fact, as a boss fight with health bars and a verdict. — deps: 043, 041 · touches: `motion/src/templates/BossBattle/`, `motion/src/registry.ts`
+- [x] 045 — Template `BossBattle` — A versus B, or myth versus fact, as a boss fight with health bars and a verdict. — deps: 043, 041 · touches: `motion/src/templates/BossBattle/`, `motion/src/registry.ts`
 - [ ] 046 — Template `QuizChest` — question, choices, countdown, reveal; built to invite comments. — deps: 043 · touches: `motion/src/templates/QuizChest/`, `motion/src/registry.ts`
 - [ ] 047 — Template `DialogStory` — an RPG-style dialogue between the mascot and a character that tells a short story or explains one idea. — deps: 043 · touches: `motion/src/templates/DialogStory/`, `motion/src/registry.ts`
 - [ ] 047a — Template `PixelSkit` — the humour template: a 10–20 s relatable "POV:" sketch acted by pixel characters, in 2–4 beats (setup, escalation, punchline, optional tag), with comic timing controls (a hold before the punchline, a freeze-frame, a sound-effect sting) and `loop` on by default; props are beats with a line and an action each, so the agent writes jokes, not animation. Short videos are where funny content works best, so its default length is the shortest of all templates. — deps: 043, 041 · touches: `motion/src/templates/PixelSkit/`, `motion/src/registry.ts`
@@ -244,6 +244,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 045 — Template BossBattle — https://github.com/enimarix/instagram-campaign-mcp/pull/51 (2026-11-17) — A vs B / myth vs fact boss fight with health bars, hit SFX, verdict; 24.7 s renders in ~26 s
 - [x] 028 — Settings page — https://github.com/enimarix/instagram-campaign-mcp/pull/50 (2026-11-17) — worker heartbeat + pause, Instagram status, storage (GET /api/storage), backups placeholder
 - [x] 044 — Template FactQuest — https://github.com/enimarix/instagram-campaign-mcp/pull/49 (2026-11-17) — hook, 3–5 facts as levels, end card, citations carried; 26.5 s video renders in ~20 s
 - [x] 042 — Sprites and sound — https://github.com/enimarix/instagram-campaign-mcp/pull/48 (2026-11-17) — code-generated sprites/tiles/placeholder mascot, 2 chiptune loops + 5 SFX, assetById registry, licence-list test
@@ -316,6 +317,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - Website: AssetPage recipe summary for the new `{kind: ffmpeg|motion}` recipe shape and use `poster_url` (from step 034)
 - `SetThreadExecutionState` is per thread: keep every hold/release on the worker's event-loop thread (comment in power.py) (from step 025a)
 - Optional real CC0 sprite pack (e.g. Kenney) — only after the owner approves the download (from step 042)
+- Pixel font: Press Start 2P draws accented capitals (É, À…) as small letters — pick a font with real accented capitals or lowercase-accent handling before the channel language is set (H9) (from step 045)
 - Other networks (TikTok, Shorts) reusing the same assets and review flow.
 - A third track with AI-generated footage.
 - More motion styles after 8-bit (the template registry already allows it).
