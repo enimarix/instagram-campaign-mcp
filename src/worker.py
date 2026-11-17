@@ -2,9 +2,11 @@
 The publishing worker (GOAL.md §3.3): `ig-campaign worker` (alias `daemon`) and `up` run it.
 
 Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late-slot and
-gap rules live there, so `run-due` and the MCP tool obey them too) and snapshots live
-Stories hourly. On Windows it keeps one one-shot Task Scheduler task that wakes the PC a
-few minutes before the next pending slot; elsewhere that part does nothing.
+gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
+(data_jobs: publish-check reconcile, insight age schedule, daily account snapshot and
+followers online), and snapshots live Stories hourly. On Windows it keeps one one-shot
+Task Scheduler task that wakes the PC a few minutes before the next pending slot;
+elsewhere that part does nothing.
 """
 
 from __future__ import annotations
@@ -15,14 +17,23 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 import structlog
 
-from .campaign import collect_insights, is_paused, run_due
+from .campaign import (
+    collect_due_insights,
+    collect_insights,
+    collect_online_followers,
+    is_paused,
+    run_due,
+    snapshot_account,
+)
 from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
 from .store import CampaignStore, parse_dt, to_iso, utcnow
+from .studio.publish import reconcile_publish_checks
 
 logger = structlog.get_logger(__name__)
 
@@ -30,6 +41,12 @@ ALIVE_WITHIN = timedelta(minutes=3)
 WAKE_TASK = "IGCampaignWake"
 WAKE_LEAD = timedelta(minutes=5)
 REPORTED = ("published", "retrying", "failed", "recovered_stuck", "replanned")
+# Publishing keeps priority: data jobs start nothing once this share of the hourly Graph
+# budget (RATE_LIMIT_REQUESTS_PER_HOUR, shared by worker, API and MCP server) is used.
+DATA_SHARE = 0.8
+INSIGHTS_EVERY = timedelta(minutes=15)
+RECONCILE_EVERY = timedelta(minutes=10)  # it lists media while an asset waits for a check
+DAILY_RETRY = timedelta(hours=1)  # a failing daily job (e.g. no insights permission) waits
 
 
 def next_slot(store: CampaignStore) -> Optional[str]:
@@ -55,6 +72,54 @@ async def cycle(client: InstagramClient, store: CampaignStore, settings: Instagr
     return result
 
 
+def data_budget_left(client: InstagramClient) -> bool:
+    return client.budget.used() < client.budget.per_hour * DATA_SHARE
+
+
+def _every(store: CampaignStore, key: str, period: timedelta, now: datetime) -> bool:
+    """True (and the time is recorded) when the job last ran `period` ago or never."""
+    last = store.get_state(key)
+    if last is not None and now - parse_dt(last) < period:
+        return False
+    store.set_state(key, to_iso(now))
+    return True
+
+
+async def data_jobs(client: InstagramClient, store: CampaignStore,
+                    settings: InstagramMCPSettings,
+                    now: Callable[[], datetime] = utcnow) -> Dict[str, Any]:
+    """The scheduled Graph reads, each skipped while the budget is past DATA_SHARE. Daily
+    jobs run once per owner-local day, retried hourly until they succeed. A job's error is
+    reported in the result, never raised."""
+    t = now()
+    today = t.astimezone(ZoneInfo(settings.timezone)).date()
+    out: Dict[str, Any] = {}
+
+    async def job(name: str, make: Callable[[], Awaitable[Any]]) -> bool:
+        if not data_budget_left(client):
+            out[name] = "skipped: request budget"
+            return False
+        try:
+            out[name] = await make()
+            return True
+        except Exception as e:  # noqa: BLE001 - one failing job must not stop the others
+            out[name] = {"error": repr(e)}
+            return False
+
+    if _every(store, "reconcile_at", RECONCILE_EVERY, t):
+        await job("reconcile", lambda: reconcile_publish_checks(client, store))
+    if _every(store, "insights_at", INSIGHTS_EVERY, t):
+        await job("insights", lambda: collect_due_insights(client, store, t,
+                                                           lambda: data_budget_left(client)))
+    for key, make in (("account_day", lambda: snapshot_account(client, store, today)),
+                      ("online_followers_day",
+                       lambda: collect_online_followers(client, store, today))):
+        if (store.get_state(key) != today.isoformat()
+                and _every(store, f"{key}_tried_at", DAILY_RETRY, t) and await job(key, make)):
+            store.set_state(key, today.isoformat())
+    return out
+
+
 async def run(client: InstagramClient, store: CampaignStore, settings: InstagramMCPSettings,
               interval: int = 60, stories_every: int = 60) -> None:
     """Publish due posts every `interval` s and snapshot live Stories; runs until cancelled."""
@@ -64,6 +129,12 @@ async def run(client: InstagramClient, store: CampaignStore, settings: Instagram
         result = await cycle(client, store, settings)
         if result.get("error") or any(result.get(k) for k in REPORTED):
             print(json.dumps(result), flush=True)
+        try:
+            jobs = await data_jobs(client, store, settings)
+            if jobs:
+                print(json.dumps({"data_jobs": jobs}, default=str), flush=True)
+        except Exception as e:  # noqa: BLE001 - e.g. database locked for too long
+            print(f"data jobs failed: {e!r}", file=sys.stderr, flush=True)
         slot = next_slot(store)
         if slot and slot != woken_for and parse_dt(slot) > utcnow():  # queue changed
             woken_for = slot

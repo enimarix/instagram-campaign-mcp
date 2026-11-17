@@ -5,6 +5,8 @@ Campaign layer: ties the Graph API client to the local store.
 - run_due(): publish what is due, after the late-slot and gap rules (hold_queue) and
   unless the pause switch is on (is_paused)
 - collect_insights(): snapshot insights of recent posts (and live Stories)
+- collect_due_insights(): the worker's age schedule (SNAPSHOT_POINTS); marks deleted posts
+- snapshot_account(): the daily account row (followers, reach by follow type, views)
 - collect_online_followers(): store today's followers-online-per-hour (slot weights)
 - rank(): score posts against the account baseline
 """
@@ -20,6 +22,7 @@ import structlog
 
 from .config import InstagramMCPSettings, get_settings
 from .instagram_client import (
+    MISSING_OBJECT,
     PUBLISH_QUOTA_SUBCODE,
     InstagramAPIError,
     InstagramClient,
@@ -42,6 +45,9 @@ HEARTBEAT_SECONDS = 60    # keeps a long publish from looking "stuck"
 # Meta error subcodes that will never succeed on retry (bad media, bad ratio...).
 PERMANENT_SUBCODES = {2207026, 2207004, 2207005, 2207009, 2207010, 2207052, 2207053}
 REPLAN_LOOKAHEAD_DAYS = 7
+# A post is snapshotted once as it crosses each of these ages (GOAL.md §3.4).
+SNAPSHOT_POINTS = tuple(timedelta(hours=h) for h in (1, 3, 6, 12, 24, 48, 24 * 7, 24 * 30))
+SNAPSHOT_GRACE = timedelta(days=1)  # a worker that was off may still take the 30 d point
 
 
 async def _with_heartbeat(store: CampaignStore, post_id: int, coro: Any) -> Any:
@@ -288,18 +294,116 @@ async def collect_insights(
         except InstagramAPIError as e:
             errors.append({"media_id": m["id"], "error": e.message})
             continue
-        store.add_snapshot(
-            media_id=m["id"],
-            metrics=ins["metrics"],
-            media_product_type=m.get("media_product_type"),
-            media_type=m.get("media_type"),
-            posted_at=ts,
-            caption=m.get("caption"),
-            permalink=m.get("permalink"),
-            captured_at=now,
-        )
+        _save_snapshot(store, m, ins, now)
         captured += 1
     return {"captured": captured, "skipped": skipped, "errors": errors}
+
+
+def _save_snapshot(store: CampaignStore, m: Dict[str, Any], ins: Dict[str, Any],
+                   now: datetime) -> None:
+    store.add_snapshot(
+        media_id=m["id"],
+        metrics=ins["metrics"],
+        media_product_type=m.get("media_product_type"),
+        media_type=m.get("media_type"),
+        posted_at=m["timestamp"],
+        caption=m.get("caption"),
+        permalink=m.get("permalink"),
+        captured_at=now,
+    )
+
+
+def due_snapshot_points(posted_at: datetime, existing_snapshot_times: List[datetime],
+                        now: datetime) -> List[timedelta]:
+    """The SNAPSHOT_POINTS the post has crossed with no snapshot taken at or after them.
+    A snapshot covers every point up to its age, so one snapshot settles a backlog and each
+    point is taken at most once. Nothing once the post is past the last point + grace."""
+    age = now - posted_at
+    if age > SNAPSHOT_POINTS[-1] + SNAPSHOT_GRACE:
+        return []
+    taken = max((t - posted_at for t in existing_snapshot_times), default=None)
+    return [p for p in SNAPSHOT_POINTS if p <= age and (taken is None or taken < p)]
+
+
+async def collect_due_insights(
+    client: InstagramClient,
+    store: CampaignStore,
+    now: datetime,
+    spare: Callable[[], bool] = lambda: True,
+) -> Dict[str, Any]:
+    """Snapshot the posts that crossed an age point (due_snapshot_points). Candidates: the
+    account's media of the last SNAPSHOT_POINTS[-1] + grace, plus posts the store knows. A
+    known post Instagram reports missing gets `deleted_at` and keeps its snapshots (GOAL.md
+    §3.4). Stops when `spare()` turns False (the worker's share of the request budget)."""
+    since = now - SNAPSHOT_POINTS[-1] - SNAPSHOT_GRACE
+    known = store.snapshot_times(since)
+    media: Dict[str, Dict[str, Any]] = {}
+    cursor: Optional[str] = None
+    while True:
+        page = await client.get_media_posts(limit=50, after=cursor)
+        recent = [m for m in page["posts"]
+                  if m.get("timestamp") and parse_dt(m["timestamp"]) >= since]
+        media.update((m["id"], m) for m in recent)
+        cursor = page.get("next_cursor")
+        if not cursor or not recent:
+            break
+    for mid, k in known.items():
+        media.setdefault(mid, {"id": mid, "timestamp": k["posted_at"],
+                               "media_product_type": k["media_product_type"],
+                               "media_type": k["media_type"]})
+
+    captured, deleted, errors = 0, [], []
+    for m in media.values():
+        times = [parse_dt(t) for t in known.get(m["id"], {}).get("times", [])]
+        if not due_snapshot_points(parse_dt(m["timestamp"]), times, now):
+            continue
+        if not spare():
+            errors.append({"media_id": m["id"], "error": "request budget spent"})
+            break
+        try:
+            ins = await client.get_media_insights(m["id"],
+                                                  media_product_type=m.get("media_product_type"))
+        except RateLimitExceeded as e:
+            errors.append({"media_id": m["id"], "error": e.message})
+            break
+        except InstagramAPIError as e:
+            if (e.error_code, e.error_subcode) == MISSING_OBJECT and m["id"] in known:
+                store.mark_deleted(m["id"], now)
+                deleted.append(m["id"])
+            else:
+                errors.append({"media_id": m["id"], "error": e.message})
+            continue
+        _save_snapshot(store, m, ins, now)
+        captured += 1
+    return {"captured": captured, "deleted": deleted, "errors": errors}
+
+
+async def snapshot_account(client: InstagramClient, store: CampaignStore,
+                           day: date) -> Dict[str, Any]:
+    """Save the account row of owner-local `day`: followers now, reach and views over the
+    24 h before (Meta's default range), and reach by follow_type when Meta answers it."""
+    profile = await client.get_profile_info()
+    insights = await client.get_account_insights(["reach", "views"])
+    totals = {i.get("name"): (i.get("total_value") or {}).get("value") for i in insights}
+    raw: Dict[str, Any] = {"followers_count": profile.get("followers_count"),
+                           "insights": insights}
+    split: Dict[str, Any] = {}
+    try:
+        raw["reach_by_follow_type"] = await client.get_account_insights(
+            ["reach"], breakdown="follow_type")
+        split = {r["dimension_values"][0]: r.get("value")
+                 for i in raw["reach_by_follow_type"]
+                 for b in (i.get("total_value") or {}).get("breakdowns", [])
+                 for r in b.get("results", []) if r.get("dimension_values")}
+    except RateLimitExceeded:
+        raise
+    except InstagramAPIError as e:
+        logger.info("reach_follow_type_unavailable", error=e.message)
+    values = {"followers": profile.get("followers_count"), "reach": totals.get("reach"),
+              "views": totals.get("views"), "reach_followers": split.get("FOLLOWER"),
+              "reach_non_followers": split.get("NON_FOLLOWER")}
+    store.save_account_snapshot(day, raw, **values)
+    return values
 
 
 async def collect_online_followers(

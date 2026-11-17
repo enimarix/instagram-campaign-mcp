@@ -8,6 +8,15 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: One Graph request budget in the database; data jobs stop at 80 % of it
+`RATE_LIMIT_REQUESTS_PER_HOUR` (default 200) is now one sliding hour shared by the worker, the
+API and the MCP server: every Graph request adds a row to `graph_requests` (count + insert in one
+write transaction). The worker's data jobs (publish-check reconcile every 10 min, insight age
+schedule every 15 min, daily account snapshot and followers online) start nothing once 80 % of
+the hour is used, so publishing always has the last 20 %. Insights follow an age schedule
+(1 h, 3 h, 6 h, 12 h, 24 h, 48 h, 7 d, 30 d; each point once, nothing after 30 d + 1 day).
+Reason: three processes with their own in-memory caps could together exceed Meta's limits.
+
 ## 2026-11-17: Website password: in-memory sessions, Origin check on every state change
 `UI_PASSWORD` (optional) guards every `/api/*` route except health, login, logout and session.
 Sessions are random tokens stored hashed in memory (a restart logs out); the login lock
