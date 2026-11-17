@@ -27,6 +27,7 @@ from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
 from . import assets, context, feedback, media, worker
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
+from .calendar import router as calendar_router
 
 # Reachable without a session even when UI_PASSWORD is set.
 PUBLIC_PATHS = {"/api/health", "/api/login", "/api/logout", "/api/session"}
@@ -142,6 +143,7 @@ def create_app(
     app.state.settings = settings
     app.include_router(assets.router)
     app.include_router(media.router)
+    app.include_router(calendar_router)
     app.include_router(feedback.router)
     app.include_router(context.router)
     app.include_router(worker.router)

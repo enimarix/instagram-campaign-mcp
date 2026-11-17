@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router'
+import CalendarPage from './calendar/CalendarPage'
 import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
 import Placeholder from './pages/Placeholder'
@@ -48,6 +49,7 @@ export default function App() {
                 path={t.path}
                 element={
                   t.path === '/inbox' ? <InboxPage /> :
+                  t.path === '/calendar' ? <CalendarPage /> :
                   t.path === '/settings' ? <Settings /> : <Placeholder title={t.label} />
                 }
               />

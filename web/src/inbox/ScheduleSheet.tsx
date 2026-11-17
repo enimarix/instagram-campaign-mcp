@@ -8,16 +8,7 @@ import {
   type Asset,
   type ProposedSlot,
 } from '../api/client'
-import { button } from './ui'
-
-/** "2026-11-18T11:00:00+01:00" → "2026-11-18 11:00": the owner's wall-clock time as sent. */
-const wallClock = (iso: string) => iso.slice(0, 16).replace('T', ' ')
-
-/** A Date as a <input type="datetime-local"> value, in the browser's time zone. */
-function inputValue(d: Date) {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+import { button, inputValue, wallClock } from './ui'
 
 type Props = {
   assetId: number

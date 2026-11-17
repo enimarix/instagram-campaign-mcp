@@ -169,3 +169,29 @@ export const getSlot = (id: number) => request<Slot & { post_id: number }>(`/api
 export const scheduleAsset = (id: number, publish_at: string, confirmed: boolean) =>
   post<{ asset: Asset }>(`/api/assets/${id}/schedule`, { publish_at, confirmed })
 export const unscheduleAsset = (id: number) => post<Asset>(`/api/assets/${id}/unschedule`)
+
+/** A publish-queue row on the calendar (src/studio/calendar.py); `local`: owner's time zone. */
+export type CalendarPost = Slot & {
+  id: number
+  kind: string
+  status: 'pending' | 'publishing' | 'published' | 'failed' | 'cancelled'
+  attempts: number
+  caption: string
+  asset_id: number | null
+  preview_url: string | null
+  permalink: string | null
+  error: string | null
+  replanned: boolean // moved by the worker: it would have gone out late
+}
+/** GET /api/calendar: every owner-local day of the range, and the publish_check videos. */
+export type Calendar = { days: { date: string; posts: CalendarPost[] }[]; publish_check: Asset[] }
+export const getCalendar = (from: string, to: string) =>
+  request<Calendar>(`/api/calendar?${new URLSearchParams({ from, to })}`)
+/** The raw queue row the post actions answer with (the page reloads the calendar). */
+type QueueRow = { id: number; status: string; publish_at: string }
+export const reschedulePost = (id: number, publish_at: string) =>
+  post<QueueRow>(`/api/posts/${id}/reschedule`, { publish_at })
+export const cancelPost = (id: number) => post<QueueRow>(`/api/posts/${id}/cancel`)
+export const replanPost = (id: number, confirmed = false) =>
+  post<QueueRow>(`/api/posts/${id}/replan`, { confirmed })
+export const releaseAsset = (id: number) => post<Asset>(`/api/assets/${id}/release`)
