@@ -151,6 +151,14 @@ failed for you to check instead of risking a double post.
 **DMs** (needs `instagram_manage_messages`, see INSTAGRAM_DM_SETUP.md)
 `get_conversations`, `get_conversation_messages`, `send_dm`
 
+### Tool profiles
+`IG_MCP_PROFILE` picks which tools the server registers (an unknown value stops it):
+- `full` (default): all 30 tools, for the owner's interactive sessions.
+- `agent`: only a read-only allow-list (`AGENT_TOOLS` in `src/instagram_mcp_server.py`)
+  for unattended runs; the agent runner (step 058) uses it. Nothing that publishes,
+  schedules, comments, hides, deletes, relabels, sends or reads DMs is registered, so
+  it can neither be listed nor called. New tools stay out until added on purpose.
+
 ## Limits to know
 - Media must be at a **public HTTPS URL**; Instagram downloads it.
 - Images must be **JPEG** (the publishing API rejects PNG). Feed images: any ratio
