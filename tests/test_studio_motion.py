@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 import src.instagram_mcp_server as srv
 from src.config import InstagramMCPSettings
-from src.studio import motion, render
+from src.studio import motion, recipe, render
 from src.studio.assets import transition
 from src.studio.tts import LineTiming, Synthesis
 from tests.test_studio_ffmpeg import needs_ffmpeg
@@ -58,6 +58,19 @@ def test_validate_props_uses_the_templates_own_message():
     assert "facts" in str(e.value) and "one timing per script line" in str(e.value)
     with pytest.raises(ValueError, match="unknown template Nope"):
         motion.validate_props("Nope", {})
+
+
+@needs_motion
+@pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
+                                      "PixelSkit"])
+def test_schema_events_give_every_template_a_timeline(template):
+    v = motion.validate_props(template, _example(template.lower()))
+    timeline = recipe.compress_timeline(v["events"])
+    total = v["durationInFrames"] / v["fps"]
+    assert timeline[0]["t"] == 0 and timeline[0]["e"].startswith("hook card: '")
+    assert all(e["t"] + e["d"] <= total + 0.1 for e in timeline)
+    assert any(e["e"].startswith("music bed") for e in timeline)
+    assert len(json.dumps(timeline)) <= recipe.TIMELINE_BYTES
 
 
 def test_missing_node_is_a_clear_error(monkeypatch):

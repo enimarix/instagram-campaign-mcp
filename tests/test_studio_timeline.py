@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.store import MIGRATIONS, CampaignStore
-from src.studio import motion, production, render
+from src.studio import production, render
 from src.studio.recipe import (
     EVENT_CHARS,
     TIMELINE_BYTES,
@@ -18,7 +18,6 @@ from src.studio.recipe import (
     compress_timeline,
     recipe_timeline,
 )
-from tests.test_studio_motion import _example, needs_motion
 from tests.test_studio_production import _asset, _finish
 from tests.test_studio_render import FAR_PAST, INFO
 
@@ -84,19 +83,6 @@ def test_too_many_or_too_big_events_are_cut_with_a_count():
                              for i in range(30)])
     assert len(json.dumps(big)) <= TIMELINE_BYTES
     assert big[-1]["e"] == f"+{30 - (len(big) - 1)} more"
-
-
-@needs_motion
-@pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
-                                      "PixelSkit"])
-def test_schema_events_give_every_template_a_timeline(template):
-    v = motion.validate_props(template, _example(template.lower()))
-    timeline = compress_timeline(v["events"])
-    total = v["durationInFrames"] / v["fps"]
-    assert timeline[0]["t"] == 0 and timeline[0]["e"].startswith("hook card: '")
-    assert all(e["t"] + e["d"] <= total + 0.1 for e in timeline)
-    assert any(e["e"].startswith("music bed") for e in timeline)
-    assert len(json.dumps(timeline)) <= TIMELINE_BYTES
 
 
 def test_render_stores_the_timeline_and_an_automatic_description(store, tmp_path):
