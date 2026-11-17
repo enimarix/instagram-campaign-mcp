@@ -41,14 +41,17 @@ def next_slot(store: CampaignStore) -> Optional[str]:
 async def cycle(client: InstagramClient, store: CampaignStore, settings: InstagramMCPSettings,
                 now: Callable[[], datetime] = utcnow) -> Dict[str, Any]:
     """One worker pass: heartbeat, then run_due. Never raises (the loop must live)."""
-    store.set_state("heartbeat_at", to_iso(now()))
     try:
+        store.set_state("heartbeat_at", to_iso(now()))
         result = await run_due(client, store, settings=settings, now=now)
     except Exception as e:  # noqa: BLE001 - keep the worker alive
         print(f"run_due failed: {e!r}", file=sys.stderr, flush=True)
         result = {"error": repr(e)}
-    store.set_state("last_run_at", to_iso(now()))
-    store.set_state("last_result", result)
+    try:
+        store.set_state("last_run_at", to_iso(now()))
+        store.set_state("last_result", result)
+    except Exception as e:  # noqa: BLE001 - e.g. database locked for too long
+        print(f"worker state not saved: {e!r}", file=sys.stderr, flush=True)
     return result
 
 
@@ -62,9 +65,9 @@ async def run(client: InstagramClient, store: CampaignStore, settings: Instagram
         if result.get("error") or any(result.get(k) for k in REPORTED):
             print(json.dumps(result), flush=True)
         slot = next_slot(store)
-        if slot and slot != woken_for:  # the queue changed: move the wake task
+        if slot and slot != woken_for and parse_dt(slot) > utcnow():  # queue changed
             woken_for = slot
-            register_wake(parse_dt(slot))
+            await asyncio.to_thread(register_wake, parse_dt(slot))
         if stories_every and time.monotonic() - last_stories >= stories_every * 60:
             last_stories = time.monotonic()
             try:
