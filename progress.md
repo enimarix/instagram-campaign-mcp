@@ -109,7 +109,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 - [ ] 012 — Assets API — list (by batch date, status, verdict, track; default order: agent `self_score` high to low), get, like / dislike (sets `verdict` only), approve / unapprove, archive, edit caption and best-before; status moves go through `transition()`; tests. — deps: 004, 008 · touches: `src/api/`, `src/studio/assets.py`, `tests/`
 - [ ] 013 — Feedback API — add, list, edit and delete comments on an asset, with reason codes from the taxonomy and an optional video time; a comment with `wants_changes` moves a `ready` asset to `revision_requested`; no comment ever publishes anything; tests. — deps: 005, 012 · touches: `src/api/`, `src/studio/feedback.py`, `tests/`
-- [ ] 014 — Dev seed — `ig-campaign dev seed` creates a fake batch (one tiny committed sample video under 50 KB that we generated ourselves, several statuses and verdicts, both tracks) so the website can be built before the pipeline exists; never runs against a non-empty production database without `--force`. — deps: 004, 005 · touches: `src/studio/seed.py`, `src/scheduler.py`, `tests/`
+- [x] 014 — Dev seed — `ig-campaign dev seed` creates a fake batch (one tiny committed sample video under 50 KB that we generated ourselves, several statuses and verdicts, both tracks) so the website can be built before the pipeline exists; never runs against a non-empty production database without `--force`. — deps: 004, 005 · touches: `src/studio/seed.py`, `src/scheduler.py`, `tests/`
 - [ ] 015 — Inbox page — phone-first feed of one day's batch, best agent score first: inline player that plays the light preview copy (`muted`, `playsinline`, so iOS Safari plays it inline), like / dislike (also by swipe on touch screens), a one-tap reason sheet after a dislike (skippable), status chips, explore badge, the agent's score and one-line reason, date picker, filters (track, status, verdict), counters ("12 of 25 reviewed"); large touch targets and keyboard shortcuts on desktop; component tests. — deps: 009, 012, 014 · touches: `web/`
 - [ ] 016 — Asset detail and comments — comment thread with reason chips and "pin to this moment", an "ask for changes" switch, caption editor, and a panel showing hook, hypothesis, track, recipe summary, rights basis, citations and QC result; older and newer versions of the same asset are linked. — deps: 013, 015 · touches: `web/`
 - [ ] 017 — Reels from local files — `publish_reel` accepts a local `video_path` and uses the Graph API resumable upload (**verify in docs**: `upload_type=resumable`, `rupload.facebook.com`, and the current Reel limits for size, duration, codecs); the path must resolve inside the media root (a tool caller cannot upload an arbitrary file); the cover is set with `thumb_offset`; `audio_name` is passed through (the studio names its original audio, GOAL.md §3.1); payload validation and the scheduler accept it; respx tests for success, processing error, retry and a path outside the root. — deps: 011 · touches: `src/instagram_client.py`, `src/campaign.py`, `src/instagram_mcp_server.py`, `tests/`
@@ -242,6 +242,7 @@ dropped (with a line under *Follow-ups* saying why).
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 014 — Dev seed — https://github.com/enimarix/instagram-campaign-mcp/pull/23 (2026-11-17) — `ig-campaign dev seed` (both tracks, all statuses via transition(), 30 KB sample mp4, --force guard)
 - [x] 031 — ffmpeg wrapper — https://github.com/enimarix/instagram-campaign-mcp/pull/22 (2026-11-17) — src/studio/ffmpeg.py find/probe/run (timeout, log), installers hint, CI installs ffmpeg
 - [x] 010 — Serve the website from the API — https://github.com/enimarix/instagram-campaign-mcp/pull/21 (2026-11-17) — web/dist with SPA fallback, `ig-campaign up` (API + worker), loopback-only Host guard without password, README "Run the studio"
 - [x] 021 — Slot planner v1 — https://github.com/enimarix/instagram-campaign-mcp/pull/20 (2026-11-17) — src/learning/slots.py plan_slots (windows, gap, max/day, jitter, DST-safe, weights hook) + settings
@@ -281,6 +282,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - HTTPS behind a proxy (Tailscale serve / tunnel, gate H7): a setting to trust `X-Forwarded-Proto` / allowed origins, else the origin check refuses and the cookie lacks `Secure` (from step 008)
 - Agent-profile MCP `INSTRUCTIONS` text without the publish tools (with step 058) (from step 020)
 - `ffmpeg_path` / `ffprobe_path` settings so `.env` can set them (today only real env vars) (from step 031)
+- Ship `src/studio/samples/*.mp4` in wheels (`[tool.setuptools.package-data]`) (from step 014)
 - Other networks (TikTok, Shorts) reusing the same assets and review flow.
 - A third track with AI-generated footage.
 - More motion styles after 8-bit (the template registry already allows it).

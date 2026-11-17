@@ -11,6 +11,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler rank                # print the winner ranking
   python -m src.scheduler serve               # studio REST API on 127.0.0.1:8765
   python -m src.scheduler up                  # website + API + daemon in one process
+  python -m src.scheduler dev seed --days 3   # fake demo batch for website work
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the daemon does it every hour.
@@ -120,7 +121,30 @@ async def _run(args: argparse.Namespace) -> int:
         store.close()
 
 
-def main() -> None:
+def _dev_seed(args: argparse.Namespace) -> int:
+    import random
+    from pathlib import Path
+
+    from .studio.seed import local_today, refusal, seed
+
+    settings = get_settings()
+    db = Path(args.db or settings.database_path)
+    production = db.resolve() == Path(settings.database_path).resolve()
+    store = CampaignStore(str(db))
+    try:
+        why = refusal(store, production_live=production and settings.instagram_configured)
+        if why and not args.force:
+            print(f"dev seed: refused, {why}. Use --force to seed anyway.", file=sys.stderr)
+            return 1
+        summary = seed(store, db.parent / "media", args.days, random.Random(args.seed),
+                       local_today(settings.timezone))
+    finally:
+        store.close()
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ig-campaign")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("run-due", help="Publish queued posts that are due, then exit")
@@ -139,12 +163,24 @@ def main() -> None:
         s = sub.add_parser(name, help=help_)
         s.add_argument("--host", default="127.0.0.1")
         s.add_argument("--port", type=int, default=8765)
-    args = parser.parse_args()
+    dev = sub.add_parser("dev", help="Developer tools").add_subparsers(dest="dev_command",
+                                                                       required=True)
+    ds = dev.add_parser("seed", help="Fill a database with a fake demo batch")
+    ds.add_argument("--db", help="SQLite file (default: the configured database)")
+    ds.add_argument("--days", type=int, default=3)
+    ds.add_argument("--force", action="store_true",
+                    help="Seed even a non-empty or live production database")
+    ds.add_argument("--seed", type=int, help="Random seed, for a reproducible batch")
+    args = parser.parse_args(argv)
+    if args.command == "dev" and args.days < 1:
+        parser.error("--days must be >= 1")
     if args.command == "daemon" and args.interval <= 0:
         parser.error("--interval must be > 0")
     if args.command == "daemon" and args.stories_every < 0:
         parser.error("--stories-every must be >= 0")
     configure_logging()
+    if args.command == "dev":
+        sys.exit(_dev_seed(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 
