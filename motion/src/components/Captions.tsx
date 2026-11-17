@@ -12,9 +12,9 @@ export type CaptionsProps = {
   speed?: number;
 };
 
-// Sound-off captions: the current script line, whole (or typed with `speed`), in a high-contrast box at the
-// top of the band under the hook area, inside the safe area. Nothing during the hook scene
-// (HookCard shows it) or the outro.
+// Sound-off captions: the current script line, whole (or typed with `speed`), in a high-contrast
+// box at the top of the band under the hook area, inside the safe area. Nothing during the hook
+// scene (HookCard shows it) or the outro.
 export const Captions = ({ timeline, scale = 4, speed }: CaptionsProps) => {
   const scene = sceneAt(timeline.scenes, useCurrentFrame());
   if (!scene || scene.index === 0) return null;
