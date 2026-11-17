@@ -10,6 +10,15 @@ divide by the median rate of the baseline posts, and take a weighted average.
 That gives the engagement index: 1.0 = typical post, 2.0 = twice as engaging.
 Reach is indexed the same way. Saves, shares and follows weigh most because
 they predict paid performance better than likes.
+
+Retention (Reels): average watch time favours long videos, so when the video length is
+known (our own assets, `duration_s` on the post's label) the `ig_reels_avg_watch_time`
+weight scores the watch ratio instead (avg watch time / length), relative to the median
+watch ratio of the baseline posts that have one. A post without a known length keeps the
+absolute watch time against the baseline's absolute watch times (all posts, as before):
+the two are never mixed in one baseline (a post with a length but no baseline post with
+one scores no watch signal). Every scored row also carries `watch_ratio` and
+`view_rate` (views / reach), None when unknown.
 """
 
 from __future__ import annotations
@@ -29,6 +38,7 @@ DEFAULT_WEIGHTS: Dict[str, float] = {
     "ig_reels_avg_watch_time": 2.0,  # absolute (ms), not divided by reach
 }
 ABSOLUTE_SIGNALS = {"ig_reels_avg_watch_time"}
+WATCH_TIME, WATCH_RATIO = "ig_reels_avg_watch_time", "watch_ratio"
 RATIO_CAP = 5.0          # one freak metric can't carry a post
 SMOOTHING = 0.0005       # avoids divide-by-zero when the baseline rate is ~0
 STORY_MIN_AGE_HOURS = 20.0
@@ -66,7 +76,22 @@ def _num(v: Any) -> float:
         return 0.0
 
 
-def _signal_value(metrics: Dict[str, Any], signal: str) -> Optional[float]:
+def watch_ratio(metrics: Dict[str, Any], duration_s: Any) -> Optional[float]:
+    """Average watch time / video length (both in seconds); None when either is unknown."""
+    if metrics.get(WATCH_TIME) is None or _num(duration_s) <= 0:
+        return None
+    return _num(metrics[WATCH_TIME]) / 1000 / _num(duration_s)
+
+
+def view_rate(metrics: Dict[str, Any]) -> Optional[float]:
+    reach = _num(metrics.get("reach"))
+    return _num(metrics["views"]) / reach if metrics.get("views") is not None and reach > 0 else None
+
+
+def _signal_value(metrics: Dict[str, Any], signal: str,
+                  duration_s: Any = None) -> Optional[float]:
+    if signal == WATCH_RATIO:
+        return watch_ratio(metrics, duration_s)
     if signal not in metrics or metrics[signal] is None:
         return None
     value = _num(metrics[signal])
@@ -136,6 +161,7 @@ def score_posts(
     labels = labels or {}
     history = history or {}
     now = now or datetime.now(timezone.utc)
+    durations = {m: label.get("duration_s") for m, label in labels.items()}
     matured_by_group: Dict[str, List[Dict[str, Any]]] = {}
     for s in snapshots:  # snapshots arrive newest-first
         if _is_matured(s, cfg):
@@ -155,6 +181,7 @@ def score_posts(
         else:  # unmatured posts only count their baseline: no query needed
             baseline = [_at_age(b, history, age, cfg) for b in others]
 
+        own_ratio = watch_ratio(metrics, durations.get(snap["media_id"]))
         res: Dict[str, Any] = {
             "media_id": snap["media_id"],
             "group": grp,
@@ -166,6 +193,8 @@ def score_posts(
             "baseline_posts": len(baseline),
             "confidence": "low" if len(baseline) < 5 else "medium" if len(baseline) < 15 else "high",
             "label": labels.get(snap["media_id"]),
+            "watch_ratio": _round(own_ratio, 3),
+            "view_rate": _round(view_rate(metrics), 3),
         }
 
         if not _is_matured(snap, cfg):
@@ -188,11 +217,14 @@ def score_posts(
 
         weighted, total_w, ratios = 0.0, 0.0, {}
         for signal, w in cfg.weights.items():
-            value = _signal_value(metrics, signal)
+            if signal == WATCH_TIME and own_ratio is not None:
+                signal = WATCH_RATIO  # length known: retention, not raw watch time
+            value = _signal_value(metrics, signal, durations.get(snap["media_id"]))
             if value is None:
                 continue
-            base_vals = [
-                v for v in (_signal_value(b.get("metrics") or {}, signal) for b in baseline)
+            base_vals = [  # watch ratio: only baseline posts with a known length
+                v for v in (_signal_value(b.get("metrics") or {}, signal,
+                                          durations.get(b["media_id"])) for b in baseline)
                 if v is not None
             ]
             if not base_vals:
@@ -222,6 +254,10 @@ def score_posts(
         )
         results.append(res)
     return results
+
+
+def _round(v: Optional[float], digits: int) -> Optional[float]:
+    return None if v is None else round(v, digits)
 
 
 def _verdict(eng: Optional[float], reach_index: Optional[float], reach: float,

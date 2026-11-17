@@ -126,3 +126,15 @@ def test_post_detail(tc, store):
     assert len(ext["series"]) == 6 and ext["tags"] is None and ext["feedback"] == []
     r = tc.get("/api/analytics/posts/unknown")
     assert r.status_code == 404 and r.json() == {"error": "not_found"}
+
+
+def test_posts_table_rows_carry_watch_ratio_and_view_rate(tc, store):
+    posted = to_iso(NOW - timedelta(days=5))
+    for mid in ("ours", "ext"):
+        store.add_snapshot(mid, {"reach": 1000, "views": 1500, "ig_reels_avg_watch_time": 6000},
+                           "REELS", "VIDEO", posted, captured_at=NOW)
+    asset = _studio_post(store, "ours")
+    store.update_asset(asset["id"], duration=20.0)
+    rows = {p["media_id"]: p for p in tc.get("/api/analytics/posts").json()["posts"]}
+    assert rows["ours"]["watch_ratio"] == 0.3 and rows["ours"]["view_rate"] == 1.5
+    assert rows["ext"]["watch_ratio"] is None and rows["ext"]["view_rate"] == 1.5

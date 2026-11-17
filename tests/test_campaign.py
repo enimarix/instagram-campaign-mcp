@@ -272,3 +272,50 @@ async def test_network_error_before_publish_is_retried(client, store):
     p = store.schedule("image", {"image_url": "https://x/1.jpg"}, utcnow() - timedelta(seconds=5))
     res = await camp.run_due(client, store)
     assert res["retrying"] and store.get_scheduled(p["id"])["status"] == "pending"
+
+
+# ---------------------------------------------------------------- retention (075)
+def _reel(mid, avg_ms, reach=1000, views=None):
+    snap = _snap(mid, reach, 10, 5, pt="REELS")
+    snap["metrics"].update(ig_reels_avg_watch_time=avg_ms, views=views)
+    return snap
+
+
+def test_long_video_no_longer_wins_on_raw_watch_time():
+    baseline = [_reel(f"s{i}", 5000) for i in range(5)]  # 10 s videos, half watched
+    long = _reel("long", 15000)                          # 60 s video, a quarter watched
+    posts = [long] + baseline
+    durations = {p["media_id"]: {"duration_s": 10} for p in baseline}
+    durations["long"] = {"duration_s": 60}
+
+    old = {r["media_id"]: r for r in score_posts(posts)}["long"]
+    new = {r["media_id"]: r for r in score_posts(posts, labels=durations)}["long"]
+    assert old["signal_ratios"]["ig_reels_avg_watch_time"] == 3.0  # raw time: 3x the median
+    assert new["signal_ratios"]["watch_ratio"] == 0.5
+    assert "ig_reels_avg_watch_time" not in new["signal_ratios"]
+    assert new["watch_ratio"] == 0.25 and old["watch_ratio"] is None
+    assert new["engagement_index"] < 1 < old["engagement_index"]
+
+
+def test_watch_ratio_baseline_only_over_posts_with_a_length_and_externals_unchanged():
+    ours = [_reel(f"s{i}", 5000) for i in range(3)]        # ratio 0.5
+    external = [_reel(f"e{i}", 50000) for i in range(3)]   # no length: absolute only
+    subject, ext_subject = _reel("ours", 5000), _reel("ext", 20000)
+    posts = [subject, ext_subject] + ours + external
+    labels = {p["media_id"]: {"duration_s": 10} for p in ours + [subject]}
+
+    new = {r["media_id"]: r for r in score_posts(posts, labels=labels)}
+    assert new["ours"]["signal_ratios"]["watch_ratio"] == 1.0  # median of the 3 ratios
+    # a post without a length scores exactly as before (absolute vs every baseline post)
+    old = {r["media_id"]: r for r in score_posts(posts)}
+    for mid in ("ext", "e0", "e1", "e2"):
+        assert new[mid] == old[mid]
+    # its absolute baseline still counts our posts: median of 4x 5000 and 3x 50000 ms
+    assert new["ext"]["signal_ratios"]["ig_reels_avg_watch_time"] == 4.0
+
+
+def test_view_rate():
+    scored = {r["media_id"]: r for r in score_posts(
+        [_reel("v", 5000, reach=400, views=1000), _snap("f", 1000, 10, 5)])}
+    assert scored["v"]["view_rate"] == 2.5
+    assert scored["f"]["view_rate"] is None and scored["f"]["watch_ratio"] is None

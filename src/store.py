@@ -800,9 +800,13 @@ class CampaignStore:
             )
 
     def labels(self, campaign: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
-        q, args = "SELECT * FROM post_labels", []
+        """Labels by media id, each with `duration_s`: the studio asset's video length
+        (None for posts made outside the studio), used by scoring's watch ratio."""
+        q = ("SELECT post_labels.*, assets.duration AS duration_s FROM post_labels"
+             " LEFT JOIN assets ON assets.id = post_labels.asset_id")
+        args: List[Any] = []
         if campaign:
-            q += " WHERE campaign=?"
+            q += " WHERE post_labels.campaign=?"
             args.append(campaign)
         with self._tx() as c:
             rows = c.execute(q, args).fetchall()
