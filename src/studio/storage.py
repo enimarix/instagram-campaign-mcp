@@ -11,7 +11,7 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 CACHE_SECONDS = 60.0
 _walks: Dict[str, Tuple[float, int]] = {}  # resolved media root -> (taken at, bytes)
@@ -36,8 +36,15 @@ def _file_bytes(path: str) -> int:
         return 0
 
 
+def free_bytes(media_root: str) -> int:
+    """Free space on the media root's disk (the root may not exist yet)."""
+    root = Path(media_root).resolve()
+    return shutil.disk_usage(next((p for p in (root, *root.parents) if p.exists()), root)).free
+
+
 def storage(media_root: str, database_path: str,
-            clock: Callable[[], float] = time.monotonic) -> Dict[str, Any]:
+            clock: Callable[[], float] = time.monotonic,
+            last_backup: Optional[str] = None) -> Dict[str, Any]:
     root = Path(media_root).resolve()
     now = clock()
     hit = _walks.get(str(root))
@@ -46,6 +53,5 @@ def storage(media_root: str, database_path: str,
     # SQLite in WAL mode keeps recent writes in the -wal file until a checkpoint.
     db = (0 if database_path == ":memory:"
           else sum(_file_bytes(database_path + s) for s in ("", "-wal", "-shm")))
-    disk = next((p for p in (root, *root.parents) if p.exists()), root)  # root may not exist yet
-    return {"media_bytes": hit[1], "db_bytes": db, "free_bytes": shutil.disk_usage(disk).free,
-            "last_backup": None}  # ponytail: backups arrive with step 027
+    return {"media_bytes": hit[1], "db_bytes": db, "free_bytes": free_bytes(media_root),
+            "last_backup": last_backup}

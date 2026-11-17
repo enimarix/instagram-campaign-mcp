@@ -121,6 +121,22 @@ class InstagramMCPSettings(BaseSettings):
         2, ge=1, description="Renders the worker runs at once (2 fit a laptop CPU, step 006a)"
     )
 
+    # --- Housekeeping -----------------------------------------------------
+    # Once a day (src/studio/housekeeping.py). Liked assets are archived only past best_before.
+    archive_unreviewed_days: int = Field(
+        7, ge=1, description="A ready asset never reviewed for this many days is archived"
+    )
+    delete_archived_files_days: int = Field(
+        14, ge=0, description="Files of an asset archived this many days ago are deleted"
+    )
+    backup_dir: str = Field(
+        str(APP_HOME / "data" / "backups"), description="Nightly database backups"
+    )
+    backup_keep: int = Field(14, ge=1, description="Database backups kept (newest)")
+    min_free_disk_gb: float = Field(
+        5.0, ge=0, description="No render starts while the media disk has less free space"
+    )
+
     # --- Quality check ----------------------------------------------------
     # Checked after every render (src/studio/qc.py); a failing check makes the asset `failed`.
     qc_min_duration_s: float = Field(5.0, gt=0, description="Shortest video that passes QC")

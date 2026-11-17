@@ -386,14 +386,18 @@ class CampaignStore:
     sqlite3.connect(":memory:") is a new empty database, so ":memory:" keeps a
     single connection and serialises all access to it with a lock instead.
     Every connection uses WAL (file only), a busy timeout and foreign keys.
+    close() (from any thread) waits for each connection's running transaction, and every
+    later use raises sqlite3.ProgrammingError: closing a connection under another thread's
+    query crashes SQLite.
     """
 
     def __init__(self, path: str):
         self.path = path
         self._memory = path == ":memory:"
         self._local = threading.local()
-        self._conns: List[sqlite3.Connection] = []
+        self._conns: Dict[sqlite3.Connection, threading.RLock] = {}  # conn -> in-use lock
         self._conns_lock = threading.Lock()
+        self._closed = False
         self._lock = threading.RLock() if self._memory else nullcontext()
         if not self._memory:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -413,7 +417,10 @@ class CampaignStore:
         if not self._memory:
             conn.execute("PRAGMA journal_mode=WAL")
         with self._conns_lock:
-            self._conns.append(conn)
+            if self._closed:
+                conn.close()
+                raise sqlite3.ProgrammingError("the store is closed")
+            self._conns[conn] = threading.RLock()
         return conn
 
     @property
@@ -466,19 +473,25 @@ class CampaignStore:
         """This thread's connection; commit on success, rollback on error."""
         with self._lock:
             conn = self._conn
-            try:
-                yield conn
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
+            with self._conns.get(conn, nullcontext()):  # tests' wrapper conns aren't listed
+                if self._closed:
+                    raise sqlite3.ProgrammingError("the store is closed")
+                try:
+                    yield conn
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
 
     def close(self) -> None:
-        """Close every connection this store opened, from any thread."""
+        """Close every connection this store opened, from any thread, each once its running
+        transaction ends."""
         with self._conns_lock:
-            conns, self._conns = self._conns, []
-        for conn in conns:
-            conn.close()
+            self._closed = True
+            conns, self._conns = self._conns, {}
+        for conn, in_use in conns.items():
+            with self._lock, in_use:
+                conn.close()
 
     # ------------------------------------------------------------------
     # Schedule

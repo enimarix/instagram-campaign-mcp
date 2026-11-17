@@ -11,7 +11,9 @@ runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the run hand
 elsewhere that part does nothing.
 
 render_loop() runs beside it (and alone in setup mode: renders need no Instagram): it
-renders queued render jobs (src/studio/render.py) in threads, keeping the PC awake meanwhile.
+renders queued render jobs (src/studio/render.py) in threads, keeping the PC awake meanwhile,
+starts none while the media disk is under MIN_FREE_DISK_GB, and runs the daily housekeeping
+(src/studio/housekeeping.py: archive stale assets, purge old files, back up the database).
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ from .campaign import (
 from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
 from .store import CampaignStore, parse_dt, to_iso, utcnow
-from .studio import power, render
+from .studio import housekeeping, power, render
 from .studio.power import keep_awake
 from .studio.publish import reconcile_publish_checks
 
@@ -59,6 +61,7 @@ RECONCILE_EVERY = timedelta(minutes=10)  # it lists media while an asset waits f
 DAILY_RETRY = timedelta(hours=1)  # a failing daily job (e.g. no insights permission) waits
 RENDER_TICK = 5.0  # s between queue polls and job heartbeats
 RENDER_STALE = timedelta(minutes=10)  # a running job without heartbeat this long is re-queued
+DISK_WARN_EVERY = 3600.0  # s between "disk too full" messages
 
 
 def next_slot(store: CampaignStore) -> Optional[str]:
@@ -209,39 +212,87 @@ async def run(client: InstagramClient, store: CampaignStore, settings: Instagram
             power.release()
 
 
+def daily_housekeeping(store: CampaignStore, settings: InstagramMCPSettings,
+                       now: Callable[[], datetime] = utcnow) -> Optional[Dict[str, Any]]:
+    """Archive, purge and back up once per owner-local day; a failure raises and is retried
+    at most hourly. Returns what was done, or None when nothing was due."""
+    t = now()
+    today = t.astimezone(ZoneInfo(settings.timezone)).date()
+    if (store.get_state("housekeeping_day") == today.isoformat()
+            or not _every(store, "housekeeping_tried_at", DAILY_RETRY, t)):
+        return None
+    out = {"archived": housekeeping.archive_stale(store, settings, today),
+           "purged": housekeeping.purge_archived_files(store, settings, today),
+           "backup": housekeeping.backup_database(store, settings, t)}
+    store.set_state("housekeeping_day", today.isoformat())
+    return out
+
+
 async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
                       run: Optional[Callable[[Dict[str, Any]], Any]] = None,
                       interval: float = RENDER_TICK, stale_after: timedelta = RENDER_STALE
                       ) -> None:
     """Render queued jobs, up to settings.render_concurrency at once, each in a thread so
-    the loop stays responsive; heartbeat running jobs; keep the PC awake while any runs.
-    Runs until cancelled (a job cut off then is re-queued once its heartbeat is stale)."""
+    the loop stays responsive; heartbeat running jobs; keep the PC awake while any runs;
+    claim nothing while the media disk is under the floor; run daily_housekeeping between
+    batches. Runs until cancelled (a job cut off then is re-queued once its heartbeat is
+    stale)."""
     run = run or functools.partial(render.run_job, store, settings.media_root)
     running: Dict[int, asyncio.Task] = {}
+    disk_warned = float("-inf")
 
     def claim() -> None:
+        nonlocal disk_warned
         try:
             store.touch_render_jobs(list(running))
+            if not housekeeping.disk_ok(settings):
+                if time.monotonic() - disk_warned >= DISK_WARN_EVERY:
+                    disk_warned = time.monotonic()
+                    print(f"render queue: less than {settings.min_free_disk_gb} GB free on the"
+                          " media disk; no render starts", file=sys.stderr, flush=True)
+                return
             free = settings.render_concurrency - len(running)
             for job in store.claim_render_jobs(free, stale_before=utcnow() - stale_after):
                 running[job["id"]] = asyncio.create_task(asyncio.to_thread(run, job))
         except Exception as e:  # noqa: BLE001 - e.g. database locked: try next tick
             print(f"render queue: {e!r}", file=sys.stderr, flush=True)
 
-    while True:
-        claim()
-        if running:
-            with keep_awake():
-                while running:
-                    done, _ = await asyncio.wait(running.values(), timeout=interval)
-                    for job_id, task in list(running.items()):
-                        if task in done:
-                            del running[job_id]
-                            if task.exception():
-                                print(f"render job {job_id} failed: {task.exception()!r}",
-                                      file=sys.stderr, flush=True)
-                    claim()
-        await asyncio.sleep(interval)
+    housekeeper: Optional[asyncio.Task] = None
+    try:
+        while True:
+            # shielded: a thread can't be cancelled, so the task must stay awaitable below
+            housekeeper = asyncio.create_task(
+                asyncio.to_thread(daily_housekeeping, store, settings))
+            try:
+                done_today = await asyncio.shield(housekeeper)
+                if done_today:
+                    print(json.dumps({"housekeeping": done_today}), flush=True)
+            except Exception as e:  # noqa: BLE001 - retried within the hour
+                print(f"housekeeping failed: {e!r}", file=sys.stderr, flush=True)
+            claim()
+            if running:
+                with keep_awake():
+                    while running:
+                        done, _ = await asyncio.wait(running.values(), timeout=interval)
+                        for job_id, task in list(running.items()):
+                            if task in done:
+                                del running[job_id]
+                                if task.exception():
+                                    print(f"render job {job_id} failed: {task.exception()!r}",
+                                          file=sys.stderr, flush=True)
+                        claim()
+            await asyncio.sleep(interval)
+    finally:
+        # Cancelled: threads still running housekeeping or renders use the store, which the
+        # caller closes next. Let them finish (asyncio.run would wait for them anyway); a
+        # render then saves its result instead of being re-queued as stale.
+        pending = [t for t in (housekeeper, *running.values()) if t and not t.done()]
+        if pending:
+            await asyncio.wait(pending)
+        for t in pending:
+            if not t.cancelled() and t.exception():
+                print(f"worker thread failed during shutdown: {t.exception()!r}",
+                      file=sys.stderr, flush=True)
 
 
 def status(store: CampaignStore, settings: InstagramMCPSettings,
@@ -253,6 +304,7 @@ def status(store: CampaignStore, settings: InstagramMCPSettings,
         "paused": is_paused(store, settings),
         "next_slot": next_slot(store),
         "last_result": store.get_state("last_result"),
+        "disk_ok": housekeeping.disk_ok(settings),
     }
 
 
