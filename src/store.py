@@ -765,9 +765,10 @@ class CampaignStore:
         track: Optional[str] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Best first: agent self_score high to low (unscored last), then id."""
+        """Best first: agent self_score high to low (unscored last), then id.
+        Rows carry their idea's track and strategy (explore/exploit) for the inbox."""
         return self._select(
-            "SELECT a.* FROM assets a JOIN ideas i ON i.id = a.idea_id",
+            "SELECT a.*, i.track, i.strategy FROM assets a JOIN ideas i ON i.id = a.idea_id",
             {"a.batch_date": _sql_value(batch_date), "a.status": status,
              "a.verdict": verdict, "i.track": track},
             "a.self_score IS NULL, a.self_score DESC, a.id", limit,
