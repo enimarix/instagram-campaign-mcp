@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-17: `assets.recipe` is an envelope; renders run in a queue, two at a time
+`assets.recipe` stores `{"kind": "ffmpeg", "recipe": <Recipe>, "inputs": {"source": <media
+path>, ...}}` for Track A edits and `{"kind": "motion", "template": <id>, "props": {...}}` for
+Track B (rendered through Remotion from step 048; until then a motion job fails), plus an optional
+`thumb_offset_ms` (cover frame). Input paths are relative to `MEDIA_ROOT`. Renders go through the
+`render_jobs` queue: one job per idempotency key (asset id + recipe hash), `RENDER_CONCURRENCY`
+at once (default 2), 3 attempts, a running job without heartbeat for 10 min is re-queued. Each
+render writes `video.mp4`, `preview.mp4` (720×1280, 1.5 Mbps, faststart), `poster.jpg` and
+`thumb.jpg` into the asset folder. Re-rendering a `failed` asset renders it again in place; a
+`ready` one gets a new child asset (`parent_asset_id`), so the version under review stays.
+Reason: one shape for both tracks; 2 renders at once fit the CPU (006a spike).
+
 ## 2026-11-17: One Graph request budget in the database; data jobs stop at 80 % of it
 `RATE_LIMIT_REQUESTS_PER_HOUR` (default 200) is now one sliding hour shared by the worker, the
 API and the MCP server: every Graph request adds a row to `graph_requests` (count + insert in one

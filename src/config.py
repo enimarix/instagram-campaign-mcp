@@ -117,6 +117,9 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "data" / "media"),
         description="Asset files (<date>/<asset id>/...); the API serves them at /api/media",
     )
+    render_concurrency: int = Field(
+        2, ge=1, description="Renders the worker runs at once (2 fit a laptop CPU, step 006a)"
+    )
 
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(

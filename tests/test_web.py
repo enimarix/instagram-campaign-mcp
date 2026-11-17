@@ -113,9 +113,15 @@ async def test_up_runs_worker_and_stops_it_with_the_server(settings, monkeypatch
     assert asyncio.all_tasks() == tasks_before  # the worker task was cancelled and awaited
 
 
-async def test_up_worker_idles_in_setup_mode(tmp_path, capsys):
+async def test_up_worker_idles_in_setup_mode(tmp_path, monkeypatch, capsys):
+    rendered = []
+
+    async def render_loop(store, settings):  # renders run without Instagram (034)
+        rendered.append(settings)
+
+    monkeypatch.setattr(scheduler.worker, "render_loop", render_loop)
     await asyncio.wait_for(scheduler._worker(_settings(tmp_path)), 1)
-    assert "publishing is idle" in capsys.readouterr().err
+    assert "publishing is idle" in capsys.readouterr().err and len(rendered) == 1
 
 
 async def test_up_worker_failure_is_reported(settings, monkeypatch, capsys):

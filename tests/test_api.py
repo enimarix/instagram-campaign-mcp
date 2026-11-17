@@ -85,7 +85,7 @@ async def test_mcp_setup_mode(setup_settings, monkeypatch):
 
 
 @respx.mock  # any request would fail: no route is mocked
-@pytest.mark.parametrize("command", ["run-due", "collect", "daemon"])
+@pytest.mark.parametrize("command", ["run-due", "collect"])  # daemon: test_studio_render
 async def test_cli_setup_mode_skips(setup_settings, monkeypatch, capsys, command):
     monkeypatch.setattr(scheduler, "get_settings", lambda: setup_settings)
     # configure_logging would bind loggers to capsys's stream, closed after this test.

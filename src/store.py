@@ -14,6 +14,7 @@ organic posts, so this store keeps:
 - worker_state: the worker's key/value state (heartbeat, pause switch, last result)
 - account_snapshots: one account row per owner-local day (followers, reach, views)
 - graph_requests: Graph API request times, the hourly budget shared by all processes
+- render_jobs: the render queue (src/studio/render.py, worker render loop)
 """
 
 from __future__ import annotations
@@ -251,10 +252,35 @@ CREATE TABLE graph_requests (at REAL NOT NULL);
 CREATE INDEX idx_graph_requests_at ON graph_requests(at);
 """
 
+# Migration 8: the render queue (034). One job per idempotency key (default: asset id +
+# recipe hash); heartbeat_at lets a restarted worker re-queue jobs a crash left running.
+# assets.poster_path: the poster frame next to the thumbnail.
+RENDER_SCHEMA = """
+CREATE TABLE render_jobs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id        INTEGER NOT NULL REFERENCES assets(id),
+    idempotency_key TEXT NOT NULL UNIQUE,
+    state           TEXT NOT NULL DEFAULT 'queued'
+        CHECK (state IN ('queued','running','done','failed')),
+    progress        REAL NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 1),
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    failure         TEXT,
+    started_at      TEXT,
+    finished_at     TEXT,
+    render_ms       INTEGER,
+    heartbeat_at    TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+CREATE INDEX idx_render_jobs_state ON render_jobs(state, id);
+ALTER TABLE assets ADD COLUMN poster_path TEXT;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
-                         ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA]
+                         ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
+                         RENDER_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version")
@@ -262,7 +288,10 @@ IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "c
                "hypothesis", "strategy", "experiment", "batch_date")
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
                 "caption", "audio_name", "recipe", "duration", "batch_date", "status",
-                "verdict", "qc", "self_score", "self_score_reason", "best_before")
+                "verdict", "qc", "self_score", "self_score_reason", "best_before",
+                "poster_path")
+RENDER_JOB_FIELDS = ("state", "progress", "attempts", "failure", "started_at", "finished_at",
+                     "render_ms", "heartbeat_at")
 FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
 LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "origin", "status")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
@@ -273,6 +302,7 @@ _INSERT_STAMPS = {
     "feedback": ("created_at", "updated_at"),
     "learnings": ("created_at", "updated_at"),
     "agent_runs": ("started_at",),
+    "render_jobs": ("created_at", "updated_at"),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")
@@ -1132,6 +1162,57 @@ class CampaignStore:
         with self._tx() as c:
             return c.execute("SELECT COUNT(*) FROM graph_requests WHERE at > ?",
                              (since,)).fetchone()[0]
+
+    # ------------------------------------------------------------------
+    # Render queue (service rules: src/studio/render.py)
+    # ------------------------------------------------------------------
+    def add_render_job(self, asset_id: int, key: str) -> Dict[str, Any]:
+        """A queued job for `key`, or the job that already has this key (any state)."""
+        now = to_iso(utcnow())
+        with self._tx() as c:
+            c.execute("INSERT INTO render_jobs (asset_id, idempotency_key, created_at, updated_at)"
+                      " VALUES (?,?,?,?) ON CONFLICT(idempotency_key) DO NOTHING",
+                      (asset_id, key, now, now))
+            row = c.execute("SELECT * FROM render_jobs WHERE idempotency_key=?",
+                            (key,)).fetchone()
+        return _decode(row)
+
+    def get_render_job(self, job_id: int) -> Dict[str, Any]:
+        return self._get("render_jobs", job_id)
+
+    def update_render_job(self, job_id: int, **fields: Any) -> Dict[str, Any]:
+        return self._update("render_jobs", RENDER_JOB_FIELDS, job_id, fields)
+
+    def list_render_jobs(self, state: Optional[str] = None, asset_id: Optional[int] = None,
+                         limit: int = 100) -> List[Dict[str, Any]]:
+        """Newest first."""
+        return self._select("SELECT * FROM render_jobs", {"state": state, "asset_id": asset_id},
+                            "id DESC", limit)
+
+    def claim_render_jobs(self, limit: int, stale_before: datetime) -> List[Dict[str, Any]]:
+        """Re-queue running jobs whose heartbeat is older than `stale_before` (a crashed
+        worker's), then move up to `limit` queued jobs, oldest first, to running (attempts + 1).
+        One write transaction, so two workers never claim the same job."""
+        if limit <= 0:
+            return []
+        now = to_iso(utcnow())
+        with self._tx() as c:
+            c.execute("UPDATE render_jobs SET state='queued', updated_at=?"
+                      " WHERE state='running' AND heartbeat_at < ?", (now, to_iso(stale_before)))
+            rows = c.execute(
+                "UPDATE render_jobs SET state='running', attempts=attempts+1, progress=0,"
+                " started_at=?, heartbeat_at=?, updated_at=? WHERE id IN"
+                " (SELECT id FROM render_jobs WHERE state='queued' ORDER BY id LIMIT ?)"
+                " RETURNING *", (now, now, now, limit)).fetchall()
+        return sorted((_decode(r) for r in rows), key=lambda j: j["id"])
+
+    def touch_render_jobs(self, job_ids: Sequence[int]) -> None:
+        """Heartbeat for jobs still rendering."""
+        if job_ids:
+            with self._tx() as c:
+                c.execute(f"UPDATE render_jobs SET heartbeat_at=? WHERE state='running'"
+                          f" AND id IN ({','.join('?' * len(job_ids))})",
+                          [to_iso(utcnow()), *job_ids])
 
     # ------------------------------------------------------------------
     # Worker state
