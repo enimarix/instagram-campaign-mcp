@@ -4,6 +4,7 @@ import {
   getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type RunResult, type TokenStatus,
 } from '../api/client'
 import { button } from '../inbox/ui'
+import ClipsSection from './Clips'
 
 // ponytail: fixed threshold (~a week of daily batches); make it a setting if it nags.
 const LOW_FREE_BYTES = 5e9
@@ -186,6 +187,8 @@ export default function Settings() {
           <Row key={e.playbook} label={`${e.playbook} at ${e.time}`}>{scheduleLine(e)}</Row>
         ))}
       </Section>
+
+      <ClipsSection />
 
       <Section title="Server" load={health}>
         <Row label="Version">{health.data ? `${health.data.status}, v${health.data.version}` : ''}</Row>
