@@ -9,8 +9,10 @@ other move, or the right move by the wrong actor, raises InvalidTransition.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, Set, Tuple
 
+from ..instagram_client import caption_problem
 from ..store import CampaignStore, to_iso, utcnow
 
 ACTORS = ("owner", "agent", "worker", "system")
@@ -84,3 +86,30 @@ def set_verdict(store: CampaignStore, asset_id: int, verdict: str) -> Dict[str, 
     if verdict not in VERDICTS:
         raise ValueError(f"verdict must be one of {VERDICTS}, not {verdict!r}")
     return store.update_asset(asset_id, verdict=verdict)
+
+
+EDITABLE = ("caption", "best_before")
+
+
+def edit_asset(store: CampaignStore, asset_id: int, **fields: Any) -> Dict[str, Any]:
+    """Owner edits: caption (Instagram's limits) and best_before (local date YYYY-MM-DD or None).
+
+    Only the keys given change; ValueError names the problem.
+    """
+    unknown = set(fields) - set(EDITABLE)
+    if unknown:
+        raise ValueError(f"only {' and '.join(EDITABLE)} can be edited,"
+                         f" not {', '.join(sorted(unknown))}")
+    if "caption" in fields:
+        problem = caption_problem(fields["caption"])
+        if problem:
+            raise ValueError(problem)
+    best_before = fields.get("best_before")
+    if best_before is not None:
+        try:  # round trip: fromisoformat takes more formats on 3.11+, we want YYYY-MM-DD only
+            ok = date.fromisoformat(best_before).isoformat() == best_before
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            raise ValueError(f"best_before must be a date YYYY-MM-DD, not {best_before!r}")
+    return store.update_asset(asset_id, **fields)
