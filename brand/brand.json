@@ -4,6 +4,7 @@
   "name": "Macrobody",
   "handle": "@macrobody",
   "logo": "logo-placeholder.svg",
+  "logo_png": "logo-placeholder.png",
   "colors": {
     "primary": "#FFCD75",
     "secondary": "#38B764",

@@ -17,13 +17,23 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import tempfile
+import textwrap
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Mapping, Sequence, Type
+from typing import Annotated, Any, Dict, List, Literal, Mapping, Sequence, Tuple, Type
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializeAsAny,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
-from src.studio import ffmpeg
+from src.studio import brand, ffmpeg
 from src.studio.ffmpeg import MediaInfo, PathLike
 
 # Output spec (Instagram Reels): one place for every op.
@@ -36,6 +46,9 @@ CONTAINER_ARGS = ("-movflags", "+faststart")
 LOUDNESS_I, LOUDNESS_TP, LOUDNESS_LRA = -14.0, -1.5, 11.0
 LOUDNORM = f"loudnorm=I={LOUDNESS_I}:TP={LOUDNESS_TP}:LRA={LOUDNESS_LRA}"
 AUDIO_FORMAT = f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo"
+
+# End of every video filtergraph: square pixels, output frame rate and pixel format.
+VIDEO_TAIL = f"setsar=1,fps={FPS},format=yuv420p[v]"
 
 DEFAULT_TIMEOUT_S = 600.0  # per op
 DEFAULT_PRESET = "medium"  # tests pass "ultrafast"
@@ -88,15 +101,18 @@ class Recipe(BaseModel):
 
 
 def encode(src: Path, info: MediaInfo, out: Path, *, filter_complex: str, timeout_s: float,
-           preset: str) -> None:
+           preset: str, extra_inputs: Sequence[PathLike] = ()) -> None:
     """Encode `src` through `filter_complex` (input [0:v], output [v]) into the output spec.
-    The source's first audio track is re-encoded; a source without audio gets silence."""
+    `extra_inputs` are files for inputs 1, 2, ... The source's first audio track is
+    re-encoded; a source without audio gets silence."""
     args: List[PathLike] = ["-i", src]
+    for path in extra_inputs:
+        args += ["-i", path]
     if info.has_audio:
         audio_map = "0:a:0"
     else:
         args += ["-f", "lavfi", "-i", f"anullsrc=r={SAMPLE_RATE}:cl=stereo", "-shortest"]
-        audio_map = "1:a:0"
+        audio_map = f"{1 + len(extra_inputs)}:a:0"
     args += ["-filter_complex", filter_complex, "-map", "[v]", "-map", audio_map,
              *VIDEO_ARGS, "-preset", preset, *AUDIO_ARGS, *CONTAINER_ARGS, out]
     ffmpeg.run(args, timeout_s=timeout_s)
@@ -113,9 +129,8 @@ class FitVertical(Op):
     def apply(self, src, info, out, *, inputs, timeout_s, preset):
         fill = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
                 f"crop={WIDTH}:{HEIGHT}")
-        tail = f"setsar=1,fps={FPS},format=yuv420p[v]"
         if self.mode == "crop":
-            graph = f"[0:v]{fill},{tail}"
+            graph = f"[0:v]{fill},{VIDEO_TAIL}"
         else:
             # Blur a quarter-size background, then scale it up: same look, far cheaper.
             graph = (
@@ -123,7 +138,7 @@ class FitVertical(Op):
                 f"[a]scale={WIDTH // 4}:{HEIGHT // 4}:force_original_aspect_ratio=increase,"
                 f"crop={WIDTH // 4}:{HEIGHT // 4},boxblur=10:2,scale={WIDTH}:{HEIGHT}[bg];"
                 f"[b]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{tail}"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{VIDEO_TAIL}"
             )
         encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset)
 
@@ -208,6 +223,121 @@ class Music(Op):
                     extra_inputs=[*loop, "-i", inputs[self.input]])
 
 
+# --- Brand overlays (GOAL.md §3.1 Track A steps 5-6, §5.1 credit). Styled from the brand
+# kit, every overlay inside its safe area. They add to the picture; they never move it.
+
+MAX_TEXT = 60  # characters, hook and credit
+TEXT_PAD = 16  # px of background box around text
+OverlayText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
+                                               max_length=MAX_TEXT)]
+
+
+def _brand_kit(info: MediaInfo) -> Tuple[Dict[str, Any], Path]:
+    """The brand kit and its folder; refuses a clip that is not in the output spec yet
+    (the safe area is in output pixels)."""
+    if (info.width, info.height) != (WIDTH, HEIGHT):
+        raise ValueError(f"brand overlays need a {WIDTH}x{HEIGHT} clip, got "
+                         f"{info.width}x{info.height}: put fit_vertical first")
+    return brand.load_brand(), brand.DEFAULT_PATH.parent
+
+
+def _filter_value(value: str) -> str:
+    """Escape a value for a filter option inside -filter_complex: first for the option
+    parser, then for the filtergraph parser (ffmpeg-filters, "Notes on filtergraph
+    escaping"). Windows paths need it for the drive colon."""
+    value = re.sub(r"([\\':])", r"\\\1", value)
+    return re.sub(r"([\\'\[\],;])", r"\\\1", value)
+
+
+def _drawtext(text: str, info: MediaInfo, out: Path, *, size: int, x: str, y: str,
+              enable: str = "") -> str:
+    """A drawtext filter: `text` wrapped to the safe width in the brand font and text
+    colour on a semi-transparent background box. `x`/`y` pick from "left", "right",
+    "center" / "top", "center", "bottom" inside the safe area."""
+    kit, root = _brand_kit(info)
+    if not kit["fonts"].get("files"):
+        raise ValueError("the brand kit has no font file (fonts.files)")
+    sx, sy, sw, sh = brand.safe_area(kit)
+    # Press Start 2P: monospaced, 1 em advance (`size` px per character), 2 em line height.
+    lines = textwrap.wrap(text, (sw - 2 * TEXT_PAD) // size)
+    textfile = out.with_suffix(".txt")  # in render()'s work dir; no drawtext text escaping
+    textfile.write_text("\n".join(lines), encoding="utf-8")
+    xs = {"left": f"{sx + TEXT_PAD}", "right": f"{sx + sw - TEXT_PAD}-text_w",
+          "center": f"{sx}+({sw}-text_w)/2"}
+    ys = {"top": f"{sy + TEXT_PAD}", "bottom": f"{sy + sh - TEXT_PAD}-text_h",
+          "center": f"{sy}+({sh}-text_h)/2"}
+    font = (root / kit["fonts"]["files"][0]).resolve().as_posix()
+    colors = kit["colors"]
+    graph = (f"drawtext=fontfile={_filter_value(font)}"
+             f":textfile={_filter_value(textfile.resolve().as_posix())}:expansion=none"
+             f":fontsize={size}:line_spacing={-size // 4}:fontcolor=0x{colors['text'][1:]}"
+             f":box=1:boxcolor=0x{colors['background'][1:]}@0.6:boxborderw={TEXT_PAD}"
+             f":x={xs[x]}:y={ys[y]}")
+    return graph + (f":enable={_filter_value(enable)}" if enable else "")
+
+
+@register
+class Logo(Op):
+    """The brand logo (brand kit `logo_png`) as a watermark in a corner of the safe area,
+    `scale` = logo width as a fraction of the frame width."""
+
+    op: Literal["logo"] = "logo"
+    position: Literal["top_left", "top_right", "bottom_left", "bottom_right"] = "bottom_right"
+    opacity: float = Field(0.8, ge=0, le=1)
+    scale: float = Field(0.12, gt=0, le=0.5)
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+        kit, root = _brand_kit(info)
+        sx, sy, sw, sh = brand.safe_area(kit)
+        x = f"{sx}" if self.position.endswith("left") else f"{sx + sw}-w"
+        y = f"{sy}" if self.position.startswith("top") else f"{sy + sh}-h"
+        width = max(2, round(WIDTH * self.scale / 2) * 2)
+        graph = (f"[1:v]scale={width}:-2,format=rgba,colorchannelmixer=aa={self.opacity}[logo];"
+                 f"[0:v][logo]overlay={x}:{y},{VIDEO_TAIL}")
+        encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
+               extra_inputs=[root / kit["logo_png"]])
+
+
+@register
+class HookText(Op):
+    """The hook as a title card from `start_s` to `end_s`, readable with the sound off.
+    The text keeps its case (the pixel font draws accented capitals small)."""
+
+    op: Literal["hook_text"] = "hook_text"
+    text: OverlayText
+    start_s: float = Field(0.0, ge=0)
+    end_s: float = Field(3.0, gt=0)
+    position: Literal["top", "center"] = "top"
+
+    @model_validator(mode="after")
+    def _window(self) -> "HookText":
+        if self.end_s <= self.start_s:
+            raise ValueError("end_s must be after start_s")
+        return self
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+        text = _drawtext(self.text, info, out, size=48, x="center", y=self.position,
+                         enable=f"between(t,{self.start_s},{self.end_s})")
+        encode(src, info, out, filter_complex=f"[0:v]{text},{VIDEO_TAIL}",
+               timeout_s=timeout_s, preset=preset)
+
+
+@register
+class Credit(Op):
+    """A visible source credit for the whole video, e.g. "@creator" or "Clip: Name /
+    Pexels" (GOAL.md §5.1), at the bottom of the safe area. The pixel font has no emoji."""
+
+    op: Literal["credit"] = "credit"
+    text: OverlayText
+    position: Literal["bottom_left", "bottom_right"] = "bottom_left"
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+        text = _drawtext(self.text, info, out, size=24, x=self.position[len("bottom_"):],
+                         y="bottom")
+        encode(src, info, out, filter_complex=f"[0:v]{text},{VIDEO_TAIL}",
+               timeout_s=timeout_s, preset=preset)
+
+
 def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path) -> None:
     """Two-pass loudnorm to LOUDNESS_*: measure, then apply with the measured values
     (linear gain when the true-peak target allows it). The video is copied. Digital
@@ -229,7 +359,7 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
 def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
            timeout_s: float = DEFAULT_TIMEOUT_S, preset: str = DEFAULT_PRESET) -> MediaInfo:
     """Run `recipe` on `inputs["source"]` and write `out`. Other named inputs (music,
-    voice-over, logo) are for the ops that use them. Every output gets a final loudness
+    voice-over) are for the ops that use them. Every output gets a final loudness
     pass (LOUDNESS_*). Returns the output's MediaInfo. `timeout_s` applies to each
     ffmpeg run."""
     paths = {k: Path(v) for k, v in inputs.items()}
