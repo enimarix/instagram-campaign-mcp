@@ -6,18 +6,10 @@ import {
 import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
 import { buttonClass } from '../ui/styles'
+import { clock } from './load'
 
 // Same list as VIDEO_SUFFIXES in src/studio/reactions.py.
 const ACCEPT = '.mp4,.mov,.m4v,.mkv,.webm'
-
-const pad = (n: number) => String(n).padStart(2, '0')
-/** 754 → "12:34", 3725 → "1:02:05". */
-function clock(seconds: number) {
-  const t = Math.floor(seconds)
-  const h = Math.floor(t / 3600)
-  const m = Math.floor((t % 3600) / 60)
-  return h ? `${h}:${pad(m)}:${pad(t % 60)}` : `${m}:${pad(t % 60)}`
-}
 
 /** Settings section: the long reaction recording each reaction video takes its next piece from. */
 export default function ReactionReelSection() {

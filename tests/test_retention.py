@@ -75,6 +75,11 @@ def test_strong_hook_and_watch_ratio():
     assert "hook" not in _kinds(findings)
 
 
+def test_capped_timeline_tail_is_ignored():
+    capped = TIMELINE + [{"e": "+12 more"}]
+    assert diagnose(capped, DURATION, _metrics(skip=55, watch_s=15.2, shares=2, saved=3), _base())         == diagnose(TIMELINE, DURATION, _metrics(skip=55, watch_s=15.2, shares=2, saved=3), _base())
+
+
 def test_no_timeline_gives_metrics_only_findings():
     findings = diagnose(None, None, _metrics(skip=55, watch_s=4), _base())
     assert _kinds(findings) == ["hook", "exit"]
@@ -143,3 +148,5 @@ async def test_facts_and_post_detail_carry_retention(store):
     with TestClient(create_app(s, store=store), base_url=LOCAL) as tc:
         body = tc.get("/api/analytics/posts/ours").json()
     assert body["retention"] == retention_for(store, s, "ours")
+    assert body["timeline"] == TIMELINE and body["duration"] == DURATION
+    assert body["description"] is None

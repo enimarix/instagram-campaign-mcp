@@ -207,7 +207,10 @@ def test_api(store):
         assert tc.post("/api/pinned-accounts", json={"username": "a b"}).status_code == 422
         assert [a["username"] for a in tc.get("/api/pinned-accounts").json()] == ["friend.one"]
         _pick(store)
-        assert len(tc.get("/api/dm-picks").json()) == 1
+        _pick(store, "m2")
+        assert [p["id"] for p in tc.get("/api/dm-picks").json()] == [2, 1]  # newest first
+        assert [p["id"] for p in D.list_picks(store)] == [1, 2]  # the agent's: oldest first
+        D.mark_pick(store, 2, "skipped", "dupe")
         assert tc.get("/api/dm-picks?status=bogus").status_code == 422
         r = tc.post("/api/dm-picks/1/skip", json={"reason": "not a video"})
         assert (r.json()["status"], r.json()["skip_reason"]) == ("skipped", "not a video")

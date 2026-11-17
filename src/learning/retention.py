@@ -74,7 +74,8 @@ def diagnose(timeline: Optional[List[Dict[str, Any]]], duration_s: Optional[floa
              metrics: Dict[str, Any],
              baseline: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """The findings of one Reel (see the module docstring), pure."""
-    timeline = sorted(timeline or [], key=lambda e: e["t"])
+    # a capped timeline ends with a bare {"e": "+N more"} (recipe.compress_timeline): no time
+    timeline = sorted((e for e in timeline or [] if e.get("t") is not None), key=lambda e: e["t"])
     v = _values(metrics, duration_s)
     hook = [e["e"] for e in timeline if e["t"] < HOOK_S][:HOOK_EVENTS]
     hook_txt = f" On screen then: {'; '.join(repr(e) for e in hook)}." if hook else ""

@@ -133,9 +133,11 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
 
 def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              start: Optional[Callable[..., Any]] = None,
-             now: Callable[[], datetime] = utcnow) -> List[str]:
+             now: Optional[Callable[[], datetime]] = None) -> List[str]:
     """Start each due playbook detached (runs.start_run). Never raises: the worker lives."""
     from .runs import start_run
+
+    now = now or utcnow  # looked up per call (a default argument would freeze it)
 
     started = []
     try:

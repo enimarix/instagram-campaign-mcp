@@ -72,12 +72,13 @@ def list_pinned(store: CampaignStore) -> List[Dict[str, Any]]:
 
 # ---------------------------------------------------------------- picks
 def list_picks(store: CampaignStore, status: Optional[str] = "new",
-               limit: int = 100) -> List[Dict[str, Any]]:
-    """Oldest first (picks are made in the order they came); all when status is None."""
+               limit: int = 100, *, newest: bool = False) -> List[Dict[str, Any]]:
+    """Oldest first (picks are made in the order they came), or the newest first for the
+    owner's list; all when status is None."""
     if status is not None and status not in STATUSES:
         raise ValueError(f"status must be one of {', '.join(STATUSES)}")
-    return store._select("SELECT * FROM dm_picks", {"status": status}, "received_at, id",
-                         limit)
+    order = "received_at DESC, id DESC" if newest else "received_at, id"
+    return store._select("SELECT * FROM dm_picks", {"status": status}, order, limit)
 
 
 def agent_view(pick: Dict[str, Any]) -> Dict[str, Any]:

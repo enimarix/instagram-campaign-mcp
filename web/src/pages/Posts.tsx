@@ -2,15 +2,16 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import {
   ApiError, errorMessage, getAnalyticsPost, listAnalyticsPosts, type AnalyticsPost, type PostDetail,
+  type RetentionFinding,
 } from '../api/client'
 import { localDate, safeUrl } from '../inbox/ui'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
-import { card, field, link } from '../ui/styles'
+import { card, field, link, type Tone } from '../ui/styles'
 import { Body, Line, Section } from './Analytics'
-import { num, pct, useLoad, VERDICT_TONE } from './load'
+import { clock, num, pct, useLoad, VERDICT_TONE } from './load'
 
 const PAGE = 20
 const SORTS = [
@@ -40,6 +41,60 @@ const COLUMNS: [string, (p: AnalyticsPost) => string][] = [
   ['Eng. index', (p) => ratio(p.engagement_index)], ['Watch ratio', (p) => pct(p.watch_ratio)],
   ['View rate', (p) => ratio(p.view_rate)],
 ]
+
+const FINDING: Record<RetentionFinding['kind'], [Tone, string]> = {
+  hook: ['warn', 'Hook'], exit: ['neutral', 'Exit'], payoff: ['warn', 'Payoff'], strong: ['success', 'Strong'],
+}
+// marker colours, written out so Tailwind sees them
+const MARKER: Record<Tone, string> = {
+  neutral: 'bg-fg', accent: 'bg-accent', success: 'bg-success', warn: 'bg-warn', danger: 'bg-danger', info: 'bg-info', explore: 'bg-explore',
+}
+
+/** "Why viewers left": the description, the timeline bar with a marker per finding, the findings. */
+function Retention({ p }: { p: PostDetail }) {
+  const events = p.timeline ?? []
+  // a cut timeline ends with a bare {e: "+N more"}: listed, not drawn
+  const timed = events.flatMap((e) => (e.t == null ? [] : [{ ...e, t: e.t, d: e.d ?? 0 }]))
+  const end = p.duration || Math.max(0, ...timed.map((e) => e.t + e.d))
+  const at = (s: number) => `${Math.min(100, (s / end) * 100)}%`
+  return (
+    <Section title="Why viewers left">
+      {p.description && <p className="mt-1 max-w-prose text-sm">{p.description}</p>}
+      {timed.length > 0 && end > 0 && (
+        <>
+          {/* the bar is decorative: the list below says the same */}
+          <div aria-hidden className="relative mt-3 h-8 overflow-hidden rounded-control bg-surface-2">
+            {timed.map((e, i) => (
+              <div key={i} title={e.e} className={`absolute inset-y-0 border-r border-surface ${i % 2 ? 'bg-line' : 'bg-line/50'}`}
+                style={{ left: at(e.t), width: at(e.d) }} />
+            ))}
+            {p.retention.filter((f) => f.at_s != null).map((f, i) => (
+              <div key={i} title={`${FINDING[f.kind][1]} at ${clock(f.at_s!)}`}
+                className={`absolute inset-y-0 w-1 -translate-x-1/2 ${MARKER[FINDING[f.kind][0]]}`} style={{ left: at(f.at_s!) }} />
+            ))}
+          </div>
+          <div className="mt-0.5 flex justify-between text-xs text-muted tabular-nums"><span>0:00</span><span>{clock(end)}</span></div>
+          <ol aria-label="Timeline events" className="mt-2 space-y-0.5 text-xs text-muted">
+            {events.map((e, i) => (
+              <li key={i}>{e.t != null && <span className="tabular-nums">{clock(e.t)}–{clock(e.t + (e.d ?? 0))} </span>}{e.e}</li>
+            ))}
+          </ol>
+        </>
+      )}
+      {p.retention.length === 0 ? <p className="mt-2 text-sm text-muted">No findings yet: they come once the Reel has matured.</p> : (
+        <ul aria-label="Findings" className="mt-3 space-y-2">
+          {p.retention.map((f, i) => (
+            <Card as="li" key={i} className="flex flex-wrap items-start gap-2 text-sm">
+              <Chip tone={FINDING[f.kind][0]}>{FINDING[f.kind][1]}{f.at_s != null && ` · ${clock(f.at_s)}`}</Chip>
+              <Chip>{f.confidence} confidence</Chip>
+              <p className="w-full">{f.text}</p>
+            </Card>
+          ))}
+        </ul>
+      )}
+    </Section>
+  )
+}
 
 /** All posts: cards on a phone, a table from md up; sort, filters and "Load more". */
 export default function Posts() {
@@ -167,6 +222,8 @@ function Detail({ p }: { p: PostDetail }) {
           <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>Open on Instagram</a>
         ) : <p className="mt-2 text-sm text-muted">No video link.</p>}
       </Section>
+
+      <Retention p={p} />
 
       <Section title="Growth by post age">
         <div className="mt-2 grid gap-3 sm:grid-cols-2">

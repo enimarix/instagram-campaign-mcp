@@ -1,13 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  ApiError, errorMessage, getAccount, getAgentSchedule, getHealth, getStorage, getToken,
-  getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type RunResult, type TokenStatus,
+  ApiError, errorMessage, getAccount, getAgentSchedule, getDownloaderStatus, getHealth, getStorage, getToken,
+  getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type DownloaderStatus, type RunResult,
+  type TokenStatus,
 } from '../api/client'
 import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
+import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { ThemeToggle } from '../ui/ThemeToggle'
 import ClipsSection from './Clips'
+import DmPicksSection from './DmPicks'
 import ReactionReelSection from './ReactionReel'
 
 // ponytail: fixed threshold (~a week of daily batches); make it a setting if it nags.
@@ -84,6 +87,28 @@ function scheduleLine(e: AgentScheduleEntry) {
   return `${next} · ${last}`
 }
 
+const DOWNLOADER_TONE = { up: 'success', down: 'danger', broken: 'danger', not_configured: 'neutral' } as const
+
+function DownloaderRows({ d }: { d: DownloaderStatus }) {
+  const h = d.health
+  return (
+    <>
+      <Row label="Status">
+        {!d.set_up ? <Chip tone="warn">not set up</Chip>
+          : <Chip tone={DOWNLOADER_TONE[h?.status ?? 'not_configured']}>{(h?.status ?? 'not checked yet').replace('_', ' ')}</Chip>}
+      </Row>
+      {h && <Row label="Last check">{relative(h.checked_at)}{h.detail && ` · ${h.detail}`}</Row>}
+      {!d.set_up && (
+        <Row label="Set it up">
+          Run <code className="rounded bg-surface-2 px-1.5 py-0.5 select-all">ig-campaign downloader setup</code>
+        </Row>
+      )}
+      {!d.health_configured && <Row label="Health check">Off: set <code>DOWNLOADER_HEALTH_URL</code> in .env</Row>}
+      <Row label="Address">{d.host}:{d.port} (this computer only)</Row>
+    </>
+  )
+}
+
 const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : undefined)
 
 export default function Settings() {
@@ -93,6 +118,7 @@ export default function Settings() {
   const [storage] = useLoad(getStorage)
   const [token] = useLoad(getToken)
   const [schedule] = useLoad(getAgentSchedule)
+  const [downloader] = useLoad(getDownloaderStatus)
   const [toggleError, setToggleError] = useState<string | null>(null)
 
   const setupMode = health.data?.instagram_configured === false ||
@@ -203,6 +229,10 @@ export default function Settings() {
 
         <ClipsSection />
         <ReactionReelSection />
+        <DmPicksSection />
+        <Section title="Reel downloader" load={downloader}>
+          {downloader.data && <DownloaderRows d={downloader.data} />}
+        </Section>
 
         <Section title="Server" load={health}>
           <Row label="Version">{health.data ? `${health.data.status}, v${health.data.version}` : ''}</Row>
