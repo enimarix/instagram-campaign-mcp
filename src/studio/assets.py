@@ -57,7 +57,8 @@ def transition(
     """Move an asset to `to_status` if the table allows it for `actor`; return the asset."""
     if actor not in ACTORS:
         raise ValueError(f"actor must be one of {ACTORS}, not {actor!r}")
-    frm = store.get_asset(asset_id)["status"]
+    asset = store.get_asset(asset_id)
+    frm = asset["status"]
     who = MOVES.get((frm, to_status))
     if who is None or actor not in who:
         targets = ", ".join(
@@ -81,7 +82,19 @@ def transition(
         )
     if to_status == "published":  # every publish path (run_due, reconcile) passes here
         mark_posted(store, asset_id)
+    if actor == "owner" and frm == "ready" and asset["parent_asset_id"]:
+        _change_decided(store, asset["parent_asset_id"])
     return store.get_asset(asset_id)
+
+
+def _change_decided(store: CampaignStore, before_id: int) -> None:
+    """The owner decided on a revised video (approved, declined, archived or sent back
+    again): the change requests on the version it replaced come back to the agent's
+    feedback (undigested), now carrying the outcome, so the agent learns what worked and
+    what did not (step 133)."""
+    with store._tx() as c:
+        c.execute("UPDATE feedback SET digested_at = NULL"
+                  " WHERE asset_id = ? AND wants_changes = 1", (before_id,))
 
 
 def set_verdict(store: CampaignStore, asset_id: int, verdict: str) -> Dict[str, Any]:

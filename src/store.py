@@ -564,7 +564,7 @@ EXPERIMENT_FIELDS = ("hypothesis", "variable", "variants", "target_per_variant",
                      "status", "result", "learning_id", "report_date", "opened_at")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
                "facts", "usage", "silences", "timeline", "analysis", "variants", "result",
-               "spec", "needed", "detail")
+               "spec", "needed", "detail", "change_request")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),
@@ -1472,11 +1472,15 @@ class CampaignStore:
         """Best first: agent self_score high to low (unscored last), then id.
         Rows carry their idea's track, strategy (explore/exploit) and experiment, its source's
         rights_basis (None: no source) and dm_pick_sender (the pinned account that sent the
-        source by DM, else None) for the inbox."""
+        source by DM, else None) for the inbox, and change_request: on a revised video, the
+        owner's newest change request on the version it replaces {text, reason_codes}."""
         return self._select(
             "SELECT a.*, i.track, i.strategy, i.experiment, s.rights_basis,"
             " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
-            "  ORDER BY d.id LIMIT 1) AS dm_pick_sender"
+            "  ORDER BY d.id LIMIT 1) AS dm_pick_sender,"
+            " (SELECT json_object('text', f.text, 'reason_codes', json(f.reason_codes))"
+            "  FROM feedback f WHERE f.asset_id = a.parent_asset_id AND f.wants_changes = 1"
+            "  ORDER BY f.id DESC LIMIT 1) AS change_request"
             " FROM assets a JOIN ideas i ON i.id = a.idea_id"
             " LEFT JOIN sources s ON s.id = i.source_id",
             {"a.batch_date": _sql_value(batch_date), "a.status": status,

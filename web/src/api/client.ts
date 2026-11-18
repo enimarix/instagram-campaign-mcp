@@ -82,6 +82,8 @@ export type Asset = {
   pillar?: string | null
   rights_basis?: string | null
   dm_pick_sender?: string | null
+  // list rows of a revised video: the owner's newest change request on the version it replaces (133)
+  change_request?: { text: string | null; reason_codes: string[] } | null
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -168,13 +170,14 @@ export const editAsset = (
   send<Asset>('PATCH', `/api/assets/${id}`, fields)
 export const unapproveAsset = (id: number) => post<Asset>(`/api/assets/${id}/unapprove`)
 export const archiveAsset = (id: number) => post<Asset>(`/api/assets/${id}/archive`)
-/** The feed's Decline in one call: disliked + archived + optional reasons. keepalive: it
- * still lands when the feed flushes it as the tab closes. */
-export const declineAsset = (id: number, reason_codes: string[]) =>
+/** The feed's Decline in one call: disliked + archived + the motive (reasons and/or text,
+ * at least one: 422 otherwise). keepalive: it still lands when the feed flushes it as the
+ * tab closes. */
+export const declineAsset = (id: number, reason_codes: string[], text?: string) =>
   request<Asset>(`/api/assets/${id}/decline`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason_codes }),
+    body: JSON.stringify({ reason_codes, ...(text && { text }) }),
     keepalive: true,
   })
 export const listFeedback = (id: number) => request<Comment[]>(`/api/assets/${id}/feedback`)

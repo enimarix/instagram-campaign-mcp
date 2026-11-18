@@ -107,8 +107,22 @@ def test_decline_is_one_call(tc, store):
     [fb] = store.list_feedback(asset_id=a["id"])
     assert fb["reason_codes"] == ["too_long"] and not fb["wants_changes"]
     b = _asset(store)
-    assert tc.post(f"/api/assets/{b['id']}/decline", json={}).status_code == 200
-    assert store.list_feedback(asset_id=b["id"]) == []  # no reasons: no comment
+    r = tc.post(f"/api/assets/{b['id']}/decline", json={"text": " Trop lent "})
+    assert r.status_code == 200 and r.json()["verdict"] == "disliked"
+    [fb] = store.list_feedback(asset_id=b["id"])
+    assert (fb["text"], fb["reason_codes"]) == ("Trop lent", [])
+
+
+def test_decline_needs_a_motive(tc, store):
+    a = _asset(store)
+    for body in ({}, {"reason_codes": []}, {"text": "   "}, {"text": None, "reason_codes": []}):
+        r = tc.post(f"/api/assets/{a['id']}/decline", json=body)
+        assert r.status_code == 422, body
+        assert r.json() == {"error": "invalid",
+                            "message": "a decline needs a motive: pick a reason or say why"}
+    row = store.get_asset(a["id"])
+    assert (row["status"], row["verdict"]) == ("ready", "none")
+    assert store.list_feedback(asset_id=a["id"]) == []
 
 
 def test_decline_refused_leaves_the_asset_unchanged(tc, store):
@@ -122,4 +136,4 @@ def test_decline_refused_leaves_the_asset_unchanged(tc, store):
         row = store.get_asset(x["id"])
         assert (row["status"], row["verdict"]) == (x["status"], "none")
         assert store.list_feedback(asset_id=x["id"]) == []
-    assert tc.post("/api/assets/999/decline", json={}).status_code == 404
+    assert tc.post("/api/assets/999/decline", json={"text": "x"}).status_code == 404

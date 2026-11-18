@@ -6,7 +6,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 import src.instagram_mcp_server as srv
 from src.learning import learnings as L
 from src.studio.assets import transition
-from src.studio.feedback import add_comment
+from src.studio.feedback import add_comment, decline
 
 
 def _asset(store, status="ready"):
@@ -197,3 +197,68 @@ async def test_mcp_update_learning_passes_scope_and_evaluate(mcp_store, monkeypa
                                      evidence_to_add=ev) == {"id": 7}
     assert (seen["id"], seen["scope"], seen["evaluate"]) == (7, scope, True)
     assert seen["evidence_to_add"] == ev
+
+
+# Step 133: every decline has a motive, every change teaches
+
+
+def _revision(store, reason="Changed: hook cut to 2 s"):
+    """A video sent back with a change request, and its new version, ready."""
+    before = _asset(store)
+    ask = add_comment(store, before, text="Shorter hook", reason_codes=["weak_hook"],
+                      wants_changes=True)["feedback"]["id"]
+    after = store.add_asset(store.get_asset(before)["idea_id"], batch_date="2026-11-17",
+                            parent_asset_id=before, self_score_reason=reason)["id"]
+    transition(store, after, "ready", actor="worker")
+    return before, ask, after
+
+
+def test_approved_change_comes_back_with_its_outcome(store):
+    before, ask, after = _revision(store)
+    [row] = L.get_feedback(store)
+    assert row["change"]["outcome"] == "pending"  # the new version is not judged yet
+    L.mark_feedback_digested(store, [ask])
+    assert L.get_feedback(store) == []
+    transition(store, after, "approved", actor="owner")
+    [row] = L.get_feedback(store)  # undigested again, now with the outcome
+    assert row["id"] == ask and row["change"] == {
+        "before_asset_id": before, "after_asset_id": after,
+        "asked": [{"feedback_id": ask, "text": "Shorter hook", "reasons": ["Weak hook"]}],
+        "changed": "Changed: hook cut to 2 s", "outcome": "approved", "decline_motives": [],
+        "asked_again": []}
+    assert L.owner_decisions(store)["approved_changes"] == [row["change"]]
+
+
+def test_declined_revision_carries_its_motive(store):
+    before, ask, after = _revision(store)
+    L.mark_feedback_digested(store, [ask])
+    decline(store, after, text="Still too slow")
+    rows = L.get_feedback(store)
+    assert [r["id"] for r in rows][0] == ask
+    motive = rows[1]
+    assert motive["text"] == "Still too slow" and motive["asset"]["id"] == after
+    for r in rows:  # both name the change, both assets and the motive
+        assert r["change"]["outcome"] == "declined"
+        assert (r["change"]["before_asset_id"], r["change"]["after_asset_id"]) == (before, after)
+        assert r["change"]["decline_motives"] == [
+            {"feedback_id": motive["id"], "text": "Still too slow", "reasons": []}]
+    decisions = L.owner_decisions(store)
+    assert [m["id"] for m in decisions["decline_motives"]] == [motive["id"]]
+    assert decisions["approved_changes"] == []
+
+
+def test_revision_sent_back_again(store):
+    _, _, after = _revision(store)
+    again = add_comment(store, after, text="Even shorter", wants_changes=True)["feedback"]
+    change = L.get_feedback(store)[0]["change"]
+    assert change["outcome"] == "sent_back"
+    assert change["asked_again"] == [{"feedback_id": again["id"], "text": "Even shorter",
+                                      "reasons": []}]
+
+
+def test_feed_rows_carry_the_change_request(store):
+    before, _, after = _revision(store)
+    rows = {a["id"]: a for a in store.list_assets()}
+    assert rows[after]["change_request"] == {"text": "Shorter hook",
+                                             "reason_codes": ["weak_hook"]}
+    assert rows[before]["change_request"] is None

@@ -83,6 +83,18 @@ Skip this step in a dry run. `list_learnings` (or the brief's) and compare with 
   "metric": …, "value": …, "baseline_median": …, "at_s": …, "event": …}], scope={…tags})`.
   One Reel is a hypothesis, never a do/dont.
 
+Then the owner's decisions, `brief.json` → `owner_decisions` (listed first: they weigh
+most). Taste learnings follow the same rules as everywhere (origin `taste`, citing
+feedback ids): one → hypothesis; repeated → `do` / `dont`; an explicit "never …" or
+"always …" in the owner's words → `owner_instruction=True`.
+- `decline_motives`: why the owner turned videos down. A motive that already has a
+  learning: add the new feedback id with `update_learning(evidence_feedback_ids_to_add=…)`
+  (2 or more motives on different videos: make it a `dont`). A motive with none: add one.
+- `approved_changes`: change requests whose new version the owner approved (`asked` →
+  `changed`). Each is evidence of what works: the same kind of change approved twice → a
+  `do` citing the `asked` feedback ids.
+Never add a second learning for a point an active one already makes: add evidence to it.
+
 ## Step 4: taste versus audience
 
 From the funnel and calibration in the facts and the learnings: where the owner liked

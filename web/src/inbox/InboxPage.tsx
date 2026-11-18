@@ -24,7 +24,7 @@ import { Sheet } from '../ui/Sheet'
 import { buttonClass, field } from '../ui/styles'
 import { Tabs } from '../ui/Tabs'
 import { useToast } from '../ui/useToast'
-import { COMMENTARY_CONFIRMATION, localDate, wallClock } from './ui'
+import { changeLabel, COMMENTARY_CONFIRMATION, localDate, wallClock } from './ui'
 
 const UNDO_MS = 5000 // the Toast's own lifetime
 const VISIBLE = 0.6 // share of a card on screen before it counts as the current one
@@ -63,10 +63,9 @@ export default function InboxPage() {
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISSED))
   const [changeFor, setChangeFor] = useState<{ asset: Asset; at: number } | null>(null)
   const [confirmFor, setConfirmFor] = useState<Asset | null>(null)
-  const [why, setWhy] = useState<{ id: number; codes: string[] } | null>(null) // decline reasons
+  const [declineFor, setDeclineFor] = useState<Asset | null>(null) // the motive sheet (133)
   const pending = useRef(new Map<number, Pending>())
   const inflight = useRef<Promise<unknown>>(Promise.resolve()) // committed decisions still saving
-  const declineCodes = useRef(new Map<number, string[]>())
   // approved explore videos the owner turned into trial Reels (088), until the commit
   const [trialAsk, setTrialAsk] = useState<{ id: number; on: boolean } | null>(null)
   const trials = useRef(new Set<number>())
@@ -75,7 +74,7 @@ export default function InboxPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    getTaxonomy().then(setTaxonomy, () => {}) // no chips: decline and change still work
+    getTaxonomy().then(setTaxonomy, () => {}) // no chips: decline and change take text
   }, [])
 
   // The bench feeds the tab count and the banner on both tabs, and the feed on the Bench tab.
@@ -142,8 +141,6 @@ export default function InboxPage() {
     setAssets((list) => list && list.map((a) => (a.id === id ? { ...a, ...fields } : a)))
   const forget = (id: number) => {
     pending.current.delete(id)
-    declineCodes.current.delete(id)
-    setWhy((w) => (w?.id === id ? null : w))
     trials.current.delete(id)
     setTrialAsk((t) => (t?.id === id ? null : t))
   }
@@ -161,7 +158,7 @@ export default function InboxPage() {
         })
         .finally(() => getBench().then(setBench, () => {}))
       inflight.current = Promise.all([inflight.current, saving])
-      forget(a.id) // after commit() started: decline reads its reasons synchronously
+      forget(a.id) // after commit() started: approve reads its trial choice synchronously
     }
     const timer = setTimeout(run, UNDO_MS)
     pending.current.set(a.id, { timer, run })
@@ -196,18 +193,16 @@ export default function InboxPage() {
         })
     })
     // an explore (or experiment) video may go out as a trial Reel instead: one tap during the undo
-    if (a.strategy === 'explore' || a.experiment) {
-      setWhy(null) // one chip row at a time: the newest decision's
-      setTrialAsk({ id: a.id, on: false })
-    }
+    if (a.strategy === 'explore' || a.experiment) setTrialAsk({ id: a.id, on: false })
   }
 
-  function decline(a: Asset) {
+  // Every decline has a motive (chips and/or words): the agent learns from it.
+  function decline(a: Asset, fb: CommentIn) {
+    setDeclineFor(null)
     decide(a, { status: 'archived', verdict: 'disliked' }, 'Declined', async () => {
-      patch(a.id, await declineAsset(a.id, declineCodes.current.get(a.id) ?? []))
+      patch(a.id, await declineAsset(a.id, fb.reason_codes, fb.text))
     })
     setTrialAsk(null)
-    setWhy({ id: a.id, codes: [] })
   }
 
   function toggleTrial() {
@@ -220,13 +215,6 @@ export default function InboxPage() {
   // Not now, but good: onto the bench ("Saved"), for a free slot later.
   function save(a: Asset) {
     decide(a, { verdict: 'liked' }, 'Saved for later', async () => patch(a.id, await setVerdict(a.id, 'liked')))
-  }
-
-  function toggleWhy(code: string) {
-    if (!why) return
-    const codes = why.codes.includes(code) ? why.codes.filter((c) => c !== code) : [...why.codes, code]
-    declineCodes.current.set(why.id, codes)
-    setWhy({ id: why.id, codes })
   }
 
   function change(a: Asset, fb: CommentIn) {
@@ -252,7 +240,7 @@ export default function InboxPage() {
   useLayoutEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target
-      if (e.ctrlKey || e.metaKey || e.altKey || changeFor || confirmFor || !feed.length) return
+      if (e.ctrlKey || e.metaKey || e.altKey || changeFor || confirmFor || declineFor || !feed.length) return
       if (t instanceof HTMLElement && (t.isContentEditable || t.closest('input, textarea, select')))
         return
       const a = feed[cur]
@@ -267,7 +255,7 @@ export default function InboxPage() {
       }
       const act: Record<string, () => void> = {
         a: () => void approve(a),
-        d: () => decline(a),
+        d: () => setDeclineFor(a),
         c: () => openChange(a),
         ...(tab === 'today' && { s: () => save(a) }),
         m: () => setMuted((m) => !m),
@@ -372,7 +360,8 @@ export default function InboxPage() {
               showBestBefore={tab === 'bench'}
               onToggleSound={() => setMuted((m) => !m)}
               onApprove={() => void approve(a)}
-              onDecline={() => decline(a)}
+              change={changeLabel(a.change_request, taxonomy?.feedback_reasons.values)}
+              onDecline={() => setDeclineFor(a)}
               onChange={() => openChange(a)}
               onSave={tab === 'today' ? () => save(a) : undefined}
             />
@@ -383,20 +372,6 @@ export default function InboxPage() {
         Keys: a approve, d decline, c change{tab === 'today' && ', s save for later'}, j / k next / previous, space play / pause, m sound
       </p>
 
-      {why && taxonomy && (
-        <div role="group" aria-label="Why decline? (optional)"
-          className="fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 lg:bottom-24">
-          <div className="flex w-full max-w-sm gap-2 overflow-x-auto rounded-card border border-line bg-surface-2 p-2 shadow-overlay">
-            <span aria-hidden className="shrink-0 self-center pl-2 text-sm text-muted">Why?</span>
-            {taxonomy.feedback_reasons.values.map((r) => (
-              <Chip key={r.id} tone="danger" pressed={why.codes.includes(r.id)} onClick={() => toggleWhy(r.id)}
-                className="shrink-0">
-                {r.label}
-              </Chip>
-            ))}
-          </div>
-        </div>
-      )}
       {trialAsk && (
         <div role="group" aria-label="Publish as a trial Reel? (optional)"
           className="fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 lg:bottom-24">
@@ -414,6 +389,13 @@ export default function InboxPage() {
           at={changeFor.at}
           onClose={() => setChangeFor(null)}
           onSave={(fb) => change(changeFor.asset, fb)}
+        />
+      )}
+      {declineFor && (
+        <ReasonSheet
+          reasons={taxonomy?.feedback_reasons.values ?? []}
+          onClose={() => setDeclineFor(null)}
+          onSave={(fb) => decline(declineFor, fb)}
         />
       )}
       {confirmFor && (

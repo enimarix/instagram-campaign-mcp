@@ -13,6 +13,7 @@ type Props = {
   preload: boolean // the next card: its preview loads ahead
   muted: boolean
   showBestBefore?: boolean // bench cards
+  change?: string | null // a revised video: "Changé : « … »", what the owner asked (133)
   onToggleSound: () => void
   onApprove: () => void
   onDecline: () => void
@@ -38,7 +39,7 @@ function RailButton({ label, icon, onClick, primary }: { label: string; icon: Re
 
 /** One screen of the review feed: the video, an overlay of what the agent says about it,
  * and the decision rail (Approve, Change, Decline). */
-export default function AssetCard({ asset: a, index, active, preload, muted, showBestBefore, onToggleSound, onApprove, onDecline, onChange, onSave }: Props) {
+export default function AssetCard({ asset: a, index, active, preload, muted, showBestBefore, change, onToggleSound, onApprove, onDecline, onChange, onSave }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const [expanded, setExpanded] = useState(false)
 
@@ -77,6 +78,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
             {a.pillar && <Chip>{a.pillar}</Chip>}
             {showBestBefore && a.best_before && <Chip tone="warn">best before {a.best_before}</Chip>}
           </div>
+          {change && <p className="line-clamp-2 text-sm font-medium">{change}</p>}
           {a.self_score != null && (
             <p className="truncate text-sm" title={a.self_score_reason ?? undefined}>
               <strong className="mr-1 text-base tabular-nums">{a.self_score}/10</strong> {a.self_score_reason}
@@ -91,7 +93,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
           {a.caption && <p className="line-clamp-1 text-sm text-white/75">{a.caption}</p>}
         </div>
       </div>
-      {/* Phone: above the decline reasons and the undo toast, which would cover it for 5 s. */}
+      {/* Phone: above the trial Reel choice and the undo toast, which would cover it for 5 s. */}
       <div className="absolute right-2 bottom-38 flex flex-col items-center gap-4 lg:static lg:justify-end lg:pb-6">
         <RailButton label="Approve" icon={<CheckIcon />} onClick={onApprove} primary />
         <RailButton label="Change" icon={<EditIcon />} onClick={onChange} />

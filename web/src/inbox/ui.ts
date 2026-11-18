@@ -1,4 +1,6 @@
 // Shared helpers of the web pages (styles live in ../ui/).
+import type { Asset, Vocabulary } from '../api/client'
+
 /** Only http(s) links are rendered: agent-written URLs could carry `javascript:`. */
 export const safeUrl = (url?: string | null) => (url && /^https?:\/\//i.test(url) ? url : null)
 
@@ -22,3 +24,11 @@ export const AI_LABEL_LINE = "Published with Instagram's AI label"
 /** What the owner confirms before a `commentary` video is queued (GOAL.md §5.1). */
 export const COMMENTARY_CONFIRMATION =
   'I checked this reaction video: my own take is a substantial part and the creator is credited.'
+
+/** "Changé : « shorter hook »" on a revised video (133): the owner's own words, else the
+ * labels of the reasons they picked; null when the video is not a revision. */
+export function changeLabel(req: Asset['change_request'], reasons: Vocabulary['values'] = []) {
+  const words = req && (req.text?.trim() ||
+    req.reason_codes.map((c) => reasons.find((r) => r.id === c)?.label ?? c).join(', '))
+  return words ? `Changé : « ${words} »` : null
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CommentIn, Vocabulary } from '../api/client'
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Chip'
@@ -8,43 +8,58 @@ import { clock } from './ui'
 
 type Props = {
   reasons: Vocabulary['values']
-  at: number // the playback time when the sheet opened, for the optional pin
+  /** Change: the playback time when the sheet opened, for the optional pin. Without it the
+   * sheet is Decline's: the motive the agent learns from (133), no pin. */
+  at?: number
   onSave: (fb: CommentIn) => void
   onClose: () => void
 }
 
-// The Change sheet: what is wrong (chips and/or text), optionally pinned to a moment.
-// Saving asks for a new version (wants_changes); the agent reworks it.
+// Change or Decline: what is wrong (chips and/or text, at least one), for Change
+// optionally pinned to a moment. Change asks for a new version (wants_changes); the agent
+// reworks it. Decline's text is a big field that phone dictation fills.
 export default function ReasonSheet({ reasons, at, onSave, onClose }: Props) {
+  const decline = at === undefined
   const [picked, setPicked] = useState<string[]>([])
   const [text, setText] = useState('')
   const [pin, setPin] = useState(false)
+  const input = useRef<HTMLTextAreaElement>(null)
+
+  // Desktop: type the motive at once. Deferred: the Sheet opens its dialog (and moves the
+  // focus into it) after this effect. Not on a phone, where the keyboard would cover the chips.
+  useEffect(() => {
+    if (!decline || !window.matchMedia?.('(pointer: fine)').matches) return
+    const t = setTimeout(() => input.current?.focus())
+    return () => clearTimeout(t)
+  }, [decline])
 
   const toggle = (id: string) =>
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
 
   return (
-    <Sheet title="What should change?" onClose={onClose}>
+    <Sheet title={decline ? 'Why decline?' : 'What should change?'} onClose={onClose}>
       <div role="group" aria-label="Reasons" className="mt-4 flex flex-wrap gap-2">
         {reasons.map((r) => (
           <Chip key={r.id} tone="danger" pressed={picked.includes(r.id)} onClick={() => toggle(r.id)}>
             {r.label}
           </Chip>
         ))}
-        <Chip tone="accent" pressed={pin} onClick={() => setPin((p) => !p)}>at {clock(at)}</Chip>
+        {!decline && <Chip tone="accent" pressed={pin} onClick={() => setPin((p) => !p)}>at {clock(at)}</Chip>}
       </div>
-      <textarea aria-label="What to change" value={text} onChange={(e) => setText(e.target.value)}
-        rows={2} placeholder="Same video, shorter hook…" className={`${field} mt-3 block w-full py-2`} />
+      <textarea ref={input} aria-label={decline ? 'Pourquoi ?' : 'What to change'} value={text}
+        onChange={(e) => setText(e.target.value)} rows={decline ? 4 : 2}
+        placeholder={decline ? 'Pourquoi ?' : 'Same video, shorter hook…'}
+        className={`${field} mt-3 block w-full py-2 ${decline ? 'min-h-32 md:min-h-0' : ''}`} />
       <div className="mt-5 grid grid-cols-2 gap-2">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" disabled={!picked.length && !text.trim()}
+        <Button variant={decline ? 'danger' : 'primary'} disabled={!picked.length && !text.trim()}
           onClick={() => onSave({
             reason_codes: picked,
             ...(text.trim() && { text: text.trim() }),
-            ...(pin && { video_time_s: at }),
-            wants_changes: true,
+            ...(pin && !decline && { video_time_s: at }),
+            ...(!decline && { wants_changes: true }),
           })}>
-          Send for changes
+          {decline ? 'Decline' : 'Send for changes'}
         </Button>
       </div>
     </Sheet>
