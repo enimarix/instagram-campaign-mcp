@@ -4,7 +4,8 @@ Render jobs (GOAL.md §3.1, §3.2, §4.3): render an asset from its recipe into 
 `assets.recipe` is an envelope (docs/DECISIONS.md):
   {"kind": "ffmpeg", "recipe": <Recipe>, "inputs": {"source": <media path>, ...}}  Track A
   {"kind": "motion", "template": <id>, "props": {...}}                             Track B
-plus an optional `thumb_offset_ms` (cover frame, also sent to Instagram). Motion recipes
+plus an optional `thumb_offset_ms` (cover frame, also sent to Instagram); a remix may carry
+its source's `clip_timeline` (step 119) for the asset's timeline. Motion recipes
 render through src/studio/motion.py (Remotion); their cover is the template's cover frame.
 
 A render writes, into media.asset_dir(): `video.mp4` (the master), `preview.mp4` (light copy
@@ -18,7 +19,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Annotated, Any, Callable, Dict, Literal, Optional, Tuple, Union
+from typing import Annotated, Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
@@ -50,6 +51,7 @@ class FfmpegRecipe(_Envelope):
     kind: Literal["ffmpeg"]
     recipe: Recipe
     inputs: Dict[str, str]
+    clip_timeline: Optional[List[Dict[str, Any]]] = None  # the source's (remix, step 119)
 
     @field_validator("inputs")
     @classmethod
@@ -138,7 +140,7 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
     else:
         inputs = {k: media.resolve(media_root, v) for k, v in env.inputs.items()}
         info = render(env.recipe, inputs, video, timeout_s=timeout_s, preset=preset)
-        timeline = recipe_timeline(env.recipe, info.duration)
+        timeline = recipe_timeline(env.recipe, info.duration, env.clip_timeline or ())
     progress(0.8)
     ffmpeg.run(["-i", video, *PREVIEW_ARGS, "-preset", preset, preview], timeout_s=timeout_s)
     progress(0.9)

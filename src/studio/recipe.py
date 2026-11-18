@@ -652,12 +652,20 @@ def compress_timeline(raw: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     return cut(keep)
 
 
-def recipe_timeline(recipe: Recipe, duration_s: float) -> List[Dict[str, Any]]:
+def recipe_timeline(recipe: Recipe, duration_s: float,
+                    clip: Sequence[Mapping[str, Any]] = ()) -> List[Dict[str, Any]]:
     """The compressed timeline of a render of `recipe` that came out `duration_s` long (the
     final video), in its seconds. Ops without a time window span the clip as it is when they
-    run: an end card makes it longer for the ops after it."""
+    run: an end card makes it longer for the ops after it. `clip` is the source clip's own
+    timeline (step 119, in its seconds): its events inside the trim come in shifted and
+    marked `clip:`, so the clip's beats and our overlays can be told apart."""
     length = duration_s - sum(op.duration_s for op in recipe.ops if isinstance(op, EndCard))
+    start = next((op.start_s for op in recipe.ops if isinstance(op, Trim)), 0.0)
     raw: List[Dict[str, Any]] = []
+    for ev in clip:
+        if "t" in ev and ev["t"] + ev["d"] >= start:  # no t: the "+N more" marker
+            raw += _window(max(ev["t"] - start, 0.0), ev["t"] + ev["d"] - start, length,
+                           "clip", ev["e"])
     for op in recipe.ops:
         raw += op.events(length)
         if isinstance(op, EndCard):

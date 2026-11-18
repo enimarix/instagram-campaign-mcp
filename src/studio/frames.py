@@ -3,7 +3,7 @@ Self-review (step 057): the agent sees its own work as small JPEG frames.
 
 The locked-down agent (step 058) cannot read `data/media`, so the MCP tools hand it images:
 `asset_frames` for a rendered asset (plus its QC result), `preview_images` for the stills of
-`preview_motion`. Frames are cached under `<media root>/frames/`, so asking twice is free.
+`preview_motion`, and (step 119) remix.clip_frames for a downloaded clip. Frames are cached under `<media root>/frames/`, so asking twice is free.
 """
 
 from __future__ import annotations
@@ -50,17 +50,26 @@ def asset_frames(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
     cover = ((asset["recipe"] or {}).get("thumb_offset_ms") or 0) / 1000
     times = [round(min(t, last), 3)
              for t in [cover] + [last * k / (n - 1) for k in range(1, n)]]
-    stat = video.stat()
-    folder = (Path(settings.media_root) / "frames"
-              / f"{asset_id}-{stat.st_mtime_ns:x}-{stat.st_size:x}-{width}")
-    outs = [folder / f"frame-{i}-{t:.3f}.jpg" for i, t in enumerate(times)]
-    if not all(p.is_file() for p in outs):
-        folder.mkdir(parents=True, exist_ok=True)
-        _jpegs([["-ss", f"{t:.3f}", "-i", video] for t in times], outs, width)
     info = {"asset_id": asset_id, "status": asset["status"], "qc": qc_summary(asset["qc"]),
             "duration_s": round(duration, 3), "frame_times_s": times,
             "description": asset["description"], "timeline": asset["timeline"]}
-    return [p.read_bytes() for p in outs], info
+    return video_frames(settings.media_root, video, str(asset_id), times, width), info
+
+
+def video_frames(media_root: Any, video: Path, key: str, times: Sequence[float],
+                 width: int = WIDTH) -> List[bytes]:
+    """`width` px JPEGs of `video` at `times` (seconds, frames that exist), cached under
+    `<media root>/frames/<key>-<mtime>-<size>-<width>/`: one ffmpeg call for the missing."""
+    stat = video.stat()
+    folder = (Path(media_root) / "frames"
+              / f"{key}-{stat.st_mtime_ns:x}-{stat.st_size:x}-{width}")
+    outs = [folder / f"frame-{t:.3f}.jpg" for t in times]
+    todo = sorted({t for t, p in zip(times, outs) if not p.is_file()})  # once per time
+    if todo:
+        folder.mkdir(parents=True, exist_ok=True)
+        _jpegs([["-ss", f"{t:.3f}", "-i", video] for t in todo],
+               [folder / f"frame-{t:.3f}.jpg" for t in todo], width)
+    return [p.read_bytes() for p in outs]
 
 
 def preview_images(template: str, props: Dict[str, Any], media_root: Any,
