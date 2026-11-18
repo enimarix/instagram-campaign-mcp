@@ -27,9 +27,9 @@ export const HOOK_POP_S = [0, 0.3, 0.8];
 /** The Reel cover: once the last hook strip has landed. */
 export const coverFrame = (p: PaperStoryProps, fps: number) => Math.round((HOOK_POP_S[p.hook.labels.length - 1] + 0.3) * fps);
 
-/** When strip `i` of a beat pops, `len` frames long. App list beats show one strip at a time, in turn. */
-export const labelStart = (i: number, len: number, fps: number, oneByOne: boolean) =>
-  oneByOne ? Math.round((i * len) / 3) + Math.round(0.1 * fps) : Math.round(0.15 * fps + i * Math.min(0.75 * fps, len * 0.18));
+/** When strip `i` of `n` pops in a `len`-frame beat. App list beats show one strip at a time, in turn. */
+export const labelStart = (i: number, n: number, len: number, fps: number, oneByOne: boolean) =>
+  oneByOne ? Math.round((i * len) / n) + Math.round(0.1 * fps) : Math.round(0.15 * fps + i * Math.min(0.75 * fps, len * 0.18));
 
 /** The sheet of scene `index` (0 = hook): its own, else hook navy, problem sky, first app mint, later app cream, payoff = the hook's. */
 export const sheetOf = (p: PaperStoryProps, index: number): SheetId => {

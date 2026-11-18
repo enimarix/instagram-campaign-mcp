@@ -13,14 +13,14 @@ import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { EndCard } from "../../endcards/EndCard";
 import { PAPER } from "../../endcards/PaperEndCard";
-import { ACCENTS } from "../../endcards/schema";
+import { ACCENTS, TEXT_ACCENT } from "../../endcards/schema";
 import { countUp } from "../../lib/countUp";
 import { frenchSpaces } from "../../lib/french";
 import { loopFade, type Scene } from "../../lib/timeline";
 import { CharacterGroup, type Gesture, type Mood } from "../../paper/Character";
 import { Confetti, Clock, Check, FoodSticker, Fridge, Lock, Phone, Plate, Ring, Slip, XMark } from "../../paper/props";
 import { CutDefs, cutRect, Finish, H, Hand, Label, LABEL_FONT, Night, pop, Sheet, Tear, W, Wipe } from "../../paper/kit";
-import { BRAND, CREAM, INK, MACRO, stepped, YELLOW } from "../../paper/palette.ts";
+import { BRAND, BRAND_LIGHT, CREAM, INK, MACRO, stepped, YELLOW } from "../../paper/palette.ts";
 import { backOut, easeInOut, easeOut, span } from "../../voxel/anim.ts";
 import {
   HOOK_POP_S,
@@ -53,8 +53,9 @@ const Strips = ({ p, index, f, len, fps }: SceneProps) => {
   return (
     <>
       {labels.map((l, i) => {
-        const start = index === 0 ? (i ? Math.round(HOOK_POP_S[i] * fps) : -99) : labelStart(i, len, fps, oneByOne);
-        if (oneByOne && (f < start - Math.round(0.1 * fps) || (i + 1 < labels.length && f >= labelStart(i + 1, len, fps, true) - Math.round(0.1 * fps)))) return null;
+        const start = index === 0 ? (i ? Math.round(HOOK_POP_S[i] * fps) : -99) : labelStart(i, labels.length, len, fps, oneByOne);
+        // One at a time: each strip leaves just before the next one pops.
+        if (oneByOne && (f < start - Math.round(0.1 * fps) || (i + 1 < labels.length && f >= labelStart(i + 1, labels.length, len, fps, true) - Math.round(0.1 * fps)))) return null;
         const tone = typeof l === "string" ? "cream" : l.tone;
         return <Label key={i} text={labelText(l)} x={540} y={oneByOne ? ys[0] : ys[i]} size={sizeOf(l)} tone={tone} rot={[-1.7, 1.2, -1.1][i]} f={f} start={start} />;
       })}
@@ -256,7 +257,7 @@ const PayoffScene = ({ p, index, f, len, fps }: SceneProps) => {
         <CharacterGroup id={p.character} x={b.value ? 230 : 400} y={1340} scale={b.value ? 0.56 : 0.72} f={f} fps={fps} look={1} {...face} />
         <Confetti x={540} y={b.value ? ringY : stampY} f={f} start={t.stamp} fps={fps} />
       </svg>
-      {b.stamp && <Stamp text={b.stamp} x={540} y={stampY} color={dark ? "#34D399" : color} f={f} start={t.stamp} />}
+      {b.stamp && <Stamp text={b.stamp} x={540} y={stampY} color={dark ? BRAND_LIGHT : TEXT_ACCENT[p.accent]} f={f} start={t.stamp} />}
     </>
   );
 };
@@ -305,7 +306,7 @@ const cuesOf = (p: PaperStoryProps, scenes: Scene[], endStart: number, fps: numb
     if (transitionInto(i) === "tear") cues.push([s.startFrame, "sfx-rip", 0.5]);
     else cues.push([s.startFrame - Math.round(0.3 * fps), "sfx-swish", 0.5]);
     const b = p.beats[i - 1];
-    b.labels.forEach((_, k) => cues.push([s.startFrame + labelStart(k, len, fps, b.kind === "app" && !!b.rows), "sfx-pop", 0.25]));
+    b.labels.forEach((_, k) => cues.push([s.startFrame + labelStart(k, b.labels.length, len, fps, b.kind === "app" && !!b.rows), "sfx-pop", 0.25]));
     if (b.kind === "problem") b.options.forEach((_, k) => cues.push([s.startFrame + optionTimes(k, b.options.length, len, fps).start, "sfx-pop", 0.45]));
     if (b.kind === "app" && !b.rows) cues.push([s.startFrame + phoneTimes(len, fps).tap, "sfx-pop", 0.5]);
     if (b.kind === "app" && b.total) cues.push([s.startFrame + rowTimes(b.rows!.length, len, fps).total, "sfx-pop", 0.5]);
