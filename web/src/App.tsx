@@ -1,4 +1,5 @@
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router'
+import Alerts from './Alerts'
 import CalendarPage from './calendar/CalendarPage'
 import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
@@ -52,10 +53,7 @@ export default function App() {
     <ToastProvider>
       <div className="min-h-dvh lg:flex">
         <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-6 lg:flex">
-          <p className="flex items-center gap-2 px-3 text-base font-bold tracking-tight">
-            <span aria-hidden className="grid size-7 place-items-center rounded-lg bg-accent text-xs font-black text-on-accent">GS</span>
-            Growth Studio
-          </p>
+          <Brand className="px-3" />
           <nav aria-label="Main" className="mt-6 flex flex-col gap-1">
             {NAV.map(({ path, label, Icon }) => (
               <NavLink key={path} to={path} className={sideLink}><Icon />{label}</NavLink>
@@ -64,9 +62,13 @@ export default function App() {
         </aside>
 
         <div className="min-w-0 flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+          <header className="sticky top-0 z-30 flex h-[calc(3rem+env(safe-area-inset-top))] items-center justify-between border-b border-line bg-surface/90 pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] backdrop-blur-md lg:static lg:h-14 lg:justify-end lg:border-0 lg:bg-transparent lg:px-8 lg:pt-0 lg:backdrop-blur-none">
+            <Brand className="lg:hidden" />
+            <Alerts />
+          </header>
           <TokenBanner />
           <main key={pathname}
-            className="mx-auto w-full max-w-6xl animate-page-in pt-[max(1rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-8 pl-[max(1rem,env(safe-area-inset-left))] lg:px-8 lg:pt-8">
+            className="mx-auto w-full max-w-6xl animate-page-in pt-4 pr-[max(1rem,env(safe-area-inset-right))] pb-8 pl-[max(1rem,env(safe-area-inset-left))] lg:px-8 lg:pt-2">
             <Routes>
               <Route path="/" element={<Navigate to="/inbox" replace />} />
               <Route path="/inbox" element={<InboxPage />} />
@@ -108,6 +110,15 @@ export default function App() {
         </nav>
       </div>
     </ToastProvider>
+  )
+}
+
+function Brand({ className = '' }: { className?: string }) {
+  return (
+    <p className={`flex items-center gap-2 text-base font-bold tracking-tight ${className}`}>
+      <span aria-hidden className="grid size-7 place-items-center rounded-lg bg-accent text-xs font-black text-on-accent">GS</span>
+      Growth Studio
+    </p>
   )
 }
 

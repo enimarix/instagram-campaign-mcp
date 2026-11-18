@@ -284,8 +284,8 @@ export default function InboxPage() {
 
   return (
     <section aria-labelledby="inbox-title"
-      className="-mx-4 -mt-[max(1rem,env(safe-area-inset-top))] -mb-8 flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom))] flex-col lg:m-0 lg:h-[calc(100dvh-4rem)]">
-      <header className="shrink-0 space-y-2 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 lg:px-0 lg:pt-0">
+      className="-mx-4 -mt-4 -mb-8 flex h-[calc(100dvh-6.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col lg:m-0 lg:h-[calc(100dvh-6rem)]">
+      <header className="shrink-0 space-y-2 px-4 pt-3 pb-2 lg:px-0 lg:pt-0">
         <h1 id="inbox-title" className="sr-only">Inbox</h1>
         <div className="mx-auto flex max-w-md items-center gap-2">
           <div className="flex-1">

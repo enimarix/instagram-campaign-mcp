@@ -17,7 +17,7 @@ export default function TokenBanner() {
     : `expires ${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}: publishing stops then.`
   return (
     <p role="alert"
-      className="border-b border-warn/30 bg-warn/12 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 text-sm font-medium text-warn lg:px-8">
+      className="border-b border-warn/30 bg-warn/12 px-4 py-2 text-sm font-medium text-warn lg:px-8">
       Instagram token {what}{' '}
       {t.can_refresh && t.valid ? 'Run ig-campaign token refresh.' : 'Paste a new token in .env (see README, Token).'}
     </p>

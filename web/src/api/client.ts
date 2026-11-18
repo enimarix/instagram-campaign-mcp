@@ -666,3 +666,17 @@ export const setLearning = (id: number, action: 'confirm' | 'retire' | 'reactiva
   post<Learning>(`/api/learnings/${id}/${action}`)
 export const refreshLearnings = () =>
   post<{ evaluated: number; contradicted: number[]; conflicts: number[] }>('/api/learnings/refresh')
+
+// --- Alerts (step 098; src/api/alerts.py) ---
+/** What needs the owner's attention, newest first; `link` is a website path. */
+export type Alert = {
+  id: string
+  kind: string
+  severity: 'info' | 'warn' | 'error'
+  title: string
+  detail: string
+  link: string
+  since: string | null
+}
+export const getAlerts = () => request<Alert[]>('/api/alerts')
+export const dismissAlert = (id: string) => post<{ id: string }>(`/api/alerts/${encodeURIComponent(id)}/dismiss`)
