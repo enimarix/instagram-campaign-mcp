@@ -17,6 +17,7 @@ Set IG_MCP_ENV_FILE to use a different .env file.
 import os
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,6 +34,8 @@ def _app_home(source_root: Optional[Path] = None) -> Path:
 
 APP_HOME = _app_home()
 ENV_FILE = os.environ.get("IG_MCP_ENV_FILE", str(APP_HOME / ".env"))
+PLACEHOLDERS = {"your_long_lived_access_token", "your_ig_user_id"}  # env.example's values
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 class InstagramMCPSettings(BaseSettings):
@@ -403,10 +406,26 @@ class InstagramMCPSettings(BaseSettings):
             raise ValueError("API version must start with 'v' (e.g., 'v25.0')")
         return v
 
+    @field_validator("instagram_api_base_url")
+    @classmethod
+    def validate_api_base_url(cls, v):
+        # The token travels to this host: https only, plain http just for a local stub (e2e).
+        url = urlparse(v)
+        if not url.hostname or not (
+            url.scheme == "https" or (url.scheme == "http" and url.hostname in LOOPBACK_HOSTS)
+        ):
+            raise ValueError(
+                f"INSTAGRAM_API_BASE_URL must be an https:// URL (http:// only for "
+                f"127.0.0.1, ::1 or localhost), got {v!r}"
+            )
+        return v
+
     @property
     def instagram_configured(self) -> bool:
         """True when Graph-backed work (publish, insights, account) can run."""
-        return bool(self.instagram_access_token and self.instagram_business_account_id)
+        # env.example's placeholder values count as not set (doctor relies on it).
+        return all(v and v not in PLACEHOLDERS
+                   for v in (self.instagram_access_token, self.instagram_business_account_id))
 
     @property
     def instagram_api_url(self) -> str:

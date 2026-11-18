@@ -30,6 +30,27 @@ def test_settings_load_without_token(setup_settings, settings):
     assert settings.instagram_configured
 
 
+def test_env_example_placeholders_are_setup_mode(settings):
+    # Step 121: a copied env.example must not look like a real account (doctor shares this).
+    for field, value in (("instagram_access_token", "your_long_lived_access_token"),
+                         ("instagram_business_account_id", "your_ig_user_id"),
+                         ("instagram_access_token", "")):
+        assert not settings.model_copy(update={field: value}).instagram_configured
+
+
+@pytest.mark.parametrize("url", ["https://graph.facebook.com", "http://127.0.0.1:9999",
+                                 "http://localhost:8080", "http://[::1]:9999"])
+def test_api_base_url_https_or_loopback(url):
+    assert InstagramMCPSettings(_env_file=None, instagram_api_base_url=url)
+
+
+@pytest.mark.parametrize("url", ["http://graph.facebook.com", "http://localhost.evil.com",
+                                 "ftp://127.0.0.1", "graph.facebook.com", ""])
+def test_api_base_url_refuses_plain_http(url):
+    with pytest.raises(ValueError, match="INSTAGRAM_API_BASE_URL must be an https:// URL"):
+        InstagramMCPSettings(_env_file=None, instagram_api_base_url=url)
+
+
 def test_health_both_modes(setup_settings, settings):
     for s, configured in ((setup_settings, False), (settings, True)):
         with TestClient(create_app(s), base_url=LOCAL) as tc:

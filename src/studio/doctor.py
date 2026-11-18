@@ -17,7 +17,6 @@ from . import downloader_service, ffmpeg, motion
 Check = Dict[str, Any]
 
 FFMPEG_FIX = f"install ffmpeg ({ffmpeg.install_hint()}), then open a new terminal"
-PLACEHOLDERS = {"your_long_lived_access_token", "your_ig_user_id"}  # env.example's values
 DOWNLOADER_FIX = ("git submodule update --init vendor/instagram-reels-downloader, "
                   "then ig-campaign downloader setup")
 
@@ -30,8 +29,7 @@ def checks(settings: InstagramMCPSettings, env_file: str = ENV_FILE) -> List[Che
 
     env = Path(env_file)
     add(".env", env.is_file(), str(env), "copy env.example to .env (the installer does it)")
-    ig_set = settings.instagram_configured and not PLACEHOLDERS & {
-        settings.instagram_access_token, settings.instagram_business_account_id}
+    ig_set = settings.instagram_configured  # env.example's placeholders count as not set
     add("Instagram account", ig_set, "token and account id set" if ig_set
         else "token or account id missing, or still env.example's placeholder",
         "set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env, "
