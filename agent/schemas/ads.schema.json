@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Ads for the weekly-ads run (ads.agent.work_packet): winners, open tests, launches left, finished tests to learn from",
+  "title": "Ads for the weekly-ads run (ads.agent.work_packet): winners, presets, open tests, launches left, finished tests to learn from",
   "type": "object",
   "required": ["configured"],
   "$defs": {
@@ -30,6 +30,13 @@
       "configured": {"const": true},
       "proposals_left": {"type": "integer", "minimum": 0},
       "launches_left": {"type": "integer", "minimum": 0},
+      "presets": {
+        "type": "array",
+        "maxItems": 10,
+        "items": {"type": "object", "required": ["id", "label", "varies"],
+                  "properties": {"id": {"type": "string"}, "label": {"type": "string"},
+                                 "varies": {"type": "array"}}}
+      },
       "winners": {
         "type": "array",
         "maxItems": 50,

@@ -17,10 +17,18 @@ Set IG_MCP_ENV_FILE to use a different .env file.
 import os
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 from urllib.parse import urlparse
 
-from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,6 +45,60 @@ APP_HOME = _app_home()
 ENV_FILE = os.environ.get("IG_MCP_ENV_FILE", str(APP_HOME / ".env"))
 PLACEHOLDERS = {"your_long_lived_access_token", "your_ig_user_id"}  # env.example's values
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+class AdPreset(BaseModel):
+    """Who sees an ad (step 127): src/ads/promote.py presets_for() builds the targeting."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,39}$")
+    label: str = Field(min_length=1, max_length=80)
+    # ponytail: ISO-2 by shape only; Meta refuses an unknown code before anything runs.
+    countries: List[str] = Field(min_length=1, max_length=25)
+    age_min: int = Field(18, ge=18, le=65)
+    age_max: Optional[int] = Field(None, ge=18, le=65)  # None = 65+
+    placements: List[Literal["reels", "stream", "story", "explore"]] = Field(min_length=1)
+
+    @field_validator("label")
+    @classmethod
+    def _label(cls, v):
+        if not v.strip():
+            raise ValueError("a label is required")
+        return v.strip()
+
+    @field_validator("countries", mode="before")
+    @classmethod
+    def _countries(cls, v):
+        if isinstance(v, str):
+            v = v.split(",")
+        if not isinstance(v, list):
+            return v  # pydantic says why
+        out = [str(c).strip().upper() for c in v]
+        for c in out:
+            if not (len(c) == 2 and c.isascii() and c.isalpha()):
+                raise ValueError(f"{c!r} is not a 2-letter country code like FR")
+        return list(dict.fromkeys(out))
+
+    @field_validator("placements")
+    @classmethod
+    def _placements(cls, v):
+        return list(dict.fromkeys(v))
+
+    @model_validator(mode="after")
+    def _ages(self):
+        if self.age_max is not None and self.age_max < self.age_min:
+            raise ValueError("the oldest age must not be below the youngest")
+        return self
+
+
+# ponytail: placeholder audiences until H9 names the market.
+DEFAULT_AD_PRESETS = (
+    {"id": "fr_reels", "label": "France, Reels", "countries": ["FR"], "placements": ["reels"]},
+    {"id": "fr_feed_reels", "label": "France, Feed and Reels", "countries": ["FR"],
+     "placements": ["stream", "reels"]},
+    {"id": "francophone_reels", "label": "France, Belgium, Switzerland, Luxembourg, Reels",
+     "countries": ["FR", "BE", "CH", "LU"], "placements": ["reels"]},
+)
 
 
 class InstagramMCPSettings(BaseSettings):
@@ -415,6 +477,18 @@ class InstagramMCPSettings(BaseSettings):
     # this one until the account has 1000+ impressions. ponytail: a guess for FR Reels.
     ads_default_cpm: Decimal = Field(Decimal(5), gt=0,
                                      description="Cost per 1000 impressions before insights")
+    ads_presets: List[AdPreset] = Field(
+        default_factory=lambda: [AdPreset(**p) for p in DEFAULT_AD_PRESETS],
+        min_length=1, max_length=10, description="Who sees the ads: audience and placements")
+
+    @field_validator("ads_presets")
+    @classmethod
+    def validate_ads_presets(cls, v):
+        ids = [p.id for p in v]
+        dup = sorted({i for i in ids if ids.count(i) > 1})
+        if dup:
+            raise ValueError(f"two presets have the id {dup[0]!r}")
+        return v
 
     @field_validator("ads_currency")
     @classmethod

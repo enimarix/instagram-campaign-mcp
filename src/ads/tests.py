@@ -47,11 +47,10 @@ from .budget import status as budget_status
 from .client import AdsClient
 from .promote import (
     CENT,
-    PRESET_LABELS,
-    PRESETS,
     PromotionRefused,
     _advertisable_asset,
     create_paused_promotion,
+    presets_for,
 )
 from .writer import ACTIVE, PAUSED, AdsWriter, missing_settings
 
@@ -70,7 +69,7 @@ OPEN_RUNNING = ("approved", "running")  # count against ads_max_running_tests
 
 class AdTestRefused(Exception):
     """Nothing was sent. code: invalid | rights | not_ours | not_published | not_boostable |
-    status | underpowered | not_configured | cap | max_running."""
+    status | underpowered | not_configured | cap | max_running | preset_gone."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -82,40 +81,44 @@ class AdTestFailed(Exception):
     """Meta (or the guard) failed after requests went out; the test is cancelled."""
 
 
-def _differ_only(a: str, b: str, variable: str) -> bool:
-    """Presets a and b differ, and only in `variable` (audience or placement)."""
-    changed = {k for k in {*PRESETS[a], *PRESETS[b]} if PRESETS[a].get(k) != PRESETS[b].get(k)}
+def _differ_only(built: Dict[str, Dict], a: str, b: str, variable: str) -> bool:
+    """Presets a and b (`presets_for`) differ, and only in `variable` (audience or
+    placement)."""
+    pa, pb = built[a], built[b]
+    changed = {k for k in {*pa, *pb} if pa.get(k) != pb.get(k)}
     return bool(changed) and (changed <= PLACEMENT_KEYS if variable == "placement"
                               else changed.isdisjoint(PLACEMENT_KEYS))
 
 
-def presets() -> List[Dict[str, Any]]:
-    """Each preset with its plain label and the variables it can be compared on (a test of
-    that variable may pair it with another preset)."""
-    return [{"id": p, "label": PRESET_LABELS[p],
-             "varies": [v for v in ("audience", "placement")
-                        if any(_differ_only(p, q, v) for q in PRESETS)]}
-            for p in PRESETS]
+def presets(settings: InstagramMCPSettings) -> List[Dict[str, Any]]:
+    """Each preset (as the owner set it, 127) with the variables it can be compared on (a
+    test of that variable may pair it with another preset)."""
+    built = presets_for(settings)
+    return [{**p.model_dump(), "varies": [v for v in ("audience", "placement")
+                                          if any(_differ_only(built, p.id, q, v)
+                                                 for q in built)]}
+            for p in settings.ads_presets]
 
 
-def _variants(variable: str, variants: Any) -> List[Dict[str, str]]:
+def _variants(variable: str, variants: Any, built: Dict[str, Dict]) -> List[Dict[str, str]]:
     if not isinstance(variants, list) or not 2 <= len(variants) <= 4:
         raise AdTestRefused("invalid", "a test has 2 to 4 variants")
     out = []
     for v in variants:
         media, preset = (v or {}).get("media_id"), (v or {}).get("preset")
         if not (isinstance(media, str) and media.isascii() and media.isdigit()
-                and preset in PRESETS):
+                and preset in built):
             raise AdTestRefused("invalid", f"each variant needs a media_id and a preset "
-                                f"(one of {sorted(PRESETS)})")
+                                f"(one of {sorted(built)})")
         out.append({"media_id": media, "preset": preset})
     medias = {v["media_id"] for v in out}
-    presets = [v["preset"] for v in out]
+    names = [v["preset"] for v in out]
     if variable == "creative":
-        ok = len(medias) == len(out) and len(set(presets)) == 1
+        ok = len(medias) == len(out) and len(set(names)) == 1
     else:
-        ok = len(medias) == 1 and len(set(presets)) == len(out)
-        ok = ok and all(_differ_only(a, b, variable) for a, b in combinations(presets, 2))
+        ok = len(medias) == 1 and len(set(names)) == len(out)
+        ok = ok and all(_differ_only(built, a, b, variable)
+                        for a, b in combinations(names, 2))
     if not ok:
         raise AdTestRefused("invalid", f"variants must differ in {variable} only: "
                             "creative = different posts, one preset; audience / placement"
@@ -166,7 +169,7 @@ async def propose(
         if waiting >= MAX_AGENT_PROPOSALS:
             raise AdTestRefused("cap", f"{waiting} agent proposals already wait for the "
                                 "owner (MAX_AGENT_PROPOSALS): propose again once they decide")
-    rows = _variants(variable, variants)
+    rows = _variants(variable, variants, presets_for(settings))
     for v in rows:
         try:
             _advertisable_asset(store, v["media_id"])
@@ -344,6 +347,12 @@ async def launch(
     missing = missing_settings(settings)
     if missing:
         raise AdTestRefused("not_configured", f"set {', '.join(missing)}")
+    known = presets_for(settings)
+    gone = sorted({v["preset"] for v in test["variants"]} - set(known))
+    if gone:
+        raise AdTestRefused("preset_gone", f"preset gone: {', '.join(gone)} was removed in "
+                            "the website since the proposal; propose again")
+    _variants(test["variable"], test["variants"], known)  # an edit may have broken it
     for media in dict.fromkeys(v["media_id"] for v in test["variants"]):
         try:  # rights or status may have changed since the proposal
             _advertisable_asset(store, media)

@@ -14,6 +14,7 @@ Owner-editable settings (step 124): the website overrides `.env` for the fields 
 - Raising a money cap needs the website password again: update() raises PasswordNeeded
   unless `confirmed`. A currency change while a cap is above 0 counts as raising (it
   changes what every cap means). Changes to ads fields write an ads_audit row.
+- Ad presets (127): a preset a running test uses can't be removed (SettingsInvalid).
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from decimal import Decimal
 from typing import Any, Dict, Iterable, Literal, get_args, get_origin
 
 import structlog
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from .config import InstagramMCPSettings
 from .store import CampaignStore, to_iso, utcnow
@@ -47,6 +48,7 @@ EDITABLE: Dict[str, str] = {
     "meta_page_id": "ads",
     "ads_dsa_beneficiary": "ads",
     "ads_dsa_payor": "ads",
+    "ads_presets": "ads",
     "batch_size": "studio",
     "max_posts_per_day": "studio",
     "explore_share": "studio",
@@ -85,7 +87,8 @@ def _effective(settings: InstagramMCPSettings, values: Dict[str, Any]) -> Instag
     except ValidationError as e:
         err = e.errors()[0]
         field = err["loc"][0] if err["loc"] else None
-        raise SettingsInvalid(f"{field}: {err['msg']}" if field else err["msg"], field) from None
+        where = ".".join(map(str, err["loc"]))  # e.g. ads_presets.1.countries
+        raise SettingsInvalid(f"{where}: {err['msg']}" if field else err["msg"], field) from None
 
 
 def _apply(settings: InstagramMCPSettings, new: InstagramMCPSettings, version: int) -> None:
@@ -115,6 +118,10 @@ async def refresh_loop(store: CampaignStore, settings: InstagramMCPSettings,
 
 
 def _json(v: Any) -> Any:
+    if isinstance(v, list):
+        return [_json(x) for x in v]
+    if isinstance(v, BaseModel):
+        return v.model_dump(mode="json")
     return str(v) if isinstance(v, Decimal) else v  # money stays exact
 
 
@@ -122,6 +129,8 @@ def _form(name: str) -> Dict[str, Any]:
     """What the website's form needs: type, choices, limits, description."""
     f = InstagramMCPSettings.model_fields[name]
     t = f.annotation
+    if name == "ads_presets":  # its own editor in the website
+        return {"type": "presets", "description": f.description}
     if get_origin(t) is Literal:
         out: Dict[str, Any] = {"type": "choice", "choices": list(get_args(t))}
     else:
@@ -152,6 +161,19 @@ def _raises_cap(old: Dict[str, Any], new: InstagramMCPSettings) -> bool:
     return new.ads_currency != old["ads_currency"] and any(getattr(new, k) > 0 for k in CAPS)
 
 
+def _presets_in_use(c: sqlite3.Connection, new: InstagramMCPSettings) -> None:
+    """Refuse removing a preset an approved or running test uses (its ads exist)."""
+    from .ads.tests import OPEN_RUNNING  # here: ads imports this module
+
+    ids = {p.id for p in new.ads_presets}
+    for test_id, variants in c.execute(
+            f"SELECT id, variants FROM ad_tests WHERE status IN {OPEN_RUNNING}"):
+        used = sorted({v["preset"] for v in json.loads(variants)} - ids)
+        if used:
+            raise SettingsInvalid(f"preset {used[0]} is used by running test {test_id}: "
+                                  "remove it once the test ends", "ads_presets")
+
+
 def update(store: CampaignStore, settings: InstagramMCPSettings, values: Dict[str, Any],
            reset: Iterable[str] = (), *, confirmed: bool = False,
            actor: str = "owner") -> Dict[str, Any]:
@@ -169,6 +191,7 @@ def update(store: CampaignStore, settings: InstagramMCPSettings, values: Dict[st
         state = json.loads(row[0]) if row else {"version": 0, "values": {}}
         kept = {k: v for k, v in state["values"].items() if k in EDITABLE and k not in reset}
         new = _effective(settings, {**kept, **values})
+        _presets_in_use(c, new)
         if not confirmed and _raises_cap(old, new):
             raise PasswordNeeded()
         keys = {*kept, *values}

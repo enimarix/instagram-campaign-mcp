@@ -22,10 +22,11 @@ const WINNERS = [
     thumbnail_url: '/api/media/1/thumb.jpg' },
   { media_id: '2', permalink: null, posted_at: '2026-11-02T10:00:00+00:00', caption: 'Quiz chest', asset_id: 2, thumbnail_url: null },
 ]
+const who = { countries: ['FR'], age_min: 18, age_max: null, placements: ['reels' as const] }
 const PRESETS: AdPreset[] = [
-  { id: 'fr_reels', label: 'France, Reels', varies: ['audience', 'placement'] },
-  { id: 'fr_feed_reels', label: 'France, Feed and Reels', varies: ['placement'] },
-  { id: 'francophone_reels', label: 'France, Belgium, Switzerland, Luxembourg, Reels', varies: ['audience'] },
+  { ...who, id: 'fr_reels', label: 'France, Reels', varies: ['audience', 'placement'] },
+  { ...who, id: 'fr_feed_reels', label: 'France, Feed and Reels', varies: ['placement'] },
+  { ...who, id: 'francophone_reels', label: 'France, Belgium, Switzerland, Luxembourg, Reels', varies: ['audience'] },
 ]
 const AUDIT: AdsAudit = {
   total: 25, limit: 20, offset: 0,

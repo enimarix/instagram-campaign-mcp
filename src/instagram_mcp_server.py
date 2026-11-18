@@ -1022,8 +1022,8 @@ async def propose_ad_test(hypothesis: str, variable: str, variants: List[Dict[st
                           min_lift: float = 0.2, primary_metric: str = "ctr"
                           ) -> Dict[str, Any]:
     """Propose a paid A/B test; it spends nothing until launch_ad_test. One variable
-    (creative | audience | placement), 2-4 variants {media_id, preset} (presets fr_reels,
-    fr_feed_reels, francophone_reels): creative = different winner posts with one preset;
+    (creative | audience | placement), 2-4 variants {media_id, preset} (preset ids from
+    `presets` in the ads work packet): creative = different winner posts with one preset;
     audience / placement = one post, presets that differ only in that. A specific,
     falsifiable hypothesis; min_lift = the relative lift worth detecting; primary_metric
     ctr. Returns the test with the budget it needs and

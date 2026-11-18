@@ -107,7 +107,7 @@ def _learned(store: CampaignStore) -> set:
 
 def work_packet(store: CampaignStore, settings: InstagramMCPSettings) -> Tuple[Any, int]:
     """The `ads` section of a work packet and its count: eligible winners (only while the
-    agent may still propose), open tests, how many more may run now (`launches_left`;
+    agent may still propose), the presets the owner set (127), open tests, how many more may run now (`launches_left`;
     the agent's waiting proposals count only while it is above 0), and finished tests no
     ads learning cites yet (evidence `test_id`). Not configured: count 0, so the run is
     skipped."""
@@ -124,6 +124,6 @@ def work_packet(store: CampaignStore, settings: InstagramMCPSettings) -> Tuple[A
     launches = max(settings.ads_max_running_tests
                    - sum(t["status"] in tests.OPEN_RUNNING for t in rows), 0)
     return {"configured": True, "proposals_left": room, "winners": found,
-            "launches_left": launches,
+            "launches_left": launches, "presets": tests.presets(settings),
             "open_tests": [_brief(t) for t in rows if t["status"] in OPEN],
             "to_learn": to_learn}, len(to_learn) + len(found) + (waiting if launches else 0)

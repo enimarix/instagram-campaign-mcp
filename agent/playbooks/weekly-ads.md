@@ -14,7 +14,8 @@ Before this run the studio wrote your work into `work/` in this workspace.
 1. Read `work/manifest.json` with Read first, then `ads.json`: `winners` (matured Reels
    scored winner that may be advertised; empty when you may not propose more),
    `proposals_left` (how many more proposals you may have waiting), `launches_left` (how
-   many more tests may run now), `open_tests` (proposed, approved or running; who
+   many more tests may run now), `presets` (who sees the ads: id, label, countries,
+   ages, placements, and `varies`: the variables it can be compared on), `open_tests` (proposed, approved or running; who
    proposed and who launched each) and `to_learn` (finished tests no ads learning cites
    yet, with their `evaluation`).
 2. The packet is a read-only snapshot; the MCP tools are the truth. Act only through
@@ -38,7 +39,7 @@ Before this run the studio wrote your work into `work/` in this workspace.
 - At most `launches_left` `launch_ad_test` calls, and only your own proposals: the
   owner's proposals wait for the owner.
 - A tool refusal is information (`cap`, `invalid`, `rights`, `not_published`,
-  `not_boostable`, `underpowered`, `killed`, `max_running`, `daily_cap`, `test_cap`,
+  `not_boostable`, `underpowered`, `preset_gone`, `killed`, `max_running`, `daily_cap`, `test_cap`,
   `lifetime_cap`, ...): change what it names or stop; never send the same call twice.
   `killed` means the owner pressed Stop all ads: launch nothing more this run.
 
@@ -74,8 +75,8 @@ Skip when `proposals_left` is 0 or there are no `winners`. Propose 1, at most 2:
 2. One variable per test:
    - `creative`: 2–4 different winner posts, one preset;
    - `audience` or `placement`: one winner post, 2–4 presets that differ only in that.
-   Presets: `fr_reels`, `fr_feed_reels` (placement vs `fr_reels`), `francophone_reels`
-   (audience vs `fr_reels`).
+   Presets: the ids in `presets` (the owner edits them in the website); for `audience`
+   or `placement`, only presets whose `varies` names that variable.
 3. A **specific, falsifiable** hypothesis naming the variable, the metric and the
    expected direction, e.g. "The countdown hook (post A) gets a higher CTR than the
    question hook (post B) with the same audience". Base it on the winners' numbers or a
