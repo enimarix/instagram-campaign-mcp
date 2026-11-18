@@ -13,6 +13,7 @@ import { clock, FINDING, num, useLoad } from './load'
 
 const NO_REPORT = 'No report yet: the nightly analysis runs at 02:00.'
 const QUIET = 'Quiet day: nothing was published and no post was old enough to judge.'
+const PENDING = 'Not analysed yet: the nightly analysis writes this day at 02:00.'
 const reportPath = (date: string) => `/reports/${date}`
 const postPath = (id: string) => `/analytics/posts/${encodeURIComponent(id)}`
 /** "2026-11-16" → "Monday, November 16" (an owner-local day, shown as is). */
@@ -33,7 +34,7 @@ export function TodayReport() {
         {(r) => r && (
           <Card className="mt-2 text-sm">
             <p className="text-muted">{longDay(r.report_date)}</p>
-            {r.summary && <p className="mt-1 line-clamp-3">{r.summary.replace(/[#*_`>]/g, '').trim()}</p>}
+            {r.summary && <p className="mt-1 line-clamp-3">{r.summary.replace(/\*\*|`|^[#>]+\s*/gm, '').trim()}</p>}
             <p className="mt-1 text-xs text-muted">
               {r.analysis.best?.length ?? 0} best · {r.analysis.worst?.length ?? 0} worst · {r.analysis.experiments?.length ?? 0} ideas to try
             </p>
@@ -87,9 +88,10 @@ function Report({ r }: { r: DailyReport }) {
   ]
   const comments = (r.facts.audience_comments?.posts ?? []).flatMap((p) => p.comments.map((c) => ({ ...c, post: p })))
   const experiments = r.analysis.experiments ?? []
+  const quiet = !y.published?.count && !y.matured?.count
   return (
     <>
-      {r.summary ? <Markdown text={r.summary} /> : <p className="text-sm text-muted">{QUIET}</p>}
+      {r.summary ? <Markdown text={r.summary} /> : <p className="text-sm text-muted">{quiet ? QUIET : PENDING}</p>}
       <Picks title="Best" picks={r.analysis.best} report={r} />
       <Picks title="Worst" picks={r.analysis.worst} report={r} />
       {experiments.length > 0 && (
@@ -163,7 +165,7 @@ export default function ReportPage() {
                 <Link to={reportPath(d.report_date)} aria-current={d.report_date === shown ? 'page' : undefined}
                   className={`flex min-h-11 flex-wrap items-center gap-x-2 ${d.report_date === shown ? 'font-semibold' : link}`}>
                   <span className="tabular-nums">{d.report_date}</span>
-                  <span className="min-w-0 flex-1 truncate text-muted">{d.first_line ?? 'Quiet day'}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted">{d.first_line ?? (d.published || d.matured ? 'Not analysed yet' : 'Quiet day')}</span>
                 </Link>
               </li>
             ))}

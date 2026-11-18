@@ -29,7 +29,7 @@ const REPORT: DailyReport = {
 }
 const day = (report_date: string, first_line: string | null): ReportDay =>
   ({ report_date, first_line, published: 1, matured: 1, best: 1, worst: 1, experiments: 0 })
-const ARCHIVE = [day('2026-11-17', null), day('2026-11-16', 'Good day'), day('2026-11-15', 'Older day')]
+const ARCHIVE = [{ ...day('2026-11-17', null), published: 0, matured: 0 }, day('2026-11-16', 'Good day'), day('2026-11-15', 'Older day')]
 
 function stubApi(routes: Record<string, unknown>) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) =>
@@ -104,6 +104,12 @@ describe('ReportPage', () => {
     show('/reports/2026-11-17')
     expect(await screen.findByText(/Quiet day: nothing was published/)).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Best' })).toBeNull()
+    cleanup()
+
+    // facts stored, the analysis not run yet: not a quiet day
+    stubApi({ '/api/reports/2026-11-17': { ...REPORT, summary: null, analysis: {}, posts: {} }, '/api/reports?limit=60': ARCHIVE })
+    show('/reports/2026-11-17')
+    expect(await screen.findByText(/Not analysed yet/)).toBeTruthy()
     cleanup()
 
     stubApi({ '/api/reports?limit=60': ARCHIVE })
