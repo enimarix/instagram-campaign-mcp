@@ -14,8 +14,9 @@ Ad budget guard (step 091): nothing spends ad money without passing `authorize_s
   authorization, so two processes can never both pass the same cap.
 - The kill switch blocks every new authorization. 095's worker pauses ads while it is on.
 - Functions that can spend are marked `@spends`; tests/test_ads_budget.py fails when an
-  src/ads module sends a write request outside one, or a `@spends` function skips
-  `authorize_spend()`.
+  src/ads module sends a write request outside one (or outside a `@pauses` function, whose
+  writes only send status=PAUSED), or a `@spends` function skips `authorize_spend()`.
+- `ads_audit` (append-only) records every money action: `audit()`, `audit_log()`.
 
 Local caps are not the only line: 092 creates every ad set with a lifetime budget and an
 end date and every campaign with a spend cap, so Meta stops spending too (GOAL.md §5.4).
@@ -42,7 +43,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 class BudgetRefused(Exception):
-    """code: killed | daily_cap | test_cap | lifetime_cap | invalid."""
+    """code: killed | daily_cap | test_cap | lifetime_cap | released | invalid."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -55,6 +56,31 @@ def spends(fn: F) -> F:
     its request (enforced by tests/test_ads_budget.py)."""
     fn.__spends__ = True
     return fn
+
+
+def pauses(fn: F) -> F:
+    """Marks a function whose writes only pause (status=PAUSED): it never spends, so it
+    needs no authorization and works while killed (enforced by tests/test_ads_budget.py)."""
+    fn.__pauses__ = True
+    return fn
+
+
+def audit(store: CampaignStore, action: str, *, actor: str = "owner",
+          test_id: Optional[int] = None, **detail: Any) -> Dict[str, Any]:
+    """Append a row to ads_audit. Never pass a secret in `detail`."""
+    return store._insert("ads_audit", ("actor", "action", "test_id", "detail"),
+                         {"actor": actor, "action": action, "test_id": test_id,
+                          "detail": detail})
+
+
+def audit_log(store: CampaignStore, *, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+    """Newest first, paged."""
+    with store.immediate() as c:
+        total = c.execute("SELECT COUNT(*) FROM ads_audit").fetchone()[0]
+        rows = c.execute("SELECT * FROM ads_audit ORDER BY id DESC LIMIT ? OFFSET ?",
+                         (limit, offset)).fetchall()
+    return {"total": total, "limit": limit, "offset": offset,
+            "rows": [{**dict(r), "detail": json.loads(r["detail"])} for r in rows]}
 
 
 def _amount(value: Any) -> Decimal:
@@ -209,17 +235,29 @@ def release(store: CampaignStore, authorization_id: int, *, reason: str = "relea
     return out
 
 
+def open_authorizations(store: CampaignStore, test_id: int) -> List[int]:
+    """Ids of the test's authorizations not yet released."""
+    with store.immediate() as c:
+        rows = c.execute(
+            "SELECT a.id FROM ad_spend_ledger a WHERE a.kind='authorized' AND a.test_id=?"
+            " AND NOT EXISTS (SELECT 1 FROM ad_spend_ledger r WHERE r.kind='released'"
+            " AND r.authorization_id=a.id) ORDER BY 1", (test_id,)).fetchall()
+    return [r[0] for r in rows]
+
+
 def kill(store: CampaignStore, reason: str = "kill switch",
-         now: Optional[datetime] = None) -> None:
+         now: Optional[datetime] = None, *, actor: str = "owner") -> None:
     """Block every new authorization; 095's worker pauses the ads (paused_ids_needed)."""
     store.set_state(KILL_KEY, {"killed": True, "killed_at": to_iso(now or utcnow()),
                                "killed_reason": reason})
+    audit(store, "kill", actor=actor, reason=reason)
     logger.warning("ads_killed", reason=reason)
 
 
 def unkill(store: CampaignStore) -> None:
     """Allow spend again. The API asks the website password first."""
     store.set_state(KILL_KEY, {"killed": False, "killed_at": None, "killed_reason": None})
+    audit(store, "unkill")
     logger.warning("ads_unkilled")
 
 

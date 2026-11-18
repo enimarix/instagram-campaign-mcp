@@ -139,6 +139,14 @@ class AdsClient(GraphClient):
     async def list_ads(self) -> List[Dict[str, Any]]:
         return await self._list(f"{self.ad_account}/ads", {"fields": AD_FIELDS})
 
+    async def boost_eligibility(self, media_id: str) -> Dict[str, Any]:
+        """IG Media `boost_eligibility_info`: may this post be promoted (copyrighted music
+        etc.)? The reference names the field but not its shape; {} when absent."""
+        if not re.fullmatch(r"\d+", media_id):
+            raise ValueError(f"not a media id: {media_id!r}")
+        out = await self._get(media_id, {"fields": "boost_eligibility_info"})
+        return out.get("boost_eligibility_info") or {}
+
     async def get_insights(
         self,
         object_id: Optional[str] = None,

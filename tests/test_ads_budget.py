@@ -215,8 +215,9 @@ WRITE_ATTRS = {"post", "put", "patch", "delete", "request"}
 
 
 def spend_violations(source: str) -> list:
-    """Write requests outside a @spends function, and @spends functions that never call
-    authorize_spend. A write = `_make_request(<anything but "GET">, ...)` or an httpx-style
+    """Write requests outside a @spends or @pauses function, @spends functions that never
+    call authorize_spend, and @pauses writes whose body is not `data=_paused({})` (094).
+    A write = `_make_request(<anything but "GET">, ...)` or an httpx-style
     `.post/.put/.patch/.delete/.request(...)` call."""
     found = []
 
@@ -231,15 +232,28 @@ def spend_violations(source: str) -> list:
             return not (isinstance(method, ast.Constant) and method.value == "GET")
         return isinstance(call.func, ast.Attribute) and fn in WRITE_ATTRS
 
+    def pauses_only(call):
+        data = next((k.value for k in call.keywords if k.arg == "data"), None)
+        return (isinstance(data, ast.Call) and name(data.func) == "_paused"
+                and len(data.args) == 1 and isinstance(data.args[0], ast.Dict)
+                and not data.args[0].keys)
+
     def visit(node, spender):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            marked = any(name(d) == "spends" for d in node.decorator_list)
-            if marked and not any(isinstance(n, ast.Call) and name(n.func) == "authorize_spend"
-                                  for n in ast.walk(node)):
+            marks = {name(d) for d in node.decorator_list}
+            if "spends" in marks and not any(
+                    isinstance(n, ast.Call) and name(n.func) == "authorize_spend"
+                    for n in ast.walk(node)):
                 found.append(f"{node.name}: @spends without authorize_spend")
-            spender = spender or marked
-        if isinstance(node, ast.Call) and is_write(node) and not spender:
-            found.append(f"line {node.lineno}: write request outside @spends")
+            if "pauses" in marks:
+                spender = "pauses"
+            elif "spends" in marks:
+                spender = True
+        if isinstance(node, ast.Call) and is_write(node):
+            if not spender:
+                found.append(f"line {node.lineno}: write request outside @spends")
+            elif spender == "pauses" and not pauses_only(node):
+                found.append(f"line {node.lineno}: @pauses write that is not _paused({{}})")
         for child in ast.iter_child_nodes(node):
             visit(child, spender)
 
@@ -266,12 +280,21 @@ def test_spend_check_catches_unguarded_writes(source):
     assert spend_violations(source)
 
 
+@pytest.mark.parametrize("data", ['{"status": "ACTIVE"}', '_paused({"x": 1})', None])
+def test_spend_check_catches_pauses_that_send_more_than_paused(data):
+    arg = f", data={data}" if data else ""
+    assert spend_violations(
+        f'@pauses\nasync def f(self, i):\n    await self._make_request("POST", i{arg})\n')
+
+
 def test_spend_check_accepts_guarded_writes_and_reads():
     assert spend_violations(
         '@budget.spends\nasync def f(self, store, settings):\n'
         '    authorize_spend(store, settings, 1, reason="x")\n'
         '    return await self._make_request("POST", "x")\n'
-        'async def g(self):\n    return await self._make_request("GET", "x")\n') == []
+        'async def g(self):\n    return await self._make_request("GET", "x")\n'
+        '@pauses\nasync def h(self, i):\n'
+        '    await self._make_request("POST", i, data=_paused({}))\n') == []
 
 
 # --- settings --------------------------------------------------------------------------

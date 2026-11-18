@@ -1,18 +1,22 @@
-"""Ads budget routes (step 091): thin doors onto src/ads/budget.py.
+"""Ads routes: budget and kill switch (091), A/B tests and the audit log (094). Thin doors
+onto src/ads/budget.py and src/ads/tests.py.
 
-No MCP tool reaches these: the agent never touches money. Unkill asks the website
-password again (auth.reauth_error), like budget approval will (094).
+No MCP tool reaches these: the agent never touches money. Unkill and test approval ask
+the website password again (auth.reauth_error).
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from decimal import Decimal
+from typing import Any, Awaitable, List, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ..ads import budget
+from ..ads import budget, tests
+from ..ads.budget import BudgetRefused
+from ..instagram_client import NotConfigured
 from .auth import reauth_error
 
 router = APIRouter(prefix="/api/ads")
@@ -48,3 +52,77 @@ def unkill(request: Request, body: UnkillBody):
         return JSONResponse(status_code=refused[0], content=refused[1])
     budget.unkill(request.app.state.store)
     return _status(request)
+
+
+class VariantIn(BaseModel):
+    media_id: str = Field(min_length=1, max_length=40)
+    preset: str
+
+
+class ProposeBody(BaseModel):
+    hypothesis: str = Field(min_length=1, max_length=500)
+    variable: str
+    variants: List[VariantIn]
+    min_lift: float = Field(0.2, gt=0, le=5)
+    primary_metric: str = "ctr"
+    baseline_rate: Optional[float] = Field(None, gt=0, lt=1)
+
+
+class ApproveBody(BaseModel):
+    budget: Decimal
+    password: str
+    underpowered_ok: bool = False
+
+
+async def _call(work: Awaitable[Any]) -> Any:
+    try:
+        return await work
+    except KeyError:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+    except (tests.AdTestRefused, BudgetRefused) as e:
+        return JSONResponse(status_code=409, content={"error": e.code, "message": e.message})
+    except tests.AdTestFailed as e:
+        return JSONResponse(status_code=502, content={"error": "failed", "message": str(e)})
+    except NotConfigured as e:
+        return JSONResponse(status_code=503,
+                            content={"error": "ads_not_configured", "message": str(e)})
+
+
+@router.get("/tests")
+def list_tests(request: Request, status: Optional[str] = None):
+    s = request.app.state
+    return {"tests": tests.list_tests(s.store, s.settings, status=status)}
+
+
+@router.get("/winners")
+def winners(request: Request):
+    s = request.app.state
+    return {"winners": tests.eligible_winners(s.store, s.settings)}
+
+
+@router.post("/tests")
+async def propose(request: Request, body: ProposeBody):
+    s = request.app.state
+    return await _call(tests.propose(s.store, s.settings, **body.model_dump()))
+
+
+@router.post("/tests/{test_id}/approve")
+async def approve(request: Request, test_id: int, body: ApproveBody):
+    s = request.app.state
+    refused = reauth_error(s.auth, body.password)
+    if refused:
+        return JSONResponse(status_code=refused[0], content=refused[1])
+    return await _call(tests.approve(s.store, s.settings, test_id, body.budget,
+                                     underpowered_ok=body.underpowered_ok))
+
+
+@router.post("/tests/{test_id}/cancel")
+async def cancel(request: Request, test_id: int):
+    s = request.app.state
+    return await _call(tests.cancel(s.store, s.settings, test_id))
+
+
+@router.get("/audit")
+def audit_log(request: Request, limit: int = Query(50, ge=1, le=200),
+              offset: int = Query(0, ge=0)):
+    return budget.audit_log(request.app.state.store, limit=limit, offset=offset)
