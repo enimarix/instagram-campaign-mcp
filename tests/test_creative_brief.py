@@ -82,13 +82,16 @@ def test_every_key_on_an_empty_db(store, settings):
     assert set(mix) == {"template", "hook_type", "pillar", "humour", "moved"}
     # 10 ideas, 3 explore: 7 exploit ideas split in every dimension
     assert all(sum(r["count"] for r in mix[d]) == 7 for d in mix if d != "moved")
-    assert list(b)[0] == "owner_decisions"  # 133: first, what the owner turned down
+    # 134: the owner's work orders first; 133: then what the owner turned down
+    assert list(b)[:2] == ["work_orders", "owner_decisions"]
     assert b == {
+        "work_orders": [],
         "owner_decisions": {"decline_motives": [], "approved_changes": []},
         "bible": None, "bible_note": B.NO_BIBLE, "learnings": [], "feedback": [],
         "change_requests": [], "last_daily_report": None, "experiments": [],
         "explore_plan": [], "quotas": todays_quotas(store, settings, DAY, NOW), "today": [], "recent_hooks": [],
-        "inspirations": [], "bench": {"count": 0, "supply_days": 0, "hooks": []},
+        "inspirations": [], "trend_taste": {"liked": [], "disliked": []},
+        "bench": {"count": 0, "supply_days": 0, "hooks": []},
     }
     assert b["quotas"]["effective_batch_size"] == 10
 
@@ -150,7 +153,7 @@ def test_decline_motives_and_approved_changes_come_first(store, settings):
     transition(store, after["id"], "ready", actor="worker")
     transition(store, after["id"], "approved", actor="owner")
     b = B.creative_brief(store, settings, NOW)
-    assert list(b)[0] == "owner_decisions"
+    assert list(b)[:2] == ["work_orders", "owner_decisions"]
     [motive] = b["owner_decisions"]["decline_motives"]
     assert (motive["text"], motive["reasons"]) == (
         "On s'ennuie", [{"code": "weak_hook", "label": "Weak hook"}])

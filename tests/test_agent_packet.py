@@ -77,7 +77,8 @@ def test_light_run_has_only_its_sections_and_lists_are_capped(store, cfg, tmp_pa
     for i in range(3):
         store.add_feedback(a, text="x" * (packet.MAX_TEXT + 5) if i == 0 else f"note {i}")
     out = packet.write_packet(store, cfg, "daily-revise", tmp_path)
-    assert set(out["manifest"]["sections"]) == {"revisions", "feedback", "dm_picks"}
+    assert set(out["manifest"]["sections"]) == {"work_orders", "revisions", "feedback",
+                                                 "dm_picks"}
     assert out["manifest"]["sections"]["feedback"]["count"] == 2
     data = json.loads((tmp_path / "work" / "feedback.json").read_bytes())
     assert len(data) == 2 and len(data[0]["text"]) == packet.MAX_TEXT + 1
@@ -131,7 +132,7 @@ def test_empty_light_run_is_skipped_without_claude(store, cfg, agent_dir, tmp_pa
     assert run["status"] == "succeeded" and run["summary"] == packet.SKIPPED
     assert not (tmp_path / "seen.json").exists()
     assert _files(tmp_path / "ws") == ["dm_picks.json", "feedback.json", "manifest.json",
-                                       "revisions.json"]
+                                       "revisions.json", "work_orders.json"]
 
 
 def test_daily_produce_runs_even_with_empty_sections(store, cfg, agent_dir, tmp_path):

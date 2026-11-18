@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from ..config import APP_HOME, InstagramMCPSettings
 from ..store import CampaignStore
+from ..studio import work_orders
+from ..studio.research import trend_taste
 from ..studio.scheduling import bench
 from ..studio.seed import local_today
 from .experiments import explore_plan
@@ -22,6 +24,7 @@ BIBLE_CHARS = 8000
 REPORT_CHARS = 2000
 NO_BIBLE = "no channel bible yet: follow brand/taxonomy.json and the learnings"
 INSPIRATIONS = 20
+WORK_ORDERS = 30
 IDEA_KEYS = ("id", "track", "pillar", "hook_type", "strategy", "hook")
 EXPERIMENT_KEYS = ("id", "status", "hypothesis", "variable", "variants",
                    "target_per_variant", "ends_on")
@@ -53,7 +56,9 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
     mix = batch_mix(store, settings, today, now=now)  # first: the quotas read its humour share
     quotas = todays_quotas(store, settings, today, now)
     return {
-        # 133: first, what the owner turned down (with why) and the changes they approved
+        # 134: the owner's work orders come before anything else (made first, literally)
+        "work_orders": work_orders.for_agent(store, "new", WORK_ORDERS),
+        # 133: what the owner turned down (with why) and the changes they approved
         "owner_decisions": owner_decisions(store),
         "bible": bible,
         "bible_note": None if bible else NO_BIBLE,
@@ -85,6 +90,8 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
         # Reels the owner pasted with a note, not used or dismissed yet (step 051b).
         "inspirations": [{k: r[k] for k in ("id", "url", "note", "created_at")}
                          for r in store.list_inspirations("new", limit=INSPIRATIONS)],
+        # 134: Reels the owner liked / disliked on the Trending page: their taste
+        "trend_taste": trend_taste(store),
         "bench": {"count": len(on_bench["assets"]), "supply_days": on_bench["supply_days"],
                   "hooks": [store.get_idea(a["idea_id"])["hook"]
                             for a in on_bench["assets"][:10]]},

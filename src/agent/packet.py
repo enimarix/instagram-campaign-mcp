@@ -13,7 +13,7 @@ does it. Before every agent run, write_packet() rebuilds `<workspace>/work/`:
 
 Run kinds are playbook names (RUNS): `daily-produce` (night) needs every section but
 `ads` (only `weekly-ads` reads it), the light afternoon run is a second playbook,
-`daily-revise` (revisions, feedback, DM picks),
+`daily-revise` (the owner's work orders, revisions, feedback, DM picks),
 scheduled like any other: `AGENT_SCHEDULE=daily-produce@03:00,daily-revise@14:00`. A
 playbook not in the table gets every section.
 
@@ -43,7 +43,7 @@ from ..learning.facts import facts_for
 from ..learning.learnings import get_feedback, list_revision_requests
 from ..learning.quotas import todays_quotas
 from ..store import CampaignStore, to_iso, utcnow
-from ..studio import dm_picks
+from ..studio import dm_picks, work_orders
 from ..studio.seed import local_today
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "agent" / "schemas"
@@ -94,20 +94,26 @@ def _dm_picks(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     return {"untrusted_notes": True, "picks": picks}, len(picks)
 
 
+def _work_orders(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
+    orders = work_orders.for_agent(store, "new", MAX_ITEMS)
+    return {"untrusted_captions": True, "orders": orders}, len(orders)
+
+
 def _ads(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
     from ..ads.agent import work_packet  # here: src/ads imports studio.alerts, which imports us
 
     return work_packet(store, settings)
 
 
-SECTIONS: Dict[str, Producer] = {"brief": _brief, "feedback": _feedback,
+SECTIONS: Dict[str, Producer] = {"work_orders": _work_orders,  # 134: first, made first
+                                 "brief": _brief, "feedback": _feedback,
                                  "revisions": _revisions, "facts": _facts,
                                  "quotas": _quotas, "dm_picks": _dm_picks, "ads": _ads}
 # playbook -> (run_kind, sections); None = every section.
 RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
-    "daily-produce": ("produce", ("brief", "feedback", "revisions", "facts", "quotas",
-                                  "dm_picks")),
-    "daily-revise": ("light", ("revisions", "feedback", "dm_picks")),
+    "daily-produce": ("produce", ("work_orders", "brief", "feedback", "revisions", "facts",
+                                  "quotas", "dm_picks")),
+    "daily-revise": ("light", ("work_orders", "revisions", "feedback", "dm_picks")),
     "daily-learn": ("learn", ("facts", "brief")),
     "weekly-ads": ("ads", ("ads",)),  # 096: skipped when not configured or nothing to do
 }
