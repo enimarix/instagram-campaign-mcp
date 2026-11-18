@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 import src.instagram_mcp_server as srv
 from src.api.app import create_app
-from src.studio import rights, stock
+from src.studio import rights, sources, stock
 from tests.test_studio_audio import make_clip
 from tests.test_studio_ffmpeg import needs_ffmpeg
 
@@ -122,7 +122,7 @@ def test_ingest_records_licence_credit_and_ads(store, cfg, clip_bytes):
     assert clip["provider"] == "pexels" and clip["external_id"] == "42"
     assert clip["rights_basis"] == "licensed" and clip["audio_rights"] == "no_audio"
     assert clip["author"] == "Ann Lee" and clip["url"] == "https://www.pexels.com/video/gym-42/"
-    assert clip["licence"] == "Pexels License" and clip["ads_allowed"] is True
+    assert clip["licence"] == "Pexels License" and clip["ads_allowed"] == 1
     assert clip["attribution"] == "Video by Ann Lee on Pexels"
     assert "Pexels License" in clip["rights_note"]
     assert rights.can_publish(clip) and rights.can_advertise(clip)
@@ -197,3 +197,20 @@ async def test_mcp_tools(monkeypatch, store, cfg):
     monkeypatch.setattr(srv, "get_settings", lambda: _settings(media_root=cfg.media_root))
     with pytest.raises(ToolError, match="PEXELS_API_KEY"):
         await srv.add_stock_clip(42)
+
+
+@needs_ffmpeg
+@respx.mock
+def test_ads_flag_lives_in_the_column(store, cfg, clip_bytes):
+    """with_attribution keeps sources.ads_allowed (065) for stock and permission clips."""
+    respx.get(VIDEO_API).mock(return_value=httpx.Response(200, json=video()))
+    respx.get(HD).mock(return_value=httpx.Response(200, content=clip_bytes))
+    clip = stock.add_clip(store, cfg, 42)
+    assert "ads_allowed" not in clip["stats"]
+    granted = store.add_source("permission", role="clip", author="bob",
+                               rights_basis="permission", rights_note="DM from bob")
+    with store._tx() as c:  # as permissions.attach_granted_file stores a yes with ads
+        c.execute("UPDATE sources SET ads_allowed=1 WHERE id=?", (granted["id"],))
+    listed = {s["id"]: s for s in sources.list_clips(store)}
+    for sid in (clip["id"], granted["id"]):
+        assert listed[sid]["ads_allowed"] == 1 and rights.can_advertise(listed[sid])

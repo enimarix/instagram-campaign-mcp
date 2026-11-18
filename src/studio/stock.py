@@ -155,15 +155,18 @@ class PexelsProvider(LocalInboxProvider):
             else:
                 raise ValueError("no portrait file of this video could be downloaded"
                                  + (f" ({'; '.join(errors)})" if errors else ""))
-            return self.ingest_file(
+            clip = self.ingest_file(
                 path, rights_basis="licensed", rights_note=RIGHTS_NOTE,
                 # the licence covers the file, but stock sound may hold third-party music:
                 # muted unless the clip is silent anyway (then no_audio)
                 audio_rights="not_covered", author=author, url=video["url"], licence=LICENCE,
                 external_id=str(video_id),
                 extra_stats={"attribution": f"Video by {author} on Pexels",
-                             "author_url": video["author_url"], "ads_allowed": True,
+                             "author_url": video["author_url"],
                              "licence_url": "https://www.pexels.com/license/"})
+        with self.store._tx() as c:  # the Pexels License allows ads (sources.ads_allowed, 065)
+            c.execute("UPDATE sources SET ads_allowed=1 WHERE id=?", (clip["id"],))
+        return self.store.get_source(clip["id"])
 
 
 def search(store: CampaignStore, settings: InstagramMCPSettings, query: str,

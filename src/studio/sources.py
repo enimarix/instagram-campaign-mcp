@@ -168,11 +168,9 @@ class LocalInboxProvider:
 
 
 def with_attribution(source: Dict[str, Any]) -> Dict[str, Any]:
-    """The source plus its `licence`, `ads_allowed` (rights.can_advertise reads both by
-    name) and the credit text a post of it must carry."""
-    stats = source.get("stats") or {}
-    licence = source.get("licence") or stats.get("licence")
-    return {**source, "licence": licence, "ads_allowed": stats.get("ads_allowed"),
+    """The source plus its `licence` and the credit text a post of it must carry."""
+    licence = source.get("licence") or (source.get("stats") or {}).get("licence")
+    return {**source, "licence": licence,
             "attribution": rights.attribution(source, licence=licence)}
 
 
