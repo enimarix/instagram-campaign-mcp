@@ -171,8 +171,9 @@ const PhoneScene = ({ p, index, f, len, fps }: SceneProps) => {
   const c = easeInOut(span(f, t.count[0], t.count[1] - t.count[0]));
   const sy = f < t.pop ? 0.02 : backOut(span(f, t.pop, Math.round(0.35 * fps)), 0.15);
   const tapP = span(f, t.tap, Math.round(0.6 * fps));
-  const y = 960;
   const s = 0.92;
+  // Under the strips, 30 px clear of the last one.
+  const y = Math.max(960, labelStack(b.labels).bottom + 30 + 440 * s);
   const button = [540, y + 276 * s] as const;
   return (
     <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
