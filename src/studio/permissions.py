@@ -40,12 +40,12 @@ DRAFT = (
 
 
 def _source(store: CampaignStore, target: Union[int, str]) -> Dict[str, Any]:
-    """The source of a request: a source id, or a Reel link (an inspiration). A link no
-    source holds yet becomes a reference source (rights unknown)."""
+    """The source of a request: a source id, or a Reel link (an inspiration); {url} alone
+    for a link no source holds yet."""
     if isinstance(target, int):
         return store.get_source(target)  # KeyError: no such source
     url, source = downloader._find_source(store, target)  # ValueError: not a Reel link
-    return source or store.add_source("inspiration", role="reference", url=url)
+    return source or {"url": url}
 
 
 def _creator(source: Dict[str, Any], creator: Optional[str]) -> Optional[str]:
@@ -65,11 +65,7 @@ def _note(note: Optional[str]) -> Optional[str]:
 def draft(store: CampaignStore, target: Union[int, str], creator: Optional[str] = None,
           *, brand_kit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """{creator, url, message}: the message the owner may send (never sent by the studio)."""
-    if isinstance(target, int):
-        source: Dict[str, Any] = store.get_source(target)
-    else:  # a link not stored yet only needs its canonical form here
-        url, found = downloader._find_source(store, target)
-        source = found or {"url": url}
+    source = _source(store, target)
     name = _creator(source, creator)
     kit = brand_kit or brand.load_brand()
     url = source.get("url")
@@ -121,6 +117,8 @@ def request_permission(store: CampaignStore, target: Union[int, str], channel: s
     name = _creator(source, creator)
     if not name:
         raise ValueError("say who the creator is: the credit needs their name")
+    if "id" not in source:  # a new link becomes a reference source (rights unknown)
+        source = store.add_source("inspiration", role="reference", url=source["url"])
     try:
         row = store._insert("permission_requests", FIELDS, {
             "source_id": source["id"], "creator": name, "channel": channel,

@@ -106,6 +106,7 @@ describe('PermissionsSection', () => {
     await vi.waitFor(() => expect(calls.find((c) => c.key === 'POST /api/permissions/3/answer')?.body).toEqual(
       { status: 'granted', proof_note: 'DM 18 Nov', ads_allowed: true }))
     expect(await screen.findByText('ads allowed')).toBeTruthy()
+    expect(screen.queryByRole('form', { name: 'Yes from @ann' })).toBeNull()
   })
 
   it('attaches the file once granted, then shows it attached', async () => {

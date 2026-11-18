@@ -139,7 +139,7 @@ function Row({ r, act }: { r: PermissionRequest; act: (fn: () => Promise<unknown
           </Button>
         </div>
       )}
-      {granting && (
+      {granting && r.status === 'requested' && (
         <form aria-label={`Yes from @${r.creator}`} className="mt-2 grid gap-2"
           onSubmit={(e) => {
             e.preventDefault()

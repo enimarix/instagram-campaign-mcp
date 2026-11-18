@@ -54,6 +54,7 @@ def test_request_refusals_and_links(store):
         permissions.request_permission(store, "https://x.org/v", "dm", brand_kit=KIT)
     with pytest.raises(ValueError, match="who the creator is"):
         permissions.request_permission(store, REEL, "dm", brand_kit=KIT)
+    assert store.list_sources() == []  # nothing stored for a refused request
     # an inspiration link becomes a reference source, the owner names the creator
     out = permissions.request_permission(store, REEL + "?igsh=x", "other", creator="@bob",
                                          brand_kit=KIT)
