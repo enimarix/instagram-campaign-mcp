@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 
 from ..ads import budget, tests
 from ..ads.budget import BudgetRefused
-from ..ads.promote import PromotionRefused
 from ..instagram_client import NotConfigured
 from .auth import reauth_error
 
@@ -80,7 +79,7 @@ async def _call(work: Awaitable[Any]) -> Any:
         return await work
     except KeyError:
         return JSONResponse(status_code=404, content={"error": "not_found"})
-    except (tests.AdTestRefused, BudgetRefused, PromotionRefused) as e:
+    except (tests.AdTestRefused, BudgetRefused) as e:
         return JSONResponse(status_code=409, content={"error": e.code, "message": e.message})
     except tests.AdTestFailed as e:
         return JSONResponse(status_code=502, content={"error": "failed", "message": str(e)})
@@ -104,8 +103,7 @@ def winners(request: Request):
 @router.post("/tests")
 async def propose(request: Request, body: ProposeBody):
     s = request.app.state
-    data = body.model_dump()
-    return await _call(tests.propose(s.store, s.settings, **data))
+    return await _call(tests.propose(s.store, s.settings, **body.model_dump()))
 
 
 @router.post("/tests/{test_id}/approve")
