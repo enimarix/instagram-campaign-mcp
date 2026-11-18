@@ -5,7 +5,8 @@
 // pill pops, macrobody.fr fades up; the cameo hops in and waves. The kitchen stays below as
 // the backdrop. Plays from its own frame 0 (VoxelQuest puts it in a <Sequence>); settles by
 // about 2.2 s.
-import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Html5Audio, interpolate, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
+import { assetById } from "../assets";
 import { brand, safeArea } from "../brand";
 import { fonts } from "../lib/font";
 import { frenchSpaces } from "../lib/french";
@@ -105,6 +106,9 @@ export const VoxelEndCard = ({ tagline, accent, cameo, address, pixelate }: Omit
           <VoxelMesh voxels={isGolem ? GOLEMS[cameo] : FOODS[cameo]} fit={isGolem ? undefined : 11} />
         </group>
       </VoxelCanvas>
+      <Sequence from={AT.pill} durationInFrames={30} layout="none">
+        <Html5Audio src={assetById("sfx-pop").src} volume={0.45} />
+      </Sequence>
       {/* Brand base: wordmark, tagline, pill, url, stacked in the lower half of the safe area. */}
       <div
         style={{

@@ -263,7 +263,7 @@ export const templates = {
       const total = timeline.totalFrames;
       return [
         ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
-        { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (voxel): mB tile assembles, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? p.toForm}` },
+        { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (voxel): mB tile assembles, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? p.beats[p.beats.length - 1].form ?? p.toForm}` },
       ];
     },
   }),

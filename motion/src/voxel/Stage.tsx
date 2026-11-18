@@ -179,7 +179,8 @@ export const VoxelCubes = ({ voxels, place, ...group }: CubesProps) => {
   });
   return (
     <group {...group}>
-      <instancedMesh ref={mesh} args={[UNIT_CUBE, undefined, voxels.length]} castShadow receiveShadow>
+      {/* Not culled: three.js would size its bounding sphere once, before the cubes move. */}
+      <instancedMesh ref={mesh} args={[UNIT_CUBE, undefined, voxels.length]} frustumCulled={false} castShadow receiveShadow>
         <meshStandardMaterial roughness={0.82} metalness={0} />
       </instancedMesh>
     </group>

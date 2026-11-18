@@ -101,10 +101,10 @@ const fitSize = (text: string, width: number, height: number, sizes: number[], l
 
 /** The line with its numbers ("308 kcal", "1,6 g", "21 h") in the accent colour. */
 const Highlighted = ({ text, color }: { text: string; color: string }) => {
-  const parts = frenchSpaces(text).split(/(\d[\d   ,.]*(?:\s?(?:kcal|kg|g|h|%))?)/);
+  const parts = frenchSpaces(text).split(/(\d[\d\u00a0\u202f ,.]*(?:\s?(?:kcal|kg|g|h|%)\b)?)/);
   return (
     <>
-      {parts.map((part, i) => (i % 2 ? <span key={i} style={{ color }}>{part.replace(/ (?=\S)/g, " ")}</span> : part))}
+      {parts.map((part, i) => (i % 2 ? <span key={i} style={{ color }}>{part.replace(/ (?=\S)/g, "\u00a0")}</span> : part))}
     </>
   );
 };
@@ -179,6 +179,9 @@ type Story = {
   flash: number;
 };
 
+/** The form the golem reaches at the payoff. */
+const reached = (p: VoxelQuestProps): FormId => p.beats[p.beats.length - 1].form ?? p.toForm;
+
 /** Which camera shot a beat uses. */
 const shotOf = (b?: Beat): keyof typeof SHOTS => (!b ? "payoff" : b.kind === "problem" && !b.foods ? "close" : b.kind);
 
@@ -192,21 +195,18 @@ const beatClock = (frame: number, scene: Scene, fps: number) => {
   return { t: frame - scene.startFrame, k, length };
 };
 
+/** The camera this frame. Every move starts from where the camera actually was (drift included). */
 const cameraAt = (frame: number, story: Story): Pose => {
   const { props, scenes, endStart } = story;
-  const shot = (s: Scene) => (s.index === 0 ? SHOTS.hook : SHOTS[shotOf(beatOf(props, s))]);
-  const i = scenes.findIndex((s) => frame >= s.startFrame && frame < s.endFrame);
-  const scene = scenes[i === -1 ? scenes.length - 1 : i];
-  if (frame >= endStart - SETTLE) {
-    const from = shot(scenes[Math.min(props.beats.length, scenes.length - 1)]);
-    return lerpPose(from, KITCHEN_WIDE, easeInOut(span(frame, endStart - SETTLE, SETTLE)));
-  }
+  const settle = endStart - SETTLE;
+  // Back to the wide shot before the end card, which starts on it.
+  if (frame >= settle) return lerpPose(cameraAt(settle - 1, story), KITCHEN_WIDE, easeInOut(span(frame, settle - 1, SETTLE)));
+  const scene = sceneAt(scenes, frame) ?? scenes[scenes.length - 1];
   if (scene.index === 0) return lerpPose({ ...KITCHEN_WIDE, lens: KITCHEN_WIDE.lens * 0.9 }, SHOTS.hook, easeOut(span(frame, 0, scene.endFrame)));
-  const prev = shot(scenes[scene.index - 1]);
   // After the move in, a slow push keeps the picture alive through the beat.
-  const to = shot(scene);
+  const to = SHOTS[shotOf(beatOf(props, scene))];
   const drift = { ...to, lens: to.lens * (1 + DRIFT * span(frame, scene.startFrame + MOVE, scene.endFrame - scene.startFrame - MOVE)) };
-  return lerpPose(prev, drift, easeInOut(span(frame, scene.startFrame, MOVE)));
+  return lerpPose(cameraAt(scene.startFrame - 1, story), drift, easeInOut(span(frame, scene.startFrame, MOVE)));
 };
 
 /** Everything in the 3D set for this frame. */
@@ -219,7 +219,7 @@ const Set3D = ({ frame, story, pose }: { frame: number; story: Story; pose: Pose
   const clock = beatClock(frame, scene, fps);
   // Room and golem pop in under the hook text in the first half second.
   const room = popIn(frame, 0, 12, 0.08);
-  const form: FormId = frame >= flash ? (kind === "payoff" ? (beat?.form ?? props.toForm) : props.toForm) : (beat?.form ?? props.fromForm);
+  const form: FormId = frame >= flash ? reached(props) : kind === "payoff" ? (props.beats[props.beats.length - 2].form ?? props.fromForm) : (beat?.form ?? props.fromForm);
   // The hook's prop shows in the hook and again in a problem beat without foods (nothing changed).
   const showProp = kind === "hook" || (kind === "problem" && !beat?.foods);
   const onScale = props.hookProp === "scale" && showProp;
@@ -298,7 +298,7 @@ const Pins = ({ frame, story, pose }: { frame: number; story: Story; pose: Pose 
     });
   }
   if (scene && beat?.kind === "payoff" && frame >= flash) {
-    const form = FORMS.findIndex((f) => f.id === (beat.form ?? props.toForm));
+    const form = FORMS.findIndex((f) => f.id === reached(props));
     const at = projectIso(pose, [KITCHEN_SPOT[0], 25, KITCHEN_SPOT[2]], width, height);
     out.push(
       <div key="level" style={{ opacity: 1 - span(frame, scene.endFrame - 5, 5) }}>
@@ -321,7 +321,8 @@ export const VoxelQuest = (props: VoxelQuestProps) => {
   const { timeline, endStart } = useMemo(() => timelineOf(props, fps), [props, fps]);
   const scenes = timeline.scenes;
   const payoff = scenes[props.beats.length];
-  const flash = payoff.startFrame + Math.round((IN_BEAT.hop + IN_BEAT.hopLength * 0.5) * beatClock(payoff.startFrame, payoff, fps).k);
+  // At the top of the payoff's hop.
+  const flash = payoff.startFrame + Math.round(IN_BEAT.hop * beatClock(payoff.startFrame, payoff, fps).k + IN_BEAT.hopLength / 2);
   const story: Story = { props, scenes, endStart, flash };
   const accent = TEXT_ACCENT[props.accent];
   const pose = cameraAt(Math.min(frame, endStart - 1), story);
@@ -354,7 +355,7 @@ export const VoxelQuest = (props: VoxelQuestProps) => {
             style="voxel"
             tagline={props.outro}
             accent={props.accent}
-            cameo={props.cameo ?? props.toForm}
+            cameo={props.cameo ?? reached(props)}
             address={props.address}
             pixelate={props.pixelate}
           />
@@ -369,7 +370,6 @@ export const VoxelQuest = (props: VoxelQuestProps) => {
       {cues.map((c, i) => (
         <Sfx key={i} at={c.at} id={c.id} />
       ))}
-      <Sfx at={endStart + 54} id="sfx-pop" volume={0.45} />
       <MusicBed id={props.music} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
