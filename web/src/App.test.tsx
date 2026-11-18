@@ -81,13 +81,14 @@ describe('App', () => {
     expect(list.map((l) => l.textContent)).toEqual(['Trends', 'Learnings', 'Ads', 'Settings'])
   })
 
-  it('says what the Ads page will hold and what it waits for', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+  it('routes /ads to the Ads page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
     render(
       <MemoryRouter initialEntries={['/ads']}>
         <App />
       </MemoryRouter>,
     )
-    expect(within(screen.getByRole('main')).getByText(/Paid A\/B tests on proven winners.*H6/)).toBeTruthy()
+    expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Ads', level: 1 })).toBeTruthy()
+    expect(await within(screen.getByRole('main')).findByRole('button', { name: 'Propose a test' })).toBeTruthy()
   })
 })

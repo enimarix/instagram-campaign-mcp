@@ -3,6 +3,7 @@ import Alerts from './Alerts'
 import CalendarPage from './calendar/CalendarPage'
 import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
+import Ads from './pages/Ads'
 import Agent from './pages/Agent'
 import Analytics from './pages/Analytics'
 import Breakdowns from './pages/Breakdowns'
@@ -81,13 +82,7 @@ export default function App() {
               <Route path="/reports/:date" element={<ReportPage />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/learnings" element={<Learnings />} />
-              <Route path="/ads" element={
-                <Placeholder title="Ads">
-                  Paid A/B tests on proven winners: the studio proposes a test with the budget it needs, you
-                  set the budget and approve it with your password, then see spend, results and the winner here.
-                  It needs your Meta ad account with a spending limit set in Meta first (setup step H6).
-                </Placeholder>
-              } />
+              <Route path="/ads" element={<Ads />} />
               <Route path="/agent" element={<Agent />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/more" element={<More />} />

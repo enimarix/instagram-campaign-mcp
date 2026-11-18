@@ -739,3 +739,63 @@ export type Alert = {
 }
 export const getAlerts = () => request<Alert[]>('/api/alerts')
 export const dismissAlert = (id: string) => post<{ id: string }>(`/api/alerts/${encodeURIComponent(id)}/dismiss`)
+
+// --- Ads (steps 091, 094; src/api/ads.py) ---
+/** Money comes as decimal strings, in `currency`. */
+export type BudgetScope = { cap: string; used: string; remaining: string }
+export type AdsBudget = {
+  killed: boolean
+  killed_at: string | null
+  killed_reason: string | null
+  currency: string
+  day: string
+  daily: BudgetScope
+  lifetime: BudgetScope
+  test_cap: string
+  tests: (BudgetScope & { test_id: number })[]
+}
+export type AdVariable = 'creative' | 'audience' | 'placement'
+export type AdTestStatus = 'proposed' | 'approved' | 'running' | 'finished' | 'cancelled'
+export type AdTest = {
+  id: number
+  hypothesis: string
+  variable: AdVariable
+  variants: { media_id: string; preset: string }[]
+  min_lift: number
+  spec: { min_days: number }
+  needed: { total: number; per_variant: number; sample_per_variant: number }
+  budget_total: string | null
+  currency: string
+  end_date: string | null
+  status: AdTestStatus
+  reason: string | null
+  /** Proposed tests only: why the caps cannot fund the test, or null. */
+  underpowered: string | null
+  created_at: string
+}
+export type AdWinner = { media_id: string; permalink: string | null; posted_at: string; caption: string; asset_id: number }
+export type AdProposal = {
+  hypothesis: string
+  variable: AdVariable
+  variants: { media_id: string; preset: string }[]
+  min_lift: number
+}
+export type AdsAuditRow = {
+  id: number
+  at: string
+  actor: 'owner' | 'agent' | 'system'
+  action: string
+  test_id: number | null
+  detail: Record<string, unknown>
+}
+export type AdsAudit = { total: number; limit: number; offset: number; rows: AdsAuditRow[] }
+export const getAdsBudget = () => request<AdsBudget>('/api/ads/budget')
+export const killAds = (reason?: string) => post<AdsBudget>('/api/ads/kill', reason ? { reason } : undefined)
+export const unkillAds = (password: string) => post<AdsBudget>('/api/ads/unkill', { password })
+export const listAdTests = () => request<{ tests: AdTest[] }>('/api/ads/tests').then((r) => r.tests)
+export const listAdWinners = () => request<{ winners: AdWinner[] }>('/api/ads/winners').then((r) => r.winners)
+export const proposeAdTest = (p: AdProposal) => post<AdTest>('/api/ads/tests', p)
+export const approveAdTest = (id: number, body: { budget: string; password: string; underpowered_ok: boolean }) =>
+  post<AdTest>(`/api/ads/tests/${id}/approve`, body)
+export const cancelAdTest = (id: number) => post<AdTest>(`/api/ads/tests/${id}/cancel`)
+export const getAdsAudit = (offset = 0, limit = 20) => request<AdsAudit>(`/api/ads/audit?limit=${limit}&offset=${offset}`)
