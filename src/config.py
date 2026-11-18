@@ -382,6 +382,20 @@ class InstagramMCPSettings(BaseSettings):
         "full", description="MCP tool profile: full (owner) | agent (allow-listed tools only)"
     )
 
+    # --- Ads (Phase 9, H6) --------------------------------------------------
+    # src/ads/client.py reads with INSTAGRAM_ACCESS_TOKEN (needs ads_read). Empty = ads off.
+    meta_ad_account_id: Optional[str] = Field(
+        None, description="Ad account id, digits only (the client adds act_)"
+    )
+
+    @field_validator("meta_ad_account_id")
+    @classmethod
+    def validate_ad_account_id(cls, v):
+        v = (v or "").strip().removeprefix("act_")
+        if v and not (v.isascii() and v.isdigit()):
+            raise ValueError(f"META_AD_ACCOUNT_ID must be digits (e.g. 1234567890), got {v!r}")
+        return v or None
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v):
