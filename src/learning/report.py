@@ -2,8 +2,8 @@
 The daily report (step 083, GOAL.md §3.5 "The late-night analysis"): the daily-learn agent
 writes its summary of a day whose facts exist (082), plus optional structured bits kept in
 daily_reports.analysis: the best and worst Reels with why, and up to 3 proposed experiments
-(one variable each; 086 builds real experiments, until then the next creative brief lists
-them under last_daily_report). Re-running overwrites the day's summary and analysis.
+(one variable each), which become `proposed` experiments (086, experiments.py
+propose_from_report). Re-running overwrites the day's summary, analysis and proposals.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from ..config import InstagramMCPSettings
 from ..store import CampaignStore
 from ..studio.media import media_url
 from ..studio.seed import local_today
+from .experiments import propose_from_report
 
 SUMMARY_CHARS = 4000
 MAX_PICKS = 3
@@ -56,7 +57,8 @@ def save_daily_report(store: CampaignStore, settings: InstagramMCPSettings, repo
                       now: datetime) -> Dict[str, Any]:
     """Write the summary (markdown, ≤ SUMMARY_CHARS) and analysis of owner-local
     `report_date` (YYYY-MM-DD, a past day whose facts are stored). best / worst name matured
-    posts of the facts. Returns the report row; ValueError on anything invalid."""
+    posts of the facts. Returns the report row with `experiment_proposals` ({proposed,
+    skipped}); ValueError on anything invalid."""
     try:
         day = datetime.strptime(report_date, "%Y-%m-%d").date()
     except (TypeError, ValueError):
@@ -77,8 +79,9 @@ def save_daily_report(store: CampaignStore, settings: InstagramMCPSettings, repo
         report["facts"])
     if unknown:
         raise ValueError(f"not a matured post of the facts: {', '.join(sorted(unknown))}")
-    return store.save_daily_analysis(day, summary, {
+    row = store.save_daily_analysis(day, summary, {
         k: [m.model_dump() for m in v] for k, v in analysis.items()})
+    return {**row, "experiment_proposals": propose_from_report(store, row["report_date"])}
 
 
 # --- The report page (step 085) ---

@@ -90,9 +90,11 @@ each conflict with its numbers; do not resolve it, the owner decides.
 
 ## Step 5: what to try next
 
-At most 3 experiment ideas, **one variable each**: a hypothesis, the variable (e.g.
-hook_type, template, posting hour, length) and 2–4 variants. Base each on step 2–4;
-do not repeat an open experiment from the brief.
+At most 3 experiment ideas, **one variable each**: a hypothesis, the variable (one of
+`track`, `pillar`, `hook_type`, `strategy`, `template`, `hour`, `duration`) and 2–4 of
+its values as variants (taxonomy ids; an owner-local hour 0–23; a duration bucket such as
+`15–30 s`). Valid ones become proposed experiments the next run can open. Base each on
+step 2–4; do not repeat an open experiment from the brief.
 
 ## Step 6: the daily report
 

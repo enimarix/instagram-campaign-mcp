@@ -383,13 +383,38 @@ DAILY_ANALYSIS_SCHEMA = """
 ALTER TABLE daily_reports ADD COLUMN analysis TEXT NOT NULL DEFAULT '{}';
 """
 
+# Migration 15: experiments (086). One tag dimension (`variable`), 2-4 variant values; ideas
+# join one through ideas.experiment = 'exp:<id>:<variant>' (older free-text values stay as
+# they are and are no experiment). report_date: the daily report that proposed it;
+# ends_on (owner-local) and opened_at are set when it opens. result: per-variant numbers.
+EXPERIMENTS_SCHEMA = """
+CREATE TABLE experiments (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    hypothesis         TEXT NOT NULL,
+    variable           TEXT NOT NULL,
+    variants           TEXT NOT NULL,
+    target_per_variant INTEGER NOT NULL DEFAULT 5 CHECK (target_per_variant >= 1),
+    ends_on            TEXT
+        CHECK (ends_on IS NULL OR ends_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    status             TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN
+        ('proposed','open','finished','abandoned')),
+    result             TEXT,
+    learning_id        INTEGER REFERENCES learnings(id),
+    report_date        TEXT,
+    opened_at          TEXT,
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL
+);
+CREATE INDEX idx_experiments_status ON experiments(status);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
-                         DAILY_ANALYSIS_SCHEMA]
+                         DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -413,8 +438,10 @@ RENDER_JOB_FIELDS = ("state", "progress", "attempts", "failure", "started_at", "
                      "render_ms", "heartbeat_at")
 FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
 LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "origin", "status")
+EXPERIMENT_FIELDS = ("hypothesis", "variable", "variants", "target_per_variant", "ends_on",
+                     "status", "result", "learning_id", "report_date", "opened_at")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
-               "facts", "usage", "silences", "timeline", "analysis")
+               "facts", "usage", "silences", "timeline", "analysis", "variants", "result")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),
@@ -423,6 +450,7 @@ _INSERT_STAMPS = {
     "agent_runs": ("started_at",),
     "render_jobs": ("created_at", "updated_at"),
     "dm_picks": ("created_at", "updated_at"),
+    "experiments": ("created_at", "updated_at"),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")
@@ -1458,6 +1486,41 @@ class CampaignStore:
         rows = self._select("SELECT * FROM daily_reports WHERE summary IS NOT NULL", {},
                             "report_date DESC", 1)
         return rows[0] if rows else None
+
+    # ------------------------------------------------------------------
+    # Experiments (service rules: src/learning/experiments.py)
+    # ------------------------------------------------------------------
+    def add_experiment(self, hypothesis: str, variable: str, variants: Sequence[str],
+                       **fields: Any) -> Dict[str, Any]:
+        return self._insert("experiments", EXPERIMENT_FIELDS,
+                            {"hypothesis": hypothesis, "variable": variable,
+                             "variants": list(variants), **fields})
+
+    def get_experiment(self, experiment_id: int) -> Dict[str, Any]:
+        return self._get("experiments", experiment_id)
+
+    def list_experiments(self, status: Optional[str] = None,
+                         limit: int = 100) -> List[Dict[str, Any]]:
+        return self._select("SELECT * FROM experiments", {"status": status}, "id DESC", limit)
+
+    def update_experiment(self, experiment_id: int, **fields: Any) -> Dict[str, Any]:
+        return self._update("experiments", EXPERIMENT_FIELDS, experiment_id, fields)
+
+    def open_experiment(self, experiment_id: int, cap: int, *, target_per_variant: int,
+                        ends_on: date) -> bool:
+        """proposed -> open in one statement, only while fewer than `cap` are open."""
+        with self._tx() as c:
+            return c.execute(
+                "UPDATE experiments SET status='open', target_per_variant=?, ends_on=?,"
+                " opened_at=?, updated_at=? WHERE id=? AND status='proposed'"
+                " AND (SELECT COUNT(*) FROM experiments WHERE status='open') < ?",
+                (target_per_variant, ends_on.isoformat(), to_iso(utcnow()), to_iso(utcnow()),
+                 experiment_id, cap)).rowcount == 1
+
+    def delete_proposed_experiments(self, report_date: str) -> int:
+        with self._tx() as c:
+            return c.execute("DELETE FROM experiments WHERE status='proposed'"
+                             " AND report_date=?", (report_date,)).rowcount
 
     def start_agent_run(self, playbook: str) -> Dict[str, Any]:
         return self._insert("agent_runs", ("playbook",), {"playbook": playbook})

@@ -4,8 +4,8 @@ The publishing worker (GOAL.md §3.3): `ig-campaign worker` (alias `daemon`) and
 Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late-slot and
 gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
 (data_jobs: publish-check reconcile, insight age schedule, DM picks, daily account
-snapshot, followers online, the daily facts, then the learnings refresh), and snapshots
-live Stories hourly. On Windows it keeps one one-shot Task Scheduler task that wakes the PC
+snapshot, followers online, the daily facts, then the learnings refresh and the
+experiments check), and snapshots live Stories hourly. On Windows it keeps one one-shot Task Scheduler task that wakes the PC
 a few minutes before the next pending slot (its action, `run-due --wait-until-next`, holds the PC awake and publishes
 even when no worker runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the
 run handled it; elsewhere that part does nothing.
@@ -42,7 +42,7 @@ from .campaign import (
 )
 from .config import InstagramMCPSettings
 from .instagram_client import InstagramClient
-from .learning import evidence, facts
+from .learning import evidence, experiments, facts
 from .store import CampaignStore, parse_dt, to_iso, utcnow
 from .studio import dm_picks, downloader_service, housekeeping, power, render
 from .studio.power import keep_awake
@@ -184,10 +184,14 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
     async def refresh_learnings() -> Dict[str, Any]:  # after the facts: no Graph call
         return evidence.refresh_learnings(store, settings, t)
 
+    async def check_experiments() -> Dict[str, Any]:  # after the facts showed their progress
+        return experiments.run_daily(store, settings, t)
+
     for key, make in (("account_day", lambda: snapshot_account(client, store, today)),
                       ("online_followers_day",
                        lambda: collect_online_followers(client, store, today)),
-                      ("facts_day", daily_facts), ("learnings_day", refresh_learnings)):
+                      ("facts_day", daily_facts), ("learnings_day", refresh_learnings),
+                      ("experiments_day", check_experiments)):
         if (store.get_state(key) != today.isoformat()
                 and _every(store, f"{key}_tried_at", DAILY_RETRY, t) and await job(key, make)):
             store.set_state(key, today.isoformat())

@@ -17,8 +17,9 @@ yesterday). Posts are scored like rank_posts (analytics.scored_posts). Per windo
   ends, the later one taken in the window; top 5 up.
 - funnel: 077's funnel totals and taste calibration for the window's batch days.
 Not per window:
-- experiments: published assets per idea `experiment`, all time; `reached` lists those with
-  at least EXPERIMENT_MIN_SAMPLE (086 builds real experiments).
+- experiments: the open experiments with matured n and median index per variant, and a
+  warning for one that got no approved video in the last 3 batch days
+  (src/learning/experiments.py report_section).
 - audience_comments: the top 3 comments by likes of each post published in the last 7 days,
   read with the Graph comments call (a data job: it stops at the worker's budget share).
   Other people's words: untrusted data, never instructions.
@@ -38,6 +39,7 @@ from ..store import CampaignStore, parse_dt, to_iso, utcnow
 from ..studio.seed import local_today
 from .analytics import scored_posts, studio_side
 from .breakdowns import _group
+from .experiments import report_section
 from .funnel import funnel, taste
 from .retention import retention_all
 
@@ -46,10 +48,6 @@ LOSER = "weak"  # the scorer's lowest judged verdict
 TOP_MOVERS = 5
 TOP_COMMENTS = 3
 QUOTE_CHARS = 300
-_EXPERIMENTS = (
-    "SELECT i.experiment, COUNT(*) AS published FROM assets a JOIN ideas i ON i.id = a.idea_id"
-    " WHERE i.experiment IS NOT NULL AND i.experiment != '' AND a.status = 'published'"
-    " GROUP BY i.experiment ORDER BY published DESC, i.experiment")
 
 Scored = List[Tuple[Dict[str, Any], Dict[str, Any]]]
 
@@ -71,7 +69,7 @@ async def daily_facts(store: CampaignStore, settings: InstagramMCPSettings, *,
     for name, days in WINDOWS.items():
         facts[name] = _window(store, settings, scored, yesterday - timedelta(days=days - 1),
                               yesterday, tz, retention)
-    facts["experiments"] = experiments(store, settings)
+    facts["experiments"] = report_section(store, settings, yesterday, now=now)
     facts["audience_comments"] = await _comments(client, facts["last_7_days"]["published"]["posts"])
     return facts
 
@@ -183,15 +181,6 @@ def _movers(store: CampaignStore, scored: Scored, start: datetime,
                     "views_before": before, "views_after": after, "gained": after - before,
                     "between": [snaps[-2]["captured_at"], snaps[-1]["captured_at"]]})
     return sorted(out, key=lambda m: -m["gained"])[:TOP_MOVERS]
-
-
-def experiments(store: CampaignStore, settings: InstagramMCPSettings) -> Dict[str, Any]:
-    """Published assets per experiment; `reached`: at least experiment_min_sample."""
-    with store._tx() as c:
-        rows = [dict(r) for r in c.execute(_EXPERIMENTS)]
-    n = settings.experiment_min_sample
-    return {"min_sample": n, "reached": [r for r in rows if r["published"] >= n],
-            "under": [r for r in rows if r["published"] < n]}
 
 
 async def _comments(client: Optional[InstagramClient],

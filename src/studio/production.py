@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 from urllib.parse import urlsplit
 
 from ..config import InstagramMCPSettings
+from ..learning.experiments import check_idea
 from ..learning.quotas import flagged_pillars, todays_quotas
 from ..store import CampaignStore
 from ..taxonomy import load_taxonomy, validate
@@ -40,8 +41,10 @@ def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str
     Everything is checked before writing; the ValueError says what to change: unknown tags
     (TaxonomyError lists the valid ones), today's quotas (src/learning/quotas.py; a DM
     pick's remix may pass a full batch, _dm_pick_extra), a near-duplicate of a recent
-    idea, a fact pillar without citations."""
+    idea, a fact pillar without citations, an experiment that is not an open one's variant
+    (src/learning/experiments.py check_idea, which may fill in the idea's tag)."""
     fields = {k: v for k, v in fields.items() if v is not None}
+    check_idea(store, track, fields)
     fields.setdefault("batch_date", local_today(settings.timezone))
     validate("tracks", track)
     pillar = fields.get("pillar") and validate("pillars", fields["pillar"])
