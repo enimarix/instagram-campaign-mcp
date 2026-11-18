@@ -24,6 +24,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler agent install-schedule [--remove]  # OS autostart + daily runs
   python -m src.scheduler downloader setup|update|status  # Reel downloader service (063a)
   python -m src.scheduler restore <backup> [--yes]  # put a nightly backup back (097)
+  python -m src.scheduler doctor              # is everything installed? (100)
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -305,6 +306,25 @@ def _restore(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- doctor (100) ---------------------------------------------------------
+def _doctor() -> int:
+    from .studio.doctor import checks
+
+    yes, no = "✔", "✖"
+    try:
+        (yes + no).encode(sys.stdout.encoding or "ascii")
+    except (UnicodeEncodeError, LookupError):  # e.g. a cp1252 pipe (Git Bash on Windows)
+        yes, no = "ok", "XX"
+    results = checks(get_settings())
+    for c in results:
+        print(f"{yes if c['ok'] else no} {c['name']}: {c['detail']}")
+        if c["fix"]:
+            print(f"    -> {c['fix']}")
+    failed = sum(not c["ok"] for c in results)
+    print("All set." if not failed else f"{failed} to fix (see -> above).")
+    return 1 if failed else 0
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ig-campaign")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -370,6 +390,8 @@ def main(argv: list[str] | None = None) -> None:
                                          " first; the current one is kept aside)")
     rs.add_argument("backup", help="A backup file, e.g. data/backups/studio-2026-11-17.db")
     rs.add_argument("--yes", action="store_true", help="Don't ask (needed when not interactive)")
+    sub.add_parser("doctor", help="Check what the studio needs (ffmpeg, Node, website, "
+                                  "downloader, Claude Code, .env); changes nothing")
     args = parser.parse_args(argv)
     if args.command == "agent" and args.agent_command == "run" and (
             (args.max_turns is not None and args.max_turns < 1)
@@ -390,6 +412,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_downloader(args))
     if args.command == "restore":
         sys.exit(_restore(args))
+    if args.command == "doctor":
+        sys.exit(_doctor())
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 

@@ -1,299 +1,181 @@
-# Instagram Campaign MCP
+# Macrobody Growth Studio
 
-An MCP server that lets Claude (or any MCP client) run **organic Instagram campaigns**
-on the official Instagram Graph API: publish, schedule, moderate, measure, and find
-the posts that beat your own average — the ones worth turning into ads.
+A video studio for one Instagram account, run by an AI agent and steered by you. Every
+night the agent studies what worked, writes and renders a batch of short vertical videos
+(8-bit motion videos and reaction remixes of viral Reels), and puts them in a review feed
+on a website. In the morning you scroll the feed on your phone and decide on each video:
+approve, decline, ask for a change, or save it for later.
 
-Fork of [jlbadano/ig-mcp](https://github.com/jlbadano/ig-mcp) (MIT), rebuilt for
-Graph API v25 and MCP SDK 2.x.
+The studio publishes what you approve at good, spread-out hours, measures how each post
+does, and learns from both the numbers and your comments. Nothing is published without
+your approval. Everything runs on your own computer; the website is local. The full plan
+is in [GOAL.md](GOAL.md). The project began as an Instagram MCP server for Claude, and
+that server is still included (see [docs/DEVELOPING.md](docs/DEVELOPING.md)).
 
-## What it adds over upstream
+## 1. Setup
 
-| Area | Upstream | This fork |
-|---|---|---|
-| Publishing | single image/video (video broke: no processing wait) | image, **carousel** (2–10), **Reels**, **trial Reels**, **Stories**, with container polling |
-| Scheduling | – | local queue + scheduler (`daemon`, `run-due`), retries, crash-safe |
-| Insights | v19 metrics incl. deprecated ones | per-type metrics (feed / Reels / Stories), auto-fallback when Meta rejects one |
-| Comments | – | list, reply, comment, hide/unhide, delete |
-| Research | – | hashtag top/recent posts, competitor stats (Business Discovery) |
-| Winners | – | daily insight snapshots, scoring vs **your account's median**, A/B variant comparison |
-| Auth | token in URL query | `Authorization: Bearer` header (token never in URLs/logs) |
+You need Git, [uv](https://docs.astral.sh/uv/) (or Python 3.10+), Node.js 22.12+ and
+ffmpeg. The installer checks for each one and tells you how to install what is missing.
 
-## The campaign loop
-
-```
-plan ─► publish / schedule_post (tag campaign + variant + hypothesis)
-          │
-          ▼
-   collect_insights (daily) ─► rank_posts ─► winners = ad candidates
-          │                         │
-          └──── compare_variants ◄──┘   (which hook / format / CTA wins)
-```
-
-- **Trial Reels** (`trial_graduation`) show a Reel to non-followers first — a clean way
-  to test hooks without spamming followers. `SS_PERFORMANCE` lets Instagram share it
-  to followers if it performs; `MANUAL` leaves that to you in the app.
-- A post is judged after **48h**, only against posts **of the same type**, read at a
-  **similar age** (a 2-day-old post isn't compared with posts measured at 30 days),
-  and needs a minimum reach (default 300) before it can be called a winner.
-- **Stories** are judged on a snapshot taken 20–24h after posting (they expire at
-  24h). The scheduler daemon snapshots live Stories every hour; without it, run
-  `ig-campaign collect --stories-only` hourly. A Story that expired without such a
-  snapshot is reported as `incomplete`.
-- `engagement_index` = weighted average of per-reach rates divided by your median:
-  follows ×4, shares ×3, saves ×3, profile visits ×2, comments ×1.5, likes ×0.5,
-  Reels avg watch time ×2. `1.0` = typical post.
-- **Winner** = enough reach and either engagement ≥ 1.5× (`WINNER_THRESHOLD`) **or**
-  reach ≥ 2× the median with at least median engagement (a post that travelled far
-  without diluting engagement).
-
-## Setup
-
-### 1. Meta prerequisites
-- Instagram **Business or Creator** account linked to a Facebook Page.
-- A Meta developer app with the Instagram Graph API.
-- A **long-lived user token** (60 days) with: `instagram_basic`,
-  `instagram_content_publish`, `instagram_manage_insights`, `instagram_manage_comments`,
-  `pages_show_list`, `pages_read_engagement`, `business_management`.
-  As the app's admin you can use these on your own account without App Review.
-  See [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md).
-- Hashtag search needs the *Instagram Public Content Access* feature on the app.
-
-### 2. Install (one command)
 ```bash
 git clone https://github.com/enimarix/instagram-campaign-mcp.git
 cd instagram-campaign-mcp
 ```
-**Windows** (PowerShell):
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -RegisterClaudeCode
-```
-**macOS / Linux**:
-```bash
-./install.sh --register-claude-code
-```
-The installer:
-- creates `.venv` with Python 3.12 using [uv](https://docs.astral.sh/uv/) if it is
-  installed (uv downloads Python itself, so a new machine only needs uv), otherwise
-  with any installed Python 3.10+;
-- installs the package, and creates `.env` from `env.example` (never overwrites it);
-- writes `mcp-config.json` with this machine's paths, ready to paste into
-  Claude Desktop;
-- with `-RegisterClaudeCode` / `--register-claude-code`, runs `claude mcp add`
-  (user scope) so Claude Code sees the server right away.
 
-Options: `-Dev` / `--dev` also installs test dependencies and runs the 67 tests
-(no network); `-Name` / `--name` changes the server name (default `instagram`);
-`-Schedule` / `--schedule` starts the studio by itself (see "Run the studio").
-Re-running the installer is safe and upgrades the install.
+| | One command |
+|---|---|
+| Windows (PowerShell) | `powershell -ExecutionPolicy Bypass -File .\install.ps1 -Schedule` |
+| macOS / Linux | `./install.sh --schedule` |
 
-Then fill in `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_BUSINESS_ACCOUNT_ID` in `.env`.
-Don't know your account ID? Set only the token, connect the server, and call
+The installer sets up Python, builds the website, installs the video packages, builds
+the Reel downloader, creates `.env` (an existing one is never changed) and ends with
+`ig-campaign doctor`. Each line shows ✔ or ✖, and every ✖ says what to do. Fix those
+lines and run the installer again: you can re-run it safely.
+
+`-Schedule` / `--schedule` makes the studio start by itself at logon (Windows) or
+reboot (macOS / Linux) and adds the nightly agent runs. Leave it out to try the studio
+first; you can add it later with `ig-campaign agent install-schedule`.
+
+**Then:**
+1. Fill in `.env`: at least `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_BUSINESS_ACCOUNT_ID`
+   (see the Meta prerequisites below). Set `UI_PASSWORD` if you want to review from your
+   phone.
+2. Sign in to Claude Code once: `claude auth login`.
+3. Start the studio: `ig-campaign up` (in `.venv\Scripts\` on Windows, `.venv/bin/`
+   elsewhere), then open http://127.0.0.1:8765.
+4. Run `ig-campaign doctor` whenever you want to check that everything is in place.
+
+Without an Instagram token the studio starts in setup mode: the website and the renders
+work, and publishing waits until the token is in `.env`.
+
+**Meta prerequisites.** An Instagram Business or Creator account linked to a Facebook
+Page, and a Meta developer app. The token is a long-lived user token from **Facebook
+Login** (about 60 days), with `instagram_basic`, `instagram_content_publish`,
+`instagram_manage_insights`, `instagram_manage_comments`, `pages_show_list`,
+`pages_read_engagement` and `business_management`. DM picks also need
+`instagram_manage_messages`, and hashtag search needs the app's *Instagram Public Content
+Access* feature. As the app's admin you can use all of this on your own account without
+App Review. Step by step: [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md).
+You don't know your account ID? Set only the token and ask Claude to call
 `get_account_pages`.
 
-<details><summary>Manual install</summary>
+**What only you can provide.** Some parts wait for you. The studio still runs without
+them, using placeholders. Details are in [GOAL.md §8](GOAL.md#8-what-only-the-owner-can-provide-human-gates).
 
-```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-cp env.example .env
-pytest -q
-```
+| Gate | You provide | Until then |
+|---|---|---|
+| H1 | Logo, colours, niche in one sentence | Placeholder brand |
+| H2 | Channel bible (the `story-bible-builder` interview) | Placeholder bible |
+| H3 | A local text-to-speech service | Captions only, no voice-over |
+| H4 | Clip sources and creators' permissions | Downloaded Reels and your own clips only |
+| H5 | A valid Instagram token and a first real publish test | Setup mode: nothing publishes |
+| H6 | Meta ad account, payment method, spending limit | No paid ads |
+| H7 | How you reach the website from your phone (Wi-Fi or HTTPS) | Use it on the PC |
+| H8 | Claude Code signed in, and a budget per run | No nightly batch |
+| H9 | Language, target countries, what the account is for | Defaults |
 
-End-to-end smoke test (seed → Inbox → Calendar → publish against a local Graph API stub,
-no network, fake token; needs the `.venv` above or `PYTHON=<path>`):
-```bash
-cd web && npm ci && npx playwright install chromium   # once
-npm run e2e                                           # builds the website, runs web/e2e/
-```
-</details>
+## 2. A normal day
 
-### 3. Connect to Claude
+**At night.** The agent runs by itself (setting `AGENT_SCHEDULE`). At 02:00
+`daily-learn` looks at yesterday's best and worst Reels, explains why they did well or
+badly, updates what the studio has learned and writes the daily report. At 03:00
+`daily-produce` makes the new batch: first the DM picks, then remixes of viral Reels,
+then 8-bit videos. A run is skipped when there is nothing to do. If the PC was off, a
+missed run starts when the studio comes up the same day. The Agent page shows each run
+and its log.
 
-**Claude Code**: use `--register-claude-code` above, or run the `claude mcp add`
-command the installer prints.
+**In the morning: the feed** (Inbox). One video per screen, like Reels. The best
+candidates come first (the agent scores each one). On each video you can:
+- **Approve**: it gets the next good slot and is published then. You have a few seconds
+  to undo.
+- **Decline**: it is archived. Pick a reason chip, because the agent learns from it.
+- **Change**: pick reasons, write what to change, and optionally mark a moment in the
+  video. The agent makes a new version in its next run.
+- **Save for later**: it goes to the Saved tab, where you can approve it on another day
+  until its best-before date.
 
-**Claude Desktop**: merge the generated `mcp-config.json` into
-`claude_desktop_config.json` (Windows: `%APPDATA%\Claude\`, macOS:
-`~/Library/Application Support/Claude/`), then restart Claude Desktop. It looks like:
-```json
-{
-  "mcpServers": {
-    "instagram": {
-      "command": "/path/to/instagram-campaign-mcp/.venv/bin/ig-campaign-mcp"
-    }
-  }
-}
-```
-The `.env` in the project folder is found automatically.
+Tap a video to open its page: sources for any facts, the creator credit, comments and
+older versions. Reaction remixes ask you to confirm the rights when you approve them.
 
-### 4. Run the scheduler (if you schedule posts or measure Stories)
-The Graph API publishes immediately — it has no "post at 18:00". Keep this running
-on a machine that's on at posting time (it also snapshots live Stories hourly;
-`--stories-every 0` turns that off):
-```bash
-.venv/bin/ig-campaign worker   # Windows: .venv\Scripts\ig-campaign.exe worker
-# or, with the venv activated:
-ig-campaign worker            # checks every 60s (`daemon` is the old name, still works)
-# or from cron / Task Scheduler every 5 min:
-ig-campaign run-due
-```
-A post more than `MAX_LATE_MINUTES` (default 30) late, for example because the PC was
-asleep, is moved to the next free slot instead of being published late, and two posts
-never go out closer than `MIN_SLOT_GAP_MINUTES`. `PUBLISHING_PAUSED=true` holds the whole
-queue; the website's pause switch (`POST /api/worker/pause` / `resume`) overrides it.
+**DM picks.** On Settings → DM picks, pin the accounts you trust. When one of them sends
+you a Reel by DM, the studio downloads it and the agent makes a commentary remix from it
+first. The agent never reads your DMs. Only Reels from pinned accounts are used.
 
-On Windows the worker registers one Task Scheduler task, `IGCampaignWake`, that wakes
-the PC 5 minutes before the next queued post. Windows only honours it when wake timers
-are allowed: Control Panel → Power Options → Change plan settings → Change advanced
-power settings → Sleep → Allow wake timers → Enable (on battery too, for a laptop).
-Also run `ig-campaign collect` once a day (or ask Claude to call `collect_insights`).
-If a publish fails because the daily quota is reached, the post waits an hour and
-tries again without using up its retries. If Instagram might have published it
-anyway (timeout, or an error while the post shows as published), it is marked
-failed for you to check instead of risking a double post.
+**The daily report** is at the top of Analytics (older ones are under Reports). It shows
+the night's analysis, the best and worst Reels with the reasons, and ideas to try.
+Learnings lists what the studio believes works. You can edit, confirm or retire any of
+them, and your own rules always win.
 
-### 5. Run the studio (website + API + scheduler)
-Needs Node 22.12+ once, to build the website:
-```bash
-npm --prefix web ci && npm --prefix web run build   # again after each website update
-ig-campaign up                                      # API, website and the daemon above
-```
-Open http://127.0.0.1:8765. Ctrl+C stops everything. Without an Instagram token it
-starts in setup mode: the website works, publishing idles until the token is in `.env`.
+**The calendar** shows what is queued and published this week. You can move or cancel a
+post there. A post more than 30 minutes late (the PC was asleep, for example) moves to
+the next good slot. It is never published late. The pause switch on Settings holds all
+publishing without losing the queue.
 
-To review from your phone, set `UI_PASSWORD` in `.env`, then
-`ig-campaign up --host 0.0.0.0` and open `http://<pc-ip>:8765`. Without a password
-the studio only answers on 127.0.0.1 / localhost. Plain `http://` on Wi-Fi is enough
-to watch and approve; recording on the phone needs HTTPS (Tailscale serve or a
-tunnel, gate H7).
+**The AI label.** Our voice-overs are synthetic, so Meta asks for its "AI info" label on
+those videos. Meta's publishing API can now set this label: the `is_ai_generated`
+parameter, added on 22 June 2026
+([Instagram Platform changelog](https://developers.facebook.com/docs/instagram-platform/changelog),
+[media reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media)).
+**The studio does not send it yet.** Until it does, open each AI-voiced Reel in the
+Instagram app after it is published and add the label if the app offers it
+(**⋯ → Edit**). If the app doesn't offer it, report this so the label is added to the
+publish step.
 
-**Autostart and daily agent runs.** `ig-campaign agent install-schedule` (or the
-installer's `-Schedule` / `--schedule`) starts `ig-campaign up` at logon and runs the
-playbooks of `AGENT_SCHEDULE` (default `daily-learn@02:00,daily-produce@03:00`,
-comma-separated `playbook@HH:MM` in `TIMEZONE`) every day with `ig-campaign agent run-due`:
-`daily-learn` analyses yesterday's best and worst Reels, updates the learnings and writes
-the daily report the night batch then builds on (skipped when nothing was published or
-matured); add `daily-revise@14:00` for the light afternoon run (change requests and
-feedback only).
-Before each run the studio writes its work packet (`work/` in the agent workspace) and
-skips the run when there is nothing to do (see `src/agent/packet.py`). On Windows
-these are Task Scheduler tasks of your user (`IGCampaignUp`, `IGCampaignAgent-<playbook>`;
-the run tasks wake the PC when wake timers are allowed, see above); elsewhere a block
-between `# ig-campaign begin/end` in your crontab. A run missed while the PC was off
-starts when the studio comes up the same day. Re-run after changing `AGENT_SCHEDULE`;
-`--remove` takes it all out. The Settings page shows each playbook's next and last run.
+## 3. When something goes wrong
 
-### 6. Reel downloader (Track A reactions)
-Public Reels for reactions are downloaded with the owner's chosen
-[Okramjimmy/Instagram-reels-downloader](https://github.com/Okramjimmy/Instagram-reels-downloader)
-(Next.js, MIT), a git submodule in `vendor/instagram-reels-downloader` pinned to a
-known commit. It is logged out, so it never touches the brand account.
-```bash
-git submodule update --init vendor/instagram-reels-downloader
-ig-campaign downloader setup    # npm ci + build; npm audit advisories are logged
-ig-campaign downloader status   # built?, port, commit, last health check
-ig-campaign downloader update   # latest upstream commit, kept only if healthy (stop `up` first)
-```
-Once built, the worker (`up` / `worker`) runs it on `127.0.0.1:DOWNLOADER_PORT`
-(default 3711, never exposed), restarts it if it dies and stops it on exit; its output
-goes to `data/logs/downloader.log`. Only its `/api/video` API is called, never its
-pages (they carry ads), and it gets no credential of ours. Set `DOWNLOADER_HEALTH_URL`
-to a public Reel permalink for the daily health check (`up` / `down` / `broken`,
-`GET /api/downloader/status`); `update` needs it.
+Problems show up under the bell at the top of the website, and on Settings.
 
-`download_reel` (MCP, agent profile) and the "Download for reaction" button on Trends
-(`POST /api/sources/download`) save a public Reel to `data/media/sources/<id>/` as a
-`commentary` clip with its creator: the service first, then `yt-dlp` if installed
-(`pip install -e ".[download]"`, Python 3.11+). Limits: `MAX_DOWNLOADS_PER_DAY` (30),
-`DOWNLOAD_DELAY_S` (5), `MAX_DOWNLOAD_MB` (200). `DOWNLOADER_COOKIES_FILE` (yt-dlp only)
-must be a separate personal account, never the brand account. When both fail, the source
-says why; save the video yourself and drop it into `data/inbox/`.
+| Problem | What to do |
+|---|---|
+| **Token expired or expiring** (banner on every page from 10 days before) | `ig-campaign token status` shows the expiry date. `ig-campaign token refresh` gets a new 60-day token and rewrites it in `.env`. This needs `FACEBOOK_APP_ID` and `FACEBOOK_APP_SECRET`, and the old token must still be valid. Then restart `ig-campaign up`. Once it has expired, make a new one (AUTHENTICATION_GUIDE.md). For a token that never expires, use a system-user token (see [docs/DEVELOPING.md](docs/DEVELOPING.md#token)). |
+| **A publish failed** | Calendar shows the post in red with Meta's message. Fix the cause (often the token), then press **Re-plan** to give it a new slot. If the daily quota was reached, it waits an hour and tries again by itself. |
+| **"Did these reach Instagram?"** (Calendar) | The publish may have gone through. The studio looks for the post on the account and marks it published if it finds it. If it is not on Instagram, press **Not on Instagram → release** so it can be queued again. It is never posted twice. |
+| **A render seems stuck** | Settings → Worker must say it is running. If not, restart `ig-campaign up`. A render cut off by a crash or a restart is queued again after 10 minutes, and a render that fails 3 times is marked failed. To get a new version, ask for a **Change** on the video. `ig-campaign doctor` checks ffmpeg and Node.js. |
+| **The Reel downloader is down** | `ig-campaign downloader status` shows its last health check. Stop the studio, then `ig-campaign downloader update` moves it to the newest version, and keeps that version only if it works. If downloads still fail, save the video yourself and drop it into `data/inbox/`. |
+| **The database needs restoring** | Every night the studio keeps a copy in `data/backups/`. Stop the studio, then run `ig-campaign restore data/backups/studio-<date>.db`. The current database is kept aside. Media files are not part of the backup. |
+| **Something else** | Run `ig-campaign doctor`. Logs are in `data/logs/`. |
 
-### 7. Backups and restore
-Every night the worker copies the database to `data/backups/studio-<date>.db`
-(`BACKUP_DIR`) with SQLite's online backup and keeps the newest 14 (`BACKUP_KEEP`). Media
-files are not backed up. To get the studio back from one, stop `up` / `worker` first:
-```bash
-ig-campaign restore data/backups/studio-2026-11-17.db   # asks first; --yes when scripted
-```
-It refuses while the worker runs, when the file fails `PRAGMA integrity_check`, or when it
-was written by newer code. The current database is kept as
-`<db>.before-restore-<UTC time>`, then pending migrations run on the restored one.
+## 4. Commands
 
-To keep the database small, insight snapshots of posts older than 45 days
-(`SNAPSHOT_THIN_AFTER_DAYS`) keep only the age-schedule points (1 h, 3 h, 6 h, 12 h, 24 h,
-48 h, 7 d, 30 d: the snapshot nearest each) and the latest; the rest are dropped daily and
-the file is compacted (`VACUUM`) once a week. Scores and post pages read only those.
+Run them from the project folder. `ig-campaign` lives in `.venv\Scripts\` (Windows) or
+`.venv/bin/`. Add `--help` to any command for its options.
 
-## Tools (30)
+| Command | What it does |
+|---|---|
+| `ig-campaign up` | Starts the studio: website, API and worker (`--host 0.0.0.0` for your phone, needs `UI_PASSWORD`) |
+| `ig-campaign doctor` | Checks everything the studio needs and says how to fix what is missing |
+| `ig-campaign token status` / `refresh` | Shows the token's expiry, or swaps it for a new 60-day one |
+| `ig-campaign agent check` | Checks that Claude Code is installed and signed in |
+| `ig-campaign agent run <playbook>` | Runs one agent playbook now, for example `daily-produce` (`--dry-run` makes ideas only) |
+| `ig-campaign agent run-due` | Runs the playbooks that are due under `AGENT_SCHEDULE` |
+| `ig-campaign agent install-schedule` | Adds autostart and the nightly runs to the OS (`--remove` takes them out) |
+| `ig-campaign downloader setup` / `status` / `update` | Builds the Reel downloader, shows its health, or updates it |
+| `ig-campaign restore <backup>` | Puts a nightly backup back (stop the studio first) |
+| `ig-campaign facts` | Prints yesterday's numbers as JSON |
+| `ig-campaign learnings refresh` | Checks every learning against the numbers now (normally done nightly) |
+| `ig-campaign worker` | Runs only the worker, without the website |
+| `ig-campaign run-due` / `collect` / `rank` | Runs one publish pass, takes one insights snapshot, or prints the winners |
 
-**Account** `validate_access_token`, `get_account_pages`, `get_profile_info`,
-`get_account_insights`, `get_publishing_limit`
-**Content** `get_media_posts`, `get_media_insights`
-**Publish now** `publish_image`, `publish_carousel`, `publish_reel`, `publish_story`
-**Schedule** `schedule_post`, `list_scheduled_posts`, `reschedule_post`,
-`cancel_scheduled_post`, `run_due_posts`
-**Comments** `get_comments`, `reply_to_comment`, `comment_on_media`, `hide_comment`,
-`delete_comment`
-**Research** `search_hashtag`, `get_competitor_profile`
-**Winners & A/B** `collect_insights`, `rank_posts`, `compare_variants`, `label_post`
-**DMs** (needs `instagram_manage_messages`, see INSTAGRAM_DM_SETUP.md)
-`get_conversations`, `get_conversation_messages`, `send_dm`
+## 5. Configuration
 
-### Tool profiles
-`IG_MCP_PROFILE` picks which tools the server registers (an unknown value stops it):
-- `full` (default): all 30 tools, for the owner's interactive sessions.
-- `agent`: only a read-only allow-list (`AGENT_TOOLS` in `src/instagram_mcp_server.py`)
-  for unattended runs; the agent runner (step 058) uses it. Nothing that publishes,
-  schedules, comments, hides, deletes, relabels, sends or reads DMs is registered, so
-  it can neither be listed nor called. New tools stay out until added on purpose.
+Settings live in `.env`. [env.example](env.example) lists the common ones with
+comments, and `src/config.py` has all of them with their defaults. Useful ones:
+`TIMEZONE` (default Europe/Paris), `AGENT_SCHEDULE` (default
+`daily-learn@02:00,daily-produce@03:00`; add `daily-revise@14:00` for an afternoon pass
+on change requests), `MAX_POSTS_PER_DAY`, `POSTING_WINDOWS`, `UI_PASSWORD`,
+`DOWNLOADER_HEALTH_URL` (a public Reel used for the downloader's daily check) and
+`PUBLISHING_PAUSED`. Restart `ig-campaign up` after changing `.env`, and re-run
+`ig-campaign agent install-schedule` after changing `AGENT_SCHEDULE`.
 
-## Limits to know
-- Media must be at a **public HTTPS URL**; Instagram downloads it.
-- Images must be **JPEG** (the publishing API rejects PNG). Feed images: any ratio
-  from 4:5 to 1.91:1. Reels: MP4/MOV H.264 + AAC, 9:16 recommended.
-  Carousels crop every slide to the first slide's ratio. These checks run before
-  anything is sent to Meta (`VALIDATE_IMAGE_RATIO=false` skips them).
-- ~100 API-published posts per rolling 24h (`get_publishing_limit` shows usage).
-- Stories via API: no stickers, links or text overlays — bake them into the media.
-- 30 unique hashtag searches per 7 days.
-- Client-side cap of 200 API calls/hour (`RATE_LIMIT_REQUESTS_PER_HOUR`): when it is
-  reached, calls fail at once with "next slot in N min" instead of hanging.
-- Tokens expire after 60 days unless you use a system-user token (see Token below).
-- Insights count organic interactions only; ad interactions are excluded.
+`.env` holds your secrets. It never leaves your computer and is never committed.
 
-## Token
-`INSTAGRAM_ACCESS_TOKEN` is a long-lived user token: it lasts about 60 days. When it
-expires every Graph call fails, so **nothing publishes** (queued posts wait, then show
-as failed) and insights stop until a new token is in `.env`.
-- `ig-campaign token status`: valid or not, expiry date, days left and scopes (asks
-  Meta's `debug_token`). The website shows the same on Settings and a banner on every
-  page from 10 days before expiry. The token itself is never printed or logged.
-- `ig-campaign token refresh`: swaps the token for a new 60-day one and rewrites only
-  the `INSTAGRAM_ACCESS_TOKEN=` line of `.env`. Needs `FACEBOOK_APP_ID` and
-  `FACEBOOK_APP_SECRET`, a token that has not expired yet, and the token set in `.env`
-  (not in the shell environment). Restart `ig-campaign up` and the MCP server afterwards.
-- No expiry at all: a **system-user token**. In Meta Business Suite → Business settings →
-  Users → System users, add an admin system user, assign it your Page, Instagram account
-  and app, then "Generate new token" with the scopes from env.example and no expiry. Put
-  it in `.env`; status then shows "never". Treat it like a password: it never expires.
+## 6. For developers
 
-## Configuration
-See [env.example](env.example). Most useful: `TIMEZONE` (default Europe/Paris, used
-for schedule times without an offset), `WINNER_MIN_AGE_HOURS`, `WINNER_MIN_REACH`,
-`WINNER_THRESHOLD`, `DATABASE_PATH`, `MEDIA_ROOT` (asset files, served at `/api/media`;
-`ig-campaign dev seed --db x.db` puts them in `media/` next to `x.db`, so point `MEDIA_ROOT`
-there too if you open that seed in the website).
-
-`.env` and the database live in the project folder for a clone or the installer's
-editable install. With a plain `pip install .` they go to `~/.instagram-campaign-mcp`
-instead (the code then sits in site-packages). `IG_MCP_HOME` overrides both.
-
-## Roadmap
-- Paid side: promote winning posts as ads (existing post as creative), A/B tests,
-  budget caps enforced in code.
-- Resumable upload for local video files (no public URL needed).
+Architecture, the MCP tools and tool profiles, the scoring rules, API limits, tests and
+CI are in [docs/DEVELOPING.md](docs/DEVELOPING.md). The rules for working on the code are
+in [CLAUDE.md](CLAUDE.md), the plan in [GOAL.md](GOAL.md) and the roadmap in
+[progress.md](progress.md).
 
 ## License
-MIT — original work © José Luis Badano; campaign extensions © Amine El Kerzazi.
+
+MIT. Original work © José Luis Badano; campaign extensions © Amine El Kerzazi.
