@@ -226,7 +226,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 - [x] 086 — Experiments — `experiments` table (hypothesis, one variable, variants, target sample, expected end date, status, result) linked to posts through the existing campaign / variant labels; at most `MAX_OPEN_EXPERIMENTS` (default 2) open at once; the explore share of each batch is drawn from open experiments; the report warns when an experiment gets no approved videos; a finished experiment becomes a learning with its numbers.
 - [x] 086a — Batch-mix allocator — pure function: for each tag dimension the brief controls (template, hook type, pillar, humour vs informative), the share of the next batch follows Thompson sampling on a Beta posterior of the **like rate** (fast signal, about 25 verdicts a day), blended with the matured-post engagement index once a value has enough posts (slow signal), with a floor per option (default 10 %) so nothing is starved and owner rules ("never X") applied as hard zeros; the brief (055) uses it instead of fixed pillar quotas; the daily report shows how the mix moved and why; tests with fixed seeds and synthetic histories (a clearly better option gains share, a disliked one shrinks to the floor, an owner rule wins).
 - [x] 087 — Slots that learn — the slot planner blends audience data with our own results per hour, mostly using the best hours and reserving a small share for testing new ones; tests with synthetic history.
-- [ ] 088 — Trial Reels for experiments — approving an explore item offers "publish as trial Reel" (existing `trial_graduation`), recorded as a tag so trial and normal posts are never compared with each other.
+- [x] 088 — Trial Reels for experiments — approving an explore item offers "publish as trial Reel" (existing `trial_graduation`), recorded as a tag so trial and normal posts are never compared with each other.
 
 ### Phase 9 — Paid ads and A/B tests
 
@@ -262,6 +262,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 088 — Trial Reels for experiments — https://github.com/enimarix/instagram-campaign-mcp/pull/117 (2026-11-18) — explore/experiment videos can be queued as trial Reels (feed toggle, schedule checkbox); trial posts form their own TRIAL scoring group, experiments compare within one group
 - [x] 121 — Safety follow-ups — https://github.com/enimarix/instagram-campaign-mcp/pull/116 (2026-11-18) — the AI label on every publish path (MCP tools too), placeholder tokens count as not set, the API base URL must be https (loopback excepted)
 - [x] 120 — AI label on publish — https://github.com/enimarix/instagram-campaign-mcp/pull/115 (2026-11-18) — AI-made videos are published with Instagram's AI label (is_ai_generated at container creation); a refusal fails the publish with an alert, never an unlabelled post; CI: ffmpeg download cached, pytest-timeout
 - [x] 119 — Look at a clip before reacting — https://github.com/enimarix/instagram-campaign-mcp/pull/114 (2026-11-18) — agent tools get_clip_frames / set_clip_timeline; the clip's own moments go into the remix timeline (marked clip:) so the night analysis can name them
@@ -391,6 +392,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - [x] (from 115) The bench no longer fills from the feed (no Like action): decide in 116 whether the feed needs a "save for later" action or the bench a new definition.
 - [x] (from 115) Decline is three calls (verdict, archive, reason); a flush on tab close may land only the first. One thin `decline` route would make it atomic.
 - [ ] (from 083) `update_learning` cannot attach audience evidence to an existing learning (081 evidence engine).
+- [ ] (from 088) The feed's "Approve as trial Reel" toggle shows only for `explore` videos; experiment videos (eligible server-side) get it only in the schedule sheet. Expose `experiment` on the web Asset and show it there too.
 - [x] (from 081) Expose `scope` (predicate) and `evaluate` on the `update_learning` MCP tool (the service has them).
 - [x] (from 116) `/api/account` returns 503 in setup mode: a console error on every Settings visit (return an empty state instead).
 - [x] (from 116) Settings is ~4000 px on a phone because of the Clips list: collapse it or move Clips to its own page.

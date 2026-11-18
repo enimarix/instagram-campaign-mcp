@@ -10,6 +10,9 @@ rows; the owner or the agent opens them, at most MAX_OPEN_EXPERIMENTS at once.
 - explore_plan: the explore ideas of a batch fill the open variants furthest from target.
 - evaluate: per variant, n = matured Reels and their median engagement index; an
   experiment is done when every variant reached the target or ends_on (owner-local) passed.
+  Trial Reels (088) and normal Reels are never compared: variants are compared within one
+  group (`group`), the one whose smallest variant is largest (then the most posts, REELS
+  on a tie).
 - finish: stores the result and a learning (origin audience): do / dont when the best and
   worst variants differ by more than EVIDENCE_MIN_EFFECT with at least medium n on both,
   else a hypothesis "no clear difference"; the worker does this once a day (run_daily).
@@ -24,12 +27,12 @@ from zoneinfo import ZoneInfo
 
 from ..campaign import scoring_config
 from ..config import InstagramMCPSettings
-from ..scoring import _is_matured
+from ..scoring import REEL_GROUPS, _is_matured
 from ..store import CampaignStore, parse_dt
 from ..studio.seed import local_today
 from .analytics import scored_posts
 from .breakdowns import TAGS
-from .evidence import POST_TYPE, _level, predicate
+from .evidence import _level, predicate
 
 STATUSES = ("proposed", "open", "finished", "abandoned")
 MAX_VARIANTS = 4
@@ -179,26 +182,28 @@ def explore_plan(store: CampaignStore, explore_count: int) -> List[Dict[str, Any
 
 def evaluate(store: CampaignStore, settings: InstagramMCPSettings, experiment: Dict[str, Any],
              *, now: datetime) -> Dict[str, Any]:
-    """{per_variant: {variant: {n, index}}, done, why} (see the module docstring)."""
+    """{per_variant: {variant: {n, index}}, group, done, why} (see the module docstring)."""
     with store._tx() as c:
         variant_of = {r[0]: parse_label(r[1])[1] for r in c.execute(
             "SELECT a.id, i.experiment FROM assets a JOIN ideas i ON i.id = a.idea_id"
             " WHERE i.experiment LIKE ?", (label(experiment["id"], "%"),))}
     cfg = scoring_config(settings)
-    n = {v: 0 for v in experiment["variants"]}
-    eng: Dict[str, List[float]] = {v: [] for v in experiment["variants"]}
+    by_group = {g: {v: [] for v in experiment["variants"]} for g in REEL_GROUPS}
     for snap, s in scored_posts(store, settings):
         v = variant_of.get((s["label"] or {}).get("asset_id"))
-        if v in n and s["group"] == POST_TYPE and _is_matured(snap, cfg):
-            n[v] += 1
-            if s["engagement_index"] is not None:
-                eng[v].append(s["engagement_index"])
-    per = {v: {"n": n[v], "index": round(median(eng[v]), 2) if eng[v] else None} for v in n}
+        if s["group"] in by_group and v in by_group[s["group"]] and _is_matured(snap, cfg):
+            by_group[s["group"]][v].append(s["engagement_index"])
+    group = max(REEL_GROUPS, key=lambda g: (min(map(len, by_group[g].values())),
+                                            sum(map(len, by_group[g].values()))))
+    per = {}
+    for v, xs in by_group[group].items():  # xs: the engagement indexes, None when unknown
+        eng = [x for x in xs if x is not None]
+        per[v] = {"n": len(xs), "index": round(median(eng), 2) if eng else None}
     reached = all(p["n"] >= experiment["target_per_variant"] for p in per.values())
     ended = (experiment["ends_on"] is not None
              and local_today(settings.timezone, now) > date.fromisoformat(experiment["ends_on"]))
     why = "target reached" if reached else f"ended {experiment['ends_on']}" if ended else None
-    return {"per_variant": per, "done": why is not None, "why": why}
+    return {"per_variant": per, "group": group, "done": why is not None, "why": why}
 
 
 def finish(store: CampaignStore, settings: InstagramMCPSettings, experiment: Dict[str, Any],

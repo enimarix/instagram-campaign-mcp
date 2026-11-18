@@ -24,7 +24,7 @@ ROW_SORTS = ("posted_at", "age_hours", "engagement_index", "reach_index", "watch
              "view_rate")
 METRIC_SORTS = ("views", "reach", "likes", "comments", "saved", "shares",
                 "ig_reels_avg_watch_time")
-POST_TYPES = ("FEED", "REELS", "STORY")
+POST_TYPES = ("FEED", "REELS", "TRIAL", "STORY")  # scoring.group_of
 VERDICTS = ("winner", "promising", "average", "weak", "inconclusive", "no_signal", "too_early",
             "incomplete", "no_baseline")  # src/scoring.py
 IDEA_TAGS = ("track", "pillar", "hook_type", "strategy")
@@ -123,7 +123,8 @@ def post_detail(store: CampaignStore, settings: InstagramMCPSettings,
     asset = studio.pop("asset")
     return {
         "media_id": media_id, "permalink": last["permalink"], "posted_at": last["posted_at"],
-        "product_type": last["media_product_type"], "group": group_of(last),
+        "product_type": last["media_product_type"],
+        "group": group_of({**last, "trial": label.get("trial")}),
         "caption": last["caption"], "deleted": bool(label.get("deleted_at")),
         "campaign": label.get("campaign"), "variant": label.get("variant"),
         **studio,

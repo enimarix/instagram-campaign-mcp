@@ -126,8 +126,10 @@ export const fixTranscript = (id: number, texts: string[]) =>
   post<{ asset: Asset }>(`/api/assets/${id}/transcript`, { texts })
 /** The feed's one-tap Approve: approved and queued into the next free slot; `slot` null =
  * the planner's week is full, approved only. `confirmed`: the commentary confirmation. */
-export const approveAndQueue = (id: number, confirmed: boolean) =>
-  post<{ asset: Asset; slot: Slot | null }>(`/api/assets/${id}/approve-and-queue`, { confirmed })
+/** A trial Reel's graduation (shown to non-followers first): by hand in the app, or automatic when it performs. */
+export type Trial = 'MANUAL' | 'SS_PERFORMANCE'
+export const approveAndQueue = (id: number, confirmed: boolean, trial?: Trial) =>
+  post<{ asset: Asset; slot: Slot | null }>(`/api/assets/${id}/approve-and-queue`, { confirmed, trial })
 export const getTaxonomy = () => request<Taxonomy>('/api/taxonomy')
 
 export type Comment = {
@@ -210,12 +212,12 @@ export function errorMessage(e: unknown): string {
 export type Slot = { publish_at: string; local: string }
 /** GET /api/assets/{id}/proposed-slot; `needs_confirmation`: a commentary clip (GOAL §5.1);
  * `ai_label`: published with Instagram's AI label (§5.6). */
-export type ProposedSlot = Slot & { needs_confirmation: boolean; ai_label: boolean }
+export type ProposedSlot = Slot & { needs_confirmation: boolean; ai_label: boolean; trial_eligible: boolean }
 export const getProposedSlot = (id: number) => request<ProposedSlot>(`/api/assets/${id}/proposed-slot`)
 /** Where a scheduled asset sits in the queue (404 when it has no pending slot). */
 export const getSlot = (id: number) => request<Slot & { post_id: number }>(`/api/assets/${id}/slot`)
-export const scheduleAsset = (id: number, publish_at: string, confirmed: boolean) =>
-  post<{ asset: Asset }>(`/api/assets/${id}/schedule`, { publish_at, confirmed })
+export const scheduleAsset = (id: number, publish_at: string, confirmed: boolean, trial?: Trial) =>
+  post<{ asset: Asset }>(`/api/assets/${id}/schedule`, { publish_at, confirmed, trial })
 export const unscheduleAsset = (id: number) => post<Asset>(`/api/assets/${id}/unschedule`)
 
 /** GET /api/bench: liked videos from every batch still waiting for approval, freshest

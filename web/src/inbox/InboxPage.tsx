@@ -67,6 +67,9 @@ export default function InboxPage() {
   const pending = useRef(new Map<number, Pending>())
   const inflight = useRef<Promise<unknown>>(Promise.resolve()) // committed decisions still saving
   const declineCodes = useRef(new Map<number, string[]>())
+  // approved explore videos the owner turned into trial Reels (088), until the commit
+  const [trialAsk, setTrialAsk] = useState<{ id: number; on: boolean } | null>(null)
+  const trials = useRef(new Set<number>())
   const scroller = useRef<HTMLDivElement>(null)
   const toast = useToast()
   const navigate = useNavigate()
@@ -141,6 +144,8 @@ export default function InboxPage() {
     pending.current.delete(id)
     declineCodes.current.delete(id)
     setWhy((w) => (w?.id === id ? null : w))
+    trials.current.delete(id)
+    setTrialAsk((t) => (t?.id === id ? null : t))
   }
 
   function decide(a: Asset, as: Partial<Asset>, message: string, commit: () => Promise<void>) {
@@ -181,7 +186,8 @@ export default function InboxPage() {
 
   function approveNow(a: Asset, confirmed: boolean) {
     decide(a, { status: 'approved' }, 'Approved', async () => {
-      const r = await approveAndQueue(a.id, confirmed)
+      // read now: forget() clears the choice right after commit() starts
+      const r = await approveAndQueue(a.id, confirmed, trials.current.has(a.id) ? 'SS_PERFORMANCE' : undefined)
       patch(a.id, r.asset)
       if (!r.slot)
         toast({
@@ -189,13 +195,26 @@ export default function InboxPage() {
           action: { label: 'Calendar', onClick: () => navigate('/calendar') },
         })
     })
+    // an explore (or experiment) video may go out as a trial Reel instead: one tap during the undo
+    if (a.strategy === 'explore') {
+      setWhy(null) // one chip row at a time: the newest decision's
+      setTrialAsk({ id: a.id, on: false })
+    }
   }
 
   function decline(a: Asset) {
     decide(a, { status: 'archived', verdict: 'disliked' }, 'Declined', async () => {
       patch(a.id, await declineAsset(a.id, declineCodes.current.get(a.id) ?? []))
     })
+    setTrialAsk(null)
     setWhy({ id: a.id, codes: [] })
+  }
+
+  function toggleTrial() {
+    if (!trialAsk) return
+    if (trialAsk.on) trials.current.delete(trialAsk.id)
+    else trials.current.add(trialAsk.id)
+    setTrialAsk({ id: trialAsk.id, on: !trialAsk.on })
   }
 
   // Not now, but good: onto the bench ("Saved"), for a free slot later.
@@ -375,6 +394,17 @@ export default function InboxPage() {
                 {r.label}
               </Chip>
             ))}
+          </div>
+        </div>
+      )}
+      {trialAsk && (
+        <div role="group" aria-label="Publish as a trial Reel? (optional)"
+          className="fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 lg:bottom-24">
+          <div className="flex w-full max-w-sm items-center gap-2 rounded-card border border-line bg-surface-2 p-2 shadow-overlay">
+            <Chip tone="explore" pressed={trialAsk.on} onClick={toggleTrial} className="shrink-0">
+              Approve as trial Reel
+            </Chip>
+            <span className="text-xs text-muted">Non-followers see it first</span>
           </div>
         </div>
       )}

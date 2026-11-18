@@ -408,13 +408,20 @@ CREATE TABLE experiments (
 CREATE INDEX idx_experiments_status ON experiments(status);
 """
 
+# Migration 16: trial Reels (088). trial = 1: published as a trial Reel (shown to
+# non-followers first). Instagram has no field for it, so the label is the only record;
+# scoring keeps trial posts in their own group.
+TRIAL_SCHEMA = """
+ALTER TABLE post_labels ADD COLUMN trial INTEGER NOT NULL DEFAULT 0;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
-                         DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA]
+                         DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -805,7 +812,7 @@ class CampaignStore:
             )
         self.label_post(
             media_id, post["campaign"], post["variant"], post["hypothesis"], post["kind"],
-            asset_id=post["asset_id"],
+            asset_id=post["asset_id"], trial=bool(post["payload"].get("trial_graduation")),
         )
 
     def mark_failed(
@@ -873,17 +880,21 @@ class CampaignStore:
         hypothesis: Optional[str] = None,
         kind: Optional[str] = None,
         asset_id: Optional[int] = None,
+        trial: bool = False,
     ) -> Dict[str, Any]:
         with self._tx() as c:
             c.execute(
                 "INSERT INTO post_labels (media_id, campaign, variant, hypothesis, kind,"
-                " asset_id, created_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(media_id) DO UPDATE"
+                " asset_id, trial, created_at) VALUES (?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(media_id) DO UPDATE"
                 " SET campaign=COALESCE(excluded.campaign, campaign),"
                 " variant=COALESCE(excluded.variant, variant),"
                 " hypothesis=COALESCE(excluded.hypothesis, hypothesis),"
                 " kind=COALESCE(excluded.kind, kind),"
-                " asset_id=COALESCE(excluded.asset_id, asset_id)",
-                (media_id, campaign, variant, hypothesis, kind, asset_id, to_iso(utcnow())),
+                " asset_id=COALESCE(excluded.asset_id, asset_id),"
+                " trial=MAX(trial, excluded.trial)",  # once a trial, always a trial
+                (media_id, campaign, variant, hypothesis, kind, asset_id, int(trial),
+                 to_iso(utcnow())),
             )
         return self.get_label(media_id) or {}
 
@@ -1007,11 +1018,14 @@ class CampaignStore:
         return out
 
     def latest_snapshots(self) -> List[Dict[str, Any]]:
-        """Most recent snapshot per media, newest posts first."""
+        """Most recent snapshot per media, newest posts first, with the label's `trial`
+        (0/1; scoring.group_of reads it)."""
         with self._tx() as c:
             rows = c.execute(
-                "SELECT s.* FROM insight_snapshots s JOIN (SELECT media_id, MAX(id) AS mid"
-                " FROM insight_snapshots GROUP BY media_id) m ON s.id = m.mid"
+                "SELECT s.*, COALESCE(l.trial, 0) AS trial FROM insight_snapshots s"
+                " JOIN (SELECT media_id, MAX(id) AS mid FROM insight_snapshots"
+                " GROUP BY media_id) m ON s.id = m.mid"
+                " LEFT JOIN post_labels l ON l.media_id = s.media_id"
                 " ORDER BY s.posted_at DESC"
             ).fetchall()
         out = []

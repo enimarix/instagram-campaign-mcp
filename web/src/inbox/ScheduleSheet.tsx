@@ -25,6 +25,7 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
   const [picking, setPicking] = useState(false)
   const [when, setWhen] = useState('')
   const [confirmed, setConfirmed] = useState(false)
+  const [trial, setTrial] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,7 +43,7 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
     setBusy(true)
     setError(null)
     try {
-      onScheduled((await scheduleAsset(assetId, publishAt, confirmed)).asset)
+      onScheduled((await scheduleAsset(assetId, publishAt, confirmed, trial ? 'SS_PERFORMANCE' : undefined)).asset)
     } catch (e) {
       setError(errorMessage(e))
       setBusy(false)
@@ -62,6 +63,13 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}
             className="mt-0.5 size-5" />
           {COMMENTARY_CONFIRMATION}
+        </label>
+      )}
+      {slot?.trial_eligible && (
+        <label className="mt-3 flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)}
+            className="mt-0.5 size-5" />
+          Trial Reel (non-followers first)
         </label>
       )}
       {picking && (

@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 from ..campaign import scoring_config
 from ..config import InstagramMCPSettings
 from ..scoring import (
+    REEL_GROUPS,
     WATCH_TIME,
     _is_matured,
     _min_age,
@@ -149,7 +150,7 @@ def _diagnoser(store: CampaignStore, settings: InstagramMCPSettings):
     durations = {m: lb.get("duration_s") for m, lb in labels.items()}
 
     def findings(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
-        if group_of(snap) != "REELS" or not _is_matured(snap, cfg):
+        if group_of(snap) not in REEL_GROUPS or not _is_matured(snap, cfg):
             return []
         base = baseline_for(snap, matured, cfg, near_age=store.snapshots_near_age)
         label = labels.get(snap["media_id"]) or {}
@@ -174,6 +175,6 @@ def retention_all(store: CampaignStore, settings: InstagramMCPSettings, *, since
     [since, until)."""
     latest, cfg, findings = _diagnoser(store, settings)
     return {s["media_id"]: findings(s) for s in latest
-            if group_of(s) == "REELS" and _is_matured(s, cfg) and s["posted_at"]
+            if group_of(s) in REEL_GROUPS and _is_matured(s, cfg) and s["posted_at"]
             and since <= parse_dt(s["posted_at"]) + timedelta(hours=_min_age("REELS", cfg))
             < until}

@@ -7,7 +7,7 @@ it); the agent never uses REST.
 
 from __future__ import annotations
 
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -57,13 +57,18 @@ class VerdictIn(BaseModel):
     verdict: str
 
 
+Trial = Optional[Literal["MANUAL", "SS_PERFORMANCE"]]  # a trial Reel's graduation (088)
+
+
 class ScheduleIn(BaseModel):
     publish_at: AwareDatetime  # with an offset: a naive time would be guessed
     confirmed: bool = False
+    trial: Trial = None
 
 
 class ApproveIn(BaseModel):
     confirmed: bool = False  # the owner's per-video confirmation a commentary clip needs
+    trial: Trial = None
 
 
 class TranscriptIn(BaseModel):
@@ -114,7 +119,7 @@ def approve_and_queue(asset_id: int, body: ApproveIn, request: Request,
     # only when the planner's week is full: `slot` null).
     def run():
         out = scheduling.approve_and_queue(store, request.app.state.settings, asset_id,
-                                           utcnow(), body.confirmed)
+                                           utcnow(), body.confirmed, body.trial)
         return {**out, "asset": with_urls(out["asset"])}
     return call(run)
 
@@ -139,7 +144,7 @@ def schedule(asset_id: int, body: ScheduleIn, request: Request,
              store: CampaignStore = Depends(get_store)):
     def run():
         out = scheduling.schedule_asset(store, request.app.state.settings, asset_id,
-                                        body.publish_at, body.confirmed)
+                                        body.publish_at, body.confirmed, body.trial)
         return {**out, "asset": with_urls(out["asset"])}
     return call(run)
 

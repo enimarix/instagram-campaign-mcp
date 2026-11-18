@@ -19,6 +19,10 @@ absolute watch time against the baseline's absolute watch times (all posts, as b
 the two are never mixed in one baseline (a post with a length but no baseline post with
 one scores no watch signal). Every scored row also carries `watch_ratio` and
 `view_rate` (views / reach), None when unknown.
+
+Trial Reels (shown to non-followers first, step 088) are their own group, TRIAL: their
+audience differs, so they are only ever compared with other trial Reels. A snapshot is a
+trial when it carries `trial` (store.latest_snapshots joins it from the post's label).
 """
 
 from __future__ import annotations
@@ -60,10 +64,14 @@ class ScoringConfig:
     weights: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
 
 
+REEL_GROUPS = ("REELS", "TRIAL")
+
+
 def group_of(snapshot: Dict[str, Any]) -> str:
+    """FEED, REELS, TRIAL (trial Reels) or STORY: posts are only compared within a group."""
     pt = (snapshot.get("media_product_type") or "FEED").upper()
     if pt == "REELS":
-        return "REELS"
+        return "TRIAL" if snapshot.get("trial") else "REELS"
     if pt == "STORY":
         return "STORY"
     return "FEED"
