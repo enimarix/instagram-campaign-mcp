@@ -4,7 +4,12 @@ import httpx
 import pytest
 import respx
 
-from src.instagram_client import InstagramAPIError, InvalidMedia, RateLimitExceeded
+from src.instagram_client import (
+    InstagramAPIError,
+    InstagramClient,
+    InvalidMedia,
+    RateLimitExceeded,
+)
 
 from .conftest import API
 
@@ -287,6 +292,22 @@ async def test_local_reel_processing_error_raises_meta_message(client, video):
     with pytest.raises(InstagramAPIError, match="2207026"):
         await client.publish_reel(video_path=video)
     assert not publish.called
+
+
+@respx.mock
+async def test_local_reel_upload_stays_on_a_loopback_graph_stub(settings, video):
+    # The e2e smoke test points the Graph base URL at a local stub: nothing may leave it.
+    stub = "http://127.0.0.1:9999"
+    settings.instagram_api_base_url = stub
+    respx.post(f"{stub}/v25.0/1789/media").respond(
+        json={"id": "C9", "uri": f"{RUPLOAD}/v25.0/C9"})
+    upload = respx.post(f"{stub}/ig-api-upload/v25.0/C9").respond(json={"success": True})
+    respx.get(f"{stub}/v25.0/C9").respond(json={"status_code": "FINISHED"})
+    respx.post(f"{stub}/v25.0/1789/media_publish").respond(json={"id": "M9"})
+    respx.get(f"{stub}/v25.0/M9").respond(json={"id": "M9"})
+    async with InstagramClient(settings, http_client=httpx.AsyncClient()) as c:
+        assert (await c.publish_reel(video_path=video))["media_id"] == "M9"
+    assert upload.called
 
 
 @respx.mock

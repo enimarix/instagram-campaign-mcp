@@ -48,6 +48,38 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  e2e:
+    # The owner's main path in Chromium against a local Graph API stub (web/e2e/smoke.spec.ts).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # No ffmpeg: the seed copies a sample video and the publish path never probes it.
+      - run: pip install -e ".[dev]"
+        working-directory: .
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report
+            web/test-results
+          retention-days: 7
+
   motion:
     runs-on: ubuntu-latest
     defaults:

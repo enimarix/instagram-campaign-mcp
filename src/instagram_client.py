@@ -79,6 +79,7 @@ MISSING_OBJECT = (100, 33)
 # Reels from local files: resumable upload ("rupload") of the bytes, then the usual polling.
 RUPLOAD_URL = "https://rupload.facebook.com/ig-api-upload/{version}/{container_id}"
 RUPLOAD_HOSTS = (".facebook.com", ".instagram.com")  # where we send the OAuth token
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")  # a local Graph stub (e2e test)
 REEL_MAX_BYTES = 300 * 1024 * 1024  # IG User Media reference, Reel specs
 UPLOAD_ATTEMPTS = 3
 UPLOAD_CHUNK = 1024 * 1024
@@ -481,7 +482,11 @@ class InstagramClient:
         """POST the file to the resumable-upload endpoint, retrying transient failures
         (network, 5xx/429, debug_info.retriable) with the polling backoff."""
         host = urlparse(uri or "").hostname or ""
-        if not (uri and uri.startswith("https://") and host.endswith(RUPLOAD_HOSTS)):
+        base = urlparse(self.settings.instagram_api_base_url)
+        if base.hostname in LOOPBACK_HOSTS:  # the e2e Graph stub: the upload stays on it too
+            uri = (f"{base.scheme}://{base.netloc}/ig-api-upload/"
+                   f"{self.settings.instagram_api_version}/{container_id}")
+        elif not (uri and uri.startswith("https://") and host.endswith(RUPLOAD_HOSTS)):
             uri = RUPLOAD_URL.format(version=self.settings.instagram_api_version,
                                      container_id=container_id)
         size = path.stat().st_size
