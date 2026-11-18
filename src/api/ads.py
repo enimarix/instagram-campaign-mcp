@@ -1,9 +1,10 @@
 """Ads routes: budget and kill switch (091), A/B tests and the audit log (094), a test's
 results (095). Thin doors onto src/ads/budget.py, src/ads/tests.py and src/ads/sync.py.
 
-The agent launches and stops tests through its own MCP tools (126); the owner's Approve
-here launches a proposed test too, without a password (the caps and the kill switch are
-the money safety). Unkill asks the website password again (auth.reauth_error).
+The owner's Approve here is the only way a test launches (128: the agent proposes and may
+stop tests through its MCP tools, never launch). No password for it (126: the caps and
+the kill switch are the money safety). Unkill asks the website password again
+(auth.reauth_error).
 """
 
 from __future__ import annotations

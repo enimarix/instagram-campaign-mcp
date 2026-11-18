@@ -238,15 +238,15 @@ Two inputs, one memory:
 - Real A/B tests: one variable at a time (creative, audience or placement), equal
   budgets, minimum duration and sample, a significance check, a declared winner.
   Every test shows the **budget it needs** to detect the expected difference; an
-  underpowered test is flagged, and the agent never launches one.
-- **The AI runs the ads** (owner's decision, 2026-11-18, docs/DECISIONS.md): the agent
-  proposes, launches, stops and judges tests on its own, with no per-test approval. Any
-  post the owner approved for publishing whose rights allow ads may be advertised: the
-  owner validates videos, not ad budgets. The money safety is the **budget caps
-  enforced in code** (set by the owner in the website), the most tests at once,
-  everything created paused, the one-click **Stop all ads** kill switch, and Meta's
-  account spending limit (H6). The owner sees every test and who launched it on `/ads`
-  and may still approve a proposed test there.
+  underpowered test is flagged before it wastes money.
+- **The owner decides what is promoted** (owner's decision, 2026-11-18,
+  docs/DECISIONS.md, reversing "the AI runs the ads"): the agent proposes tests, judges
+  results and may stop a test, but **nothing spends money without the owner's Approve
+  on `/ads`**, where proposals wait with Approve / Cancel. Any post the owner approved
+  for publishing whose rights allow ads may be proposed. The money safety on top is the
+  **budget caps enforced in code** (set by the owner in the website), the most tests at
+  once, everything created paused, the one-click **Stop all ads** kill switch, and
+  Meta's account spending limit (H6).
 - **Caps also live on Meta's side** (§5.4), because the owner's machine can be off
   while an ad keeps running.
 - Ad results feed the same learnings memory.
@@ -502,11 +502,12 @@ account.
   with a **lifetime budget and an end date**, every campaign with a spend cap, and the
   owner sets an account spending limit in Meta (H6). The worst case is then bounded
   even if this software never runs again.
-- The agent may launch and stop tests, but every spend goes through the budget guard
-  with the current caps; it can never turn ads back on after Stop, change a cap or a
-  setting, or exceed the most tests at once. Raising a money cap and turning ads back on
-  after Stop ask for the website password again; launching a test within the caps does
-  not.
+- The agent may propose and stop tests, never launch one: no agent tool reaches
+  `tests.launch`, which refuses `actor="agent"` anyway. Every spend goes through the
+  budget guard with the current caps; nothing can turn ads back on after Stop, change a
+  cap or a setting from the agent. Raising a money cap and turning ads back on after
+  Stop ask for the website password again; the owner's Approve of a test within the
+  caps does not.
 
 ### 5.5 Engineering
 

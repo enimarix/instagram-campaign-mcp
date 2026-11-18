@@ -1,5 +1,5 @@
-"""Paid A/B tests (step 094, AI-run since 126): propose, launch (the one place ads go
-ACTIVE), cancel.
+"""Paid A/B tests (step 094; 128: the owner launches): propose, launch (the one place ads
+go ACTIVE), cancel.
 
 - `propose`: 2-4 variants {media_id, preset} that differ in ONE variable: `creative` =
   different posts with one preset; `audience` / `placement` = one post with presets that
@@ -9,10 +9,10 @@ ACTIVE), cancel.
   `abtest.budget_needed` at the account's usual rates: spend × 1000 / impressions (CPM)
   and clicks / impressions (the CTR baseline) of its last 90 days of insights, else
   `ADS_DEFAULT_CPM` and DEFAULT_CTR. `underpowered` says whether the caps can fund it.
-- `launch`: by the owner (Approve in the website, no password since 126) or the agent
-  (`budget=None`: the need, capped by what the caps allow; never underpowered). Refuses
+- `launch`: by the owner only (Approve in the website, no password since 126); the agent
+  proposes, the owner decides what is promoted (128: `actor="agent"` is refused). Refuses
   (before any request) unless the test is proposed, every post is still advertisable,
-  the budget covers the need (or the owner's `underpowered_ok`, stored and audited),
+  the budget covers the need (or `underpowered_ok`, stored and audited),
   fewer than `ads_max_running_tests` run and the caps (read fresh) allow the whole
   budget. Splits it equally per variant, creates each paused
   (`promote.create_paused_promotion`), then activates ad → ad set → campaign of every
@@ -63,13 +63,13 @@ PLACEMENT_KEYS = {"publisher_platforms", "instagram_positions"}
 DEFAULT_CTR = 0.01  # ponytail: a low guess (larger sample) until the account has insights
 MIN_IMPRESSIONS = 1000  # fewer: the account's own rates are noise, use the defaults
 PAUSE_ORDER = {"campaign": 0, "adset": 1, "ad": 2}  # the campaign first stops everything
-MAX_AGENT_PROPOSALS = 3  # agent proposals not launched yet, at once (096)
+MAX_AGENT_PROPOSALS = 3  # agent proposals waiting for the owner, at once (096)
 OPEN_RUNNING = ("approved", "running")  # count against ads_max_running_tests
 
 
 class AdTestRefused(Exception):
     """Nothing was sent. code: invalid | rights | not_ours | not_published | not_boostable |
-    status | underpowered | not_configured | cap | max_running | preset_gone."""
+    status | underpowered | not_configured | cap | max_running | preset_gone | owner_only."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -312,34 +312,22 @@ def _set_status(store: CampaignStore, test_id: int, new: str, *, expect: tuple,
     return store._get("ad_tests", test_id)
 
 
-def _agent_budget(store: CampaignStore, settings: InstagramMCPSettings,
-                  test: Dict[str, Any]) -> Decimal:
-    """The agent's budget: the test's need (rounded up to whole cents per variant), capped
-    by what the caps allow over its days; ZERO when they allow nothing."""
-    n = len(test["variants"])
-    want = (Decimal(str(test["needed"]["total"])) / n).quantize(CENT, rounding=ROUND_UP) * n
-    room = _affordable(store, settings, test["spec"]["min_days"])
-    return min(want, (room / n).quantize(CENT, rounding=ROUND_DOWN) * n)
-
-
 async def launch(
     store: CampaignStore,
     settings: InstagramMCPSettings,
     test_id: int,
-    budget: Any = None,
+    budget: Any,
     *,
     actor: str,
     underpowered_ok: bool = False,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Create the variants paused, then activate them. `actor` owner (the website's
-    Approve) or agent (`budget` None: picked by `_agent_budget`; never underpowered).
-    Raises AdTestRefused / BudgetRefused before any request, AdTestFailed after (the test
-    is then cancelled)."""
-    if actor not in ("owner", "agent"):
-        raise AdTestRefused("invalid", "actor is owner or agent")
-    if actor == "agent" and (budget is not None or underpowered_ok):
-        raise AdTestRefused("invalid", "the agent's budget comes from the need and the caps")
+    """Create the variants paused, then activate them. `actor` must be owner (the
+    website's Approve): every launch is the owner's decision (128). Raises AdTestRefused /
+    BudgetRefused before any request, AdTestFailed after (the test is then cancelled)."""
+    if actor != "owner":
+        raise AdTestRefused("owner_only", "only the owner launches a test, with Approve on "
+                            "the Ads page: propose it and it waits there")
     test = store._get("ad_tests", test_id)
     if test["status"] != "proposed":
         raise AdTestRefused("status", f"test {test_id} is {test['status']}, not proposed")
@@ -358,11 +346,6 @@ async def launch(
             _advertisable_asset(store, media)
         except PromotionRefused as e:
             raise AdTestRefused(e.code, e.message) from None
-    if budget is None:
-        budget = _agent_budget(store, settings, test)
-        if budget <= 0:
-            raise AdTestRefused("underpowered", "the caps leave nothing to spend on this "
-                                "test now: wait, or propose a smaller one")
     amount = _amount(budget)
     variants, spec, need = test["variants"], abtest.TestSpec(**test["spec"]), test["needed"]
     per = (amount / len(variants)).quantize(CENT, rounding=ROUND_DOWN)
@@ -370,9 +353,8 @@ async def launch(
     short = abtest.underpowered(spec, float(total), test["baseline_rate"], test["min_lift"],
                                 cpm=need["cpm"], cpc=need["cpc"])
     if short and not underpowered_ok:
-        raise AdTestRefused("underpowered", f"{short}; " + (
-            "propose a larger lift or wait for room under the caps" if actor == "agent"
-            else "tick 'run underpowered anyway' to run it regardless"))
+        raise AdTestRefused("underpowered", f"{short}; tick 'run underpowered anyway' to "
+                            "run it regardless")
     now = now or utcnow()
     today = now.astimezone(ZoneInfo(settings.timezone)).date()
     end_date = today + timedelta(days=max(spec.min_days - 1, 1))

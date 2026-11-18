@@ -1,11 +1,10 @@
-"""The agent's side of ads (096; AI-run since 126): it proposes, launches and stops A/B
-tests and reads results.
+"""The agent's side of ads (096; 128: the owner decides what is promoted): it proposes and
+stops A/B tests and reads results. Every launch is the owner's Approve in the website.
 
-Money moves only through the guard: `launch` goes through `tests.launch` (the caps read
-fresh, the kill switch, `ads_max_running_tests`, never underpowered, the budget picked
-from the need), `stop` through `tests.cancel` (a pause). Nothing here reaches unkill,
-the settings, the writer or `authorize_spend` directly: tests/test_ads_agent.py walks
-the calls from every agent tool to prove it. Every action is audited `actor = "agent"`.
+Nothing here launches, activates or spends: `stop` goes through `tests.cancel` (a pause),
+and nothing reaches `tests.launch`, unkill, the settings, the writer or `authorize_spend`:
+tests/test_ads_agent.py walks the calls from every agent tool to prove it, and
+`tests.launch` refuses `actor="agent"` anyway. Every action is audited `actor = "agent"`.
 Until ads are set up (H6) each answers {"error": "ads_not_configured", "message"}.
 """
 
@@ -53,19 +52,6 @@ async def _refused(work: Any) -> Dict[str, Any]:
         raise ValueError(f"failed: {e}") from None
 
 
-async def launch(store: CampaignStore, settings: InstagramMCPSettings,
-                 test_id: int) -> Dict[str, Any]:
-    """Launch one of the agent's proposed tests within the caps (the owner's proposals
-    wait for the owner). ValueError '<code>: <why>' when refused."""
-    refused = not_configured(settings)
-    if refused:
-        return refused
-    if store._get("ad_tests", test_id)["proposed_by"] != "agent":
-        raise ValueError(f"owner_test: test {test_id} was proposed by the owner, who "
-                         "launches it")
-    return await _refused(tests.launch(store, settings, test_id, actor="agent"))
-
-
 async def stop(store: CampaignStore, settings: InstagramMCPSettings, test_id: int,
                reason: str) -> Dict[str, Any]:
     """Pause a test's ads and cancel it. ValueError '<code>: <why>' when refused."""
@@ -107,10 +93,9 @@ def _learned(store: CampaignStore) -> set:
 
 def work_packet(store: CampaignStore, settings: InstagramMCPSettings) -> Tuple[Any, int]:
     """The `ads` section of a work packet and its count: eligible winners (only while the
-    agent may still propose), the presets the owner set (127), open tests, how many more may run now (`launches_left`;
-    the agent's waiting proposals count only while it is above 0), and finished tests no
-    ads learning cites yet (evidence `test_id`). Not configured: count 0, so the run is
-    skipped."""
+    agent may still propose), the presets the owner set (127), open tests (proposals wait
+    for the owner's Approve, 128) and finished tests no ads learning cites yet (evidence
+    `test_id`). Not configured: count 0, so the run is skipped."""
     refused = not_configured(settings)
     if refused:
         return {"configured": False, "message": refused["message"]}, 0
@@ -121,9 +106,7 @@ def work_packet(store: CampaignStore, settings: InstagramMCPSettings) -> Tuple[A
     found: List[Dict[str, Any]] = tests.eligible_winners(store, settings) if room else []
     to_learn = [_brief(t) for t in rows
                 if t["status"] == "finished" and str(t["id"]) not in learned]
-    launches = max(settings.ads_max_running_tests
-                   - sum(t["status"] in tests.OPEN_RUNNING for t in rows), 0)
     return {"configured": True, "proposals_left": room, "winners": found,
-            "launches_left": launches, "presets": tests.presets(settings),
+            "presets": tests.presets(settings),
             "open_tests": [_brief(t) for t in rows if t["status"] in OPEN],
-            "to_learn": to_learn}, len(to_learn) + len(found) + (waiting if launches else 0)
+            "to_learn": to_learn}, len(to_learn) + len(found)

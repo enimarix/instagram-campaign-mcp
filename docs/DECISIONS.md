@@ -346,3 +346,20 @@ Reason: step 006a spike measurements above.
 The owner accepted the stack defaults of GOAL.md §4.1 at onboarding, and chose to build
 Track B (motion + agent, Phases 4–5) before Track A (Phase 6), keeping roadmap order.
 Reason: owner's answers at team-up onboarding.
+
+## 2026-11-18: The owner decides what is promoted (128)
+Owner's words: "let me only me decide what to push and what to publish, because I have
+the artistic eye". This reverses the launch part of "The AI runs the ads within the
+owner's caps (126)" above: the agent may still **propose** paid A/B tests, read results,
+judge them into learnings and **stop** a test (a pause spends nothing), but every launch
+is the owner's Approve on the Ads page, where waiting proposals show with Approve /
+Cancel. The MCP tool `launch_ad_test` is removed (no agent tool launches, activates or
+spends; tests/test_ads_agent.py lists the agent's ads tools and walks their calls), and
+`tests.launch` refuses any actor but `owner` (`owner_only`), as defence in depth. The
+weekly-ads playbook proposes and never launches; its work packet drops `launches_left`.
+Kept from 126: the caps, the kill switch, no password for Approve (password for raising
+a cap and turning ads back on), at most 3 agent proposals waiting. Promotions are only
+created paused, inside `tests.launch`. Publishing is unchanged (per-video approval).
+GOAL.md §3.6 and §5.4 updated.
+Reason: the owner's instruction of 2026-11-18; the owner has the artistic eye and
+decides what is pushed with money.
