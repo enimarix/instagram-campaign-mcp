@@ -314,7 +314,7 @@ function ApproveSheet({ t, act, onClose }: { t: AdTest; act: Act; onClose: () =>
 function verdict(t: AdTest) {
   const e = t.result?.evaluation
   if (!e) return 'No numbers yet: the first ones come within an hour of the start'
-  const [, more, unit] = METRIC[e.metric]
+  const [, more, unit] = METRIC[t.spec.primary_metric]
   const days = Math.floor(e.days)
   switch (e.status) {
     case 'winner': {
@@ -374,7 +374,7 @@ function ResultsSheet({ id, onClose }: { id: number; onClose: () => void }) {
           {res && (
             <table className="w-full text-left tabular-nums">
               <thead className="text-xs text-muted">
-                <tr><th>Version</th><th>{METRIC[res.evaluation.metric][0]}</th><th>Views</th><th>Spend</th></tr>
+                <tr><th>Version</th><th>{METRIC[d.spec.primary_metric][0]}</th><th>Views</th><th>Spend</th></tr>
               </thead>
               <tbody>
                 {Object.entries(res.variants).map(([name, v]) => {

@@ -242,6 +242,14 @@ describe('Ads page', () => {
       expect(within(sheet).getByText(text)).toBeTruthy()
     })
 
+    it('says why when the numbers could not be judged', async () => {
+      const t = running({})
+      const { sheet } = await openResults({ ...t, result: { ...t.result!,
+        evaluation: { status: 'error', error: 'expected 2 variants, got 1' } as AdEvaluation } })
+      expect(within(sheet).getByText('The numbers could not be judged: expected 2 variants, got 1.')).toBeTruthy()
+      expect(within(sheet).getByText('No p-values before the planned sample is reached.')).toBeTruthy()
+    })
+
     it('shows the review issue on the row and in the details', async () => {
       const t = running({ status: 'running' }, [ISSUE, { ...ISSUE, ad_id: '904', effective_status: 'WITH_ISSUES', reason: 'limited' }])
       const { sheet } = await openResults(t)

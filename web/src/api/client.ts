@@ -776,7 +776,7 @@ export type AdTest = {
   result: AdResult | null
 }
 export type AdMetric = 'ctr' | 'result_rate' | 'conversion_rate'
-/** src/ads/abtest.py evaluate(); 'error' when the snapshot could not be judged. */
+/** src/ads/abtest.py evaluate(); 'error' (only `error` set) when the snapshot could not be judged. */
 export type AdEvaluation = {
   status: 'too_early' | 'running' | 'winner' | 'no_difference' | 'error'
   error?: string
