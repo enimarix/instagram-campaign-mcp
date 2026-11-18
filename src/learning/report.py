@@ -15,8 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
+from ..studio.media import media_url
 from ..studio.seed import local_today
-from .analytics import _urls, studio_side
 
 SUMMARY_CHARS = 4000
 MAX_PICKS = 3
@@ -132,8 +132,8 @@ def report_page(store: CampaignStore, report_date: Optional[str] = None) -> Dict
         caption = (snap.get("caption") or "").strip().split("\n", 1)[0][:TITLE_CHARS]
         posts[mid] = {"media_id": mid, "permalink": snap.get("permalink") or row.get("permalink"),
                       "title": caption or None, "asset_id": asset_id,
-                      "thumbnail_url": _urls(studio_side(store, asset_id)["asset"])[
-                          "thumbnail_url"],
+                      "thumbnail_url": asset_id and media_url(
+                          store.get_asset(asset_id)["thumbnail_path"]),
                       "verdict": row.get("verdict"), "retention": row.get("retention", [])}
     return {"report_date": report["report_date"], "summary": report["summary"],
             "facts": facts, "analysis": analysis, "posts": posts}

@@ -19,11 +19,24 @@ const postPath = (id: string) => `/analytics/posts/${encodeURIComponent(id)}`
 /** "2026-11-16" → "Monday, November 16" (an owner-local day, shown as is). */
 const longDay = (d: string) =>
   new Date(`${d}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+/** Markdown as one line of plain text, for the Analytics card. */
+const plain = (md: string) => md.replace(/^\s*([#>]+|[-*+]|\d+[.)])\s+/gm, '').replace(/[*`]/g, '').replace(/\s+/g, ' ').trim()
 /** The report of `date` (default: the newest with a summary); null when there is none. */
 const loadReport = (date?: string) => getReport(date).catch((e: unknown) => {
   if (e instanceof ApiError && e.status === 404) return null
   throw e
 })
+
+/** The summary's first line as a title, then the start of the rest. */
+function Teaser({ md }: { md: string }) {
+  const [head, ...rest] = md.trim().split('\n')
+  return (
+    <>
+      <p className="mt-1 font-medium">{plain(head)}</p>
+      <p className="line-clamp-2">{plain(rest.join('\n'))}</p>
+    </>
+  )
+}
 
 /** The "Today's report" card at the top of Analytics. */
 export function TodayReport() {
@@ -34,7 +47,7 @@ export function TodayReport() {
         {(r) => r && (
           <Card className="mt-2 text-sm">
             <p className="text-muted">{longDay(r.report_date)}</p>
-            {r.summary && <p className="mt-1 line-clamp-3">{r.summary.replace(/\*\*|`|^[#>]+\s*/gm, '').trim()}</p>}
+            {r.summary && <Teaser md={r.summary} />}
             <p className="mt-1 text-xs text-muted">
               {r.analysis.best?.length ?? 0} best · {r.analysis.worst?.length ?? 0} worst · {r.analysis.experiments?.length ?? 0} ideas to try
             </p>
