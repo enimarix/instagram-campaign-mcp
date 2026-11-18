@@ -241,7 +241,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ### Phase 10 — Hardening and handover
 
-- [ ] 097 — Restore and retention — `ig-campaign restore <backup>` tested end to end on a copy; old insight snapshots are thinned (keep the age-schedule points, drop the rest) so the database stays small; retention settings documented.
+- [x] 097 — Restore and retention — `ig-campaign restore <backup>` tested end to end on a copy; old insight snapshots are thinned (keep the age-schedule points, drop the rest) so the database stays small; retention settings documented.
 - [ ] 098 — Alerts — a notification area in the website for failed publishes, re-planned late slots, a token expiring within 10 days, failed or over-budget agent runs, QC failure spikes, a stale worker heartbeat and ad caps.
 - [ ] 099 — End-to-end smoke test — Playwright: seed, open inbox, like, comment, approve, slot appears in the calendar, worker "publishes" against a mocked Graph API; runs in CI.
 - [ ] 100 — One-command setup and README — installers set up Python, Node dependencies, the website build, the Reel downloader (`git submodule update --init` and `ig-campaign downloader setup`), the ffmpeg check, the Claude Code CLI check and the scheduled tasks on Windows, macOS and Linux; README rewritten: setup, a normal day (including the AI label if it must be set by hand), recovery (expired token, failed publish, stuck render, restore from backup).
@@ -262,6 +262,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 097 — Restore and retention — https://github.com/enimarix/instagram-campaign-mcp/pull/109 (2026-11-18) — `ig-campaign restore <backup>` (guarded, current DB kept aside, migrations run); old insight snapshots thinned to the age-schedule points; weekly VACUUM; README section
 - [x] 087 — Slots that learn — https://github.com/enimarix/instagram-campaign-mcp/pull/108 (2026-11-18) — posting windows weighted by audience x our own results (median index, n >= 5, clamped), about 15 % of days test the least-tried window; proposals say why
 - [x] 118 — Follow-up sweep — https://github.com/enimarix/instagram-campaign-mcp/pull/107 (2026-11-18) — one-call Decline, commentary and "DM pick from @sender" chips in the feed, quiet setup-mode account route, shorter Settings on phones, Ads explanation, bigger links, revision list hides re-renders in progress, update_learning takes a predicate
 - [x] 084 — Learnings page — https://github.com/enimarix/instagram-campaign-mcp/pull/106 (2026-11-18) — what the studio learned with its evidence and conflicts; the owner adds, edits, confirms or retires rules, and owner rules always win over the agent and the nightly check
