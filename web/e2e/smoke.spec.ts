@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 
 // The owner's main path, end to end (step 099): seed → Inbox feed (save for later, change,
 // approve) → the slot in the Calendar → the publish run against a local Graph API stub →
@@ -83,13 +83,17 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-  studio?.kill()
+  if (studio && studio.exitCode === null) {
+    const exited = new Promise((ok) => studio.once('exit', ok))
+    studio.kill()
+    await exited // the database file is free before the temp folder goes
+  }
   stub?.close()
   if (tmp) rmSync(tmp, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('decide in the feed, see the slot, publish against the stub', async ({ page }) => {
-  const idOf = async (card: ReturnType<typeof page.getByRole>) =>
+  const idOf = async (card: Locator) =>
     Number((await card.getAttribute('aria-label'))?.replace('Video ', ''))
 
   await page.goto(`${base}/inbox`)
@@ -114,7 +118,7 @@ test('decide in the feed, see the slot, publish against the stub', async ({ page
   const queued = page.waitForResponse((r) => r.url().endsWith(`/api/assets/${saved}/approve-and-queue`))
   await page.getByRole('article', { name: `Video ${saved}` }).getByRole('button', { name: 'Approve' }).click()
   // The feed commits after its 5 s undo window, or at once when the page is hidden: hide it.
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+  await page.evaluate("window.dispatchEvent(new Event('pagehide'))")
   const response = await queued
   expect(response.ok()).toBe(true)
   const { post } = await response.json()
