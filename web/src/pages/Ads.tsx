@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import {
   ApiError, approveAdTest, cancelAdTest, errorMessage, getAdsAudit, getAdsBudget, getAdTest, killAds, listAdTests,
-  listAdWinners, proposeAdTest, unkillAds, type AdMetric, type AdReviewIssue, type AdsBudget, type AdTest,
-  type AdTestStatus, type AdVariable, type BudgetScope,
+  listAdPresets, listAdWinners, proposeAdTest, unkillAds, type AdMetric, type AdPreset, type AdReviewIssue,
+  type AdsBudget, type AdTest, type AdTestStatus, type AdVariable, type BudgetScope,
 } from '../api/client'
 import { Button } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
@@ -14,17 +14,6 @@ import { Tabs } from '../ui/Tabs'
 import { dateTime, humanize, num, pct, useLoad } from './load'
 
 // Steps 094 (API), 094b (this page) and 095b (results).
-// ponytail: mirrors PRESETS in src/ads/promote.py (no route lists them); the server re-checks.
-const PRESETS: Record<string, string> = {
-  fr_reels: 'France, Reels',
-  fr_feed_reels: 'France, Feed and Reels',
-  francophone_reels: 'France, Belgium, Switzerland, Luxembourg, Reels',
-}
-// Presets that differ in only that one thing, per variable.
-const VARIES: Record<Exclude<AdVariable, 'creative'>, string[]> = {
-  audience: ['fr_reels', 'francophone_reels'],
-  placement: ['fr_reels', 'fr_feed_reels'],
-}
 const VARIABLES: { id: AdVariable; label: string }[] = [
   { id: 'creative', label: 'Video' }, { id: 'audience', label: 'Audience' }, { id: 'placement', label: 'Placement' },
 ]
@@ -44,8 +33,6 @@ const METRIC: Record<AdMetric, [string, string, string]> = {
   ctr: ['CTR', 'clicks', 'views'], result_rate: ['Result rate', 'results', 'views'],
   conversion_rate: ['Conversion rate', 'results', 'clicks'],
 }
-// ponytail: mirrors NEAR_CAP in src/ads/sync.py; the budget route carries no near_cap flags.
-const NEAR_CAP = 0.8
 
 const money = (v: string | number, currency: string) => {
   try {
@@ -167,12 +154,15 @@ function BudgetCard({ b, act }: { b?: AdsBudget; act: Act }) {
   )
 }
 
-function ProposeSheet({ act, onClose }: { act: Act; onClose: () => void }) {
+type Labels = Record<string, string> // preset id → its plain label
+
+function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act; onClose: () => void }) {
   const winners = useLoad(listAdWinners, 0)
   const [variable, setVariable] = useState<AdVariable>('creative')
   const [medias, setMedias] = useState<string[]>([])
-  const [presets, setPresets] = useState<string[]>([])
-  const [preset, setPreset] = useState('fr_reels')
+  const [compared, setCompared] = useState<string[]>([])
+  const [picked, setPreset] = useState<string>()
+  const preset = picked ?? presets[0]?.id ?? ''
   const [hypothesis, setHypothesis] = useState('')
   const [lift, setLift] = useState('20')
   const [error, setError] = useState<string | null>(null)
@@ -182,8 +172,8 @@ function ProposeSheet({ act, onClose }: { act: Act; onClose: () => void }) {
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   const variants = creative
     ? medias.map((media_id) => ({ media_id, preset }))
-    : presets.map((p) => ({ media_id: medias[0], preset: p }))
-  const ready = hypothesis.trim() && (creative ? medias.length >= 2 && medias.length <= 4 : medias.length === 1 && presets.length >= 2)
+    : compared.map((p) => ({ media_id: medias[0], preset: p }))
+  const ready = hypothesis.trim() && (creative ? preset && medias.length >= 2 && medias.length <= 4 : medias.length === 1 && compared.length >= 2)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -210,7 +200,7 @@ function ProposeSheet({ act, onClose }: { act: Act; onClose: () => void }) {
     <Sheet title="Propose a test" onClose={onClose}>
       <form onSubmit={(e) => void submit(e)} className="mt-3 grid gap-3 text-sm">
         <Tabs label="What to vary" tabs={VARIABLES} value={variable}
-          onChange={(v) => { setVariable(v); setMedias([]); setPresets([]) }} />
+          onChange={(v) => { setVariable(v); setMedias([]); setCompared([]) }} />
         <fieldset>
           <legend className="font-medium">{creative ? 'Pick 2 to 4 winners' : 'Pick one winner'}</legend>
           {winners.error && <p role="alert" className="text-danger">{winners.error}</p>}
@@ -223,6 +213,7 @@ function ProposeSheet({ act, onClose }: { act: Act; onClose: () => void }) {
                   <label className="flex min-h-11 items-center gap-2">
                     <input type={creative ? 'checkbox' : 'radio'} name="winner" checked={medias.includes(w.media_id)}
                       onChange={() => setMedias(creative ? toggle(medias, w.media_id) : [w.media_id])} />
+                    {w.thumbnail_url && <img src={w.thumbnail_url} alt="" className="h-10 w-6 shrink-0 rounded object-cover" />}
                     <span className="min-w-0 truncate">{w.caption || `Post ${w.media_id}`}</span>
                     <span className="ml-auto shrink-0 text-muted">{dateTime(w.posted_at)}</span>
                   </label>
@@ -234,15 +225,17 @@ function ProposeSheet({ act, onClose }: { act: Act; onClose: () => void }) {
         {creative ? (
           <label>Who sees it
             <select value={preset} onChange={(e) => setPreset(e.target.value)} className={`${field} mt-1 block w-full`}>
-              {Object.entries(PRESETS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </label>
         ) : (
           <fieldset>
             <legend className="font-medium">Compare</legend>
             <div className="mt-1 flex flex-wrap gap-2">
-              {VARIES[variable].map((p) => (
-                <Chip key={p} pressed={presets.includes(p)} onClick={() => setPresets(toggle(presets, p))}>{PRESETS[p]}</Chip>
+              {presets.filter((p) => p.varies.includes(variable)).map((p) => (
+                <Chip key={p.id} pressed={compared.includes(p.id)} onClick={() => setCompared(toggle(compared, p.id))}>
+                  {p.label}
+                </Chip>
               ))}
             </div>
           </fieldset>
@@ -334,8 +327,8 @@ function verdict(t: AdTest) {
 }
 
 /** What each version shows: the post for a video test, the audience or placement otherwise. */
-const versionLabel = (t: AdTest, v: { media_id: string; preset: string }) =>
-  t.variable === 'creative' ? `Post ${v.media_id}` : PRESETS[v.preset] ?? v.preset
+const versionLabel = (t: AdTest, v: { media_id: string; preset: string }, labels: Labels) =>
+  t.variable === 'creative' ? `Post ${v.media_id}` : labels[v.preset] ?? v.preset
 
 function Issues({ issues }: { issues: AdReviewIssue[] }) {
   return issues.map((i) => (
@@ -348,7 +341,7 @@ function Issues({ issues }: { issues: AdReviewIssue[] }) {
   ))
 }
 
-function ResultsSheet({ id, onClose }: { id: number; onClose: () => void }) {
+function ResultsSheet({ id, labels, onClose }: { id: number; labels: Labels; onClose: () => void }) {
   const r = useLoad(() => getAdTest(id), id)
   const d = r.data
   const res = d?.result
@@ -381,7 +374,7 @@ function ResultsSheet({ id, onClose }: { id: number; onClose: () => void }) {
                   const rate = res.evaluation.variants?.[name]?.rate
                   return (
                     <tr key={name}>
-                      <td>{name} · {versionLabel(d, v)}</td>
+                      <td>{name} · {versionLabel(d, v, labels)}</td>
                       <td>{rate == null ? '–' : `${(rate * 100).toFixed(2)} %`}</td>
                       <td>{num(v.impressions)}</td>
                       <td>{money(v.spend, d.currency)}</td>
@@ -408,7 +401,7 @@ function ResultsSheet({ id, onClose }: { id: number; onClose: () => void }) {
   )
 }
 
-function TestRow({ t, act }: { t: AdTest; act: Act }) {
+function TestRow({ t, labels, act }: { t: AdTest; labels: Labels; act: Act }) {
   const [showing, setShowing] = useState(false)
   const [approving, setApproving] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -420,7 +413,7 @@ function TestRow({ t, act }: { t: AdTest; act: Act }) {
     <li className="py-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone={STATUS_TONE[t.status]}>{t.status}</Chip>
-        {winner && <Chip tone="success">Winner: {winner}{won && ` (${versionLabel(t, won)})`}</Chip>}
+        {winner && <Chip tone="success">Winner: {winner}{won && ` (${versionLabel(t, won, labels)})`}</Chip>}
         <span className="font-medium break-words">{t.hypothesis}</span>
       </div>
       <p className="mt-1 text-muted">
@@ -444,7 +437,7 @@ function TestRow({ t, act }: { t: AdTest; act: Act }) {
       </div>
       {error && <p role="alert" className="mt-1 text-danger">{error}</p>}
       {approving && <ApproveSheet t={t} act={act} onClose={() => setApproving(false)} />}
-      {showing && <ResultsSheet id={t.id} onClose={() => setShowing(false)} />}
+      {showing && <ResultsSheet id={t.id} labels={labels} onClose={() => setShowing(false)} />}
     </li>
   )
 }
@@ -488,12 +481,11 @@ function AuditLog({ version }: { version: number }) {
 
 /** src/ads/sync.py near_caps() in words: "Today's ad spend is at 85 % of the daily cap". */
 function nearCaps(b: AdsBudget) {
-  const share = (s: BudgetScope) => Number(s.cap) > 0 && Number(s.used) >= Number(s.cap) * NEAR_CAP
-    ? pct(Number(s.used) / Number(s.cap)) : null
+  const share = (s: BudgetScope) => pct(Number(s.used) / Number(s.cap))
   const out = []
-  if (share(b.daily)) out.push(`Today's ad spend is at ${share(b.daily)} of the daily cap`)
-  if (share(b.lifetime)) out.push(`Total ad spend is at ${share(b.lifetime)} of the lifetime cap`)
-  for (const t of b.tests) if (share(t)) out.push(`Test #${t.test_id} is at ${share(t)} of its cap`)
+  if (b.near_cap.daily) out.push(`Today's ad spend is at ${share(b.daily)} of the daily cap`)
+  if (b.near_cap.lifetime) out.push(`Total ad spend is at ${share(b.lifetime)} of the lifetime cap`)
+  for (const t of b.tests) if (b.near_cap.tests.includes(t.test_id)) out.push(`Test #${t.test_id} is at ${share(t)} of its cap`)
   return out
 }
 
@@ -504,6 +496,8 @@ export default function Ads() {
   const [proposing, setProposing] = useState(false)
   const budget = useLoad(getAdsBudget, version)
   const tests = useLoad(listAdTests, version)
+  const presets = useLoad(listAdPresets, 0).data ?? []
+  const labels: Labels = Object.fromEntries(presets.map((p) => [p.id, p.label]))
 
   // Runs one action, reloads everything; the error in plain words, or null.
   const act: Act = async (fn) => {
@@ -536,12 +530,12 @@ export default function Ads() {
           {!tests.data ? !tests.error && <Skeleton className="mt-3 h-12" /> : tests.data.length === 0 ? (
             <div className="mt-3"><EmptyState title="No tests yet">Propose one from your winners.</EmptyState></div>
           ) : (
-            <ul className="mt-2 divide-y divide-line/60">{tests.data.map((t) => <TestRow key={t.id} t={t} act={act} />)}</ul>
+            <ul className="mt-2 divide-y divide-line/60">{tests.data.map((t) => <TestRow key={t.id} t={t} labels={labels} act={act} />)}</ul>
           )}
         </Card>
         <AuditLog version={version} />
       </div>
-      {proposing && <ProposeSheet act={act} onClose={() => setProposing(false)} />}
+      {proposing && <ProposeSheet presets={presets} act={act} onClose={() => setProposing(false)} />}
     </>
   )
 }

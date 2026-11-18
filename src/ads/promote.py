@@ -57,6 +57,8 @@ PRESETS: Dict[str, Dict[str, Any]] = {
     "francophone_reels": {**_IG, "geo_locations": {"countries": ["FR", "BE", "CH", "LU"]},
                           "instagram_positions": ["reels"]},
 }
+PRESET_LABELS = {"fr_reels": "France, Reels", "fr_feed_reels": "France, Feed and Reels",
+                 "francophone_reels": "France, Belgium, Switzerland, Luxembourg, Reels"}
 MIN_SPEND_CAP = Decimal(100)  # Meta: "a minimum value of $100 USD (or local equivalent)"
 CENT = Decimal("0.01")
 

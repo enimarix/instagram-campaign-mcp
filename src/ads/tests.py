@@ -36,11 +36,19 @@ from ..config import InstagramMCPSettings
 from ..instagram_client import InstagramAPIError, NotConfigured
 from ..learning.analytics import scored_posts
 from ..store import CampaignStore, to_iso, utcnow
+from ..studio.media import media_url
 from . import abtest
 from .budget import _amount, audit, authorize_spend, open_authorizations, release
 from .budget import status as budget_status
 from .client import AdsClient
-from .promote import CENT, PRESETS, PromotionRefused, _advertisable_asset, create_paused_promotion
+from .promote import (
+    CENT,
+    PRESET_LABELS,
+    PRESETS,
+    PromotionRefused,
+    _advertisable_asset,
+    create_paused_promotion,
+)
 from .writer import ACTIVE, PAUSED, AdsWriter, missing_settings
 
 logger = structlog.get_logger(__name__)
@@ -69,6 +77,22 @@ class AdTestFailed(Exception):
     """Meta (or the guard) failed after requests went out; the test is cancelled."""
 
 
+def _differ_only(a: str, b: str, variable: str) -> bool:
+    """Presets a and b differ, and only in `variable` (audience or placement)."""
+    changed = {k for k in {*PRESETS[a], *PRESETS[b]} if PRESETS[a].get(k) != PRESETS[b].get(k)}
+    return bool(changed) and (changed <= PLACEMENT_KEYS if variable == "placement"
+                              else changed.isdisjoint(PLACEMENT_KEYS))
+
+
+def presets() -> List[Dict[str, Any]]:
+    """Each preset with its plain label and the variables it can be compared on (a test of
+    that variable may pair it with another preset)."""
+    return [{"id": p, "label": PRESET_LABELS[p],
+             "varies": [v for v in ("audience", "placement")
+                        if any(_differ_only(p, q, v) for q in PRESETS)]}
+            for p in PRESETS]
+
+
 def _variants(variable: str, variants: Any) -> List[Dict[str, str]]:
     if not isinstance(variants, list) or not 2 <= len(variants) <= 4:
         raise AdTestRefused("invalid", "a test has 2 to 4 variants")
@@ -86,11 +110,7 @@ def _variants(variable: str, variants: Any) -> List[Dict[str, str]]:
         ok = len(medias) == len(out) and len(set(presets)) == 1
     else:
         ok = len(medias) == 1 and len(set(presets)) == len(out)
-        for a, b in combinations(presets, 2):
-            changed = {k for k in {*PRESETS[a], *PRESETS[b]}
-                       if PRESETS[a].get(k) != PRESETS[b].get(k)}
-            ok = ok and bool(changed) and (changed <= PLACEMENT_KEYS if variable == "placement"
-                                           else changed.isdisjoint(PLACEMENT_KEYS))
+        ok = ok and all(_differ_only(a, b, variable) for a, b in combinations(presets, 2))
     if not ok:
         raise AdTestRefused("invalid", f"variants must differ in {variable} only: "
                             "creative = different posts, one preset; audience / placement"
@@ -220,7 +240,9 @@ def eligible_winners(store: CampaignStore, settings: InstagramMCPSettings) -> Li
             continue
         out.append({"media_id": snap["media_id"], "permalink": snap["permalink"],
                     "posted_at": snap["posted_at"], "caption": (snap["caption"] or "")[:120],
-                    "asset_id": asset["id"], "engagement_index": s.get("engagement_index"),
+                    "asset_id": asset["id"],
+                    "thumbnail_url": media_url(asset.get("thumbnail_path")),
+                    "engagement_index": s.get("engagement_index"),
                     "reach_index": s.get("reach_index")})
     return out
 

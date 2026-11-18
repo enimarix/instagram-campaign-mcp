@@ -342,6 +342,7 @@ def test_api_budget_kill_unkill(api):
     r = tc.get("/api/ads/budget")
     assert r.status_code == 200 and r.json()["killed"] is False
     assert r.json()["daily"] == {"cap": "10", "used": "0", "remaining": "10"}
+    assert r.json()["near_cap"] == {"daily": False, "lifetime": False, "tests": []}
     r = _post(tc, "/api/ads/kill", {"reason": "stop it"})
     assert r.status_code == 200 and r.json()["killed"] is True
     assert r.json()["killed_reason"] == "stop it"

@@ -753,6 +753,8 @@ export type AdsBudget = {
   lifetime: BudgetScope
   test_cap: string
   tests: (BudgetScope & { test_id: number })[]
+  /** src/ads/sync.py near_caps(): the scopes at 80 % of their cap or more. */
+  near_cap: { daily: boolean; lifetime: boolean; tests: number[] }
 }
 export type AdVariable = 'creative' | 'audience' | 'placement'
 export type AdTestStatus = 'proposed' | 'approved' | 'running' | 'finished' | 'cancelled'
@@ -800,7 +802,16 @@ export type AdTestResults = AdTest & {
   spend: { reported: string | null; counted: string; budget: string | null; currency: string }
   near_cap: { daily: boolean; lifetime: boolean; test: boolean }
 }
-export type AdWinner = { media_id: string; permalink: string | null; posted_at: string; caption: string; asset_id: number }
+export type AdWinner = {
+  media_id: string
+  permalink: string | null
+  posted_at: string
+  caption: string
+  asset_id: number
+  thumbnail_url: string | null
+}
+/** src/ads/tests.py presets(): `varies` = the variables a test may compare it on. */
+export type AdPreset = { id: string; label: string; varies: Exclude<AdVariable, 'creative'>[] }
 export type AdProposal = {
   hypothesis: string
   variable: AdVariable
@@ -821,6 +832,7 @@ export const killAds = (reason?: string) => post<AdsBudget>('/api/ads/kill', rea
 export const unkillAds = (password: string) => post<AdsBudget>('/api/ads/unkill', { password })
 export const listAdTests = () => request<{ tests: AdTest[] }>('/api/ads/tests').then((r) => r.tests)
 export const listAdWinners = () => request<{ winners: AdWinner[] }>('/api/ads/winners').then((r) => r.winners)
+export const listAdPresets = () => request<{ presets: AdPreset[] }>('/api/ads/presets').then((r) => r.presets)
 export const proposeAdTest = (p: AdProposal) => post<AdTest>('/api/ads/tests', p)
 export const approveAdTest = (id: number, body: { budget: string; password: string; underpowered_ok: boolean }) =>
   post<AdTest>(`/api/ads/tests/${id}/approve`, body)
