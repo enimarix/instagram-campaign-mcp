@@ -545,6 +545,22 @@ export type ReelDownload = {
 export const downloadReel = (target: { source_id: number } | { url: string }) =>
   post<ReelDownload>('/api/sources/download', target)
 
+// --- Stock clips (step 064; src/api/stock.py) ---
+/** A video of GET /api/stock/search (Pexels); `image`: its preview picture. */
+export type StockResult = {
+  id: number
+  url: string | null
+  author: string | null
+  duration_s: number | null
+  width: number | null
+  height: number | null
+  image: string | null
+}
+export const stockStatus = () => request<{ configured: boolean; provider: string }>('/api/stock')
+export const searchStock = (q: string) =>
+  request<StockResult[]>(`/api/stock/search?${new URLSearchParams({ q })}`)
+export const addStockClip = (result_id: number) => post<Clip>('/api/stock/add', { result_id })
+
 // --- Breakdowns and A/B (step 080) ---
 type Median = { median: number | null }
 /** A group of GET /api/analytics/breakdown (src/learning/breakdowns.py); `watch_ratio` only when known. */

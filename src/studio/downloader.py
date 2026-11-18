@@ -181,11 +181,13 @@ class YtDlpProvider:
                 "likes": info.get("like_count"), "duration_s": info.get("duration")}
 
 
-def fetch_video(url: str, dest: Path, max_bytes: int) -> int:
-    """Stream the video to `dest` (bytes written). ProviderFailed for a non-CDN URL, an
-    HTTP error or a file over the cap; nothing is left behind then."""
-    if not cdn_ok(url):
-        raise ProviderFailed(f"video host {urlsplit(url).hostname!r} is not Instagram's CDN")
+def fetch_video(url: str, dest: Path, max_bytes: int, *,
+                host_ok: Callable[[str], bool] = cdn_ok, hosts: str = "Instagram's CDN") -> int:
+    """Stream the video to `dest` (bytes written). ProviderFailed for a URL `host_ok`
+    refuses (`hosts` names the allowed ones), an HTTP error or a file over the cap;
+    nothing is left behind then. Also used by the stock provider (step 064)."""
+    if not host_ok(url):
+        raise ProviderFailed(f"video host {urlsplit(url).hostname!r} is not {hosts}")
     part = dest.with_name(dest.name + ".part")
     dest.parent.mkdir(parents=True, exist_ok=True)
     size = 0

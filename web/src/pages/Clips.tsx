@@ -7,6 +7,7 @@ import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
 import { field as fieldClass } from '../ui/styles'
 import { AskPermissionButton } from './Permissions'
+import StockClips from './StockClips'
 
 // GOAL.md §5.1; `unknown` is never offered: a clip without rights is never stored.
 const BASES: { id: RightsBasis; label: string }[] = [
@@ -137,6 +138,7 @@ export default function ClipsSection() {
           {!all && clips.length > SHOWN && (
             <Button className="mt-2 md:w-auto" onClick={() => setAll(true)}>Show all {clips.length} clips</Button>
           )}
+          <StockClips onAdded={reload} />
         </>
       )}
     </Card>

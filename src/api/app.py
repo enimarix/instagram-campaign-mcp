@@ -42,6 +42,7 @@ from . import (
     reports,
     research,
     sources,
+    stock,
     worker,
 )
 from . import settings as settings_routes
@@ -181,6 +182,7 @@ def create_app(
     app.include_router(learnings.router)
     app.include_router(experiments.router)
     app.include_router(sources.router)
+    app.include_router(stock.router)
     app.include_router(reactions.router)
     app.include_router(permissions.router)
     app.include_router(dm_picks.router)
