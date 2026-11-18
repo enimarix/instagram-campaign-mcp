@@ -872,8 +872,10 @@ async def list_assets(status: Optional[str] = None, batch_date: Optional[str] = 
 async def get_feedback(undigested: bool = True, limit: int = 50) -> Dict[str, Any]:
     """The owner's comments, oldest first (limit up to 100; undigested=False includes ones
     already read): text, reason codes with labels, video_time_s, wants_changes, and the
-    asset's context (status, template, hook, pillar, hook_type, track). Digest them into
-    learnings, then mark_feedback_digested."""
+    asset's context (status, template, hook, pillar, hook_type, track), and `change`: for
+    a change request or a comment on a revised video, both asset ids, what was asked, what
+    was changed and the owner's outcome (a change request comes back unread when the owner
+    judges its new version). Digest them into learnings, then mark_feedback_digested."""
     return {"feedback": await _studio(learnings.get_feedback, store(), undigested=undigested,
                                       limit=limit)}
 
@@ -932,7 +934,9 @@ async def update_learning(learning_id: int, statement: Optional[str] = None,
 
 @mcp.tool(annotations=LOCAL_READ)
 async def get_creative_brief() -> Dict[str, Any]:
-    """Everything to plan today's batch in one call: bible, learnings, undigested feedback,
+    """Everything to plan today's batch in one call: first owner_decisions (recent decline
+    motives and approved changes: avoid the motives, repeat what worked), bible, learnings,
+    undigested feedback,
     change requests, last daily report, open and proposed experiments with the
     explore_plan (which experiment variant each explore idea fills), quotas (effective
     batch size follows the bench), today's ideas, recent hooks to avoid, inspirations, the bench."""
