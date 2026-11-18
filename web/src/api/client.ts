@@ -126,8 +126,10 @@ export const fixTranscript = (id: number, texts: string[]) =>
   post<{ asset: Asset }>(`/api/assets/${id}/transcript`, { texts })
 /** The feed's one-tap Approve: approved and queued into the next free slot; `slot` null =
  * the planner's week is full, approved only. `confirmed`: the commentary confirmation. */
-export const approveAndQueue = (id: number, confirmed: boolean) =>
-  post<{ asset: Asset; slot: Slot | null }>(`/api/assets/${id}/approve-and-queue`, { confirmed })
+/** A trial Reel's graduation (shown to non-followers first): by hand in the app, or automatic when it performs. */
+export type Trial = 'MANUAL' | 'SS_PERFORMANCE'
+export const approveAndQueue = (id: number, confirmed: boolean, trial?: Trial) =>
+  post<{ asset: Asset; slot: Slot | null }>(`/api/assets/${id}/approve-and-queue`, { confirmed, trial })
 export const getTaxonomy = () => request<Taxonomy>('/api/taxonomy')
 
 export type Comment = {

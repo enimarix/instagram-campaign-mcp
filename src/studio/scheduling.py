@@ -4,6 +4,10 @@ slot, the owner accepts it or picks another time, the publish guard queues it.
 
 Approve and schedule are two owner steps on the detail page; the review feed's one-tap
 Approve (approve_and_queue, step 115) does both at once.
+
+Either may queue the video as a trial Reel (step 088, `trial` = MANUAL | SS_PERFORMANCE,
+Instagram's graduation strategy): shown to non-followers first, so a risky idea is tested
+without the followers seeing a miss. Only explore or experiment videos may (trial_problem).
 """
 
 from __future__ import annotations
@@ -15,10 +19,11 @@ from zoneinfo import ZoneInfo
 
 from ..campaign import _next_free_slot, free_slot, slot_inputs
 from ..config import InstagramMCPSettings
+from ..learning.experiments import parse_label
 from ..learning.slots import explain_slot
 from ..store import CampaignStore, parse_dt, to_iso
 from .assets import InvalidTransition, transition
-from .publish import _source, ai_generated, cancel_post, queue_asset
+from .publish import QueueRefused, _source, ai_generated, cancel_post, queue_asset
 from .seed import local_today
 
 
@@ -50,16 +55,40 @@ def propose_slot(
             "why": explain_slot(settings, at, inputs[1]), "ai_label": ai_generated(asset, idea)}
 
 
+TRIAL_GRADUATIONS = ("MANUAL", "SS_PERFORMANCE")
+
+
+def trial_problem(store: CampaignStore, asset_id: int) -> Optional[str]:
+    """Why the asset may not go out as a trial Reel; None when it may (its idea is
+    `explore` or belongs to an experiment)."""
+    idea = store.get_idea(store.get_asset(asset_id)["idea_id"])
+    if idea["strategy"] == "explore" or parse_label(idea.get("experiment")):
+        return None
+    return "only an explore or experiment video can be a trial Reel"
+
+
+def _check_trial(store: CampaignStore, asset_id: int, trial: Optional[str]) -> None:
+    if trial is None:
+        return
+    if trial not in TRIAL_GRADUATIONS:
+        raise ValueError(f"trial must be one of {TRIAL_GRADUATIONS}")
+    problem = trial_problem(store, asset_id)
+    if problem:
+        raise QueueRefused("trial", problem)
+
+
 def schedule_asset(
     store: CampaignStore,
     settings: InstagramMCPSettings,
     asset_id: int,
     publish_at: datetime,
     confirmed: bool = False,
+    trial: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Queue the approved asset at `publish_at` through the publish guard (QueueRefused /
-    ValueError pass through); return {post, asset}."""
-    post = queue_asset(store, settings, asset_id, publish_at, confirmed=confirmed)
+    ValueError pass through), as a trial Reel when `trial`; return {post, asset}."""
+    _check_trial(store, asset_id, trial)
+    post = queue_asset(store, settings, asset_id, publish_at, confirmed=confirmed, trial=trial)
     return {"post": post, "asset": store.get_asset(asset_id)}
 
 
@@ -69,19 +98,22 @@ def approve_and_queue(
     asset_id: int,
     now: datetime,
     confirmed: bool = False,
+    trial: Optional[str] = None,
 ) -> Dict[str, Any]:
     """The feed's one-tap Approve (step 115): ready -> approved, then queued into the
-    planner's next free slot. No free slot within the planner's week: approved only
+    planner's next free slot (as a trial Reel when `trial`). No free slot within the planner's week: approved only
     (`slot` None) and the owner picks a time in the Calendar. Any refusal (rights, QC,
     file, caption) takes the approval back, so the asset stays `ready`, and passes through.
     Returns {asset, post, slot}."""
     status = store.get_asset(asset_id)["status"]
     if status != "ready":  # scheduled -> approved is also an owner move: not this one
         raise InvalidTransition(f"asset {asset_id} is {status}, not ready")
+    _check_trial(store, asset_id, trial)
     transition(store, asset_id, "approved", actor="owner")
     try:
         at = free_slot(store, settings, _taken(store, now), now)
-        post = queue_asset(store, settings, asset_id, at, confirmed=confirmed) if at else None
+        post = (queue_asset(store, settings, asset_id, at, confirmed=confirmed, trial=trial)
+                if at else None)
     except Exception:
         transition(store, asset_id, "ready", actor="owner")
         raise

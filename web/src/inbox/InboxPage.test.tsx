@@ -217,6 +217,37 @@ describe('InboxPage feed', () => {
         ['/api/assets/1/approve-and-queue', { confirmed: true }]]))
     })
 
+    it('an explore video can be approved as a trial Reel during the undo window', async () => {
+      const calls = stubApi({
+        'POST /api/assets/1/approve-and-queue': [200, { asset: asset(1, { status: 'scheduled' }), slot: SLOT }],
+      })
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      vi.useFakeTimers()
+      press(1, 'Approve')
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      const group = screen.getByRole('group', { name: 'Publish as a trial Reel? (optional)' })
+      const toggle = within(group).getByRole('button', { name: 'Approve as trial Reel' })
+      expect(toggle.getAttribute('aria-pressed')).toBe('false')
+      fireEvent.click(toggle)
+      expect(toggle.getAttribute('aria-pressed')).toBe('true')
+      await closeUndoWindow()
+      await waitFor(() => expect(posts(calls)).toEqual([
+        ['/api/assets/1/approve-and-queue', { confirmed: false, trial: 'SS_PERFORMANCE' }]]))
+      expect(screen.queryByRole('group', { name: 'Publish as a trial Reel? (optional)' })).toBeNull()
+    })
+
+    it('a normal (exploit) video offers no trial Reel', async () => {
+      stubApi({ 'POST /api/assets/2/approve-and-queue': [200, { asset: asset(2, { status: 'scheduled' }), slot: SLOT }] })
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      vi.useFakeTimers()
+      press(2, 'Approve')
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      expect(screen.getByText('Approved')).toBeTruthy()
+      expect(screen.queryByRole('group', { name: 'Publish as a trial Reel? (optional)' })).toBeNull()
+    })
+
     it('undo brings the card back and sends nothing', async () => {
       const calls = stubApi()
       renderPage()

@@ -3,14 +3,22 @@
 from datetime import timedelta
 
 import pytest
+from fastapi.testclient import TestClient
 
+from src.api.app import create_app
+from src.config import InstagramMCPSettings
 from src.learning import experiments as X
 from src.learning.analytics import posts_table
 from src.scoring import ScoringConfig, group_of, score_posts
 from src.store import to_iso, utcnow
+from src.studio import scheduling
+from src.studio.publish import QueueRefused
 
+from .conftest import LOCAL
 from .test_api_assets import _settings
 from .test_experiments import NOW, _baseline, _open, _post
+from .test_studio_publish import _asset
+from .test_studio_scheduling import _day
 
 
 @pytest.fixture
@@ -86,3 +94,61 @@ def test_experiments_compare_variants_within_one_group(store, settings):
     assert ev["group"] == "TRIAL"
     assert {v: p["n"] for v, p in ev["per_variant"].items()} == {"question": 3, "bold_claim": 2}
     assert ev["per_variant"]["question"]["index"] > ev["per_variant"]["bold_claim"]["index"]
+
+
+# --- queueing as a trial (studio side) -------------------------------------------------
+
+H = {"Origin": LOCAL}
+
+
+@pytest.fixture
+def cfg(tmp_path):
+    return InstagramMCPSettings(_env_file=None, database_path=":memory:",
+                                media_root=str(tmp_path), timezone="UTC",
+                                posting_windows="10:00-12:00", slot_jitter_minutes=0)
+
+
+def _idea_is(store, asset, **fields):
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    with store._tx() as c:
+        c.execute(f"UPDATE ideas SET {sets} WHERE id = ?", (*fields.values(), asset["idea_id"]))
+    return asset
+
+
+def test_explore_and_experiment_videos_queue_as_trials(store, cfg):
+    explore = _idea_is(store, _asset(store, cfg, status="ready"), strategy="explore")
+    out = scheduling.approve_and_queue(store, cfg, explore["id"], _day(), trial="SS_PERFORMANCE")
+    assert out["post"]["payload"]["trial_graduation"] == "SS_PERFORMANCE"
+    exp = _idea_is(store, _asset(store, cfg), strategy="exploit", experiment="exp:1:question")
+    out = scheduling.schedule_asset(store, cfg, exp["id"], _day(), trial="MANUAL")
+    assert out["post"]["payload"]["trial_graduation"] == "MANUAL"
+    normal = _idea_is(store, _asset(store, cfg), strategy="explore")
+    out = scheduling.schedule_asset(store, cfg, normal["id"], _day(3))  # no trial asked
+    assert "trial_graduation" not in out["post"]["payload"]
+
+
+def test_normal_videos_are_refused_as_trials(store, cfg):
+    for asset in (_idea_is(store, _asset(store, cfg, status="ready"), strategy="exploit"),
+                  _idea_is(store, _asset(store, cfg, status="ready"), experiment="short hooks")):
+        with pytest.raises(QueueRefused) as e:
+            scheduling.approve_and_queue(store, cfg, asset["id"], _day(), trial="MANUAL")
+        assert e.value.code == "trial" and "explore or experiment" in str(e.value)
+        assert store.get_asset(asset["id"])["status"] == "ready"  # nothing happened
+        assert scheduling.trial_problem(store, asset["id"])
+    assert store.list_scheduled() == []
+
+
+def test_trial_routes(store, cfg):
+    with TestClient(create_app(cfg, store=store), base_url=LOCAL) as tc:
+        a = _idea_is(store, _asset(store, cfg, status="ready"), strategy="explore")
+        r = tc.post(f"/api/assets/{a['id']}/approve-and-queue", json={"trial": "SS_PERFORMANCE"},
+                    headers=H)
+        assert r.status_code == 200, r.text
+        assert store.list_scheduled()[0]["payload"]["trial_graduation"] == "SS_PERFORMANCE"
+        b = _asset(store, cfg)  # not explore
+        r = tc.post(f"/api/assets/{b['id']}/schedule",
+                    json={"publish_at": to_iso(_day()), "trial": "MANUAL"}, headers=H)
+        assert r.status_code == 409 and r.json()["error"] == "trial"
+        r = tc.post(f"/api/assets/{b['id']}/schedule",
+                    json={"publish_at": to_iso(_day()), "trial": "SOMETIMES"}, headers=H)
+        assert r.status_code == 422
