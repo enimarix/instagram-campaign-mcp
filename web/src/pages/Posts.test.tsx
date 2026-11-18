@@ -9,7 +9,7 @@ const post = (i: number, extra: Partial<AnalyticsPost> = {}): AnalyticsPost => (
   group: 'REELS', metrics: { views: 1000 + i, reach: 500 }, caption: `Post ${i}`, deleted: false,
   verdict: 'average', why: null, asset_id: null, engagement_index: 1.2, watch_ratio: 0.35, view_rate: 2, ...extra,
 })
-const ALL = Array.from({ length: 25 }, (_, i) => post(i, i === 0 ? { asset_id: 7, thumbnail_url: '/api/media/7/thumb.jpg' } : {}))
+const ALL = Array.from({ length: 25 }, (_, i) => post(i, i === 0 ? { asset_id: 7, thumbnail_url: '/api/media/7/thumb.jpg' } : i === 1 ? { group: 'TRIAL' } : {}))
 
 const DETAIL: PostDetail = {
   ...post(0, { asset_id: 7, preview_url: '/api/media/7/preview.mp4', thumbnail_url: '/api/media/7/thumb.jpg' }),
@@ -29,6 +29,7 @@ const DETAIL: PostDetail = {
 const EXTERNAL: PostDetail = {
   ...DETAIL, media_id: 'm1', permalink: 'https://www.instagram.com/reel/1/', asset_id: null, preview_url: null, thumbnail_url: null,
   tags: null, hypothesis: null, feedback: [], description: null, timeline: null, duration: null, retention: [],
+  group: 'TRIAL',
 }
 
 function stubApi() {
@@ -83,6 +84,18 @@ describe('Posts', () => {
     expect(await screen.findByText('No posts match.')).toBeTruthy()
   })
 
+  it('marks trial Reels with a chip in the cards and the table', async () => {
+    stubApi()
+    show('/analytics/posts')
+    const cards = within(await screen.findByRole('list', { name: 'Posts' })).getAllByRole('listitem')
+    expect(within(cards[1]).getByText('trial')).toBeTruthy()
+    expect(within(cards[0]).queryByText('trial')).toBeNull()
+    const rows = within(screen.getByRole('table')).getAllByRole('row')
+    expect(within(rows[2]).getByText('trial')).toBeTruthy()
+    expect(within(rows[1]).queryByText('trial')).toBeNull()
+    expect(within(screen.getByRole('combobox', { name: 'Type' })).getByRole('option', { name: 'Trial Reels' })).toBeTruthy()
+  })
+
   it('loads more with the next offset', async () => {
     const fetchMock = stubApi()
     show('/analytics/posts')
@@ -122,6 +135,7 @@ describe('PostPage', () => {
     expect(screen.queryByLabelText('Studio video')).toBeNull()
     expect(screen.getByText('No tags: made outside the studio.')).toBeTruthy()
     expect(screen.getByText('No feedback.')).toBeTruthy()
+    expect(screen.getByText('trial')).toBeTruthy() // a trial Reel
   })
 
   it('shows why viewers left on the timeline, with confidence chips', async () => {

@@ -19,7 +19,7 @@ const SORTS = [
 ]
 // [param, label, [value, option label][]]; '' = all
 const FILTERS = [
-  ['type', 'Type', [['', 'All types'], ['REELS', 'Reels'], ['FEED', 'Feed'], ['STORY', 'Stories']]],
+  ['type', 'Type', [['', 'All types'], ['REELS', 'Reels'], ['TRIAL', 'Trial Reels'], ['FEED', 'Feed'], ['STORY', 'Stories']]],
   ['verdict', 'Verdict', [['', 'All verdicts'], ...['winner', 'promising', 'average', 'weak', 'inconclusive',
     'no_signal', 'too_early', 'incomplete', 'no_baseline'].map((v) => [v, v.replace('_', ' ')])]],
   ['tagged', 'Tags', [['', 'Tagged or not'], ['true', 'Studio (tagged)'], ['false', 'Untagged']]],
@@ -33,6 +33,11 @@ const detailPath = (id: string) => `/analytics/posts/${encodeURIComponent(id)}`
 
 function Verdict({ v }: { v: string }) {
   return <Chip tone={VERDICT_TONE[v]}>{v.replace('_', ' ')}</Chip>
+}
+
+/** A trial Reel (shown to non-followers first): scored against other trials only. */
+function Trial({ p }: { p: { group: string } }) {
+  return p.group === 'TRIAL' ? <Chip tone="explore" title="Trial Reel: shown to non-followers first, compared with other trials only">trial</Chip> : null
 }
 
 const COLUMNS: [string, (p: AnalyticsPost) => string][] = [
@@ -138,7 +143,7 @@ export default function Posts() {
                 <Card as="li" key={p.media_id} className="flex gap-3 text-sm">
                   {p.thumbnail_url && <img src={p.thumbnail_url} alt="" className="h-20 w-11 shrink-0 rounded-lg object-cover" />}
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><Verdict v={p.verdict} /><span className="text-muted">{day(p.posted_at)}</span></div>
+                    <div className="flex flex-wrap items-center gap-2"><Verdict v={p.verdict} /><Trial p={p} /><span className="text-muted">{day(p.posted_at)}</span></div>
                     <Link to={detailPath(p.media_id)} className={`mt-1 block min-h-11 truncate leading-[2.75rem] ${link}`}>{p.caption || 'Untitled post'}</Link>
                     <p className="text-xs text-muted">{COLUMNS.map(([k, v]) => `${k} ${v(p)}`).join(' · ')}</p>
                   </div>
@@ -163,7 +168,7 @@ export default function Posts() {
                       </Link>
                     </td>
                     <td className="p-2 whitespace-nowrap">{day(p.posted_at)}</td>
-                    <td className="p-2"><Verdict v={p.verdict} /></td>
+                    <td className="p-2"><span className="flex flex-wrap gap-1"><Verdict v={p.verdict} /><Trial p={p} /></span></td>
                     {COLUMNS.map(([k, v]) => <td key={k} className="p-2 text-right tabular-nums">{v(p)}</td>)}
                   </tr>
                 ))}
@@ -203,7 +208,7 @@ function Detail({ p }: { p: PostDetail }) {
   return (
     <>
       <p className="text-sm text-muted">
-        {day(p.posted_at)} · {humanize(p.group)}{p.deleted && ' · deleted on Instagram'}
+        {day(p.posted_at)} · {humanize(p.group === 'TRIAL' ? 'REELS' : p.group)}{p.deleted && ' · deleted on Instagram'} <Trial p={p} />
       </p>
       {p.caption && <p className="mt-1 whitespace-pre-line text-sm">{p.caption}</p>}
 
