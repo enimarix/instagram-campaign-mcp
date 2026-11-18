@@ -14,6 +14,7 @@ GOOD = {
     "handle": "@test",
     "logo": "logo.svg",
     "logo_png": "logo.png",
+    "wordmark_png": "wordmark.png",
     "colors": {
         "brand": "#10B981",
         "brand_light": "#34d399",
@@ -36,6 +37,7 @@ GOOD = {
 def _write(tmp_path, data):
     (tmp_path / "logo.svg").write_text("<svg/>", encoding="utf-8")
     (tmp_path / "logo.png").write_bytes(b"png")
+    (tmp_path / "wordmark.png").write_bytes(b"png")
     path = tmp_path / "brand.json"
     path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
     return path
@@ -56,6 +58,7 @@ def test_committed_file_loads():
     png = (DEFAULT_PATH.parent / brand["logo_png"]).read_bytes()
     assert png[:4] == b"\x89PNG"
     assert int.from_bytes(png[16:20], "big") == int.from_bytes(png[20:24], "big") == 512
+    assert (DEFAULT_PATH.parent / brand["wordmark_png"]).read_bytes()[:4] == b"\x89PNG"
     assert brand["colors"]["brand"] == "#10B981"
     assert (brand["fonts"]["display"], brand["fonts"]["display_weight"]) == ("Inter Tight", 900)
     assert brand["cta"]["never_show_price"] is True
@@ -136,6 +139,8 @@ def _set(*keys, value):
         (_del("logo_png"), "missing key(s): logo_png"),
         (_set("logo_png", value="missing.png"), "'logo_png' file not found"),
         (_set("logo_png", value="logo.svg"), "'logo_png' must be a .png"),
+        (_del("wordmark_png"), "missing key(s): wordmark_png"),
+        (_set("wordmark_png", value="logo.svg"), "'wordmark_png' must be a .png"),
         (_del("colors", "brand_light"), "missing 'brand_light'"),
         (_del("colors", "dark", "text"), "'colors.dark' is missing 'text'"),
         (_set("colors", "macros", value="#3E8EF7"), "'colors.macros' must be an object"),

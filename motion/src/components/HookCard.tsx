@@ -3,6 +3,7 @@ import { scriptAreas } from "../brand";
 import { colors, palette } from "../lib/palette";
 import { fitTextScale, intScale } from "../lib/pixel";
 import { loopFade, type Timeline } from "../lib/timeline";
+import { frenchSpaces } from "../lib/french";
 import { wrap } from "../lib/typewriter";
 import { PixelText } from "./PixelText";
 
@@ -24,7 +25,7 @@ export const HookCard = ({ text, timeline, maxScale = 8, color = colors.primary 
   const opacity = frame < timeline.scenes[0].endFrame ? 1 : loopFade(frame, timeline);
   if (!opacity) return null;
   const area = scriptAreas().hook;
-  const s = text.normalize("NFC");
+  const s = frenchSpaces(text.normalize("NFC"));
   const scale = fitTextScale((cols) => wrap(s, cols).length, area.width, area.height, maxScale);
   const px = intScale(scale);
   return (

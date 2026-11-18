@@ -5,6 +5,7 @@
   "handle": "@macrobody.fr",
   "logo": "logo.svg",
   "logo_png": "logo.png",
+  "wordmark_png": "wordmark.png",
   "colors": {
     "brand": "#10B981",
     "brand_light": "#34D399",
@@ -61,7 +62,7 @@
     "right_rail": 120
   },
   "_source": {
-    "brand": "The owner's macroBody identity (step 050, 2026-11-18): colours, fonts and logo from the macroBody app (docs/DESIGN.md, theme) and the owner's own Reels. Logo drawn in-repo after the app icon; logo.png is logo.svg at 512 px. Every template picks its own style: the 8-bit templates keep Sweetie 16 and Press Start 2P in motion/src/lib/palette.ts and font.ts.",
+    "brand": "The owner's macroBody identity (step 050, 2026-11-18): colours, fonts and logo from the macroBody app (docs/DESIGN.md, theme) and the owner's own Reels. Logo drawn in-repo after the app icon; logo.png (logo.svg at 512 px) and wordmark.png (the name in Inter Tight 900, 'Body' in emerald) come from motion/scripts/brand-images.mjs. Every template picks its own style: the 8-bit templates keep Sweetie 16 and Press Start 2P in motion/src/lib/palette.ts and font.ts.",
     "colors": "brand = emerald accent (white text on it); macros = the app's per-macro colours; light = main surfaces (bg, white cards, ink text); dark = dark mode. Video overlays (ffmpeg ops) use dark.text on dark.bg.",
     "fonts": "Family names plus 'files' (paths relative to this file). files[0] is the static Inter Tight Black TTF the ffmpeg ops (drawtext, captions) use: the local ffmpeg cannot read WOFF2. The WOFF2 files are the variable Inter / Inter Tight the motion templates load (motion/src/lib/font.ts). Licences in motion/ASSETS_LICENSES.md.",
     "cta": "End-card call to action: never a price, never 'lien en bio' unless the owner asks.",

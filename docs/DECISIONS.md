@@ -381,6 +381,11 @@ llms.txt) and the owner's own Reels (macrobody-video: README, logo, drawing code
   flat: no glow, no gradient. `brand/logo.svg` + `brand/logo.png` (512 px).
 - CTA (`cta`): "7 jours gratuits" + "macrobody.fr" (+ "Dispo sur App Store & Google
   Play"); never a price; never "lien en bio" unless the owner asks.
+- End card (`end_card` op): centred like the owner's end cards: logo tile, wordmark
+  ("macro" ink + "Body" emerald), optional tagline, "7 jours gratuits" in an emerald
+  pill, "macrobody.fr". Its `text` became an optional tagline (the CTA comes from the kit).
+- French typography: a no-break space before ? ! : ; » and after « in every text the
+  studio draws (ffmpeg ops and motion hook/captions), so a line never starts with a mark.
 - Address (`address`): "vous" by default (brand films, paper, informative), "tu" for
   humour and live-action. Agent skill `agent/skills/brand-voice`.
 - Styles are per template: the brand kit is no longer the 8-bit look. The 8-bit templates

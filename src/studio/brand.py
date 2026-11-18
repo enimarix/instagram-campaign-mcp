@@ -3,7 +3,9 @@ Brand kit (GOAL.md §3.1): `brand/brand.json`.
 
 Plain JSON so the agent and `motion/` (TypeScript) read the same file. Shape:
 `version`, `placeholder`, `name`, `handle`, `logo` (path relative to the JSON file),
-`logo_png` (a PNG of the logo: the local ffmpeg has no SVG reader),
+`logo_png` (a PNG of the logo: the local ffmpeg has no SVG reader), `wordmark_png` (the
+name in the display font, for the end card; both PNGs come from
+`motion/scripts/brand-images.mjs`),
 `colors` (`#RRGGBB`: `brand`, `brand_light`, and the blocks `macros`
 kcal/protein/fat/carbs/weight, `light` bg/card/ink/muted, `dark` bg/card/text/muted),
 `fonts` (`display`/`body` family names, `display_weight`, `files` paths relative to the
@@ -62,7 +64,8 @@ def _check(data: Any, path: Path) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise fail("top level must be an object")
     missing = [
-        k for k in ("version", "placeholder", "name", "handle", "logo", "logo_png", "colors",
+        k for k in ("version", "placeholder", "name", "handle", "logo", "logo_png", "wordmark_png",
+                    "colors",
                     "fonts", "cta", "address", "safe_zone") if k not in data
     ]
     if missing:
@@ -82,9 +85,10 @@ def _check(data: Any, path: Path) -> Dict[str, Any]:
             raise fail(f"{what} file not found: {path.parent / rel}")
 
     file_exists(data["logo"], "'logo'")
-    file_exists(data["logo_png"], "'logo_png'")
-    if not data["logo_png"].lower().endswith(".png"):
-        raise fail("'logo_png' must be a .png file")
+    for key in ("logo_png", "wordmark_png"):
+        file_exists(data[key], f"'{key}'")
+        if not data[key].lower().endswith(".png"):
+            raise fail(f"'{key}' must be a .png file")
 
     colors = data["colors"]
     if not isinstance(colors, dict):

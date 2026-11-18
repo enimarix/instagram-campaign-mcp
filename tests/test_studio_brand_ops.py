@@ -94,7 +94,7 @@ def test_hook_text_only_inside_its_window(tmp_path):
     x0, y0, x1, y1 = box
     assert y0 - SY <= recipe.TEXT_PAD + NEAR  # top of the safe area
     assert abs((x0 + x1) / 2 - (SX + SW / 2)) <= NEAR  # centred
-    assert 3 * 48 < y1 - y0 < 5 * 48  # wrapped over 3 lines, no blank line between them
+    assert 2 * 48 < y1 - y0 < 4 * 48  # wrapped over 2 lines, no blank line between them
 
 
 @needs_ffmpeg
