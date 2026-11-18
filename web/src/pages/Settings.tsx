@@ -229,6 +229,7 @@ export default function Settings() {
           ))}
         </Section>
 
+        <SettingsSection section="studio" title="Studio" />
         <SettingsSection section="ads" title="Ads" />
         <ClipsSection />
         <PermissionsSection />

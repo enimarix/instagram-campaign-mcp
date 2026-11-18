@@ -12,7 +12,8 @@ const SETTINGS: EditableSettings = {
     f({ name: 'ads_daily_cap', description: 'Most spend per owner-local day' }),
     f({ name: 'ads_objective', type: 'choice', value: 'OUTCOME_AWARENESS', choices: ['OUTCOME_AWARENESS', 'OUTCOME_ENGAGEMENT'] }),
     f({ name: 'ads_dsa_payor', type: 'text', value: 'Macrobody', default: null, overridden: true, max_length: 512 }),
-    f({ name: 'batch_size', section: 'studio', type: 'int', value: 10 }),
+    f({ name: 'batch_size', section: 'studio', type: 'int', value: 10, ge: 1, le: 50 }),
+    f({ name: 'humour_share', section: 'studio', type: 'float', value: 0.7, default: 0.5, overridden: true, le: 1 }),
   ],
 }
 const saved = (name: string, value: string): EditableSettings =>
@@ -98,5 +99,31 @@ describe('SettingsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset Ads dsa payor to default' }))
     await vi.waitFor(() => expect(screen.queryByText('set here')).toBeNull())
     expect(bodies[1]).toEqual({ reset: ['ads_dsa_payor'] })
+  })
+
+  it('studio: plain labels, shares in %, saved without a password, reset and error', async () => {
+    const bodies = stubApi([
+      [200, saved('humour_share', '0.35')],
+      [422, { error: 'invalid', field: 'batch_size', message: 'batch_size: Value error, below BATCH_FLOOR' }],
+      [200, { ...SETTINGS, fields: SETTINGS.fields.map((x) => ({ ...x, overridden: false, value: x.default })) }],
+    ])
+    render(<SettingsSection section="studio" title="Studio" />)
+    const studio = await screen.findByRole('region', { name: 'Studio' })
+    expect(within(studio).queryByText(/money cap/)).toBeNull()
+    expect(screen.queryByLabelText('Ads daily cap')).toBeNull()
+    expect(input('Videos made per day').value).toBe('10')
+    expect([input('Videos made per day').min, input('Videos made per day').max]).toEqual(['1', '50'])
+    expect(input('Share of funny videos (%)').value).toBe('70')
+    fireEvent.change(input('Share of funny videos (%)'), { target: { value: '35' } })
+    fireEvent.click(within(studio).getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() => expect(within(studio).getByRole('button', { name: 'Save' }).getAttribute('aria-busy')).toBeNull())
+    expect(input('Share of funny videos (%)').value).toBe('35')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.change(input('Videos made per day'), { target: { value: '2' } })
+    fireEvent.click(within(studio).getByRole('button', { name: 'Save' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Videos made per day: Value error, below BATCH_FLOOR')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Share of funny videos to default' }))
+    await vi.waitFor(() => expect(input('Share of funny videos (%)').value).toBe('50'))
+    expect(bodies).toEqual([{ values: { humour_share: '0.35' } }, { values: { batch_size: '2' } }, { reset: ['humour_share'] }])
   })
 })

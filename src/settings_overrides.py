@@ -47,6 +47,10 @@ EDITABLE: Dict[str, str] = {
     "meta_page_id": "ads",
     "ads_dsa_beneficiary": "ads",
     "ads_dsa_payor": "ads",
+    "batch_size": "studio",
+    "max_posts_per_day": "studio",
+    "explore_share": "studio",
+    "humour_share": "studio",
 }
 CAPS = ("ads_daily_cap", "ads_test_cap", "ads_lifetime_cap")
 REFRESH_EVERY = 30.0  # seconds, the worker's check
