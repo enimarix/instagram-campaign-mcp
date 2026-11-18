@@ -15,7 +15,7 @@ import {
   type Taxonomy,
 } from '../api/client'
 import CommentThread from './CommentThread'
-import ReactionCards from './ReactionCard'
+import ReactionCards from './ReactionCards'
 import ScheduleSheet, { ScheduledSlot } from './ScheduleSheet'
 import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
