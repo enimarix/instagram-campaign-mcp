@@ -70,7 +70,6 @@ export const Lights = ({ extent = 48 }: { extent?: number }) => (
       shadow-mapSize={[2048, 2048]}
       shadow-bias={-0.0004}
       shadow-normalBias={0.05}
-      shadow-radius={3}
       shadow-camera-left={-extent}
       shadow-camera-right={extent}
       shadow-camera-top={extent}
@@ -113,6 +112,7 @@ export const CameraRig = ({ kind, pose }: { kind: "iso" | "persp"; pose: Pose })
 };
 
 type MeshProps = Omit<ThreeElements["group"], "children"> & {
+  /** Build it once (module level or useMemo): a new array rebuilds the mesh. */
   voxels: Voxel[];
   /** Scale so the model's largest side is `fit` world units (default: 1 voxel = 1 unit). */
   fit?: number;
@@ -121,8 +121,9 @@ type MeshProps = Omit<ThreeElements["group"], "children"> & {
 
 /** One model = one merged mesh (built once per model, then only transformed). */
 export const VoxelMesh = ({ voxels, fit, build, ...group }: MeshProps) => {
+  const { noise, ao, center } = build ?? {};
   const { geometry, scale } = useMemo(() => {
-    const m = buildMesh(voxels, COLORS, build);
+    const m = buildMesh(voxels, COLORS, { noise, ao, center });
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(m.positions, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(m.normals, 3));
@@ -130,7 +131,7 @@ export const VoxelMesh = ({ voxels, fit, build, ...group }: MeshProps) => {
     g.setIndex(new THREE.BufferAttribute(m.indices, 1));
     g.computeBoundingSphere();
     return { geometry: g, scale: fit ? fit / Math.max(...m.size, 1) : 1 };
-  }, [voxels, fit, build]);
+  }, [voxels, fit, noise, ao, center]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   return (
     <group {...group}>
