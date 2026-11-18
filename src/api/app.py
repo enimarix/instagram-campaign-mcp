@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException
 from starlette.staticfiles import StaticFiles
 
-from .. import campaign
+from .. import campaign, settings_overrides
 from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
@@ -115,6 +115,9 @@ def create_app(
         if (auth.required and (path == "/api" or path.startswith("/api/"))
                 and path not in PUBLIC_PATHS and not auth.valid(token)):
             return JSONResponse(status_code=401, content={"error": "login_required"})
+        # Settings another process changed on the website (124) apply before the route runs.
+        if path.startswith("/api/") and hasattr(request.app.state, "store"):
+            settings_overrides.refresh(request.app.state.store, request.app.state.settings)
         return await call_next(request)
 
     @app.post("/api/login")

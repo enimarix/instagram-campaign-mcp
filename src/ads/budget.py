@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 import structlog
 
 from ..config import InstagramMCPSettings
+from ..settings_overrides import refresh
 from ..store import CampaignStore, to_iso, utcnow
 
 logger = structlog.get_logger(__name__)
@@ -191,6 +192,7 @@ def authorize_spend(
     if ad_entity_id is not None and not isinstance(ad_entity_id, str):
         raise BudgetRefused("invalid", "ad_entity_id must be a string")
     now = now or utcnow()
+    refresh(store, settings)  # the caps the owner set on the website a moment ago count
     currency = settings.ads_currency
     with store.immediate() as c:
         if _kill_state(c)["killed"]:

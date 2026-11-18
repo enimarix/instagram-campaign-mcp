@@ -37,10 +37,11 @@ describe('App', () => {
   it('renders the sidebar, the phone tab bar and the setup-mode banner on Settings', async () => {
     const health = { status: 'ok', instagram_configured: false, version: '1.0' }
     // every route answers the health body, except the lists the Settings page maps over
+    const objects: Record<string, unknown> = { '/api/settings': { version: 0, fields: [] }, '/api/ads/presets': { presets: [] } }
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
       new Response(JSON.stringify(
         ['/api/agent/schedule', '/api/reactions', '/api/pinned-accounts', '/api/dm-picks', '/api/permissions'].includes(url) || url.startsWith('/api/sources')
-          ? [] : health))))
+          ? [] : objects[url] ?? health))))
     render(
       <MemoryRouter initialEntries={['/settings']}>
         <App />

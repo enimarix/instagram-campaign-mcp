@@ -20,8 +20,9 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from . import campaign as camp
+from . import config, settings_overrides
 from .ads import agent as ads_agent
-from .config import get_settings
+from .config import InstagramMCPSettings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .learning import brief, facts, learnings, report
 from .learning import experiments as experiments_
@@ -92,8 +93,13 @@ def client() -> InstagramClient:
 def store() -> CampaignStore:
     global _store
     if _store is None:
-        _store = CampaignStore(get_settings().database_path)
+        _store = CampaignStore(config.get_settings().database_path)
     return _store
+
+
+def get_settings() -> InstagramMCPSettings:
+    """The settings with the website's overrides (124), checked at every tool call."""
+    return settings_overrides.refresh(store(), config.get_settings())
 
 
 def _err(e: InstagramAPIError) -> ToolError:

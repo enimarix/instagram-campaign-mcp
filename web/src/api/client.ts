@@ -282,6 +282,29 @@ export const setPublishingPaused = (paused: boolean) =>
 export type Storage = { media_bytes: number; db_bytes: number; free_bytes: number; last_backup: string | null }
 export const getStorage = () => request<Storage>('/api/storage')
 
+/** GET /api/settings (src/settings_overrides.py): an owner-editable setting and its form.
+ * Money is a decimal string. `default` is the .env value. */
+export type SettingField = {
+  name: string
+  section: string
+  value: string | number | null
+  default: string | number | null
+  overridden: boolean
+  type: 'money' | 'int' | 'float' | 'bool' | 'text' | 'choice'
+  choices?: string[]
+  ge?: number
+  gt?: number
+  le?: number
+  lt?: number
+  max_length?: number
+  description: string | null
+}
+export type EditableSettings = { version: number; fields: SettingField[] }
+export const getSettings = () => request<EditableSettings>('/api/settings')
+/** `password`: only when a money cap rises (the server answers 400 password_required). */
+export const saveSettings = (body: { values?: Record<string, unknown>; reset?: string[]; password?: string }) =>
+  send<EditableSettings>('PATCH', '/api/settings', body)
+
 /** GET /api/token. `valid`/`expires_at` null = unknown; valid with no expires_at = never expires. */
 export type TokenStatus = {
   configured: boolean
