@@ -13,7 +13,7 @@ import ipaddress
 import math
 import secrets
 import time
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 from ..config import InstagramMCPSettings
@@ -79,6 +79,23 @@ class Auth:
     def logout(self, token: Optional[str]) -> None:
         if token:
             self._sessions.pop(_digest(token), None)
+
+
+def reauth_error(auth: Auth, password: Any) -> Optional[Tuple[int, Dict[str, Any]]]:
+    """Ask the website password again before a money action (GOAL.md §5.4: ads unkill in
+    091, budget approval in 094). None = confirmed, else (HTTP status, JSON body).
+
+    Without UI_PASSWORD nothing can confirm, so the action is refused.
+    """
+    if not auth.required:
+        return 403, {"error": "password_not_set"}
+    if not isinstance(password, str) or not password:
+        return 400, {"error": "password_required"}
+    try:
+        ok = auth.check_password(password)
+    except Locked as e:
+        return 429, {"error": "locked", "retry_after": e.retry_after}
+    return None if ok else (403, {"error": "bad_password"})
 
 
 def _origin(url: str) -> tuple:

@@ -8,6 +8,17 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: Ad spend caps default to 0 and re-enabling spend needs UI_PASSWORD (091)
+`ADS_DAILY_CAP`, `ADS_TEST_CAP` and `ADS_LIFETIME_CAP` default to 0, so nothing can be
+authorized until the owner sets them (in `ADS_CURRENCY`, default EUR until H9 names the
+account's currency; it must match the ad account). Turning the kill switch off
+(`POST /api/ads/unkill`) asks the website password again; without `UI_PASSWORD` it is
+refused (`password_not_set`), and 094's budget approval uses the same check
+(`auth.reauth_error`). Turning it on needs no password. Amounts are Decimals: floats are
+refused. While a test runs its authorization and Meta's reported spend both count against
+the caps (over-counting) until 095 reconciles.
+Reason: money is the one thing a bug can lose for good; every unsure case refuses.
+
 ## 2026-11-18: AI-made videos are published with Instagram's AI label, or not at all (120)
 Replaces GOAL §5.6's fallback ("set the label by hand in the app"): the Graph API can set
 it (`is_ai_generated`, changelog 2026-06-22). `studio.publish.ai_generated(asset, idea)`

@@ -27,6 +27,7 @@ from ..config import InstagramMCPSettings, get_settings
 from ..instagram_client import InstagramAPIError, InstagramClient
 from ..store import CampaignStore
 from . import (
+    ads,
     agent,
     assets,
     bench,
@@ -165,6 +166,7 @@ def create_app(
 
     app.state.media_root = settings.media_root
     app.state.settings = settings
+    app.state.auth = auth
     app.include_router(assets.router)
     app.include_router(media.router)
     app.include_router(token_routes.router)
@@ -188,6 +190,7 @@ def create_app(
     app.include_router(dm_picks.router)
     app.include_router(downloader_router)
     app.include_router(alerts_router)
+    app.include_router(ads.router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 

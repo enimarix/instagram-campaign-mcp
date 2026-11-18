@@ -15,6 +15,7 @@ organic posts, so this store keeps:
 - account_snapshots: one account row per owner-local day (followers, reach, views)
 - graph_requests: Graph API request times, the hourly budget shared by all processes
 - render_jobs: the render queue (src/studio/render.py, worker render loop)
+- ad_spend_ledger: ad money reserved, released and reported (src/ads/budget.py)
 """
 
 from __future__ import annotations
@@ -438,6 +439,27 @@ CREATE UNIQUE INDEX idx_permission_open ON permission_requests(source_id)
 ALTER TABLE sources ADD COLUMN ads_allowed INTEGER;
 """
 
+# Migration 18: the ad spend ledger (091, src/ads/budget.py). Amounts are Decimal strings
+# in `currency`. `authorized` reserves money before a spend, `released` (one per
+# authorization) frees it, `reported` is spend Meta reports (095). Rows are never updated;
+# created_at is always store.to_iso() (budget.py compares it as text for the daily cap).
+AD_SPEND_SCHEMA = """
+CREATE TABLE ad_spend_ledger (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind             TEXT NOT NULL CHECK (kind IN ('authorized','reported','released')),
+    amount           TEXT NOT NULL,
+    currency         TEXT NOT NULL,
+    test_id          INTEGER,
+    ad_entity_id     TEXT,
+    authorization_id INTEGER REFERENCES ad_spend_ledger(id),
+    reason           TEXT NOT NULL,
+    created_at       TEXT NOT NULL,
+    CHECK (kind <> 'released' OR authorization_id IS NOT NULL)
+);
+CREATE UNIQUE INDEX idx_spend_released ON ad_spend_ledger(authorization_id)
+    WHERE kind = 'released';
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -445,7 +467,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
-                         PERMISSIONS_SCHEMA]
+                         PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -664,6 +686,14 @@ class CampaignStore:
                 except Exception:
                     conn.rollback()
                     raise
+
+    @contextmanager
+    def immediate(self) -> Iterator[sqlite3.Connection]:
+        """_tx() that takes the write lock up front (BEGIN IMMEDIATE): a read-check-write
+        no other connection can interleave with (the ad budget guard, 091)."""
+        with self._tx() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            yield conn
 
     def close(self) -> None:
         """Close every connection this store opened, from any thread, each once its running
