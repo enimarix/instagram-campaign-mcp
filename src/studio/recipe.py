@@ -661,16 +661,17 @@ def recipe_timeline(recipe: Recipe, duration_s: float,
     marked `clip:`, so the clip's beats and our overlays can be told apart."""
     length = duration_s - sum(op.duration_s for op in recipe.ops if isinstance(op, EndCard))
     start = next((op.start_s for op in recipe.ops if isinstance(op, Trim)), 0.0)
-    raw: List[Dict[str, Any]] = []
+    clips: List[Dict[str, Any]] = []
     for ev in clip:
         if "t" in ev and ev["t"] + ev["d"] >= start:  # no t: the "+N more" marker
-            raw += _window(max(ev["t"] - start, 0.0), ev["t"] + ev["d"] - start, length,
-                           "clip", ev["e"])
+            clips += _window(max(ev["t"] - start, 0.0), ev["t"] + ev["d"] - start, length,
+                             "clip", ev["e"])
+    raw: List[Dict[str, Any]] = []
     for op in recipe.ops:
         raw += op.events(length)
         if isinstance(op, EndCard):
             length += op.duration_s
-    return compress_timeline(raw)
+    return compress_timeline(raw + clips)  # stable sort: our overlays first at the same t
 
 
 def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path) -> None:

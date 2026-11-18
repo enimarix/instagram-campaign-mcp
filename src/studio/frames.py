@@ -3,7 +3,8 @@ Self-review (step 057): the agent sees its own work as small JPEG frames.
 
 The locked-down agent (step 058) cannot read `data/media`, so the MCP tools hand it images:
 `asset_frames` for a rendered asset (plus its QC result), `preview_images` for the stills of
-`preview_motion`, and (step 119) remix.clip_frames for a downloaded clip. Frames are cached under `<media root>/frames/`, so asking twice is free.
+`preview_motion`, and (step 119) remix.clip_frames for a downloaded clip. Frames are
+cached under `<media root>/frames/`, so asking twice is free.
 """
 
 from __future__ import annotations
