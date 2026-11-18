@@ -62,7 +62,7 @@ def test_validate_props_uses_the_templates_own_message():
 
 @needs_motion
 @pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
-                                      "PixelSkit", "VoxelQuest"])
+                                      "PixelSkit", "VoxelQuest", "PaperStory"])
 def test_schema_events_give_every_template_a_timeline(template):
     v = motion.validate_props(template, _example(template.lower()))
     timeline = recipe.compress_timeline(v["events"])
@@ -132,10 +132,11 @@ def test_script_gives_one_line_per_voice_timing(template, props):
 def test_schema_export_gives_every_template_a_style():
     out = motion._node("schemas.mjs", [], timeout_s=motion.SCHEMA_TIMEOUT_S)
     styles = {s["id"]: s["label"] for s in out["styles"]}
-    assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit"}
+    assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier"}
     by_id = {t["id"]: t["style"] for t in out["templates"]}
     assert set(by_id.values()) <= set(styles)
     assert by_id["VoxelQuest"] == "voxel" and by_id["FactQuest"] == "pixel"
+    assert by_id["PaperStory"] == "paper"
 
 
 @needs_motion
@@ -147,6 +148,28 @@ def test_validate_props_voxelquest_examples_and_no_price():
     bad = {**_example("voxelquest"), "outro": "Seulement 4,99 € par mois"}
     with pytest.raises(ValueError, match="no price on screen"):
         motion.validate_props("VoxelQuest", bad)
+
+
+@needs_motion
+def test_validate_props_paperstory_examples_events_and_no_price():
+    for name in ("paperstory", "paperstory-proteines", "paperstory-moyenne"):
+        v = motion.validate_props("PaperStory", _example(name))
+        assert 20 <= v["durationInFrames"] / v["fps"] <= 30, name
+        assert v["coverFrame"] <= 2.5 * v["fps"]  # the hook has landed by the cover
+        assert any(e["e"].startswith("end card (paper)") for e in v["events"])
+        assert any(e["e"].startswith("payoff") for e in v["events"])
+    bad = {**_example("paperstory"), "outro": "Seulement 4,99 € par mois"}
+    with pytest.raises(ValueError, match="no price on screen"):
+        motion.validate_props("PaperStory", bad)
+
+
+def test_paperstory_script_joins_the_strips_like_the_template():
+    # Same lines as sceneLine in motion/src/templates/PaperStory/schema.ts (test/paperstory.test.ts).
+    lines = motion.SCRIPTS["PaperStory"](_example("paperstory"))
+    assert lines[:2] == ["21 h. Il vous reste 308 kcal. Vous mangez quoi ?",
+                         "Trois parts de pizza ? Trop."]
+    assert lines[-1] == "Terminez la journée pile sur vos objectifs."
+    assert motion._paper_line(["Léa mange", "2 000 kcal", "comme sur l'étiquette."]) ==         "Léa mange 2 000 kcal comme sur l'étiquette."
 
 
 @needs_motion

@@ -1,0 +1,49 @@
+{
+  "character": "paul",
+  "hook": {
+    "labels": ["Paul fait du sport.", { "text": "Et ses protéines ?", "tone": "yellow", "size": "l" }],
+    "aside": "(indice : il en manque)",
+    "sheet": "peach",
+    "prop": "plate",
+    "foods": ["egg", "bread"]
+  },
+  "beats": [
+    {
+      "kind": "problem",
+      "labels": ["Au petit-déj : un œuf.", { "text": "6 g de protéines.", "tone": "red" }],
+      "prop": "fridge",
+      "options": [{ "food": "egg", "label": "≈ 6 g", "note": "un œuf", "verdict": "too_little" }]
+    },
+    {
+      "kind": "problem",
+      "labels": ["Son repère ?", { "text": "Environ 120 g par jour.", "tone": "ink" }],
+      "prop": "none",
+      "options": [{ "food": "drumstick", "label": "120 g / jour", "note": "à 75 kg", "verdict": "none" }],
+      "aside": "(1,6 g par kg)"
+    },
+    {
+      "kind": "app",
+      "labels": ["macroBody calcule sa cible…", { "text": "…et suit chaque repas.", "tone": "brand" }],
+      "value": "120 g",
+      "unit": "protéines / jour",
+      "button": "Ajouter un repas"
+    },
+    {
+      "kind": "payoff",
+      "labels": ["Cette semaine :"],
+      "value": "121 g",
+      "of": "/ 120 g par jour",
+      "stamp": "TENU.",
+      "foods": ["drumstick", "egg", "yogurt"]
+    }
+  ],
+  "outro": "Vos protéines, enfin au bon niveau.",
+  "address": "vous",
+  "accent": "protein",
+  "citations": [
+    { "url": "https://bjsm.bmj.com/content/52/6/376", "title": "Morton et al. 2018, Br J Sports Med: protein beyond ~1.6 g/kg/day adds no further gain (75 kg x 1.6 = 120 g)" },
+    { "url": "https://fdc.nal.usda.gov/food-details/171287/nutrients", "title": "USDA FoodData Central: Egg, whole, raw (12.6 g protein / 100 g, large egg 50 g = about 6 g)" }
+  ],
+  "music": "music-kalimba",
+  "loop": false
+}

@@ -1,0 +1,45 @@
+{
+  "character": "lea",
+  "hook": {
+    "labels": ["Léa mange", { "text": "2 000 kcal", "tone": "brand", "size": "l" }, { "text": "comme sur l'étiquette.", "tone": "yellow" }],
+    "aside": "(c'est une moyenne)",
+    "sheet": "cream",
+    "prop": "plate",
+    "foods": ["rice", "avocado", "apple"]
+  },
+  "beats": [
+    {
+      "kind": "problem",
+      "labels": ["Trois semaines plus tard…", { "text": "rien ne bouge.", "tone": "red" }],
+      "prop": "clock",
+      "time": "08:00",
+      "aside": "(et la motivation non plus)"
+    },
+    {
+      "kind": "app",
+      "labels": ["macroBody mesure", { "text": "sa vraie dépense…", "tone": "brand" }],
+      "button": "Mon check-in"
+    },
+    {
+      "kind": "app",
+      "labels": ["…et recalcule", { "text": "chaque semaine.", "tone": "brand" }],
+      "value": "1 850",
+      "unit": "kcal / jour",
+      "button": "Semaine 2"
+    },
+    {
+      "kind": "payoff",
+      "labels": [{ "text": "Enfin, ça bouge.", "tone": "brand", "size": "l" }],
+      "stamp": "BRAVO !",
+      "aside": "(sans deviner)"
+    }
+  ],
+  "outro": "Votre corps n'est pas une moyenne.",
+  "address": "vous",
+  "accent": "kcal",
+  "citations": [
+    { "url": "https://eur-lex.europa.eu/eli/reg/2011/1169/oj", "title": "Regulation (EU) No 1169/2011, Annex XIII Part B: reference intake for an average adult = 8 400 kJ / 2 000 kcal" }
+  ],
+  "music": "music-kalimba",
+  "loop": false
+}

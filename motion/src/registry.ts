@@ -8,6 +8,9 @@ import { dialogStorySchema } from "./templates/DialogStory/schema";
 import { FactQuest, timelineOf as factQuestTimeline } from "./templates/FactQuest/FactQuest";
 import { factQuestSchema } from "./templates/FactQuest/schema";
 import { Hello, helloSchema } from "./templates/Hello";
+import { PaperStory } from "./templates/PaperStory/PaperStory";
+import { coverFrame as paperStoryCover, transitionInto } from "./templates/PaperStory/layout";
+import { paperStorySchema, timelineOf as paperStoryTimeline } from "./templates/PaperStory/schema";
 import { PixelSkit, timelineOf as pixelSkitTimeline } from "./templates/PixelSkit/PixelSkit";
 import { pixelSkitSchema } from "./templates/PixelSkit/schema";
 import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
@@ -22,7 +25,7 @@ export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -269,6 +272,48 @@ export const templates = {
       return [
         ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (voxel): mB tile assembles, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? p.beats[p.beats.length - 1].form ?? p.toForm}` },
+      ];
+    },
+  }),
+  PaperStory: template({
+    style: "paper",
+    component: PaperStory,
+    schema: paperStorySchema,
+    defaultProps: {
+      character: "ines",
+      hook: {
+        labels: ["21 h. Il vous reste", { text: "308 kcal", tone: "brand", size: "l" }, { text: "Vous mangez quoi ?", tone: "yellow", size: "m" }],
+        aside: "(spoiler : pas une pizza)",
+        prop: "clock",
+        time: "21:00",
+      },
+      beats: [
+        { kind: "problem", labels: ["Une pomme ?", { text: "Pas assez.", tone: "red", size: "m" }], prop: "fridge", time: "21:00", options: [{ food: "apple", label: "≈ 95 kcal", note: "environ", verdict: "too_little" }] },
+        { kind: "app", labels: ["Inès ouvre l'app."], value: "308", unit: "kcal restantes", button: "Compléter ma journée" },
+        { kind: "payoff", labels: ["Fin de journée :"], value: "2 236", of: "/ 2 238 kcal", stamp: "PILE." },
+      ],
+      outro: "Terminez la journée pile sur vos objectifs.",
+      address: "vous",
+      accent: "brand",
+      citations: [{ url: "https://fdc.nal.usda.gov/food-details/171688/nutrients", title: "USDA FoodData Central: Apples, raw, with skin (52 kcal / 100 g, a medium apple 182 g = about 95 kcal)" }],
+      music: "music-kalimba",
+      loop: false,
+    },
+    durationInFrames: (p) => paperStoryTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => paperStoryCover(p, FPS),
+    events: (p) => {
+      const { timeline, endStart } = paperStoryTimeline(p, FPS);
+      const who = p.character;
+      const beat = (b: (typeof p.beats)[number], i: number) => {
+        const into = `${transitionInto(i + 1)} in`;
+        if (b.kind === "problem") return `problem, ${into} (${b.prop}${b.options.length ? `: ${b.options.map((o) => `${o.food} ${o.label} ${o.verdict}`).join(", ")}` : `, ${who} shrugs`})`;
+        if (b.kind === "app") return b.rows ? `app list, ${into} (${b.rows.length} rows solve their grams${b.total ? `, ${b.total}` : ""})` : `app phone, ${into} (ring ${b.value ?? "fills"}, tap « ${b.button} »)`;
+        return `payoff, ${into} (${b.value ? `ring ${b.value} ${b.of ?? ""}`.trim() : `${who} cheers`}${b.stamp ? `, stamp ${b.stamp}` : ""})`;
+      };
+      const total = timeline.totalFrames;
+      return [
+        ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (paper): kraft cover tears open, mB tile, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? who}` },
       ];
     },
   }),

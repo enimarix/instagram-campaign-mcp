@@ -20,6 +20,7 @@ import functools
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -47,6 +48,20 @@ STILL_TIMEOUT_S = 120.0
 RENDER_CONCURRENCY = 4  # Chrome tabs per render; 2 renders in parallel (step 006a)
 TAIL_CHARS = 2000
 
+def _paper_line(labels: Sequence[Any]) -> str:
+    """A PaperStory scene's spoken line: its strips in order, a full stop added where a strip
+    ends without punctuation and the next starts a sentence (= sceneLine in
+    motion/src/templates/PaperStory/schema.ts)."""
+    line = ""
+    for label in labels:
+        text = label if isinstance(label, str) else label["text"]
+        if line and not re.search(r"[.!?…:;,]$", line) and text[:1].isupper():
+            line = f"{line}. {text}"
+        else:
+            line = f"{line} {text}" if line else text
+    return line
+
+
 # Script lines (hook first) of templates with a voice, in the order of `voice.lines` (each
 # schema's refine). The voice reads the text the viewer sees, as is.
 SCRIPTS = {
@@ -57,6 +72,9 @@ SCRIPTS = {
                               *([p["moral"]] if p.get("moral") else [])],
     "PixelSkit": lambda p: [p["hook"], *(b["line"] for b in p["beats"])],
     "VoxelQuest": lambda p: [p["hook"], *(b["line"] for b in p["beats"]),
+                             *([p["outro"]] if p.get("outro") else [])],
+    "PaperStory": lambda p: [_paper_line(p["hook"]["labels"]),
+                             *(_paper_line(b["labels"]) for b in p["beats"]),
                              *([p["outro"]] if p.get("outro") else [])],
 }
 
