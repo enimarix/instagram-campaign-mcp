@@ -127,8 +127,9 @@ def _qc_spike(store: CampaignStore) -> List[Dict[str, Any]]:
     if not rows or len(failed) < QC_SPIKE * len(rows):
         return []
     return [_alert("qc_spike", rows[0][0], "warn",
-                   f"{len(failed)} of {len(rows)} videos of the {rows[0][0]} batch failed QC",
-                   "More than usual: check the render log and the templates.", "/agent",
+                   f"{len(failed)} of {len(rows)} videos of the {rows[0][0]} batch failed",
+                   "Quality check or render failures, more than usual: check the render log "
+                   "and the templates.", "/agent",
                    max(r[3] for r in failed))]
 
 
