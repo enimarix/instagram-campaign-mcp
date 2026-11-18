@@ -299,13 +299,16 @@ def fix_transcript(store: CampaignStore, settings: InstagramMCPSettings, asset_i
         if len(text) > MAX_CAPTION:
             raise ValueError(f"line {n} is longer than {MAX_CAPTION} characters")
         lines[i]["text"] = text
-    store.patch_source_stats(source["id"], {"transcript": {"lines": lines}})
-    captions = transcript_captions(store.get_source(source["id"]), start, end)
+    fixed = {**source, "stats": {**source["stats"],
+                                 "transcript": {**source["stats"]["transcript"], "lines": lines}}}
     ops = list(env["recipe"]["ops"])
     # Replace the captions op, or put one where build_remix does (before credit and logo).
     i = next((i for i, op in enumerate(ops) if op["op"] in ("captions", "credit", "logo")),
              len(ops))
     had = i < len(ops) and ops[i]["op"] == "captions"
-    ops[i:i + had] = [{**(ops[i] if had else {"op": "captions"}), "lines": captions}]
-    return render.rerender(store, settings.media_root, asset_id,
-                           {**env, "recipe": {**env["recipe"], "ops": ops}})
+    ops[i:i + had] = [{**(ops[i] if had else {"op": "captions"}),
+                       "lines": transcript_captions(fixed, start, end)}]
+    new = render.validate_recipe({**env, "recipe": {**env["recipe"], "ops": ops}},
+                                 settings.media_root)  # nothing is saved if a line is refused
+    store.patch_source_stats(source["id"], {"transcript": {"lines": lines}})
+    return render.rerender(store, settings.media_root, asset_id, new)

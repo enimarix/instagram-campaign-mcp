@@ -380,7 +380,8 @@ def test_fix_transcript_validates_and_rebuilds_captions(tc, store, cfg, tts, ree
     a, _ = _remix_asset(store, cfg)
     url = f"/api/assets/{a['id']}/transcript"
     for texts, why in ((["one"], "send 2 lines"), (["ok", "  "], "line 2 is empty"),
-                       (["x" * 81, "ok"], "longer than 80")):
+                       (["x" * 81, "ok"], "longer than 80"),
+                       (["🙂", "ok"], "emoji are removed")):  # refused by the recipe
         r = tc.post(url, json={"texts": texts})
         assert r.status_code == 422 and why in r.json()["message"], r.text
     source_id = store.get_idea(a["idea_id"])["source_id"]
