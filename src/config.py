@@ -15,11 +15,12 @@ Set IG_MCP_ENV_FILE to use a different .env file.
 """
 
 import os
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -387,6 +388,26 @@ class InstagramMCPSettings(BaseSettings):
     meta_ad_account_id: Optional[str] = Field(
         None, description="Ad account id, digits only (the client adds act_)"
     )
+    # Budget guard (src/ads/budget.py): money in the ad account's currency. 0 = no spend.
+    ads_daily_cap: Decimal = Field(Decimal(0), ge=0, description="Most spend per owner-local day")
+    ads_test_cap: Decimal = Field(Decimal(0), ge=0, description="Most spend per A/B test")
+    ads_lifetime_cap: Decimal = Field(Decimal(0), ge=0, description="Most spend ever")
+    # ponytail: EUR until H9 names the account's currency; it must match the ad account's.
+    ads_currency: str = Field("EUR", description="ISO 4217 code of the ad account currency")
+
+    @field_validator("ads_currency")
+    @classmethod
+    def validate_ads_currency(cls, v):
+        v = v.strip().upper()
+        if not (len(v) == 3 and v.isascii() and v.isalpha()):
+            raise ValueError(f"ADS_CURRENCY must be an ISO 4217 code like EUR, got {v!r}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_ads_caps(self):
+        if self.ads_daily_cap > self.ads_lifetime_cap:
+            raise ValueError("ADS_DAILY_CAP must not be above ADS_LIFETIME_CAP")
+        return self
 
     @field_validator("meta_ad_account_id")
     @classmethod
