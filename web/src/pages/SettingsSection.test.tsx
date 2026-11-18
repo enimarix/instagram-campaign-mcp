@@ -1,14 +1,17 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditableSettings, SettingField } from '../api/client'
+import type { AdPresetValue, EditableSettings, SettingField } from '../api/client'
 import SettingsSection from './SettingsSection'
 
 const f = (over: Partial<SettingField> & Pick<SettingField, 'name'>): SettingField => ({
   section: 'ads', value: '10', default: '10', overridden: false, type: 'money', ge: 0, description: null, ...over,
 })
+const FR: AdPresetValue = { id: 'fr_reels', label: 'France, Reels', countries: ['FR'], age_min: 18, age_max: null, placements: ['reels'] }
+const BE: AdPresetValue = { ...FR, id: 'be_feed', label: 'Belgium, Feed', countries: ['BE'], placements: ['stream'] }
 const SETTINGS: EditableSettings = {
   version: 1,
   fields: [
+    f({ name: 'ads_presets', type: 'presets', value: [FR, BE], default: [FR, BE], ge: undefined }),
     f({ name: 'ads_daily_cap', description: 'Most spend per owner-local day' }),
     f({ name: 'ads_objective', type: 'choice', value: 'OUTCOME_AWARENESS', choices: ['OUTCOME_AWARENESS', 'OUTCOME_ENGAGEMENT'] }),
     f({ name: 'ads_dsa_payor', type: 'text', value: 'Macrobody', default: null, overridden: true, max_length: 512 }),
@@ -27,7 +30,6 @@ function stubApi(patches: Reply[]) {
     const key = `${init?.method ?? 'GET'} ${url}`
     let reply: Reply = [404, { error: 'not_found' }]
     if (key === 'GET /api/settings') reply = [200, SETTINGS]
-    if (key === 'GET /api/ads/presets') reply = [200, { presets: [{ id: 'fr', label: 'France, Reels', varies: [] }] }]
     if (key === 'PATCH /api/settings') {
       bodies.push(JSON.parse(String(init?.body)))
       reply = patches.shift() ?? reply
@@ -46,7 +48,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const input = (label: string) => screen.getByLabelText(label) as HTMLInputElement
+const input = (label: string, i?: number) =>
+  (i === undefined ? screen.getByLabelText(label) : screen.getAllByLabelText(label)[i]) as HTMLInputElement
 
 describe('SettingsSection', () => {
   it('edits and saves only what changed, in its own section', async () => {
@@ -55,7 +58,7 @@ describe('SettingsSection', () => {
     const ads = await screen.findByRole('region', { name: 'Ads' })
     expect(screen.queryByLabelText('Batch size')).toBeNull()
     expect(within(ads).getByText('Most spend per owner-local day')).toBeTruthy()
-    expect(await within(ads).findByText(/France, Reels/)).toBeTruthy()
+    expect(await within(ads).findByDisplayValue('France, Reels')).toBeTruthy()
     expect((within(ads).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(input('Ads objective'), { target: { value: 'OUTCOME_ENGAGEMENT' } })
     fireEvent.click(within(ads).getByRole('button', { name: 'Save' }))
@@ -125,5 +128,54 @@ describe('SettingsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset Share of funny videos to default' }))
     await vi.waitFor(() => expect(input('Share of funny videos (%)').value).toBe('50'))
     expect(bodies).toEqual([{ values: { humour_share: '0.35' } }, { values: { batch_size: '2' } }, { reset: ['humour_share'] }])
+  })
+
+  it('presets: edit, add, remove, save without a password, refusals and reset', async () => {
+    const withPresets = (value: AdPresetValue[], version: number, overridden = true): EditableSettings =>
+      ({ version, fields: SETTINGS.fields.map((x) => (x.name === 'ads_presets' ? { ...x, value, overridden } : x)) })
+    const DE: AdPresetValue = { id: 'germany_young', label: 'Germany young', countries: ['DE', 'AT'], age_min: 18, age_max: 30, placements: ['reels', 'story'] }
+    const bodies = stubApi([
+      [422, { error: 'invalid', field: 'ads_presets', message: "ads_presets.2.countries.0: Value error, 'DEU' is not a 2-letter country code like FR" }],
+      [422, { error: 'invalid', field: 'ads_presets', message: 'ads_presets: Value error, preset be_feed is used by running test 3: remove it once the test ends' }],
+      [200, withPresets([{ ...FR, label: 'France only' }, DE], 2)],
+      [200, withPresets([FR, BE], 3, false)],
+    ])
+    render(<SettingsSection section="ads" title="Ads" />)
+    let box = await screen.findByRole('region', { name: 'Who sees the ads' }) // remounted by each save
+    const save = () => within(box).getByRole('button', { name: 'Save presets' }) as HTMLButtonElement
+    expect(save().disabled).toBe(true)
+    expect(input('Countries (2-letter codes, comma separated)', 1).value).toBe('BE')
+    expect((within(box).getByRole('group', { name: 'Placements of preset 2' }).querySelector('input:checked')?.parentElement?.textContent)).toBe('Feed')
+    fireEvent.change(input('Name', 0), { target: { value: 'France only' } })
+    fireEvent.click(within(box).getByRole('button', { name: 'Add preset' }))
+    const third = within(box).getByRole('group', { name: 'Preset 3' })
+    fireEvent.change(within(third).getByLabelText('Name'), { target: { value: 'Germany young' } })
+    fireEvent.change(within(third).getByLabelText('Countries (2-letter codes, comma separated)'), { target: { value: 'DEU' } })
+    fireEvent.change(within(third).getByLabelText('Oldest (empty = 65+)'), { target: { value: '30' } })
+    fireEvent.click(within(third).getByLabelText('Stories'))
+    fireEvent.click(save())
+    expect((await within(box).findByRole('alert')).textContent).toBe("Preset 3: 'DEU' is not a 2-letter country code like FR")
+    fireEvent.change(within(third).getByLabelText('Countries (2-letter codes, comma separated)'), { target: { value: 'de, AT' } })
+    fireEvent.click(within(box).getByRole('button', { name: 'Remove preset 2' }))
+    fireEvent.click(save())
+    expect(await within(box).findByText(/be_feed is used by running test 3/)).toBeTruthy()
+    fireEvent.click(save())  // the owner tries again once the test ended
+    await vi.waitFor(() => expect(screen.getByRole('region', { name: 'Who sees the ads' })).not.toBe(box))
+    box = screen.getByRole('region', { name: 'Who sees the ads' })
+    expect(within(box).getByText('set here')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull() // presets are not money
+    expect(within(box).queryByRole('alert')).toBeNull()
+    expect(within(box).getAllByRole('group', { name: /^Preset / })).toHaveLength(2)
+    fireEvent.click(within(box).getByRole('button', { name: 'Reset to default' }))
+    await vi.waitFor(() => expect(screen.getByRole('region', { name: 'Who sees the ads' })).not.toBe(box))
+    expect(within(screen.getByRole('region', { name: 'Who sees the ads' })).queryByText('set here')).toBeNull()
+    expect(input('Name', 1).value).toBe('Belgium, Feed')
+    const sentDe = { id: 'germany_young', label: 'Germany young', countries: ['de', 'AT'], age_min: 18, age_max: 30, placements: ['reels', 'story'] }
+    expect(bodies).toEqual([
+      { values: { ads_presets: [{ ...FR, label: 'France only' }, BE, { ...sentDe, countries: ['DEU'] }] } },
+      { values: { ads_presets: [{ ...FR, label: 'France only' }, sentDe] } },
+      { values: { ads_presets: [{ ...FR, label: 'France only' }, sentDe] } },
+      { reset: ['ads_presets'] },
+    ])
   })
 })

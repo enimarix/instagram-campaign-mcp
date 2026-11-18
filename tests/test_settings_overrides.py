@@ -137,6 +137,47 @@ def test_money_changes_are_audited(store):
                                            "ads_dsa_payor": [None, "Macrobody"]}})]
 
 
+# --- Ad presets (127) -----------------------------------------------------------------
+def _presets(n=1, **kw):
+    return [{"id": f"p{i}", "label": "France", "countries": ["FR"], "placements": ["reels"],
+             **kw} for i in range(n)]
+
+
+def test_ad_presets_validated(store):
+    s = _settings()
+    for bad, message in ((_presets(countries=["FRA"]), "ads_presets.0.countries.*'FRA'"),
+                         (_presets(countries=[]), "at least 1 item"),
+                         (_presets(age_min=40, age_max=30), "oldest age"),
+                         (_presets(age_min=17), "greater than or equal to 18"),
+                         (_presets(placements=[]), "ads_presets.0.placements"),
+                         (_presets(placements=["feed"]), "'reels'"),
+                         (_presets(2, id="same"), "two presets have the id 'same'"),
+                         (_presets(id="Not a slug"), "ads_presets.0.id"),
+                         (_presets(11), "at most 10"),
+                         ([], "at least 1 item")):
+        with pytest.raises(ov.SettingsInvalid, match=message) as e:
+            ov.update(store, s, {"ads_presets": bad})
+        assert e.value.field == "ads_presets"
+    assert store.get_state(ov.KEY) is None  # nothing stored
+    assert [p.id for p in s.ads_presets] == ["fr_reels", "fr_feed_reels", "francophone_reels"]
+
+
+def test_ad_presets_edit_reset_and_audit(store):
+    s = _settings()
+    out = ov.update(store, s, {"ads_presets": _presets(countries="be, fr, BE")})  # no password
+    field = _field(out, "ads_presets")
+    assert field["type"] == "presets" and field["overridden"] and len(field["default"]) == 3
+    assert field["value"] == [{"id": "p0", "label": "France", "countries": ["BE", "FR"],
+                               "age_min": 18, "age_max": None, "placements": ["reels"]}]
+    (row,) = budget.audit_log(store)["rows"]
+    assert row["action"] == "settings" and row["actor"] == "owner"
+    old, new = row["detail"]["changes"]["ads_presets"]
+    assert [p["id"] for p in old] == ["fr_reels", "fr_feed_reels", "francophone_reels"]
+    assert new == field["value"]
+    out = ov.update(store, s, {}, reset=["ads_presets"])
+    assert not _field(out, "ads_presets")["overridden"] and len(s.ads_presets) == 3
+
+
 # --- Studio (125) ----------------------------------------------------------------------
 STUDIO = {"batch_size": 25, "max_posts_per_day": 2, "explore_share": 0.2, "humour_share": 0.7}
 

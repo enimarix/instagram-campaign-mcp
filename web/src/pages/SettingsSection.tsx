@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
-  ApiError, errorMessage, getSettings, listAdPresets, saveSettings, type EditableSettings, type SettingField,
+  ApiError, errorMessage, getSettings, saveSettings, type EditableSettings, type SettingField,
 } from '../api/client'
 import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { Sheet } from '../ui/Sheet'
 import { field as fieldClass } from '../ui/styles'
+import AdPresets from './AdPresets'
 import { humanize } from './load'
 
 // Step 124: owner-editable settings, stored by the server over .env and seen by every process.
@@ -73,7 +74,6 @@ export default function SettingsSection({ section, title }: { section: string; t
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<Change | null>(null) // waits for the password
   const [busy, setBusy] = useState(false)
-  const [presets, setPresets] = useState<string[]>()
 
   function load(d: EditableSettings) {
     setData(d)
@@ -81,10 +81,11 @@ export default function SettingsSection({ section, title }: { section: string; t
   }
   useEffect(() => {
     getSettings().then(load, (e: unknown) => setError(errorMessage(e)))
-    if (section === 'ads') listAdPresets().then((p) => setPresets(p.map((x) => x.label)), () => setPresets([]))
-  }, [section])
+  }, [])
 
-  const fields = data?.fields.filter((f) => f.section === section) ?? []
+  const all = data?.fields.filter((f) => f.section === section) ?? []
+  const fields = all.filter((f) => f.type !== 'presets')
+  const presets = all.find((f) => f.type === 'presets')
   const changed = Object.fromEntries(fields.filter((f) => draft[f.name] !== shown(f)).map((f) => [f.name, sent(f, draft[f.name])]))
 
   async function save(change: Change, password?: string) {
@@ -132,13 +133,11 @@ export default function SettingsSection({ section, title }: { section: string; t
               </div>
             </div>
           ))}
-          {presets && (
-            <p className="text-muted">Audience and placement presets (read-only for now): {presets.join(' · ') || 'none'}</p>
-          )}
           {error && !pending && <p role="alert" className="text-danger">{error}</p>}
           <Button type="submit" variant="primary" loading={busy} disabled={!Object.keys(changed).length}>Save</Button>
         </form>
       )}
+      {data && presets && <AdPresets key={data.version} field={presets} onSaved={load} />}
       {pending && <PasswordSheet error={error} onSubmit={(p) => save(pending, p)} onClose={() => { setPending(null); setError(null) }} />}
     </Card>
   )

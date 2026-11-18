@@ -287,10 +287,10 @@ export const getStorage = () => request<Storage>('/api/storage')
 export type SettingField = {
   name: string
   section: string
-  value: string | number | null
-  default: string | number | null
+  value: string | number | null | AdPresetValue[]
+  default: string | number | null | AdPresetValue[]
   overridden: boolean
-  type: 'money' | 'int' | 'float' | 'bool' | 'text' | 'choice'
+  type: 'money' | 'int' | 'float' | 'bool' | 'text' | 'choice' | 'presets'
   choices?: string[]
   ge?: number
   gt?: number
@@ -836,8 +836,18 @@ export type AdWinner = {
   asset_id: number
   thumbnail_url: string | null
 }
+/** Who sees an ad (src/config.py AdPreset, setting `ads_presets`, step 127). age_max null = 65+. */
+export type AdPlacement = 'reels' | 'stream' | 'story' | 'explore'
+export type AdPresetValue = {
+  id: string
+  label: string
+  countries: string[]
+  age_min: number
+  age_max: number | null
+  placements: AdPlacement[]
+}
 /** src/ads/tests.py presets(): `varies` = the variables a test may compare it on. */
-export type AdPreset = { id: string; label: string; varies: Exclude<AdVariable, 'creative'>[] }
+export type AdPreset = AdPresetValue & { varies: Exclude<AdVariable, 'creative'>[] }
 export type AdProposal = {
   hypothesis: string
   variable: AdVariable

@@ -15,7 +15,8 @@ lifetime budget and an end date, the campaign a spend cap.
   what exists.
 
 Objective follows `ADS_OBJECTIVE` (default OUTCOME_AWARENESS: reach, billed on
-impressions; H6/H9 decide). Audience and placement come from a named preset.
+impressions; H6/H9 decide). Audience and placement come from a named preset (`ads_presets`, editable in the
+website since 127).
 """
 
 from __future__ import annotations
@@ -45,20 +46,19 @@ OBJECTIVES: Dict[str, Dict[str, str]] = {
     "OUTCOME_ENGAGEMENT": {"optimization_goal": "THRUPLAY", "billing_event": "IMPRESSIONS",
                            "destination_type": "ON_VIDEO"},
 }
-# ponytail: placeholder audiences until H9 names the market. advantage_audience must be
-# explicit since v23.0 (0 = keep to the preset).
-_IG = {"publisher_platforms": ["instagram"], "age_min": 18,
-       "targeting_automation": {"advantage_audience": 0}}
-PRESETS: Dict[str, Dict[str, Any]] = {
-    "fr_reels": {**_IG, "geo_locations": {"countries": ["FR"]},
-                 "instagram_positions": ["reels"]},
-    "fr_feed_reels": {**_IG, "geo_locations": {"countries": ["FR"]},
-                      "instagram_positions": ["stream", "reels"]},
-    "francophone_reels": {**_IG, "geo_locations": {"countries": ["FR", "BE", "CH", "LU"]},
-                          "instagram_positions": ["reels"]},
-}
-PRESET_LABELS = {"fr_reels": "France, Reels", "fr_feed_reels": "France, Feed and Reels",
-                 "francophone_reels": "France, Belgium, Switzerland, Luxembourg, Reels"}
+# advantage_audience must be explicit since v23.0 (0 = keep to the preset).
+_IG = {"publisher_platforms": ["instagram"], "targeting_automation": {"advantage_audience": 0}}
+
+
+def presets_for(settings: InstagramMCPSettings) -> Dict[str, Dict[str, Any]]:
+    """id -> Meta targeting of each preset the owner set in the website (127). Sorted
+    lists: an order change is no audience or placement change."""
+    return {p.id: {**_IG, "geo_locations": {"countries": sorted(p.countries)},
+                   "age_min": p.age_min, **({"age_max": p.age_max} if p.age_max else {}),
+                   "instagram_positions": sorted(p.placements)}
+            for p in settings.ads_presets}
+
+
 MIN_SPEND_CAP = Decimal(100)  # Meta: "a minimum value of $100 USD (or local equivalent)"
 CENT = Decimal("0.01")
 
@@ -109,8 +109,9 @@ async def create_paused_promotion(
 ) -> Dict[str, Any]:
     """Returns {campaign, adset, creative, ad: ad_entities rows, authorization_id}.
     Raises PromotionRefused / BudgetRefused before any request, PromotionFailed after."""
-    if preset not in PRESETS:
-        raise PromotionRefused("invalid", f"unknown preset {preset!r}; one of {sorted(PRESETS)}")
+    presets = presets_for(settings)
+    if preset not in presets:
+        raise PromotionRefused("invalid", f"unknown preset {preset!r}; one of {sorted(presets)}")
     try:
         amount = _amount(budget)
     except BudgetRefused as e:
@@ -152,7 +153,7 @@ async def create_paused_promotion(
             step = "ad set"
             adset_id, auth = await w.create_ad_set(
                 name, campaign_id=campaign["meta_id"], budget=amount, end_time=end_time,
-                daily_amount=daily, daily_until=end_date, targeting=PRESETS[preset],
+                daily_amount=daily, daily_until=end_date, targeting=presets[preset],
                 test_id=test_id, **goal)
             adset = record("adset", adset_id, campaign, lifetime_budget=str(amount),
                            end_time=end_time.isoformat())

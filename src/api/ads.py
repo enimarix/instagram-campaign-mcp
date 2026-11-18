@@ -111,8 +111,8 @@ def winners(request: Request):
 
 
 @router.get("/presets")
-def presets():
-    return {"presets": tests.presets()}
+def presets(request: Request):
+    return {"presets": tests.presets(request.app.state.settings)}
 
 
 @router.post("/tests")

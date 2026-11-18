@@ -13,8 +13,10 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
+from src import settings_overrides as ov
 from src.ads import budget, tests, writer
 from src.ads.budget import BudgetRefused
+from src.ads.promote import presets_for
 from src.ads.tests import AdTestFailed, AdTestRefused
 from src.api.app import create_app
 from src.api.auth import Auth
@@ -198,7 +200,7 @@ def test_eligible_winners(store, monkeypatch):
 
 
 def test_presets_name_what_they_vary():
-    out = {p["id"]: p for p in tests.presets()}
+    out = {p["id"]: p for p in tests.presets(_settings())}
     assert {k: p["varies"] for k, p in out.items()} == {
         "fr_reels": ["audience", "placement"], "fr_feed_reels": ["placement"],
         "francophone_reels": ["audience"]}
@@ -495,6 +497,88 @@ def test_api_winners_and_kill_audit(api, monkeypatch):
     tc, store = api
     monkeypatch.setattr(tests, "scored_posts", lambda store, settings: [])
     assert tc.get("/api/ads/winners").json() == {"winners": []}
-    assert tc.get("/api/ads/presets").json() == {"presets": tests.presets()}
+    assert tc.get("/api/ads/presets").json() == {"presets": tests.presets(_settings())}
     _send(tc, "/api/ads/kill", {"reason": "panic"})
     assert tc.get("/api/ads/audit").json()["rows"][0]["detail"] == {"reason": "panic"}
+
+
+# --- presets edited in the website (127) -------------------------------------------------
+def _preset(id, countries, placements, **kw):
+    return {"id": id, "label": id.upper(), "countries": countries, "placements": placements,
+            **kw}
+
+
+EDITED = [_preset("de_reels", ["DE"], ["reels"]),
+          _preset("de_story", ["DE"], ["story", "reels"]),
+          _preset("dach_reels", "de, at, ch", ["reels"], age_min=25, age_max=44)]
+
+
+def test_targeting_built_from_a_preset():
+    s = _settings()
+    ov.update(CampaignStore(":memory:"), s, {"ads_presets": EDITED})
+    assert presets_for(s)["dach_reels"] == {
+        "publisher_platforms": ["instagram"], "targeting_automation": {"advantage_audience": 0},
+        "geo_locations": {"countries": ["AT", "CH", "DE"]}, "age_min": 25, "age_max": 44,
+        "instagram_positions": ["reels"]}
+    assert "age_max" not in presets_for(s)["de_reels"]  # none = 65+
+    assert presets_for(s)["de_story"]["instagram_positions"] == ["reels", "story"]
+
+
+async def test_readers_see_an_edit(store, meta):
+    s, api = _settings(), _settings()
+    ov.update(store, api, {"ads_presets": EDITED})
+    ov.refresh(store, s)
+    assert {p["id"]: p["varies"] for p in tests.presets(s)} == {
+        "de_reels": ["audience", "placement"], "de_story": ["placement"],
+        "dach_reels": ["audience"]}
+    with pytest.raises(AdTestRefused, match="one of"):  # the old ids are gone
+        await _propose(store, s, variants=CREATIVE)
+    with pytest.raises(AdTestRefused, match="differ in placement only"):  # edited presets
+        await _propose(store, s, variable="placement", variants=[
+            {"media_id": "111", "preset": "de_reels"}, {"media_id": "111", "preset": "dach_reels"}])
+    t = await _propose(store, s, variable="audience", variants=[
+        {"media_id": "111", "preset": "de_reels"}, {"media_id": "111", "preset": "dach_reels"}])
+    await _launch(store, s, t["id"], "427")
+    adsets = [json.loads(c.request.content)["targeting"] for c in meta.calls
+              if c.request.url.path.endswith("adsets")]
+    assert [a["geo_locations"]["countries"] for a in adsets] == [["DE"], ["AT", "CH", "DE"]]
+
+
+async def test_a_preset_a_running_test_uses_cannot_be_removed(store, meta):
+    s = _settings()
+    t = await _propose(store, s)  # fr_reels
+    await _launch(store, s, t["id"], "427")
+    keep = [p.model_dump() for p in s.ads_presets if p.id != "fr_reels"]
+    with pytest.raises(ov.SettingsInvalid, match="fr_reels is used by running test 1"):
+        ov.update(store, s, {"ads_presets": keep})
+    with pytest.raises(ov.SettingsInvalid, match="running test"):  # nor by replacing all
+        ov.update(store, s, {"ads_presets": EDITED})
+    assert [p.id for p in s.ads_presets][0] == "fr_reels"
+    ov.update(store, s, {"ads_presets": keep[:1] + [p.model_dump() for p in s.ads_presets
+                                                    if p.id == "fr_reels"]})
+    assert [p.id for p in s.ads_presets] == ["fr_feed_reels", "fr_reels"]
+
+
+async def test_a_proposal_with_a_removed_preset_is_refused_at_launch(store, meta):
+    s = _settings()
+    t = await _propose(store, s, variable="audience", variants=[
+        {"media_id": "111", "preset": "fr_reels"},
+        {"media_id": "111", "preset": "francophone_reels"}])
+    ov.update(store, s, {"ads_presets": [p.model_dump() for p in s.ads_presets
+                                         if p.id != "francophone_reels"]})  # only proposed
+    with pytest.raises(AdTestRefused, match="preset gone: francophone_reels") as e:
+        await _launch(store, s, t["id"], "427")
+    assert e.value.code == "preset_gone" and not _posts(meta)
+    assert store._get("ad_tests", t["id"])["status"] == "proposed"
+
+
+def test_api_presets_follow_the_settings(api):
+    tc, _ = api
+    r = tc.patch("/api/settings", json={"values": {"ads_presets": EDITED[:2]}},
+                 headers={"Origin": "http://127.0.0.1"})
+    assert r.status_code == 200
+    assert [p["id"] for p in tc.get("/api/ads/presets").json()["presets"]] == [
+        "de_reels", "de_story"]
+    r = tc.patch("/api/settings", json={"values": {"ads_presets": []}},
+                 headers={"Origin": "http://127.0.0.1"})
+    assert r.status_code == 422 and r.json()["field"] == "ads_presets"
