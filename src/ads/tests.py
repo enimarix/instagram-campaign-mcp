@@ -33,7 +33,7 @@ from zoneinfo import ZoneInfo
 import structlog
 
 from ..config import InstagramMCPSettings
-from ..instagram_client import NotConfigured
+from ..instagram_client import InstagramAPIError, NotConfigured
 from ..learning.analytics import scored_posts
 from ..store import CampaignStore, to_iso, utcnow
 from . import abtest
@@ -74,7 +74,8 @@ def _variants(variable: str, variants: Any) -> List[Dict[str, str]]:
     out = []
     for v in variants:
         media, preset = (v or {}).get("media_id"), (v or {}).get("preset")
-        if not isinstance(media, str) or not media or preset not in PRESETS:
+        if not (isinstance(media, str) and media.isascii() and media.isdigit()
+                and preset in PRESETS):
             raise AdTestRefused("invalid", f"each variant needs a media_id and a preset "
                                 f"(one of {sorted(PRESETS)})")
         out.append({"media_id": media, "preset": preset})
@@ -222,6 +223,10 @@ def _entities(store: CampaignStore, test_id: int) -> List[Dict[str, Any]]:
                   key=lambda r: PAUSE_ORDER[r["kind"]])
 
 
+def _mark(store: CampaignStore, entity: Dict[str, Any], status: str) -> None:
+    store._update("ad_entities", ("status",), entity["id"], {"status": status})
+
+
 async def _pause_active(store: CampaignStore, settings: InstagramMCPSettings,
                         test_id: int) -> List[str]:
     """Pause the test's objects not recorded PAUSED; returns the ids that failed."""
@@ -232,7 +237,7 @@ async def _pause_active(store: CampaignStore, settings: InstagramMCPSettings,
             for r in todo:
                 try:
                     await w.pause(r["meta_id"])
-                    store._update("ad_entities", ("status",), r["id"], {"status": PAUSED})
+                    _mark(store, r, PAUSED)
                 except Exception:  # keep pausing the others
                     logger.exception("ad_pause_failed", meta_id=r["meta_id"])
                     failed.append(r["meta_id"])
@@ -306,11 +311,16 @@ async def approve(
                 if store._get("ad_tests", test_id)["status"] != "approved":
                     raise AdTestRefused("status", "the test was cancelled during approval")
                 for kind in ("ad", "adset", "campaign"):
-                    await w.activate(p[kind]["meta_id"], test_id=test_id,
-                                     authorization_id=p["authorization_id"])
+                    try:
+                        await w.activate(p[kind]["meta_id"], test_id=test_id,
+                                         authorization_id=p["authorization_id"])
+                    except InstagramAPIError as e:
+                        if getattr(e, "network", False):  # Meta may have acted: pause it
+                            _mark(store, p[kind], ACTIVE)
+                            live.add(p["authorization_id"])
+                        raise
+                    _mark(store, p[kind], ACTIVE)
                     live.add(p["authorization_id"])
-                    store._update("ad_entities", ("status",), p[kind]["id"],
-                                  {"status": ACTIVE})
                 audit(store, "activate", test_id=test_id, media_id=p["ad"]["media_id"],
                       campaign=p["campaign"]["meta_id"], adset=p["adset"]["meta_id"],
                       ad=p["ad"]["meta_id"])

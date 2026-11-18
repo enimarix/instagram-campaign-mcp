@@ -7,6 +7,7 @@ import itertools
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
@@ -144,6 +145,7 @@ async def test_propose_audience_and_placement(store, meta):
     ("creative", CREATIVE[:1]),
     ("creative", [{"media_id": str(i), "preset": "fr_reels"} for i in range(1, 6)]),
     ("creative", [{"media_id": "111", "preset": "nope"}, CREATIVE[1]]),
+    ("creative", [{"media_id": "m1", "preset": "fr_reels"}, CREATIVE[1]]),
     ("budget", CREATIVE),
 ])
 async def test_propose_one_variable_only(store, meta, variable, variants):
@@ -299,6 +301,23 @@ async def test_failure_mid_activation_pauses_what_was_activated(store, meta):
     # variant 1 ran for a moment: its reservation stays for 095; variant 2's is released
     assert len(budget.open_authorizations(store, t["id"])) == 1
     assert _audit(store) == ["propose", "approve", "activate", "cancel"]
+
+
+async def test_network_error_mid_activation_pauses_the_unsure_object(store, meta):
+    s = _settings()
+    t = await _propose(store, s)
+    real = meta.routes[-1].side_effect
+
+    def timeout(req):
+        if req.url.path.endswith("/901") and b"ACTIVE" in req.content:
+            raise httpx.ReadTimeout("timed out", request=req)
+        return real(req)
+
+    meta.routes[-1].side_effect = timeout  # the ad set: ad 903 went live, then this
+    with pytest.raises(AdTestFailed):
+        await tests.approve(store, s, t["id"], "427")
+    assert _status_calls(meta)[-2:] == [("901", "PAUSED"), ("903", "PAUSED")]
+    assert len(budget.open_authorizations(store, t["id"])) == 1  # it may have spent
 
 
 async def test_kill_mid_activation(store, meta, monkeypatch):
