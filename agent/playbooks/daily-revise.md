@@ -68,7 +68,8 @@ account; every new DM pick is an order, so `dm_picks.json` only holds older pick
    - a **recut of our own Reel** ("shorter", "new hook", "keep the end") → only when
      `own_reel` is true: `download_reel(<permalink>)`, then `render_remix` as the
      instruction says (the part to keep as the trim, the new hook and voice-over); the
-     credit then names our own account. When `own_reel` is false the Reel is someone
+     credit then names our own account; render_remix still adds a reaction piece, say
+     so in the summary. When `own_reel` is false the Reel is someone
      else's: a reaction or an inspired video, never a recut;
    - **analyse only** ("this one worked, analyse it", "analyse-la") → no video:
      `download_reel(<permalink>)`, `get_clip_frames(source_id)`,
