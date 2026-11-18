@@ -1,5 +1,5 @@
-"""Ads routes: budget and kill switch (091), A/B tests and the audit log (094). Thin doors
-onto src/ads/budget.py and src/ads/tests.py.
+"""Ads routes: budget and kill switch (091), A/B tests and the audit log (094), a test's
+results (095). Thin doors onto src/ads/budget.py, src/ads/tests.py and src/ads/sync.py.
 
 No MCP tool reaches these: the agent never touches money. Unkill and test approval ask
 the website password again (auth.reauth_error).
@@ -14,7 +14,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ..ads import budget, tests
+from ..ads import budget, sync, tests
 from ..ads.budget import BudgetRefused
 from ..instagram_client import NotConfigured
 from .auth import reauth_error
@@ -92,6 +92,15 @@ async def _call(work: Awaitable[Any]) -> Any:
 def list_tests(request: Request, status: Optional[str] = None):
     s = request.app.state
     return {"tests": tests.list_tests(s.store, s.settings, status=status)}
+
+
+@router.get("/tests/{test_id}")
+def get_test(request: Request, test_id: int):
+    s = request.app.state
+    try:
+        return sync.results(s.store, s.settings, test_id)
+    except KeyError:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
 
 
 @router.get("/winners")

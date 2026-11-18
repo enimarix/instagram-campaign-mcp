@@ -5,7 +5,7 @@ Every cycle writes a heartbeat, then runs `campaign.run_due` (pause switch, late
 gap rules live there, so `run-due` and the MCP tool obey them too), then the data jobs
 (data_jobs: publish-check reconcile, insight age schedule, DM picks, daily account
 snapshot, followers online, the daily facts, then the learnings refresh and the
-experiments check), and snapshots live Stories hourly. On Windows it keeps one one-shot
+experiments check; the ads sync, src/ads/sync.py, once ads are set up), and snapshots live Stories hourly. On Windows it keeps one one-shot
 Task Scheduler task that wakes the PC a few minutes before the next pending slot (its
 action, `run-due --wait-until-next`, holds the PC awake and publishes even when no worker
 runs), and holds the PC awake itself from AWAKE_BEFORE a slot until the
@@ -196,6 +196,16 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
         if (store.get_state(key) != today.isoformat()
                 and _every(store, f"{key}_tried_at", DAILY_RETRY, t) and await job(key, make)):
             store.set_state(key, today.isoformat())
+    if settings.meta_ad_account_id:
+        # Late import: ads.sync → studio.alerts imports this module. Not held back by the
+        # data budget: the kill switch must reach Meta.
+        from .ads import sync as ads_sync
+
+        if _every(store, "ads_sync_at", ads_sync.period(store), t):
+            try:
+                out["ads_sync"] = await ads_sync.sync(store, settings, t)
+            except Exception as e:  # noqa: BLE001
+                out["ads_sync"] = {"error": repr(e)}
     return out
 
 
