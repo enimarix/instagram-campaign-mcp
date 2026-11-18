@@ -740,7 +740,7 @@ export type Alert = {
 export const getAlerts = () => request<Alert[]>('/api/alerts')
 export const dismissAlert = (id: string) => post<{ id: string }>(`/api/alerts/${encodeURIComponent(id)}/dismiss`)
 
-// --- Ads (steps 091, 094; src/api/ads.py) ---
+// --- Ads (steps 091, 094, 095; src/api/ads.py) ---
 /** Money comes as decimal strings, in `currency`. */
 export type BudgetScope = { cap: string; used: string; remaining: string }
 export type AdsBudget = {
@@ -762,7 +762,7 @@ export type AdTest = {
   variable: AdVariable
   variants: { media_id: string; preset: string }[]
   min_lift: number
-  spec: { min_days: number }
+  spec: { min_days: number; max_days: number; min_sample: number; primary_metric: AdMetric }
   needed: { total: number; per_variant: number; sample_per_variant: number }
   budget_total: string | null
   currency: string
@@ -772,6 +772,33 @@ export type AdTest = {
   /** Proposed tests only: why the caps cannot fund the test, or null. */
   underpowered: string | null
   created_at: string
+  /** The worker's latest snapshot (095); null until the first sync. */
+  result: AdResult | null
+}
+export type AdMetric = 'ctr' | 'result_rate' | 'conversion_rate'
+/** src/ads/abtest.py evaluate(); 'error' (only `error` set) when the snapshot could not be judged. */
+export type AdEvaluation = {
+  status: 'too_early' | 'running' | 'winner' | 'no_difference' | 'error'
+  error?: string
+  metric: AdMetric
+  days: number
+  variants: Record<string, { successes: number; trials: number; rate: number | null }>
+  winner: string | null
+  p_values: Record<string, number>
+  lift: { vs: string; value: number; ci_low: number; ci_high: number; confidence: number } | null
+}
+export type AdReviewIssue = { ad_id: string; media_id: string; effective_status: string; reason: string }
+export type AdResult = {
+  synced_at: string
+  days: number
+  variants: Record<string, { media_id: string; preset: string; impressions: number; clicks: number; results: number; spend: string }>
+  evaluation: AdEvaluation
+  review: AdReviewIssue[]
+}
+/** GET /api/ads/tests/{id} (src/ads/sync.py results). */
+export type AdTestResults = AdTest & {
+  spend: { reported: string | null; counted: string; budget: string | null; currency: string }
+  near_cap: { daily: boolean; lifetime: boolean; test: boolean }
 }
 export type AdWinner = { media_id: string; permalink: string | null; posted_at: string; caption: string; asset_id: number }
 export type AdProposal = {
@@ -797,5 +824,6 @@ export const listAdWinners = () => request<{ winners: AdWinner[] }>('/api/ads/wi
 export const proposeAdTest = (p: AdProposal) => post<AdTest>('/api/ads/tests', p)
 export const approveAdTest = (id: number, body: { budget: string; password: string; underpowered_ok: boolean }) =>
   post<AdTest>(`/api/ads/tests/${id}/approve`, body)
+export const getAdTest = (id: number) => request<AdTestResults>(`/api/ads/tests/${id}`)
 export const cancelAdTest = (id: number) => post<AdTest>(`/api/ads/tests/${id}/cancel`)
 export const getAdsAudit = (offset = 0, limit = 20) => request<AdsAudit>(`/api/ads/audit?limit=${limit}&offset=${offset}`)

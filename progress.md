@@ -238,7 +238,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 - [x] 094 — Approve and launch — API and Ads page: "propose a test" from eligible winners, the owner sees the needed budget, sets it and approves **after typing the website password again**; only then are the ads activated; kill switch button; audit log of what was approved and when.
 - [x] 094b — Ads page (web) — `/ads` on the design system: budget card with kill / unkill (password), propose a test from eligible winners with the needed budget in plain words, approve with budget + password + underpowered warning, tests list with status chips, audit log; on the 094 API. — deps: 094 · touches: `web/src/pages/Ads.tsx`, `web/src/App.tsx`, `web/src/api/client.ts`
 - [x] 095 — Ad results — worker job collects ad insights, spend and Meta's review status (an ad that Meta rejects or limits is shown with the reason); the ledger is reconciled with the spend Meta reports; results page with spend, primary metric, significance and the declared winner; warning when spend nears a cap.
-- [ ] 095b — Ad results on the Ads page — per test: spend vs budget, metric per variant, p-value, winner and lift in plain words ("B gets 24 % more clicks than A, 95 % sure") or "too early: day 3 of 7"; review-issue chip with the reason; near-cap banner. — deps: 094b, 095 · touches: `web/src/pages/Ads.tsx`, `web/src/api/client.ts`
+- [x] 095b — Ad results on the Ads page — per test: spend vs budget, metric per variant, p-value, winner and lift in plain words ("B gets 24 % more clicks than A, 95 % sure") or "too early: day 3 of 7"; review-issue chip with the reason; near-cap banner. — deps: 094b, 095 · touches: `web/src/pages/Ads.tsx`, `web/src/api/client.ts`
 - [ ] 096 — Ads for the agent — MCP tools to propose tests and read results, in the `agent` profile (no tool there can activate, approve or raise a budget); playbook `weekly-ads.md` proposes tests from organic winners with a hypothesis each and turns finished tests into learnings.
 
 ### Phase 10 — Hardening and handover
@@ -265,6 +265,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 095b — Ad results on the Ads page — https://github.com/enimarix/instagram-campaign-mcp/pull/128 (2026-11-18) — per test: verdict in plain words with the lift interval, spend bar, versions table, p-values under Details, Meta review chips, near-cap banners
 - [x] 095 — Ad results (backend) — https://github.com/enimarix/instagram-campaign-mcp/pull/127 (2026-11-18) — `ads_sync` worker job: kill enforced on Meta, insights snapshots, ledger reconciled (never under-counts), over-spend alert + kill, review issues, stop rules, near-cap alerts; results API (web in 095b)
 - [x] 094b — Ads page (web) — https://github.com/enimarix/instagram-campaign-mcp/pull/126 (2026-11-18) — `/ads`: budget card with Stop all ads / Allow again (password), propose with the needed budget in plain words, approve with budget + password, tests list, audit log
 - [x] 094 — Approve and launch (backend + API) — https://github.com/enimarix/instagram-campaign-mcp/pull/125 (2026-11-18) — propose (eligibility, needed budget, underpowered), approve after the password re-check creates paused then activates (the only ACTIVE path), cancel pauses, `ads_audit`; min_days 7; web split to 094b
@@ -421,7 +422,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - [ ] (from 073) A DM share that arrives as a CDN link (not a permalink) is refused by download_reel: verify the live payload at H5 and map it.
 - [ ] (from 064) With the H4 key: one real Pexels search + add; confirm the file host (`videos.pexels.com` vs `player.vimeo.com`) that `stock.file_host_ok` allows.
 - [ ] (from 090) At H6: confirm `ads_read` alone can read campaigns / ad sets / ads (docs frame it as reporting only).
-- [ ] (from 094b) `eligible_winners` carries no thumbnail (the Ads picker shows caption + date), and no route lists the ad presets (the page mirrors them). Add `thumbnail_url` and `GET /api/ads/presets`.
+- [ ] (from 094b, 095b) Ads API gaps the page works around: `eligible_winners` has no thumbnail (picker shows caption + date); no route lists the ad presets (the page mirrors them); `/api/ads/budget` has no `near_cap` flags (the page copies NEAR_CAP 0.8). Add `thumbnail_url`, `GET /api/ads/presets`, `sync.near_caps` on the budget route, and drop the web copies.
 - [x] (from 112) `list_revision_requests` (MCP) should also hide requests whose new version is still rendering, like the work packet does.
 - Clip intake (063 review): add a `sources.licence` column (cc licence is kept in stats.licence today, so publishing refuses cc clips: fails safe) and a store setter for local_path; optional streamed upload route for clips.
 - Inspirations (051b review): playbook Safety rule 1 should say the owner's inspiration notes are taste guidance while the Reels themselves are outside data; accept a mixed-case host (Instagram.com) in pasted links; check Trends + Inspirations at 375 px.

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AdsAudit, AdsBudget, AdTest } from '../api/client'
+import type { AdEvaluation, AdsAudit, AdsBudget, AdTest, AdTestResults } from '../api/client'
 import Ads from './Ads'
 
 const scope = (cap: string, used = '0') => ({ cap, used, remaining: String(Number(cap) - Number(used)) })
@@ -11,9 +11,9 @@ const BUDGET: AdsBudget = {
 const TEST: AdTest = {
   id: 4, hypothesis: 'Boss fight wins', variable: 'creative',
   variants: [{ media_id: '1', preset: 'fr_reels' }, { media_id: '2', preset: 'fr_reels' }],
-  min_lift: 0.2, spec: { min_days: 7 }, needed: { total: 84, per_variant: 42, sample_per_variant: 4000 },
+  min_lift: 0.2, spec: { min_days: 7, max_days: 30, min_sample: 5000, primary_metric: 'ctr' }, needed: { total: 84, per_variant: 42, sample_per_variant: 4000 },
   budget_total: null, currency: 'EUR', end_date: null, status: 'proposed', reason: null, underpowered: null,
-  created_at: '2026-11-18T08:00:00+00:00',
+  created_at: '2026-11-18T08:00:00+00:00', result: null,
 }
 const WINNERS = [
   { media_id: '1', permalink: null, posted_at: '2026-11-01T10:00:00+00:00', caption: 'Boss fight', asset_id: 1 },
@@ -186,5 +186,91 @@ describe('Ads page', () => {
     expect(within(log).getByText('1–20 of 25')).toBeTruthy()
     fireEvent.click(within(log).getByRole('button', { name: 'Older' }))
     await vi.waitFor(() => expect(calls.at(-1)?.key).toBe('GET /api/ads/audit?limit=20&offset=20'))
+  })
+
+  describe('results', () => {
+    const v = (media_id: string, impressions: number, spend: string) =>
+      ({ media_id, preset: 'fr_reels', impressions, clicks: 0, results: 0, spend })
+    const EVAL: AdEvaluation = {
+      status: 'winner', metric: 'ctr', days: 9, winner: 'B', p_values: { A: 0.0123 },
+      variants: { A: { successes: 60, trials: 6000, rate: 0.01 }, B: { successes: 74, trials: 6000, rate: 0.0124 } },
+      lift: { vs: 'A', value: 0.24, ci_low: 0.1, ci_high: 0.38, confidence: 0.95 },
+    }
+    const ISSUE = { ad_id: '903', media_id: '2', effective_status: 'DISAPPROVED', reason: 'Text: too much text' }
+    const running = (evaluation: Partial<AdEvaluation>, review: typeof ISSUE[] = []): AdTest => ({
+      ...TEST, status: 'running', budget_total: '84.00',
+      result: { synced_at: '2026-11-18T09:00:00+00:00', days: evaluation.days ?? 9,
+        variants: { A: v('1', 6000, '21.00'), B: v('2', 6000, '21.50') }, evaluation: { ...EVAL, ...evaluation }, review },
+    })
+    const details = (t: AdTest): AdTestResults => ({
+      ...t, spend: { reported: '42.50', counted: '84.00', budget: '84.00', currency: 'EUR' },
+      near_cap: { daily: false, lifetime: false, test: false },
+    })
+    async function openResults(t: AdTest) {
+      const calls = stubApi({ 'GET /api/ads/tests': { tests: [t] }, 'GET /api/ads/tests/4': details(t) })
+      render(<Ads />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Results' }))
+      const sheet = screen.getByRole('dialog', { name: 'Test #4 results' })
+      await within(sheet).findByText(/€42.50 spent of €84.00/)
+      return { calls, sheet }
+    }
+
+    it('says who won, by how much, with the interval, and shows spend and versions', async () => {
+      const { calls, sheet } = await openResults(running({}))
+      expect(calls.some((c) => c.key === 'GET /api/ads/tests/4')).toBe(true)
+      expect(within(sheet).getByText('B gets 24 % more clicks than A (between 10 % and 38 %), 95 % sure.')).toBeTruthy()
+      expect(within(sheet).getByRole('progressbar', { name: 'Spend' }).getAttribute('aria-valuenow')).toBe('51')
+      const row = within(sheet).getByText('B · Post 2').closest('tr') as HTMLElement
+      expect(row.textContent).toBe('B · Post 21.24 %6,000€21.50')
+    })
+
+    it('keeps the p-values in a details disclosure', async () => {
+      const { sheet } = await openResults(running({}))
+      const box = within(sheet).getByText('Details').closest('details') as HTMLDetailsElement
+      expect(box.open).toBe(false)
+      expect(within(box).getByText('A vs the leader: p = 0.0123')).toBeTruthy()
+    })
+
+    it.each([
+      [{ status: 'too_early', days: 3, winner: null, lift: null, p_values: {},
+        variants: { A: { successes: 9, trials: 1200, rate: 0.0075 }, B: { successes: 9, trials: 1300, rate: 0.007 } } },
+      'Too early: day 3 of 7, 1,200 of 5,000 views per version.'],
+      [{ status: 'running', winner: null, lift: null }, 'No clear difference yet.'],
+      [{ status: 'no_difference', days: 30, winner: null, lift: null }, 'No clear difference after 30 days.'],
+    ] as [Partial<AdEvaluation>, string][])('says %j in plain words', async (evaluation, text) => {
+      const { sheet } = await openResults(running(evaluation))
+      expect(within(sheet).getByText(text)).toBeTruthy()
+    })
+
+    it('says why when the numbers could not be judged', async () => {
+      const t = running({})
+      const { sheet } = await openResults({ ...t, result: { ...t.result!,
+        evaluation: { status: 'error', error: 'expected 2 variants, got 1' } as AdEvaluation } })
+      expect(within(sheet).getByText('The numbers could not be judged: expected 2 variants, got 1.')).toBeTruthy()
+      expect(within(sheet).getByText('No p-values before the planned sample is reached.')).toBeTruthy()
+    })
+
+    it('shows the review issue on the row and in the details', async () => {
+      const t = running({ status: 'running' }, [ISSUE, { ...ISSUE, ad_id: '904', effective_status: 'WITH_ISSUES', reason: 'limited' }])
+      const { sheet } = await openResults(t)
+      expect(within(sheet).getByText('Meta rejected')).toBeTruthy()
+      expect(within(sheet).getByText('Text: too much text')).toBeTruthy()
+      const tests = screen.getByRole('region', { name: 'Tests', hidden: true })
+      expect(within(tests).getAllByText(/^Meta (rejected|limits)$/, { exact: true }).map((e) => e.textContent))
+        .toContain('Meta limits')
+    })
+
+    it('shows the declared winner on a finished row', async () => {
+      stubApi({ 'GET /api/ads/tests': { tests: [{ ...running({}), status: 'finished', reason: 'winner' }] } })
+      render(<Ads />)
+      expect(await screen.findByText('Winner: B (Post 2)')).toBeTruthy()
+    })
+
+    it('warns when spend nears a cap', async () => {
+      stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('20', '17'), tests: [] } })
+      render(<Ads />)
+      expect(await screen.findByText("Today's ad spend is at 85 % of the daily cap.")).toBeTruthy()
+      expect(screen.queryByText(/lifetime cap/)).toBeNull()
+    })
   })
 })
