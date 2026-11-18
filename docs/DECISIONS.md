@@ -8,6 +8,17 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: A remix's uncovered clip speech is shown as captions, not kept ducked (069)
+Changes GOAL.md §3.1 Track A step 6 ("the clip's speech stays, ducked under the reaction").
+When a source's `audio_rights` is not `covered`, `src/studio/remix.py` mutes the whole
+original track (`mute_original`), may lay our own music bed under it, and shows the clip's
+speech as captions from its 068 transcript (the trimmed span). Covered audio stays, ducked
+under the reaction and the voice-over (`reaction_collage` `clip_gain_db`, `voice_over`).
+A remix uses only the trimmed part being reacted to, at most `REMIX_MAX_CLIP_S` (45 s).
+Reason: speech and background music share one track; separating them needs an ML source
+separation model we do not ship, and keeping the track keeps the music that can get the
+post muted or blocked.
+
 ## 2026-11-17: Reel downloads: rules in code, yt-dlp fallback, field check pending (063b)
 `src/studio/downloader.py` asks the local service first, then yt-dlp (optional extra
 `download`, pinned `yt-dlp==2026.10.26`, which needs Python 3.11+, so the extra is

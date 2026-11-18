@@ -23,6 +23,7 @@ from ..store import CampaignStore
 from ..taxonomy import load_taxonomy, validate
 from .assets import edit_asset
 from .render import auto_description
+from .rights import caption_credit_problem
 from .seed import local_today
 
 FINISHED = ("done", "failed")
@@ -260,6 +261,11 @@ def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
         raise ValueError(f"self_score_reason must be one line of 1-{REASON_CHARS} characters")
     if not (caption or "").strip():
         raise ValueError("a caption is required")
+    source_id = store.get_idea(asset["idea_id"])["source_id"]
+    problem = source_id is not None and caption_credit_problem(store.get_source(source_id),
+                                                                caption)
+    if problem:
+        raise ValueError(problem)
     if best_before is None:
         best_before = default_best_before(store, settings, asset)
     if description is None:

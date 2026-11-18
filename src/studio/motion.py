@@ -117,12 +117,17 @@ def build_props(template: str, props: Dict[str, Any], settings: InstagramMCPSett
     filled: Dict[str, Any] = {"lines": [{"text": t.text, "start_s": t.start_s, "end_s": t.end_s}
                                         for t in synth.lines]}
     if synth.audio_path:
-        dest = Path(settings.media_root) / "voice" / synth.audio_path.name
-        if not dest.is_file():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(synth.audio_path, dest)
-        filled["audioSrc"] = media.relative(settings.media_root, dest)
+        filled["audioSrc"] = store_voice(settings, synth.audio_path)
     return {**props, "voice": filled}
+
+
+def store_voice(settings: InstagramMCPSettings, audio: Path) -> str:
+    """Copy synthesised audio into `<media root>/voice/` (once); returns its media path."""
+    dest = Path(settings.media_root) / "voice" / audio.name
+    if not dest.is_file():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(audio, dest)
+    return media.relative(settings.media_root, dest)
 
 
 _bundle_lock = threading.Lock()

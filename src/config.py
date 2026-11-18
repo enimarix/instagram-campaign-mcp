@@ -329,6 +329,12 @@ class InstagramMCPSettings(BaseSettings):
         16000, ge=1, description="Largest reaction reel upload (an hour of phone video fits)"
     )
 
+    # --- Remix ------------------------------------------------------------
+    # src/studio/remix.py: a reaction remix uses only the part of the clip it reacts to.
+    remix_max_clip_s: float = Field(
+        45.0, gt=0, description="Longest stretch of a clip one reaction remix may use (seconds)"
+    )
+
     # --- Logging / cache --------------------------------------------------
     log_level: str = Field("INFO", description="Log level")
     cache_enabled: bool = Field(True, description="Cache GET responses")

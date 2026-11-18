@@ -92,7 +92,7 @@ def test_schedule_refusals_are_409(tc, store, cfg, code, kw):
 
 
 def test_schedule_commentary_with_confirmation(tc, store, cfg):
-    a = _asset(store, cfg, track="remix", source=COMMENTARY)
+    a = _asset(store, cfg, track="remix", source=COMMENTARY, caption="ha @creator")
     r = tc.post(f"/api/assets/{a['id']}/schedule",
                 json={"publish_at": to_iso(_day()), "confirmed": True}, headers=H)
     assert r.status_code == 200 and r.json()["asset"]["status"] == "scheduled"
@@ -229,7 +229,8 @@ def test_approve_and_queue_route(tc, store, cfg):
     assert r.status_code == 200, r.text
     assert r.json()["asset"]["status"] == "scheduled" and "file_url" in r.json()["asset"]
     assert parse_dt(r.json()["slot"]["publish_at"]) > utcnow()
-    comm = _asset(store, cfg, status="ready", track="remix", source=COMMENTARY)
+    comm = _asset(store, cfg, status="ready", track="remix", source=COMMENTARY,
+                  caption="ha @creator")
     r = tc.post(url(comm["id"]), json={}, headers=H)
     assert r.status_code == 409 and r.json()["error"] == "rights"
     assert store.get_asset(comm["id"])["status"] == "ready"
