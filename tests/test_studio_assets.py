@@ -92,7 +92,7 @@ def test_create_get_list_and_json_columns(store):
 
 def test_list_assets_filters_and_order(store):
     remix = store.add_idea("remix")
-    motion = store.add_idea("motion", strategy="explore")
+    motion = store.add_idea("motion", strategy="explore", experiment="exp:1:question")
     low = store.add_asset(remix["id"], self_score=3, batch_date="2026-11-17")
     unscored = store.add_asset(remix["id"], batch_date="2026-11-17")
     high = store.add_asset(motion["id"], self_score=9, batch_date="2026-11-17")
@@ -101,8 +101,9 @@ def test_list_assets_filters_and_order(store):
     day = "2026-11-17"
     assert ids(store.list_assets(batch_date=day)) == [high["id"], low["id"], unscored["id"]]
     assert ids(store.list_assets(batch_date=day, track="remix")) == [low["id"], unscored["id"]]
-    assert {(r["track"], r["strategy"]) for r in store.list_assets(batch_date=day)} == {
-        ("remix", None), ("motion", "explore")}
+    assert {(r["track"], r["strategy"], r["experiment"])
+            for r in store.list_assets(batch_date=day)} == {
+        ("remix", None, None), ("motion", "explore", "exp:1:question")}
     transition(store, low["id"], "ready", actor="worker")
     set_verdict(store, low["id"], "liked")
     assert ids(store.list_assets(status="ready", verdict="liked")) == [low["id"]]

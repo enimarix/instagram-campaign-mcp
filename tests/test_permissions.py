@@ -113,6 +113,22 @@ def test_attach_makes_a_permission_clip(store, cfg, ref, tmp_path):
 
 
 @needs_ffmpeg
+def test_attach_removes_the_old_clip_file(store, cfg, ref, tmp_path):
+    old = Path(cfg.media_root) / "sources" / str(ref["id"]) / "clip.webm"
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"downloaded")
+    with store._tx() as c:
+        c.execute("UPDATE sources SET local_path=? WHERE id=?",
+                  (f"sources/{ref['id']}/clip.webm", ref["id"]))
+    rid = permissions.request_permission(store, ref["id"], "dm", brand_kit=KIT)["request"]["id"]
+    permissions.answer(store, rid, "granted", "DM yes")
+    src = permissions.attach_granted_file(store, cfg, rid, make_clip(tmp_path / "a.mp4"),
+                                          audio_rights="covered")
+    assert src["local_path"] == f"sources/{ref['id']}/clip.mp4"
+    assert not old.exists() and (Path(cfg.media_root) / src["local_path"]).is_file()
+
+
+@needs_ffmpeg
 def test_routes(store, ref, tmp_path):
     cfg = _settings(media_root=str(tmp_path / "media"), max_clip_mb=1)
     with TestClient(create_app(cfg, store=store), base_url=LOCAL) as tc:

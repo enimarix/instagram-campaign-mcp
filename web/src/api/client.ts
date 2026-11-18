@@ -76,6 +76,7 @@ export type Asset = {
   // from the asset's idea; only the list carries them
   track?: string
   strategy?: 'explore' | 'exploit' | null
+  experiment?: string | null // 'exp:<id>:<variant>' when the idea fills an experiment (086)
   // shown by the feed when a row carries them (list rows: the source's rights and the
   // pinned account that sent it by DM; no pillar yet)
   pillar?: string | null

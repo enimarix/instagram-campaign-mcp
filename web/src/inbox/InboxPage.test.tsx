@@ -237,6 +237,20 @@ describe('InboxPage feed', () => {
       expect(screen.queryByRole('group', { name: 'Publish as a trial Reel? (optional)' })).toBeNull()
     })
 
+    it('an experiment video (exploit) can be approved as a trial Reel too', async () => {
+      stubApi({
+        'GET /api/assets': [200, ASSETS.map((a) => (a.id === 2 ? { ...a, experiment: 'exp:4:question' } : a))],
+        'POST /api/assets/2/approve-and-queue': [200, { asset: asset(2, { status: 'scheduled' }), slot: SLOT }],
+      })
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      vi.useFakeTimers()
+      press(2, 'Approve')
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      const group = screen.getByRole('group', { name: 'Publish as a trial Reel? (optional)' })
+      expect(within(group).getByRole('button', { name: 'Approve as trial Reel' })).toBeTruthy()
+    })
+
     it('a normal (exploit) video offers no trial Reel', async () => {
       stubApi({ 'POST /api/assets/2/approve-and-queue': [200, { asset: asset(2, { status: 'scheduled' }), slot: SLOT }] })
       renderPage()

@@ -129,7 +129,8 @@ def test_agent_cannot_change_or_retire_owner_learning(store):
     lid = L.add_learning(store, "Never red", "dont", "taste", [f],
                          owner_instruction=True)["learning"]["id"]
     for change in ({"status": "retired"}, {"statement": "Red is fine"},
-                   {"evidence_feedback_ids_to_add": [f]}):
+                   {"evidence_feedback_ids_to_add": [f]},
+                   {"evidence_to_add": [{"media_id": "1"}]}):
         with pytest.raises(ValueError, match="only the owner can change this"):
             L.update_learning(store, lid, **change)
     assert store.get_learning(lid)["status"] == "active"
@@ -155,6 +156,23 @@ def test_update_caps_and_evidence(store):
     assert [r["id"] for r in L.list_learnings(store, status=None)] == [lid]
 
 
+def test_update_adds_audience_evidence(store):
+    lid = L.add_learning(store, "Evenings win", "hypothesis", "audience",
+                         evidence=[{"media_id": "1"}])["learning"]["id"]
+    row = L.update_learning(store, lid, evidence_to_add=[{"media_id": "2", "at_s": 2}],
+                            confidence="medium")
+    assert row["evidence"] == [{"media_id": "1"}, {"media_id": "2", "at_s": 2}]
+    assert row["confidence"] == "medium"
+    for bad in ([{}], ["media 3"]):
+        with pytest.raises(ValueError, match="evidence dicts"):
+            L.update_learning(store, lid, evidence_to_add=bad)
+    taste = L.add_learning(store, "x", "hypothesis", "taste",
+                           [_fb(store, _asset(store))])["learning"]["id"]
+    with pytest.raises(ValueError, match="evidence dicts"):
+        L.update_learning(store, taste, evidence_to_add=[{"media_id": "1"}])
+    assert len(store.get_learning(lid)["evidence"]) == 2
+
+
 async def test_mcp_doors(mcp_store):
     a = _asset(mcp_store)
     f = _fb(mcp_store, a, text="Never use red")
@@ -174,5 +192,8 @@ async def test_mcp_update_learning_passes_scope_and_evaluate(mcp_store, monkeypa
     monkeypatch.setattr(srv.learnings, "update_learning",
                         lambda store, lid, **kw: seen.update(kw, id=lid) or {"id": lid})
     scope = {"tag": "hook_type", "value": "question"}
-    assert await srv.update_learning(7, scope=scope, evaluate=True) == {"id": 7}
+    ev = [{"media_id": "1"}]
+    assert await srv.update_learning(7, scope=scope, evaluate=True,
+                                     evidence_to_add=ev) == {"id": 7}
     assert (seen["id"], seen["scope"], seen["evaluate"]) == (7, scope, True)
+    assert seen["evidence_to_add"] == ev

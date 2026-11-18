@@ -196,7 +196,7 @@ export default function InboxPage() {
         })
     })
     // an explore (or experiment) video may go out as a trial Reel instead: one tap during the undo
-    if (a.strategy === 'explore') {
+    if (a.strategy === 'explore' || a.experiment) {
       setWhy(null) // one chip row at a time: the newest decision's
       setTrialAsk({ id: a.id, on: false })
     }
