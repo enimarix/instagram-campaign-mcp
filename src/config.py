@@ -311,6 +311,19 @@ class InstagramMCPSettings(BaseSettings):
                                 " a dont < 1 - this"
     )
 
+    # --- Batch mix (src/learning/mix.py) ------------------------------------
+    mix_floor: float = Field(
+        0.10, ge=0, le=1, description="Smallest share of each allowed option in the batch mix"
+    )
+    mix_min_posts: int = Field(
+        5, ge=1, description="Matured Reels an option needs before its engagement index"
+                             " counts in the mix"
+    )
+    mix_index_weight: float = Field(
+        0.5, ge=0, le=1, description="Weight of the engagement index vs the like rate once"
+                                     " an option has MIX_MIN_POSTS"
+    )
+
     # --- Website ----------------------------------------------------------
     # Optional; required before `serve` binds a non-loopback host. Never logged or returned.
     ui_password: Optional[SecretStr] = Field(None, description="Website password")

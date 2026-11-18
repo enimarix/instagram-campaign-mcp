@@ -132,11 +132,13 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 
 1. Load the `hook-guide` skill (Skill tool) if you have not yet.
 2. Plan the whole set before calling anything:
-   - the pillar mix the quotas allow (humour vs informative; `limits` minus `counts`);
+   - the brief's `mix`: for each dimension (`template`, `hook_type`, `pillar`, `humour`)
+     the `count` of exploit ideas each option gets today, learned from likes and results
+     (owner rules are already 0). Follow the counts (±1 each); templates apply to motion
+     ideas. Explore ideas are free picks outside the mix;
    - explore vs exploit: about 70 % exploit (formats with liked videos or `do` learnings),
      at most `limits.explore - counts.explore` explore ideas. Each explore idea tests one
      thing; give it the `experiment` name of an open experiment when it belongs to one;
-   - templates: spread them; let the learnings and the liked/disliked counts lead.
 3. For each idea call `create_idea` with:
    - `track="motion"`, a `pillar` and a `hook_type` from the taxonomy;
    - `hook`: the on-screen first second (≤ ~8 words, readable with the sound off);
