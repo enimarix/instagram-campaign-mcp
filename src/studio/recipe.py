@@ -18,11 +18,23 @@ import json
 import math
 import os
 import re
+import struct
 import tempfile
-import textwrap
 import unicodedata
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, Type
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+)
 
 from pydantic import (
     BaseModel,
@@ -36,6 +48,7 @@ from pydantic import (
 
 from src.studio import brand, ffmpeg
 from src.studio.ffmpeg import MediaInfo, PathLike
+from src.studio.fontmetrics import ascent_descent, ass_em, text_width
 
 # Output spec (Instagram Reels): one place for every op.
 WIDTH, HEIGHT, FPS = 1080, 1920, 30
@@ -305,33 +318,88 @@ def _brand_font(kit: Dict[str, Any], root: Path) -> Path:
     return (root / kit["fonts"]["files"][0]).resolve()
 
 
-def _wrap_width(width: int, size: int) -> int:
-    """Characters per line in `width` px less the box padding. Press Start 2P is
-    monospaced with a 1 em advance (`size` px per character)."""
-    return (width - 2 * TEXT_PAD) // size
+NBSP = "\u00a0"
+
+
+def french_spaces(text: str) -> str:
+    """French typography for every text the studio draws: a no-break space before ? ! : ;
+    and » and after «, so wrapping never leaves the mark alone at a line start. Only a
+    space that is already there before ? ! : ; changes, so English "Why?" stays as is."""
+    text = re.sub(r"«[ \u00a0]*", "«" + NBSP, text)
+    text = re.sub(r"[ \u00a0]*»", NBSP + "»", text)
+    return re.sub(r" +([?!:;])", NBSP + r"\1", text)
+
+
+def _wrap(text: str, width: float, size: float, font: Path) -> List[str]:
+    """`text` (French spaces applied) in lines of at most `width` px at `size` px per em
+    in `font`, broken at plain spaces only (never at a no-break space); a word wider than
+    a line is cut."""
+    lines: List[str] = []
+    line = ""
+    for word in french_spaces(text).split(" "):
+        if not word:
+            continue
+        joined = f"{line} {word}" if line else word
+        if text_width(joined, size, font) <= width:
+            line = joined
+            continue
+        if line:
+            lines.append(line)
+        line = ""
+        for c in word:  # rarely more than a long URL
+            if line and text_width(line + c, size, font) > width:
+                lines.append(line)
+                line = ""
+            line += c
+    return lines + [line] if line else lines
+
+
+def _png_size(path: Path) -> Tuple[int, int]:
+    """(width, height) of a PNG, from its IHDR header."""
+    return struct.unpack(">II", path.read_bytes()[16:24])
+
+
+def _surface(kit: Dict[str, Any], name: str) -> Tuple[str, str]:
+    """(text, background) colours of a brand surface: dark.text on dark.bg, light.ink on
+    light.bg."""
+    s = kit["colors"][name]
+    return s.get("text") or s["ink"], s["bg"]
+
+
+def _text_filter(lines: Sequence[str], out: Path, tag: str, *, font: Path, size: float,
+                 color: str, x: str, y: str, box: str = "", enable: str = "") -> str:
+    """A drawtext filter for `lines` (already wrapped) in `font`, `color` #RRGGBB, at the
+    drawtext expressions `x`/`y`; `box`: a box colour like 0x0E1117@0.6, padded by
+    TEXT_PAD. The text goes through a file named after `tag` in render()'s work dir (no
+    drawtext text escaping)."""
+    textfile = out.with_name(f"{out.stem}-{tag}.txt")
+    # newline: drawtext breaks on "\r" too, so a Windows "\r\n" would double each break.
+    textfile.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    graph = (f"drawtext=fontfile={_filter_value(font.as_posix())}"
+             f":textfile={_filter_value(textfile.resolve().as_posix())}:expansion=none"
+             f":fontsize={size}:line_spacing={-round(size) // 8}:fontcolor=0x{color[1:]}"
+             f":x={_filter_value(x)}:y={_filter_value(y)}")
+    if box:
+        graph += f":box=1:boxcolor={box}:boxborderw={TEXT_PAD}"
+    return graph + (f":enable={_filter_value(enable)}" if enable else "")
 
 
 def _drawtext(text: str, info: MediaInfo, out: Path, *, size: int, x: str, y: str,
               enable: str = "") -> str:
-    """A drawtext filter: `text` wrapped to the safe width in the brand font and text
-    colour on a semi-transparent background box. `x`/`y` pick from "left", "right",
-    "center" / "top", "center", "bottom" inside the safe area."""
+    """A drawtext filter: `text` wrapped to the safe width in the brand font, dark.text on
+    a semi-transparent dark.bg box. `x`/`y` pick from "left", "right", "center" / "top",
+    "center", "bottom" inside the safe area."""
     kit, root = _brand_kit(info)
+    font = _brand_font(kit, root)
     sx, sy, sw, sh = brand.safe_area(kit)
-    lines = textwrap.wrap(text, _wrap_width(sw, size))
-    textfile = out.with_suffix(".txt")  # in render()'s work dir; no drawtext text escaping
-    textfile.write_text("\n".join(lines), encoding="utf-8")
     xs = {"left": f"{sx + TEXT_PAD}", "right": f"{sx + sw - TEXT_PAD}-text_w",
           "center": f"{sx}+({sw}-text_w)/2"}
     ys = {"top": f"{sy + TEXT_PAD}", "bottom": f"{sy + sh - TEXT_PAD}-text_h",
           "center": f"{sy}+({sh}-text_h)/2"}
-    colors = kit["colors"]
-    graph = (f"drawtext=fontfile={_filter_value(_brand_font(kit, root).as_posix())}"
-             f":textfile={_filter_value(textfile.resolve().as_posix())}:expansion=none"
-             f":fontsize={size}:line_spacing={-size // 4}:fontcolor=0x{colors['text'][1:]}"
-             f":box=1:boxcolor=0x{colors['background'][1:]}@0.6:boxborderw={TEXT_PAD}"
-             f":x={xs[x]}:y={ys[y]}")
-    return graph + (f":enable={_filter_value(enable)}" if enable else "")
+    fg, bg = _surface(kit, "dark")
+    return _text_filter(_wrap(text, sw - 2 * TEXT_PAD, size, font), out, "text", font=font,
+                        size=size, color=fg, x=xs[x], y=ys[y], box=f"0x{bg[1:]}@0.6",
+                        enable=enable)
 
 
 @register
@@ -362,7 +430,7 @@ class Logo(Op):
 @register
 class HookText(Op):
     """The hook as a title card from `start_s` to `end_s`, readable with the sound off.
-    The text keeps its case (the pixel font draws accented capitals small)."""
+    The text keeps its case."""
 
     op: Literal["hook_text"] = "hook_text"
     text: OverlayText
@@ -389,7 +457,7 @@ class HookText(Op):
 @register
 class Credit(Op):
     """A visible source credit for the whole video, e.g. "@creator" or "Clip: Name /
-    Pexels" (GOAL.md §5.1), at the bottom of the safe area. The pixel font has no emoji."""
+    Pexels" (GOAL.md §5.1), at the bottom of the safe area. The brand font has no emoji."""
 
     op: Literal["credit"] = "credit"
     text: OverlayText
@@ -406,10 +474,11 @@ class Credit(Op):
 
 
 MAX_CAPTION = 80  # characters per caption line
+CAPTION_GAP = 12  # px between the boxes of a caption's wrapped lines
 
 
 def _strip_emoji(text: str) -> str:
-    """Drop emoji and pictographs: the pixel font has none, and a fallback emoji font is
+    """Drop emoji and pictographs: the brand font has none, and a fallback emoji font is
     not on every machine (CI has none), so they would render as boxes or not at all.
     Letters the font lacks (e.g. Romanian Ș) still fall back to a system font."""
     # ponytail: Unicode-category heuristic, not the font's real cmap; read the cmap if a
@@ -464,8 +533,10 @@ class CaptionLine(BaseModel):
 @register
 class Captions(Op):
     """Timed caption lines burned in with libass in the brand font and text colour on a
-    semi-transparent box, wrapped to the safe width. bottom: just above the bottom safe
-    inset; center: the middle of the safe area. Emoji are dropped (see _strip_emoji)."""
+    semi-transparent box, wrapped to the safe width, each wrapped line centred in its own
+    box with CAPTION_GAP px between boxes (they never overlap). bottom: just above the
+    bottom safe inset; center: the middle of the safe area. Emoji are dropped (see
+    _strip_emoji)."""
 
     op: Literal["captions"] = "captions"
     lines: List[CaptionLine] = Field(min_length=1)
@@ -484,19 +555,23 @@ class Captions(Op):
         kit, root = _brand_kit(info)
         font = _brand_font(kit, root)
         sx, sy, sw, sh = brand.safe_area(kit)
-        if self.position == "bottom":
-            anchor = f"\\an2\\pos({sx + sw // 2},{sy + sh - TEXT_PAD})"
-        else:
-            anchor = f"\\an5\\pos({sx + sw // 2},{sy + sh // 2})"
-        text, box = _ass_color(kit["colors"]["text"]), _ass_color(kit["colors"]["background"], 0.6)
+        fg, bg = _surface(kit, "dark")
+        text, box = _ass_color(fg), _ass_color(bg, 0.6)
         # WrapStyle 2: no libass wrapping, the lines are wrapped here. BorderStyle 3: an
-        # opaque box (OutlineColour) padded by Outline px around each line.
-        width = _wrap_width(sw, self.size)
-        events = [
-            f"Dialogue: 0,{_ass_time(line.start_s)},{_ass_time(line.end_s)},Brand,,0,0,0,,"
-            f"{{{anchor}}}" + "\\N".join(_ass_text(t) for t in textwrap.wrap(line.text, width))
-            for line in self.lines
-        ]
+        # opaque box (OutlineColour) padded by Outline px around each line, `size` +
+        # 2 x Outline px tall; one event per line, `step` apart, so boxes never touch.
+        em, step = ass_em(self.size, font), self.size + 2 * TEXT_PAD + CAPTION_GAP
+        events = []
+        for line in self.lines:
+            rows = _wrap(line.text, sw - 2 * TEXT_PAD, em, font)
+            for i, row in enumerate(rows):
+                if self.position == "bottom":
+                    pos = f"\\an2\\pos({sx + sw // 2},{sy + sh - TEXT_PAD - (len(rows) - 1 - i) * step})"
+                else:
+                    y = sy + sh // 2 + round((i - (len(rows) - 1) / 2) * step)
+                    pos = f"\\an5\\pos({sx + sw // 2},{y})"
+                events.append(f"Dialogue: 0,{_ass_time(line.start_s)},{_ass_time(line.end_s)},"
+                              f"Brand,,0,0,0,,{{{pos}}}{_ass_text(row)}")
         ass = out.with_suffix(".ass")  # in render()'s work dir
         ass.write_text("\n".join([
             "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {WIDTH}", f"PlayResY: {HEIGHT}",
@@ -506,7 +581,7 @@ class Captions(Op):
             "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
             "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
             f"Style: Brand,{kit['fonts']['display']},{self.size},{text},{text},{box},{box},"
-            f"0,0,0,0,100,100,0,0,3,{TEXT_PAD},0,2,0,0,0,1", "",
+            f"{kit['fonts']['display_weight']},0,0,0,100,100,0,0,3,{TEXT_PAD},0,2,0,0,0,1", "",
             "[Events]",
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
             *events, ""]), encoding="utf-8")
@@ -521,35 +596,88 @@ class Captions(Op):
 
 @register
 class EndCard(Op):
-    """A call-to-action card appended after the clip: the brand background, `text` in the
-    middle of the safe area and (with_logo) the logo at its top. The video gets
-    `duration_s` longer and the audio goes on under the card as silence; to run a music
-    bed under the card too, put `music` after `end_card` in the recipe."""
+    """The brand's call-to-action card appended after the clip, on the light surface, as
+    in the owner's own end cards. Centred on the frame's vertical axis inside the safe
+    area: the logo tile (with_logo), the wordmark (brand name, from its second capital in
+    emerald: "macro" + "Body"), the optional tagline `text`, the brand kit's `cta.trial`
+    in an emerald pill and `cta.url`. Never a price. The video gets `duration_s` longer
+    and the audio goes on under the card as silence; to run a music bed under the card
+    too, put `music` after `end_card` in the recipe."""
 
     op: Literal["end_card"] = "end_card"
-    text: OverlayText
+    text: Optional[OverlayText] = None
     duration_s: float = Field(2.0, ge=1, le=4)
     with_logo: bool = True
 
+    LOGO_W: ClassVar[int] = 260  # px, the tile
+    SIZES: ClassVar[Dict[str, int]] = {"text": 44, "pill": 52, "url": 44}
+    PILL_H: ClassVar[int] = 104
+    PILL_PAD: ClassVar[int] = 56  # px left and right of the pill text
+    GAP: ClassVar[int] = 40  # px between blocks (the tagline's lines touch)
+
     def apply(self, src, info, out, *, inputs, timeout_s, preset):
         kit, root = _brand_kit(info)
-        _, sy, _, _ = brand.safe_area(kit)
-        text = _drawtext(self.text, info, out, size=48, x="center", y="center")
-        card = (f"color=c=0x{kit['colors']['background'][1:]}:s={WIDTH}x{HEIGHT}:r={FPS}"
-                f":d={self.duration_s},{text}")
-        extra: List[PathLike] = []
+        font = _brand_font(kit, root)
+        _, sy, sw, sh = brand.safe_area(kit)
+        colors, cta = kit["colors"], kit["cta"]
+        ink, size = colors["light"]["ink"], self.SIZES
+        wordmark = root / kit["wordmark_png"]
+        _, wordmark_h = _png_size(wordmark)
+        text_h = sum(ascent_descent(size["text"], font))
+        rows = _wrap(self.text, sw - 2 * TEXT_PAD, size["text"], font) if self.text else []
+        blocks = ([("logo", self.LOGO_W)] if self.with_logo else []) + [
+            ("wordmark", wordmark_h), ("text", text_h * len(rows)), ("pill", self.PILL_H),
+            ("url", sum(ascent_descent(size["url"], font)))]
+        blocks = [(k, h) for k, h in blocks if h]
+        top, y = {}, sy + (sh - sum(h for _, h in blocks) - self.GAP * (len(blocks) - 1)) / 2
+        for k, h in blocks:
+            top[k] = y
+            y += h + self.GAP
+
+        def baseline(line_top: float, px: int) -> str:
+            # drawtext puts the highest glyph of its own text at y: anchor on the baseline
+            # instead, so every line sits the same whatever its letters.
+            return f"{round(line_top + ascent_descent(px, font)[0])}-max_glyph_a"
+
+        texts = [_text_filter([row], out, f"text{i}", font=font, size=size["text"], color=ink,
+                              x="(w-text_w)/2", y=baseline(top["text"] + i * text_h,
+                                                           size["text"]))
+                 for i, row in enumerate(rows)]
+        trial = french_spaces(cta["trial"])
+        pw = round((text_width(trial, size["pill"], font) + 2 * self.PILL_PAD) / 2) * 2
+        ph, r = self.PILL_H, self.PILL_H / 2
+        # ponytail: cap height ~0.72 em (Inter): the pill text's capitals sit centred.
+        texts.append(_text_filter([trial], out, "pill", font=font, size=size["pill"],
+                                  color="#FFFFFF", x="(w-text_w)/2",
+                                  y=f"{round(top['pill'] + r + 0.36 * size['pill'])}"
+                                    "-max_glyph_a"))
+        texts.append(_text_filter([french_spaces(cta["url"])], out, "url", font=font,
+                                  size=size["url"], color=ink, x="(w-text_w)/2",
+                                  y=baseline(top["url"], size["url"])))
+
+        dur = self.duration_s
+        # The pill: an emerald capsule, alpha = coverage of a rounded rectangle (1 px soft).
+        alpha = (f"255*clip({r}+0.5-hypot(max(abs(X+0.5-{pw / 2})-{pw / 2 - r}\\,0)\\,"
+                 f"Y+0.5-{r})\\,0\\,1)")
+        card = (f"color=c=0x{colors['light']['bg'][1:]}:s={WIDTH}x{HEIGHT}:r={FPS}:d={dur}[bg];"
+                f"color=c=0x{colors['brand'][1:]}:s={pw}x{ph}:r={FPS}:d={dur},format=rgba,"
+                f"geq=r=r(X\\,Y):g=g(X\\,Y):b=b(X\\,Y):a={alpha}[pill];"
+                f"[bg][pill]overlay={(WIDTH - pw) // 2}:{round(top['pill'])}")
+        card += f"[bp];[1:v]format=rgba[wm];[bp][wm]overlay=(W-w)/2:{round(top['wordmark'])}"
+        extra: List[PathLike] = [wordmark]
         if self.with_logo:
-            width = round(WIDTH * 0.24 / 2) * 2
-            card += f"[bg];[1:v]scale={width}:-2[logo];[bg][logo]overlay=(W-w)/2:{sy}"
-            extra = [root / kit["logo_png"]]
+            card += (f"[bw];[2:v]scale={self.LOGO_W}:-2[logo];"
+                     f"[bw][logo]overlay=(W-w)/2:{round(top['logo'])}")
+            extra.append(root / kit["logo_png"])
         graph = (f"[0:v]setsar=1,fps={FPS},format=yuv420p[clip];"
-                 f"{card},setsar=1,format=yuv420p[card];"
+                 f"{card},{','.join(texts)},setsar=1,format=yuv420p[card];"
                  f"[clip][card]concat=n=2:v=1:a=0,{VIDEO_TAIL}")
         encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
                extra_inputs=extra, extend_s=self.duration_s)
 
     def events(self, length):  # appended: starts where the clip ends
-        return [{"t": length, "d": self.duration_s, "e": "end card", "text": self.text}]
+        event = {"t": length, "d": self.duration_s, "e": "end card"}
+        return [{**event, "text": self.text} if self.text else event]
 
 
 @register

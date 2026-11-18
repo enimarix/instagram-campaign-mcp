@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import brand from "../../brand/brand.json" with { type: "json" };
+import { palette } from "../src/lib/palette.ts";
 import { seeded, sheetSvg } from "../src/lib/game.ts";
 import * as art from "../src/lib/sprites.ts";
 
@@ -174,7 +174,7 @@ const effects: Record<string, Float64Array> = {
 /** Every generated file: path under motion/ → contents. */
 export const build = (): Map<string, string | Buffer> => {
   const files = new Map<string, string | Buffer>();
-  for (const [name, a] of Object.entries(art)) files.set(`public/sprites/${name}.svg`, `${sheetSvg(a, brand.colors.palette)}\n`);
+  for (const [name, a] of Object.entries(art)) files.set(`public/sprites/${name}.svg`, `${sheetSvg(a, palette)}\n`);
   for (const [name, s] of Object.entries(songs)) files.set(`public/audio/${name}.wav`, wav(song(s)));
   for (const [name, b] of Object.entries(effects)) files.set(`public/audio/${name}.wav`, wav(b));
   return files;

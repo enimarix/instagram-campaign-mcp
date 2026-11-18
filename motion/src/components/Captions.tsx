@@ -1,5 +1,6 @@
 import { useCurrentFrame } from "remotion";
 import { scriptAreas } from "../brand";
+import { frenchSpaces } from "../lib/french";
 import { intScale } from "../lib/pixel";
 import { sceneAt, type Timeline } from "../lib/timeline";
 import { DialogBox } from "./DialogBox";
@@ -25,7 +26,7 @@ export const Captions = ({ timeline, scale = 4, speed }: CaptionsProps) => {
   return (
     // Anchored to the band's top: a long line grows the box downwards, never into the hook area.
     <div style={{ position: "absolute", ...area, padding: px }}>
-      <DialogBox text={scene.text} width={area.width - 4 * px} scale={px} speed={speed} startFrame={scene.startFrame} cursor={false} />
+      <DialogBox text={frenchSpaces(scene.text)} width={area.width - 4 * px} scale={px} speed={speed} startFrame={scene.startFrame} cursor={false} />
     </div>
   );
 };

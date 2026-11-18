@@ -1,26 +1,32 @@
 import copy
 import json
+import re
 
 import pytest
 
+from src.config import APP_HOME
 from src.studio.brand import DEFAULT_PATH, BrandError, load_brand, safe_area
 
 GOOD = {
     "version": 1,
-    "placeholder": True,
+    "placeholder": False,
     "name": "Test",
     "handle": "@test",
     "logo": "logo.svg",
     "logo_png": "logo.png",
+    "wordmark_png": "wordmark.png",
     "colors": {
-        "primary": "#FFCD75",
-        "secondary": "#38b764",
-        "accent": "#EF7D57",
-        "background": "#1A1C2C",
-        "text": "#F4F4F4",
-        "palette": ["#000000", "#FFFFFF"],
+        "brand": "#10B981",
+        "brand_light": "#34d399",
+        "macros": {"kcal": "#3E8EF7", "protein": "#FF6F61", "fat": "#F5C242",
+                   "carbs": "#3FBF7F", "weight": "#A78BFA"},
+        "light": {"bg": "#F5F7F8", "card": "#FFFFFF", "ink": "#111827", "muted": "#6B7280"},
+        "dark": {"bg": "#0E1117", "card": "#1C1C1E", "text": "#FFFFFF", "muted": "#98989F"},
     },
-    "fonts": {"display": "Pixel", "body": "Pixel", "files": []},
+    "fonts": {"display": "Sans", "display_weight": 900, "body": "Sans", "files": []},
+    "cta": {"trial": "7 jours gratuits", "url": "example.fr", "stores": "Dispo partout",
+            "never_show_price": True},
+    "address": {"default": "vous", "humour": "tu", "live": "tu"},
     "safe_zone": {
         "width": 1080, "height": 1920, "top": 269, "bottom": 672, "left": 65, "right": 65,
     },
@@ -31,6 +37,7 @@ GOOD = {
 def _write(tmp_path, data):
     (tmp_path / "logo.svg").write_text("<svg/>", encoding="utf-8")
     (tmp_path / "logo.png").write_bytes(b"png")
+    (tmp_path / "wordmark.png").write_bytes(b"png")
     path = tmp_path / "brand.json"
     path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
     return path
@@ -45,13 +52,44 @@ def _with(change):
 def test_committed_file_loads():
     brand = load_brand()
     assert DEFAULT_PATH.is_file()
-    assert brand["placeholder"] is True
+    assert brand["placeholder"] is False
+    assert (brand["name"], brand["handle"]) == ("macroBody", "@macrobody.fr")
     assert (DEFAULT_PATH.parent / brand["logo"]).is_file()
-    assert (DEFAULT_PATH.parent / brand["logo_png"]).read_bytes()[:4] == b"\x89PNG"
-    assert len(brand["colors"]["palette"]) >= 8
+    png = (DEFAULT_PATH.parent / brand["logo_png"]).read_bytes()
+    assert png[:4] == b"\x89PNG"
+    assert int.from_bytes(png[16:20], "big") == int.from_bytes(png[20:24], "big") == 512
+    assert (DEFAULT_PATH.parent / brand["wordmark_png"]).read_bytes()[:4] == b"\x89PNG"
+    assert brand["colors"]["brand"] == "#10B981"
+    assert (brand["fonts"]["display"], brand["fonts"]["display_weight"]) == ("Inter Tight", 900)
+    assert brand["cta"]["never_show_price"] is True
+    assert brand["address"] == {"default": "vous", "humour": "tu", "live": "tu"}
     assert brand["safe_zone"]["width"] == 1080 and brand["safe_zone"]["height"] == 1920
     assert "_source" in brand
     assert load_brand() is brand  # cached
+
+
+def _colours(value):
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if not k.startswith("_"):
+                yield from _colours(v)
+    else:
+        yield value
+
+
+def test_committed_colours_are_hex_and_fonts_are_licensed():
+    brand = load_brand()
+    colours = list(_colours(brand["colors"]))
+    assert len(colours) == 15
+    assert all(re.fullmatch(r"#[0-9A-F]{6}", c) for c in colours), colours
+    licences = (APP_HOME / "motion" / "ASSETS_LICENSES.md").read_text(encoding="utf-8")
+    listed = set(re.findall(r"`(public/[^`]+)`", licences))
+    files = brand["fonts"]["files"]
+    assert files[0].endswith(".ttf")  # the ffmpeg ops need a font FreeType reads
+    for rel in files:
+        path = (DEFAULT_PATH.parent / rel).resolve()
+        assert path.is_file(), rel
+        assert path.relative_to(APP_HOME / "motion").as_posix() in listed, rel
 
 
 def test_tmp_file_loads(tmp_path):
@@ -101,12 +139,20 @@ def _set(*keys, value):
         (_del("logo_png"), "missing key(s): logo_png"),
         (_set("logo_png", value="missing.png"), "'logo_png' file not found"),
         (_set("logo_png", value="logo.svg"), "'logo_png' must be a .png"),
-        (_del("colors", "accent"), "missing 'accent'"),
-        (_set("colors", "primary", value="#FFF"), "colour 'primary' must be #RRGGBB"),
-        (_set("colors", "text", value="red"), "colour 'text'"),
-        (_set("colors", "palette", value=[]), "'colors.palette'"),
-        (_set("colors", "palette", value=["#12345G"]), "palette colour #0"),
+        (_del("wordmark_png"), "missing key(s): wordmark_png"),
+        (_set("wordmark_png", value="logo.svg"), "'wordmark_png' must be a .png"),
+        (_del("colors", "brand_light"), "missing 'brand_light'"),
+        (_del("colors", "dark", "text"), "'colors.dark' is missing 'text'"),
+        (_set("colors", "macros", value="#3E8EF7"), "'colors.macros' must be an object"),
+        (_set("colors", "brand", value="#FFF"), "colour 'brand' must be #RRGGBB"),
+        (_set("colors", "light", "ink", value="red"), "colour 'light.ink'"),
+        (_set("colors", "extra", value="#12345G"), "colour 'extra'"),
         (_del("fonts", "body"), "'fonts.body'"),
+        (_set("fonts", "display_weight", value=950), "'fonts.display_weight'"),
+        (_del("cta"), "missing key(s): cta"),
+        (_set("cta", "url", value=""), "'cta.url'"),
+        (_set("cta", "never_show_price", value="yes"), "'cta.never_show_price'"),
+        (_set("address", "humour", value="toi"), "'address.humour'"),
         (_set("fonts", "files", value=["nope.ttf"]), "font #0 file not found"),
         (_set("safe_zone", "top", value=-1), "'safe_zone.top'"),
         (_set("safe_zone", "left", value=1.5), "'safe_zone.left'"),
@@ -130,3 +176,11 @@ def test_missing_file_and_bad_json(tmp_path):
         load_brand(_write(tmp_path, "{"))
     with pytest.raises(BrandError, match="top level"):
         load_brand(_write(tmp_path, "[]"))
+
+
+def test_brand_voice_skill_matches_the_kit():
+    text = (APP_HOME / "agent" / "skills" / "brand-voice" / "SKILL.md").read_text(encoding="utf-8")
+    brand = load_brand()
+    for value in (brand["handle"], *(brand["cta"][k] for k in ("trial", "url", "stores"))):
+        assert value in text, value
+    assert "Never show or say a price" in text and "lien en bio" in text

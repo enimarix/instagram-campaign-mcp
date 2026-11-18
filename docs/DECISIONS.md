@@ -363,3 +363,35 @@ created paused, inside `tests.launch`. Publishing is unchanged (per-video approv
 GOAL.md §3.6 and §5.4 updated.
 Reason: the owner's instruction of 2026-11-18; the owner has the artistic eye and
 decides what is pushed with money.
+
+## 2026-11-18: Owner art direction: the real macroBody brand kit (050)
+The placeholder kit (H1) is replaced by the owner's own identity. Sources the owner
+pointed to: the macroBody app (docs/DESIGN.md, the mobile theme, the website fonts and
+llms.txt) and the owner's own Reels (macrobody-video: README, logo, drawing code).
+- Palette (`brand/brand.json colors`): brand emerald #10B981 (light #34D399), the app's
+  macro colours (kcal #3E8EF7, protein #FF6F61, fat #F5C242, carbs #3FBF7F, weight
+  #A78BFA), light surfaces (#F5F7F8 / #FFFFFF / ink #111827 / muted #6B7280) and dark
+  (#0E1117 / #1C1C1E / #FFFFFF / #98989F). ffmpeg overlays draw dark.text on dark.bg;
+  the end card is the light surface with the logo.
+- Fonts: Inter Tight 900 (display) and Inter (body), the variable WOFF2 files from the
+  owner's website. The local ffmpeg cannot read WOFF2 (drawtext segfaults), so the ffmpeg
+  ops use a static Inter Tight Black TTF derived from that WOFF2 (OFL, no Reserved Font
+  Name).
+- Logo: the app mark drawn in-repo (black #0B0B0B squircle, radius 22 %, white "mB"),
+  flat: no glow, no gradient. `brand/logo.svg` + `brand/logo.png` (512 px).
+- CTA (`cta`): "7 jours gratuits" + "macrobody.fr" (+ "Dispo sur App Store & Google
+  Play"); never a price; never "lien en bio" unless the owner asks.
+- End card (`end_card` op): centred like the owner's end cards: logo tile, wordmark
+  ("macro" ink + "Body" emerald), optional tagline, "7 jours gratuits" in an emerald
+  pill, "macrobody.fr". Its `text` became an optional tagline (the CTA comes from the kit).
+- French typography: a no-break space before ? ! : ; » and after « in every text the
+  studio draws (ffmpeg ops and motion hook/captions), so a line never starts with a mark.
+- Address (`address`): "vous" by default (brand films, paper, informative), "tu" for
+  humour and live-action. Agent skill `agent/skills/brand-voice`.
+- Styles are per template: the brand kit is no longer the 8-bit look. The 8-bit templates
+  keep Sweetie 16 and Press Start 2P as their own constants (`motion/src/lib/palette.ts`,
+  `font.ts`).
+- The first 8-bit sample (FactQuest) was declined by the owner ("not good at all"):
+  samples go to `data/samples/`, never the inbox, and new styles (voxel, paper, clean brand
+  film) come as their own templates.
+Reason: owner's art direction, 2026-11-18.

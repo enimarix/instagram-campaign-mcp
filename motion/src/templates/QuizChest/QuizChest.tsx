@@ -47,7 +47,7 @@ const DIGIT_SCALE = 12;
 const MAX_CHOICE_SCALE = 5;
 const GAP = 24;
 
-/** Treasure chest, frame 0 closed, frame 1 open (gold inside). Colours: brand palette indices. */
+/** Treasure chest, frame 0 closed, frame 1 open (gold inside). Colours: 8-bit palette indices. */
 const chestBody = [
   ".KYYYYYYYYYYYYK.",
   ".KRRRRRYYRRRRRK.",

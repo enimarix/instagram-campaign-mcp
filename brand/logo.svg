@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- macroBody app mark, drawn in-repo after the owner's icon (black squircle, white "mB" with
+     the m's last leg shared with the B's stem). Flat: no glow, no gradient. logo.png is this
+     file at 512 px (step 050). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>macroBody</title>
+  <rect width="512" height="512" rx="113" fill="#0B0B0B"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="44">
+    <!-- m: two arches on stems at x 110 / 194, the last leg is the B stem at x 278 -->
+    <path d="M110 339V256A42 42 0 0 1 194 256V339M194 256A42 42 0 0 1 278 256"/>
+    <!-- B stem, cap height 148 to baseline 339 -->
+    <path d="M278 148V339"/>
+  </g>
+  <!-- m: square top-left shoulder at the x-height -->
+  <rect x="88" y="192" width="44" height="80" fill="#FFFFFF"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="36">
+    <!-- B bowls: the lower one wider, as in the owner's mark -->
+    <path d="M278 166H350A35 35 0 0 1 350 236H278"/>
+    <path d="M278 236H362A42.5 42.5 0 0 1 362 321H278"/>
+  </g>
+</svg>

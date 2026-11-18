@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.studio import ffmpeg, recipe
+from src.studio.brand import DEFAULT_PATH, load_brand
 from src.studio.recipe import Captions, EndCard, Logo, Recipe, render
 from tests.test_studio_brand_ops import (
     NEAR,
@@ -67,6 +68,56 @@ def test_captions_center(tmp_path):
     assert abs((y0 + y1) / 2 - (SY + SH / 2)) <= NEAR
 
 
+def _box_runs(tmp_path, src, out, t, x):
+    """(start, end) row ranges, end exclusive, of pixels the op changed in column `x`;
+    gaps of up to 3 rows are inside a box (a text edge can blend to the clip's grey)."""
+    a, b = gray(tmp_path, src, t), gray(tmp_path, out, t)
+    rows = [y for y in range(recipe.HEIGHT) if abs(a[y * W + x] - b[y * W + x]) > 24]
+    runs = []
+    for y in rows:
+        if runs and y <= runs[-1][1] + 3:
+            runs[-1][1] = y + 1
+        else:
+            runs.append([y, y + 1])
+    return runs
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("size, text, n", [
+    (40, "Ton corps dépense moins quand tu manges moins : voilà pourquoi tu stagnes", 2),
+    (64, "Ton corps dépense moins quand tu manges moins : voilà pourquoi tu stagnes !", 3)])
+def test_wrapped_caption_lines_get_separate_boxes_that_never_touch(tmp_path, size, text, n):
+    font = DEFAULT_PATH.parent / load_brand()["fonts"]["files"][0]
+    rows = recipe._wrap(text, SW - 2 * recipe.TEXT_PAD, recipe.ass_em(size, font), font)
+    assert len(rows) == n
+    src, out, _ = run(tmp_path, [Captions(lines=[{"start_s": 0, "end_s": 1, "text": text}],
+                                          size=size)], duration=1)
+    runs = _box_runs(tmp_path, src, out, 0.5, SX + SW // 2)
+    assert len(runs) == n, runs  # one box per line, gaps of untouched clip between them
+    for (_, end), (start, _) in zip(runs, runs[1:]):
+        assert start - end >= recipe.CAPTION_GAP - 2 * NEAR
+    for y0, y1 in runs:
+        assert y1 - y0 == pytest.approx(size + 2 * recipe.TEXT_PAD, abs=NEAR)
+    box = changed(tmp_path, src, out, 0.5)
+    assert_in_safe_area(box)
+    assert SY + SH - box[3] <= NEAR  # bottom position: the last box on the safe bottom
+
+
+def test_french_spaces_and_wrapping_never_start_a_line_with_a_mark():
+    nb = recipe.NBSP
+    assert recipe.french_spaces("Vrai ? Faux ! Note : oui ; « non »") == (
+        f"Vrai{nb}? Faux{nb}! Note{nb}: oui{nb}; «{nb}non{nb}»")
+    assert recipe.french_spaces("«oui»") == f"«{nb}oui{nb}»"
+    assert recipe.french_spaces("Why? 12:30 https://x.fr") == "Why? 12:30 https://x.fr"
+    font = DEFAULT_PATH.parent / load_brand()["fonts"]["files"][0]
+    text = "Pourquoi tu stagnes en sèche ? La réponse est simple : tu manges moins !"
+    for width in range(250, 900, 10):
+        lines = recipe._wrap(text, width, 48, font)
+        assert " ".join(lines).replace(nb, " ") == text
+        assert not any(line[0] in "?!:;»" for line in lines), (width, lines)
+        assert all(recipe.text_width(line, 48, font) <= width for line in lines)
+
+
 def test_caption_validation():
     ok = {"start_s": 0, "end_s": 1, "text": "x"}
     for bad in ([], [ok, ok],  # overlap
@@ -93,7 +144,7 @@ def test_ass_text_escapes_override_braces_and_backslashes():
 
 @needs_ffmpeg
 def test_end_card_extends_video_with_brand_background_and_continuous_audio(tmp_path):
-    src, out, info = run(tmp_path, [EndCard(text="Follow for more 8-bit facts")], duration=1)
+    src, out, info = run(tmp_path, [EndCard()], duration=1)
     assert_spec(info, 3)
     s = streams(out)
     assert s["video"] == pytest.approx(1 + 2.0, abs=FRAME + 0.005)
@@ -101,9 +152,35 @@ def test_end_card_extends_video_with_brand_background_and_continuous_audio(tmp_p
     clip, card = gray(tmp_path, out, 0.5), gray(tmp_path, out, 2.5)
     assert clip[0] > 100  # the grey clip
     bg = card[0]
-    assert bg < 64  # the dark brand background
+    assert bg > 220  # the light brand surface (#F5F7F8)
     for x, y in ((W - 1, 0), (0, recipe.HEIGHT - 1), (W // 2, recipe.HEIGHT - 300)):
         assert abs(card[y * W + x] - bg) <= 4
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("with_logo", [True, False])
+def test_end_card_blocks_are_centred_on_the_frame_axis(tmp_path, with_logo):
+    """Tile, wordmark, each tagline line, the pill and the URL: each a band of rows with its
+    own content centred on x = 540, all inside the safe area."""
+    text = "Terminez la journée pile sur vos objectifs, sans calculer"
+    _, out, _ = run(tmp_path, [EndCard(text=text, with_logo=with_logo)], duration=1)
+    card = gray(tmp_path, out, 2.5)
+    bg = card[0]
+    bands, last = [], None
+    for y in range(recipe.HEIGHT):
+        xs = [x for x in range(W) if abs(card[y * W + x] - bg) > 24]
+        if not xs:
+            continue
+        if last is not None and y == last + 1:
+            bands[-1] = (bands[-1][0], y + 1, min(bands[-1][2], xs[0]), max(bands[-1][3], xs[-1] + 1))
+        else:
+            bands.append((y, y + 1, xs[0], xs[-1] + 1))
+        last = y
+    # logo, wordmark, 2 tagline lines, pill, url: bands split by background rows
+    assert len(bands) == (6 if with_logo else 5), bands
+    for y0, y1, x0, x1 in bands:
+        assert abs((x0 + x1) / 2 - W / 2) <= NEAR, (y0, y1, x0, x1)
+        assert_in_safe_area((x0, y0, x1, y1))
 
 
 def test_end_card_validation():
@@ -111,7 +188,7 @@ def test_end_card_validation():
                 {"text": "x" * 61}):
         with pytest.raises(ValidationError):
             EndCard(**bad)
-    assert EndCard(text="x").duration_s == 2.0 and EndCard(text="x").with_logo
+    assert EndCard().duration_s == 2.0 and EndCard().with_logo and EndCard().text is None
 
 
 @needs_ffmpeg

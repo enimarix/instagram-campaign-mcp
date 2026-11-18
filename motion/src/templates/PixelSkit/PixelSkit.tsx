@@ -39,7 +39,7 @@ const BOX_SCALE = 4;
 const FLASH = 6;
 const DEFAULT_SPRITE = ["mascot", "slime"] as const;
 
-/** A hand (palm out) slapped over the face; colours are brand palette indices. */
+/** A hand (palm out) slapped over the face; colours are 8-bit palette indices. */
 const hand: PixelArt = {
   colors: { K: 0, Y: 4 },
   frames: [[".K.K.K.", "KYKYKYK", "KYYYYYK", "KYYYYYK", ".KYYYK.", "..KKK.."]],
