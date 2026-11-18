@@ -11,8 +11,9 @@ does it. Before every agent run, write_packet() rebuilds `<workspace>/work/`:
   written, then written atomically (tmp + replace). A producer error or an invalid
   section raises PacketError: the run fails before Claude starts.
 
-Run kinds are playbook names (RUNS): `daily-produce` (night) needs every section, the light
-afternoon run is a second playbook, `daily-revise` (revisions, feedback, DM picks),
+Run kinds are playbook names (RUNS): `daily-produce` (night) needs every section but
+`ads` (only `weekly-ads` reads it), the light afternoon run is a second playbook,
+`daily-revise` (revisions, feedback, DM picks),
 scheduled like any other: `AGENT_SCHEDULE=daily-produce@03:00,daily-revise@14:00`. A
 playbook not in the table gets every section.
 
@@ -93,14 +94,22 @@ def _dm_picks(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     return {"untrusted_notes": True, "picks": picks}, len(picks)
 
 
+def _ads(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
+    from ..ads.agent import work_packet  # here: src/ads imports studio.alerts, which imports us
+
+    return work_packet(store, settings)
+
+
 SECTIONS: Dict[str, Producer] = {"brief": _brief, "feedback": _feedback,
                                  "revisions": _revisions, "facts": _facts,
-                                 "quotas": _quotas, "dm_picks": _dm_picks}
+                                 "quotas": _quotas, "dm_picks": _dm_picks, "ads": _ads}
 # playbook -> (run_kind, sections); None = every section.
 RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
-    "daily-produce": ("produce", None),
+    "daily-produce": ("produce", ("brief", "feedback", "revisions", "facts", "quotas",
+                                  "dm_picks")),
     "daily-revise": ("light", ("revisions", "feedback", "dm_picks")),
     "daily-learn": ("learn", ("facts", "brief")),
+    "weekly-ads": ("ads", ("ads",)),  # 096: skipped when not configured or nothing to do
 }
 # playbook -> the section that decides the skip, whatever the others count: a day with
 # nothing published or matured has nothing to analyse.

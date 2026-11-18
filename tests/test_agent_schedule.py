@@ -41,10 +41,11 @@ def started_at(store, run_id, when):
 
 
 def test_parse_schedule():
-    assert schedule.parse_schedule(" a@03:00, b-2@23:59 ,") == [
-        ("a", time(3)), ("b-2", time(23, 59))]
+    assert schedule.parse_schedule(" a@03:00, b-2@23:59 , w@sun 04:00") == [
+        ("a", time(3), None), ("b-2", time(23, 59), None), ("w", time(4), 6)]
     assert schedule.parse_schedule("") == []
-    for bad in ("a@3:00", "a@24:00", "a", "../a@03:00", "a@03:00,a@04:00"):
+    for bad in ("a@3:00", "a@24:00", "a", "../a@03:00", "a@03:00,a@04:00", "a@mon04:00",
+                "a@monday 04:00", "a@Mon 04:00", "a@mon  04:00", "a@03:00 mon"):
         with pytest.raises(ValueError):
             schedule.parse_schedule(bad)
     with pytest.raises(ValidationError):
@@ -284,3 +285,43 @@ def test_light_afternoon_run_is_due_after_the_night_run(store, agent_dir):
     assert schedule.due_runs(store, s, afternoon) == []
     assert [r["playbook"] for r in schedule.next_runs(s, afternoon)] == [
         "daily-produce", "daily-revise"]
+
+
+# --- weekly entries (096) ---------------------------------------------------------------
+def test_weekly_entry_is_due_on_its_weekday_only(store, agent_dir):
+    (agent_dir / "playbooks" / "weekly-ads.md").write_text("Ads.\n")
+    s = cfg(agent_schedule="weekly-ads@tue 03:00,later@wed 03:00")  # NOW: Tuesday 03:30
+    assert schedule.due_runs(store, s, NOW - timedelta(minutes=31)) == []
+    assert schedule.due_runs(store, s, NOW) == ["weekly-ads"]
+    store.finish_agent_run(store.start_agent_run("weekly-ads")["id"], "succeeded")
+    assert schedule.due_runs(store, s, NOW) == []
+    for days in range(1, 7):  # not again the rest of the week
+        assert schedule.due_runs(store, s, NOW + timedelta(days=days)) == []
+    assert schedule.due_runs(store, s, NOW + timedelta(days=7)) == ["weekly-ads"]
+
+
+def test_next_runs_of_a_weekly_entry():
+    s = cfg(agent_schedule="a@tue 03:00,b@tue 04:00,c@mon 03:00,d@03:00")
+    a, b, c, d = schedule.next_runs(s, NOW)  # Tuesday 03:30 Paris
+    assert a["next_at"].isoformat() == "2026-11-24T03:00:00+01:00" and a["time"] == "tue 03:00"
+    assert b["next_at"].isoformat() == "2026-11-17T04:00:00+01:00" and b["weekly"]
+    assert c["next_at"].isoformat() == "2026-11-23T03:00:00+01:00"
+    assert d["time"] == "03:00" and not d["weekly"]
+
+
+def test_weekly_os_registration():
+    s = cfg(agent_schedule="daily-produce@03:00,weekly-ads@mon 04:00")
+    script = schedule.windows_command(s, exe="python.exe", now=NOW)[-1]
+    at = datetime(2026, 11, 23, 3, 0, tzinfo=UTC).astimezone()  # Monday 04:00 Paris
+    day = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+           "Sunday")[at.weekday()]
+    assert (f"-Weekly -DaysOfWeek {day} -At '{at.strftime('%Y-%m-%dT%H:%M:%S')}'"
+            in script)
+    assert script.count("-Daily -At") == 1 and "-TaskName 'IGCampaignAgent-weekly-ads'" in script
+    lines = schedule.cron_block(s, exe="py", now=NOW).splitlines()
+    assert lines[2].split()[2:5] == ["*", "*", "*"]  # daily
+    assert lines[3].startswith(f"{at.minute} {at.hour} * * {(at.weekday() + 1) % 7} cd ")
+    assert lines[3].endswith(" agent run-due")
+    run = FakeRun()
+    schedule.install_schedule(s, run=run, platform="win32")
+    assert "-Weekly -DaysOfWeek" in run.calls[0][0][-1]

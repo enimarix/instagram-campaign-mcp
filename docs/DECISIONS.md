@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: The agent proposes ad tests weekly, never approves them (096)
+Four agent-profile MCP tools: `list_ad_winners`, `propose_ad_test` (stored with
+`proposed_by = "agent"`; at most `MAX_AGENT_PROPOSALS` = 3 waiting for the owner),
+`list_ad_tests`, `get_ad_test_results`. None reaches approve, activate, cancel, the kill
+switch, the caps or the writer (a test walks their calls). The `weekly-ads` playbook turns
+finished tests into `ads` learnings whose evidence carries the `test_id`. Weekly runs:
+`AGENT_SCHEDULE` entries take an optional weekday, `weekly-ads@mon 04:00` (Task Scheduler
+`-Weekly -DaysOfWeek`, cron day of week); a missed weekly run waits for the next week.
+`weekly-ads` is not in the default schedule: the owner adds it after H6. Its run is
+skipped (no Claude launch) while ads are not configured or there is nothing to do.
+Reason: a paid test is the owner's decision; a weekday in the schedule costs no empty run.
+
 ## 2026-11-18: A/B tests run at least 7 days; budgets from the account's rates (094)
 `abtest.TestSpec.min_days` defaults to 7 (was 4): Meta's A/B testing best practices say
 "we recommend a minimum of 7-day tests" (Business Help Center, article 290009911394576).

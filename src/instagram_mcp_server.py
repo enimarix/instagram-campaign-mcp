@@ -20,6 +20,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from . import campaign as camp
+from .ads import agent as ads_agent
 from .config import get_settings
 from .instagram_client import InstagramAPIError, InstagramClient, NotConfigured
 from .learning import brief, facts, learnings, report
@@ -645,6 +646,16 @@ async def _studio(fn, *args, **kwargs) -> Any:
         raise ToolError(str(e)) from e
 
 
+async def _studio_async(work) -> Any:
+    """_studio for a coroutine that may also call the Graph API."""
+    try:
+        return await work
+    except (ValueError, KeyError, RuntimeError) as e:
+        raise ToolError(str(e)) from e
+    except InstagramAPIError as e:
+        raise _err(e) from e
+
+
 @mcp.tool(annotations=LOCAL_READ)
 async def list_motion_templates() -> Dict[str, Any]:
     """Motion video templates with their props JSON Schema and default props. Pass props
@@ -990,6 +1001,47 @@ async def list_learnings(kind: Optional[str] = None, status: Optional[str] = "ac
 
 
 # ----------------------------------------------------------------------
+# Ads for the agent (step 096): propose and read only; approval is the owner's, in the UI
+# ----------------------------------------------------------------------
+@mcp.tool(annotations=LOCAL_READ)
+async def list_ad_winners() -> Dict[str, Any]:
+    """Matured Reels scored winner that may be advertised (rights checked), newest first:
+    the posts an ad test can use (media_id)."""
+    return await _studio(ads_agent.winners, store(), get_settings())
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                      open_world_hint=True))
+async def propose_ad_test(hypothesis: str, variable: str, variants: List[Dict[str, str]],
+                          min_lift: float = 0.2, primary_metric: str = "ctr"
+                          ) -> Dict[str, Any]:
+    """Propose a paid A/B test; it spends nothing and waits for the owner's approval in the
+    website. One variable (creative | audience | placement), 2-4 variants {media_id,
+    preset} (presets fr_reels, fr_feed_reels, francophone_reels): creative = different
+    winner posts with one preset; audience / placement = one post, presets that differ
+    only in that. A specific, falsifiable hypothesis; min_lift = the relative lift worth
+    detecting; primary_metric ctr. Returns the test with the budget it needs; refused
+    beyond a few proposals still waiting for the owner."""
+    return await _studio_async(ads_agent.propose(
+        store(), get_settings(), hypothesis=hypothesis, variable=variable,
+        variants=variants, min_lift=min_lift, primary_metric=primary_metric))
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def list_ad_tests(status: Optional[str] = None) -> Dict[str, Any]:
+    """Ad tests, newest first (status proposed | approved | running | finished |
+    cancelled), each with its budget need and latest result."""
+    return await _studio(ads_agent.list_tests, store(), get_settings(), status)
+
+
+@mcp.tool(annotations=LOCAL_READ)
+async def get_ad_test_results(test_id: int) -> Dict[str, Any]:
+    """One ad test's latest results: per-variant metrics, the evaluation (winner, lift with
+    its confidence interval, p-values), spend against its budget."""
+    return await _studio(ads_agent.results, store(), get_settings(), test_id)
+
+
+# ----------------------------------------------------------------------
 # DMs (requires instagram_manage_messages)
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=READ)
@@ -1097,6 +1149,13 @@ AGENT_TOOLS = frozenset({
     # (the key stays in it); licence, credit and ads_allowed are recorded in code.
     "search_stock",
     "add_stock_clip",
+    # Ads (step 096): propose tests and read results only. No agent tool approves,
+    # activates, cancels, kills or unkills, changes a cap or reaches the writer
+    # (tests/test_ads_agent.py walks the calls); a proposal waits for the owner's approval.
+    "list_ad_winners",
+    "propose_ad_test",
+    "list_ad_tests",
+    "get_ad_test_results",
 })
 
 

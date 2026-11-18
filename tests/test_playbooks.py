@@ -71,7 +71,8 @@ def test_prepare_workspace_with_the_real_agent_folder(tmp_path):
         assert (ws / ".claude" / "skills" / skill.name / "SKILL.md").is_file()
 
 
-@pytest.mark.parametrize("name", ["daily-produce", "daily-revise", "daily-learn"])
+@pytest.mark.parametrize("name", ["daily-produce", "daily-revise", "daily-learn",
+                                  "weekly-ads"])
 def test_scheduled_playbooks_read_their_work_packet_first(name):
     from src.agent import packet
 
@@ -95,9 +96,9 @@ def test_default_schedule_runs_the_analysis_before_the_batch():
 
     cfg = InstagramMCPSettings(_env_file=None, instagram_access_token=None)
     runs = parse_schedule(cfg.agent_schedule)
-    assert [p for p, _ in runs] == ["daily-learn", "daily-produce"]
-    assert runs[0][1] < runs[1][1]
-    for name, _ in runs:
+    assert [p for p, _, _ in runs] == ["daily-learn", "daily-produce"]
+    assert runs[0][1] < runs[1][1] and "weekly-ads" not in cfg.agent_schedule  # 096: owner adds it
+    for name, _, _ in runs:
         assert (runner.AGENT_DIR / "playbooks" / f"{name}.md").is_file()
 
 

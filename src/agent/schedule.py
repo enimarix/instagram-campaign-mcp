@@ -1,8 +1,9 @@
 """Scheduled agent runs and autostart (061).
 
-AGENT_SCHEDULE (`playbook@HH:MM,...`, owner-local TIMEZONE) says when each playbook runs.
-due_runs() is the one place that decides: a playbook is due once its time today has
-passed, it has no run started today, it isn't running and its file exists. Three callers:
+AGENT_SCHEDULE (`playbook@HH:MM,...`, owner-local TIMEZONE) says when each playbook runs;
+`playbook@mon 04:00` runs weekly, on that weekday only (096). due_runs() is the one place
+that decides: a playbook is due once its time today has passed (on its weekday, if it has
+one), it has no run started today, it isn't running and its file exists. Three callers:
 
 - `ig-campaign agent run-due` (the OS tasks' action): runs each due playbook in turn;
 - the `up` / `worker` process: catch_up() at start and every CATCH_UP_EVERY, starting due
@@ -10,8 +11,9 @@ passed, it has no run started today, it isn't running and its file exists. Three
 - the website's Settings page: overview() (next and last run per playbook).
 
 install_schedule() registers the OS side: on Windows a logon task for `up` and one daily
-task per playbook that wakes the PC (-WakeToRun -StartWhenAvailable); elsewhere a crontab
-block between markers (`@reboot ... up`, `M H * * * ... agent run-due`).
+(or weekly) task per playbook that wakes the PC (-WakeToRun -StartWhenAvailable);
+elsewhere a crontab block between markers (`@reboot ... up`, `M H * * D|* ... agent
+run-due`). A weekly run missed while the PC was off waits for the next week.
 """
 
 from __future__ import annotations
@@ -47,18 +49,22 @@ CATCH_UP_EVERY = 600.0  # s
 UP_TASK = "IGCampaignUp"
 AGENT_TASK = "IGCampaignAgent-"  # + playbook
 CRON_BEGIN, CRON_END = "# ig-campaign begin", "# ig-campaign end"
-_ENTRY = re.compile(r"^([^@\s]+)@([01]\d|2[0-3]):([0-5]\d)$")
+DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")  # datetime.weekday() order
+DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+_ENTRY = re.compile(rf"^([^@\s]+)@(?:({'|'.join(DAYS)}) )?([01]\d|2[0-3]):([0-5]\d)$")
 
 
-def parse_schedule(value: str) -> List[Tuple[str, time]]:
-    """`daily-produce@03:00, other@14:30` -> [(playbook, time)]; ValueError when malformed."""
+def parse_schedule(value: str) -> List[Tuple[str, time, Optional[int]]]:
+    """`daily-produce@03:00, weekly-ads@mon 04:00` -> [(playbook, time, weekday 0=Monday
+    or None = daily)]; ValueError when malformed."""
     out = []
     for part in filter(None, (p.strip() for p in value.split(","))):
         m = _ENTRY.match(part)
         if not m or not PLAYBOOK_NAME.match(m[1]):
-            raise ValueError(f"bad agent schedule entry {part!r} (want playbook@HH:MM)")
-        out.append((m[1], time(int(m[2]), int(m[3]))))
-    if len({p for p, _ in out}) != len(out):
+            raise ValueError(f"bad agent schedule entry {part!r} (want playbook@HH:MM or "
+                             "playbook@mon HH:MM)")
+        out.append((m[1], time(int(m[3]), int(m[4])), DAYS.index(m[2]) if m[2] else None))
+    if len({p for p, _, _ in out}) != len(out):
         raise ValueError("a playbook appears twice in the agent schedule")
     return out
 
@@ -74,8 +80,8 @@ def due_runs(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     local = _local(settings, now)
     day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
     due = []
-    for playbook, at in parse_schedule(settings.agent_schedule):
-        if local.time() < at:
+    for playbook, at, weekday in parse_schedule(settings.agent_schedule):
+        if local.time() < at or weekday not in (None, local.weekday()):
             continue
         last = store.list_agent_runs(playbook, limit=1)
         if last and parse_iso(last[0]["started_at"]) >= day_start:
@@ -93,13 +99,19 @@ def due_runs(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
 
 def next_runs(settings: InstagramMCPSettings, now: datetime) -> List[Dict[str, Any]]:
-    """[{playbook, time 'HH:MM' owner-local, next_at aware owner-local datetime}]."""
+    """[{playbook, time 'HH:MM' (weekly: 'mon HH:MM') owner-local, weekly, next_at aware
+    owner-local datetime}]."""
     local = _local(settings, now)
     out = []
-    for playbook, at in parse_schedule(settings.agent_schedule):
-        day = local.date() if local.time() < at else local.date() + timedelta(days=1)
-        out.append({"playbook": playbook, "time": at.strftime("%H:%M"),
-                    "next_at": datetime.combine(day, at, tzinfo=local.tzinfo)})
+    for playbook, at, weekday in parse_schedule(settings.agent_schedule):
+        ahead = 0 if weekday is None else (weekday - local.weekday()) % 7
+        if ahead == 0 and local.time() >= at:
+            ahead = 1 if weekday is None else 7
+        out.append({"playbook": playbook, "weekly": weekday is not None,
+                    "time": (f"{DAYS[weekday]} " if weekday is not None else "")
+                    + at.strftime("%H:%M"),
+                    "next_at": datetime.combine(local.date() + timedelta(days=ahead), at,
+                                                tzinfo=local.tzinfo)})
     return out
 
 
@@ -194,11 +206,13 @@ def windows_command(settings: InstagramMCPSettings, *, remove: bool = False,
             " -Force | Out-Null",
         ]
         for r in next_runs(settings, now or utcnow()):
-            # the OS uses this machine's clock
-            at = r["next_at"].astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+            at = r["next_at"].astimezone()  # the OS uses this machine's clock
+            when = (f"-Weekly -DaysOfWeek {DAY_NAMES[at.weekday()]}" if r["weekly"]
+                    else "-Daily")
             lines += [
                 f"$a = {action('agent run-due')}",
-                f"$t = New-ScheduledTaskTrigger -Daily -At {_ps(at)}",
+                f"$t = New-ScheduledTaskTrigger {when} -At "
+                f"{_ps(at.strftime('%Y-%m-%dT%H:%M:%S'))}",
                 f"$s = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable {battery}",
                 f"Register-ScheduledTask -TaskName {_ps(AGENT_TASK + r['playbook'])} -Action $a"
                 " -Trigger $t -Settings $s -Force | Out-Null",
@@ -212,7 +226,8 @@ def cron_block(settings: InstagramMCPSettings, *, exe: str = sys.executable,
     lines = [CRON_BEGIN, f"@reboot {cmd} up"]
     for r in next_runs(settings, now or utcnow()):
         at = r["next_at"].astimezone()  # the OS uses this machine's clock
-        lines.append(f"{at.minute} {at.hour} * * * {cmd} agent run-due")
+        dow = (at.weekday() + 1) % 7 if r["weekly"] else "*"  # cron: 0 = Sunday
+        lines.append(f"{at.minute} {at.hour} * * {dow} {cmd} agent run-due")
     return "\n".join([*lines, CRON_END]) + "\n"
 
 
@@ -238,7 +253,7 @@ def install_schedule(settings: InstagramMCPSettings, *, remove: bool = False,
         run(windows_command(settings, remove=remove), check=True, capture_output=True,
             timeout=60)
         return "Task Scheduler: " + ("removed" if remove else
-                                    f"{UP_TASK} at logon, {AGENT_TASK}<playbook> daily")
+                                    f"{UP_TASK} at logon, {AGENT_TASK}<playbook> daily or weekly")
     current = run(["crontab", "-l"], capture_output=True, text=True, timeout=60)
     if current.returncode and "no crontab" not in current.stderr:  # never overwrite blind
         raise subprocess.CalledProcessError(current.returncode, "crontab -l",

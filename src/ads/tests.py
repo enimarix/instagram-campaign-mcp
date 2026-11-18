@@ -52,11 +52,12 @@ PLACEMENT_KEYS = {"publisher_platforms", "instagram_positions"}
 DEFAULT_CTR = 0.01  # ponytail: a low guess (larger sample) until the account has insights
 MIN_IMPRESSIONS = 1000  # fewer: the account's own rates are noise, use the defaults
 PAUSE_ORDER = {"campaign": 0, "adset": 1, "ad": 2}  # the campaign first stops everything
+MAX_AGENT_PROPOSALS = 3  # agent proposals waiting for the owner at once (096)
 
 
 class AdTestRefused(Exception):
     """Nothing was sent. code: invalid | rights | not_ours | not_boostable | status |
-    underpowered | not_configured."""
+    underpowered | not_configured | cap."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -133,6 +134,13 @@ async def propose(
         raise AdTestRefused("invalid", f"variable must be one of {abtest.VARIABLES}")
     if proposed_by not in ("owner", "agent"):
         raise AdTestRefused("invalid", "proposed_by is owner or agent")
+    if proposed_by == "agent":  # ponytail: count then insert, one agent run at a time
+        with store._tx() as c:
+            waiting = c.execute("SELECT COUNT(*) FROM ad_tests WHERE proposed_by='agent'"
+                                " AND status='proposed'").fetchone()[0]
+        if waiting >= MAX_AGENT_PROPOSALS:
+            raise AdTestRefused("cap", f"{waiting} agent proposals already wait for the "
+                                "owner (MAX_AGENT_PROPOSALS): propose again once they decide")
     rows = _variants(variable, variants)
     for v in rows:
         try:

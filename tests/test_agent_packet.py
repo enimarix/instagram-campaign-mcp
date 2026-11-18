@@ -53,8 +53,9 @@ def test_every_section_is_valid_with_counts_and_checksums_on_a_seeded_db(
     out = packet.write_packet(store, cfg, "daily-produce", ws)
     manifest = json.loads((ws / "work" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest == out["manifest"] and manifest["run_kind"] == "produce"
-    assert set(manifest["sections"]) == set(packet.SECTIONS)
-    assert _files(ws) == sorted(["manifest.json", *(f"{n}.json" for n in packet.SECTIONS)])
+    produce = packet.RUNS["daily-produce"][1]
+    assert set(manifest["sections"]) == set(packet.SECTIONS) - {"ads"} == set(produce)
+    assert _files(ws) == sorted(["manifest.json", *(f"{n}.json" for n in produce)])
     for name, entry in manifest["sections"].items():
         raw = (ws / "work" / entry["file"]).read_bytes()
         assert hashlib.sha256(raw).hexdigest() == entry["sha256"]
