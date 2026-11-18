@@ -99,6 +99,13 @@ pip install -e ".[dev]"
 cp env.example .env
 pytest -q
 ```
+
+End-to-end smoke test (seed → Inbox → Calendar → publish against a local Graph API stub,
+no network, fake token; needs the `.venv` above or `PYTHON=<path>`):
+```bash
+cd web && npm ci && npx playwright install chromium   # once
+npm run e2e                                           # builds the website, runs web/e2e/
+```
 </details>
 
 ### 3. Connect to Claude
