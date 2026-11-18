@@ -48,11 +48,11 @@ def checks(settings: InstagramMCPSettings, env_file: str = ENV_FILE) -> List[Che
             "install Node.js 22.12+, then npm --prefix motion ci")
     index = Path(settings.web_dist) / "index.html"
     add("website build", index.is_file(), str(index.parent),
-        "npm --prefix web ci && npm --prefix web run build")
+        "npm --prefix web ci, then npm --prefix web run build")
     checked_out = (downloader_service.VENDOR_DIR / "package.json").is_file()
     add("Reel downloader", checked_out and downloader_service.built(),
         "built" if downloader_service.built() else
-        "built: no" if checked_out else "submodule not checked out", DOWNLOADER_FIX)
+        "not built yet" if checked_out else "submodule not checked out", DOWNLOADER_FIX)
     try:
         add("Claude Code CLI", True, f"{preflight(settings)} (signed in)", "")
     except AgentError as e:

@@ -179,3 +179,4 @@ echo "  1. Fill in .env (INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_BUSINESS_ACCOUNT_ID, 
 echo "  2. Start the studio:  $IGC up"
 echo "  3. Open http://127.0.0.1:8765"
 [ "$SCHEDULE" = 1 ] || echo "  4. To start it at reboot and run the agent every night: ./install.sh --schedule"
+exit "$FAILED"

@@ -225,3 +225,4 @@ Write-Host "  3. Open http://127.0.0.1:8765"
 if (-not $Schedule) {
     Write-Host "  4. To start it at logon and run the agent every night: install.ps1 -Schedule"
 }
+if ($script:Failed) { exit 1 }

@@ -60,7 +60,7 @@ def test_failures_say_what_to_do(mocked, monkeypatch, tmp_path):
     assert got["ffmpeg"]["ok"]
     assert "npm --prefix web run build" in got["website build"]["fix"]
     assert "downloader setup" in got["Reel downloader"]["fix"]
-    assert got["Reel downloader"]["detail"] == "built: no"
+    assert got["Reel downloader"]["detail"] == "not built yet"
     assert "not signed in" in got["Claude Code CLI"]["detail"]
     assert all(got[n]["fix"] for n in failed)
 
@@ -77,6 +77,7 @@ def test_cli_exit_code(monkeypatch, capsys):
     rows = [{"name": "ffmpeg", "ok": True, "detail": "/bin/ffmpeg", "fix": ""},
             {"name": "website build", "ok": False, "detail": "web/dist", "fix": "npm ..."}]
     monkeypatch.setattr(doctor, "checks", lambda s: rows)
+    monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)  # keeps capsys' file
     with pytest.raises(SystemExit) as e:
         scheduler.main(["doctor"])
     assert e.value.code == 1
