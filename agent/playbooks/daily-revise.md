@@ -75,8 +75,10 @@ viral finds, no watchlist, no trend research.
    only the part you react to is used, the creator is credited on screen and with
    `@<creator>` in the caption. Never a plain re-upload, never mirror, flip, speed or
    pitch changes.
-4. A `create_idea` refusal (batch full, reaction quota used): leave the pick
-   `downloaded`; the night run makes it first. Say so in the summary.
+4. A pick's remix may go past a full batch (up to 3 a day), so the night's full batch
+   does not stop it. A `create_idea` refusal (reaction quota used, or today's pick extras
+   used up): leave the pick `downloaded`; the night run makes it first. Say so in the
+   summary.
 5. `wait_for_renders` on the remix jobs (within the limits above), `get_asset_frames` on
    each: the credit shows, the reaction piece is there, your voice-over matches what you
    see. Then `submit_asset` with a caption carrying `@<creator>` and the credit, a

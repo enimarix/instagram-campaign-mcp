@@ -241,6 +241,9 @@ class InstagramMCPSettings(BaseSettings):
     reaction_margin: int = Field(
         2, ge=0, description="Extra reaction ideas prepared above MAX_REACTIONS_PER_DAY"
     )
+    max_dm_pick_extras_per_day: int = Field(
+        3, ge=0, description="DM-pick remix ideas allowed past a full batch per day (073)"
+    )
     dedupe_days: int = Field(30, ge=0, description="How far back create_idea looks for duplicates")
     dedupe_threshold: float = Field(
         0.85, gt=0, le=1, description="Hook similarity (difflib ratio) that counts as a duplicate"

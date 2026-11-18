@@ -150,3 +150,8 @@ def test_daily_revise_makes_dm_picks_without_research():
     assert not named & {"research_trends", "get_trend_report", "list_watchlist",
                         "search_hashtag", "list_inspirations"}
     assert "mark_dm_pick" in _section(text, "Dry run")  # a dry run changes no pick
+
+
+def test_daily_revise_expects_pick_remixes_past_a_full_batch():
+    picks = _section(_book("daily-revise"), "Step 3: DM picks")
+    assert "go past a full batch" in picks and "night's full batch does not stop it" in picks

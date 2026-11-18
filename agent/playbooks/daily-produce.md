@@ -181,8 +181,9 @@ a Reel is good or funny. They come before anything else in Track A.
    another trim, or your own `captions`, and render again; if you keep it, say so in
    the self-score reason.
 
-A refusal of `create_idea` for the batch or the reaction quota: leave the pick
-`downloaded` for the next run and say so in the summary.
+A pick's remix may go past a full batch (up to 3 a day). A refusal of `create_idea` for
+the reaction quota or the batch: leave the pick `downloaded` for the next run and say so
+in the summary.
 
 ## Phase 5: Track A, viral finds
 
