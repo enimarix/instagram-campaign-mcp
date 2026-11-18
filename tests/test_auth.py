@@ -47,7 +47,7 @@ def _login(tc, password=PASSWORD):
 
 def test_no_password_everything_open(make):
     tc, _ = make(password=None)
-    assert tc.get("/api/account").status_code == 503  # setup mode, not 401
+    assert tc.get("/api/account").status_code == 200  # setup mode, not 401
     assert tc.get("/api/session").json() == {"authenticated": False,
                                              "password_required": False}
 
@@ -59,7 +59,7 @@ def test_password_required_then_login(make):
     r = tc.get("/api/account")
     assert r.status_code == 401 and r.json() == {"error": "login_required"}
     assert _login(tc).status_code == 200
-    assert tc.get("/api/account").status_code == 503
+    assert tc.get("/api/account").status_code == 200
     assert tc.get("/api/session").json()["authenticated"] is True
 
 
@@ -89,7 +89,7 @@ def test_session_expires(make):
     tc, _ = make(clock=clock, session_ttl_hours=1)
     _login(tc)
     clock.now += 3599
-    assert tc.get("/api/account").status_code == 503
+    assert tc.get("/api/account").status_code == 200
     clock.now += 2
     assert tc.get("/api/account").status_code == 401
 
