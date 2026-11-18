@@ -149,7 +149,8 @@ def answer(store: CampaignStore, request_id: int, status: str,
 
 
 def attach_granted_file(store: CampaignStore, settings: InstagramMCPSettings, request_id: int,
-                        path: Path, *, audio_rights: Optional[str] = None) -> Dict[str, Any]:
+                        path: Path, *, audio_rights: Optional[str] = None,
+                        original_name: Optional[str] = None) -> Dict[str, Any]:
     """MOVE the creator's file into the request's source, which becomes a `permission` clip
     (credit to the creator, the proof + date as its rights note, the ads flag). Same checks
     as the clip inbox (063); ValueError when refused (the file stays where it was)."""
@@ -161,6 +162,8 @@ def attach_granted_file(store: CampaignStore, settings: InstagramMCPSettings, re
     sources.check_rights("permission", note, author=req["creator"])
     path = Path(path)
     stats, audio_rights = sources.probe_clip(settings, path, audio_rights)
+    if original_name:  # an upload's temporary name means nothing to the owner
+        stats["original_name"] = Path(original_name).name
     source_id = req["source_id"]
     dest = sources.move_into(path, Path(settings.media_root) / "sources" / str(source_id),
                              "clip" + path.suffix.lower())
@@ -194,6 +197,6 @@ async def upload_granted_file(store: CampaignStore, settings: InstagramMCPSettin
     try:
         await reactions.save_upload(chunks, tmp, cap)
         return await asyncio.to_thread(attach_granted_file, store, settings, request_id, tmp,
-                                       audio_rights=audio_rights)
+                                       audio_rights=audio_rights, original_name=filename)
     finally:
         tmp.unlink(missing_ok=True)

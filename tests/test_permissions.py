@@ -140,6 +140,7 @@ def test_routes(store, ref, tmp_path):
         r = tc.post(f"/api/permissions/{rid}/attach?name=c.mp4&audio_rights=not_covered",
                     content=data)
         assert r.status_code == 200 and r.json()["rights_basis"] == "permission"
+        assert r.json()["stats"]["original_name"] == "c.mp4"
         assert r.json()["ads_allowed"] == 0
         assert [p["has_file"] for p in tc.get("/api/permissions").json()] == [True]
         assert tc.get("/api/permissions?status=denied").json() == []
