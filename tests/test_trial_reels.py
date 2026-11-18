@@ -2,13 +2,20 @@
 
 from datetime import timedelta
 
+import pytest
+
 from src.learning import experiments as X
 from src.learning.analytics import posts_table
 from src.scoring import ScoringConfig, group_of, score_posts
 from src.store import to_iso, utcnow
 
+from .test_api_assets import _settings
 from .test_experiments import NOW, _baseline, _open, _post
-from .test_experiments import settings  # noqa: F401  (fixture)
+
+
+@pytest.fixture
+def settings():
+    return _settings(timezone="UTC")
 
 
 def _snap(mid, saved, trial=False):
@@ -38,7 +45,7 @@ def test_trial_and_normal_baselines_never_mix():
     assert mixed["t0"]["verdict"] == "weak"  # what mixing would have said
 
 
-def test_a_published_trial_gets_the_tag(store, settings):  # noqa: F811
+def test_a_published_trial_gets_the_tag(store, settings):
     trial = store.schedule("reel", {"video_url": "https://x/v.mp4", "caption": "c",
                                     "trial_graduation": "SS_PERFORMANCE"},
                            utcnow() + timedelta(minutes=1))
@@ -62,7 +69,7 @@ def _trial(store, mid):
         c.execute("UPDATE post_labels SET trial = 1 WHERE media_id = ?", (mid,))
 
 
-def test_experiments_compare_variants_within_one_group(store, settings):  # noqa: F811
+def test_experiments_compare_variants_within_one_group(store, settings):
     exp = _open(store, settings)
     _baseline(store)
     for i in range(3):  # question: 3 trial Reels; bold_claim: 3 normal Reels
