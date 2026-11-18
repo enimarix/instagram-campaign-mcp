@@ -64,16 +64,20 @@ def decline(
     reason_codes: Sequence[str] = (),
     text: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """The feed's Decline: verdict disliked, archived, and the reasons (if any) saved as a
-    comment -> the asset. Ordered so a refusal leaves the asset unchanged: the status and
-    the reasons are checked first, the archive move (a compare-and-set) comes before the
-    verdict. KeyError: no such asset; InvalidTransition: the asset is not ready."""
+    """The feed's Decline: verdict disliked, archived, and the motive saved as a comment
+    -> the asset. Every decline has a motive (step 133): reason codes or text, so the agent
+    learns from it. Ordered so a refusal leaves the asset unchanged: the status and the
+    motive are checked first, the archive move (a compare-and-set) comes before the
+    verdict. KeyError: no such asset; InvalidTransition: the asset is not ready;
+    ValueError: no motive, or an unknown reason code."""
     asset = store.get_asset(asset_id)
     if asset["status"] != "ready":
         raise InvalidTransition(f"asset {asset_id} is {asset['status']}; only a ready asset"
                                 " can be declined")
-    if text or reason_codes:  # validates before the move; a lost race leaves only the comment
-        store.add_feedback(asset_id, text=text, reason_codes=reason_codes)
+    if not (text and text.strip()) and not reason_codes:
+        raise ValueError("a decline needs a motive: pick a reason or say why")
+    # validates before the move; a lost race leaves only the comment
+    store.add_feedback(asset_id, text=text and text.strip(), reason_codes=reason_codes)
     transition(store, asset_id, "archived", actor="owner")
     return store.update_asset(asset_id, verdict="disliked")
 

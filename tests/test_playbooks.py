@@ -156,3 +156,19 @@ def test_daily_revise_makes_dm_picks_without_research():
 def test_daily_revise_expects_pick_remixes_past_a_full_batch():
     picks = _section(_book("daily-revise"), "Step 3: DM picks")
     assert "go past a full batch" in picks and "night's full batch does not stop it" in picks
+
+
+def test_decline_motives_and_changes_are_learned():
+    """Step 133: the playbooks turn decline motives and judged changes into learnings with
+    the 054 rules."""
+    def read(name):
+        return (runner.AGENT_DIR / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
+    revise, learn = read("daily-revise"), read("daily-learn")
+    for phrase in ("Decline motives", "`change` block", "`approved`", "`declined`",
+                   "`decline_motives`", "`hypothesis`", "`dont`", "owner instruction",
+                   '"Changed: "'):
+        assert phrase in revise, phrase
+    for phrase in ("`owner_decisions`", "`decline_motives`", "`approved_changes`",
+                   "one → hypothesis", "repeated → `do` / `dont`", "owner_instruction=True",
+                   "evidence_feedback_ids_to_add"):
+        assert phrase in learn, phrase

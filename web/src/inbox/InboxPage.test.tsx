@@ -51,6 +51,15 @@ const card = (id: number) => screen.getByRole('article', { name: `Video ${id}` }
 const cards = () => screen.queryAllByRole('article').map((a) => a.getAttribute('aria-label'))
 const posts = (calls: Call[]) => calls.filter((c) => c.method === 'POST').map((c) => [c.url, c.body])
 const press = (id: number, name: string) => fireEvent.click(within(card(id)).getByRole('button', { name }))
+const declineSheet = () => screen.getByRole('dialog', { name: 'Why decline?' })
+/** Decline (button or key `d`) opens the motive sheet; this fills its text and confirms. */
+function declineWith(id: number | null, text = 'Trop lent') {
+  if (id === null) fireEvent.keyDown(window, { key: 'd' })
+  else press(id, 'Decline')
+  const sheet = within(declineSheet())
+  fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: text } })
+  fireEvent.click(sheet.getByRole('button', { name: 'Decline' }))
+}
 
 /** Let the 5 s undo window close (fake timers), then wait on real ones. */
 async function closeUndoWindow() {
@@ -293,35 +302,57 @@ describe('InboxPage feed', () => {
       'POST /api/assets/1/decline': [200, asset(1, { status: 'archived', verdict: 'disliked' })],
     })
 
-    it('commits after 5 s with the reasons picked meanwhile', async () => {
+    it('opens the motive sheet; Confirm waits for a reason or words; commits after 5 s', async () => {
       const calls = declineApi()
       renderPage()
       await screen.findByText('1 of 3 decided')
-      vi.useFakeTimers()
       press(1, 'Decline')
+      const sheet = within(declineSheet())
+      expect(cards()).toEqual(['Video 1', 'Video 2']) // nothing decided before Confirm
+      const confirm = sheet.getByRole('button', { name: 'Decline' }) as HTMLButtonElement
+      expect(confirm.disabled).toBe(true)
+      fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: '   ' } })
+      expect(confirm.disabled).toBe(true) // blanks are no motive
+      fireEvent.click(await sheet.findByRole('button', { name: 'Too long' }))
+      expect(confirm.disabled).toBe(false)
+      fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: ' On décroche ' } })
+      vi.useFakeTimers()
+      fireEvent.click(confirm)
+      expect(screen.queryByRole('dialog')).toBeNull()
       expect(cards()).toEqual(['Video 2'])
       expect(screen.getByText('Declined')).toBeTruthy()
-      fireEvent.click(within(screen.getByRole('group', { name: 'Why decline? (optional)' }))
-        .getByRole('button', { name: 'Too long' }))
       await act(() => vi.advanceTimersByTimeAsync(4900))
       expect(posts(calls)).toEqual([])
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([
-        ['/api/assets/1/decline', { reason_codes: ['too_long'] }],
+        ['/api/assets/1/decline', { reason_codes: ['too_long'], text: 'On décroche' }],
       ]))
-      expect(screen.queryByRole('group', { name: 'Why decline? (optional)' })).toBeNull()
     })
 
-    it('without a reason it sends none, with keepalive (it may be flushed on tab close)', async () => {
+    it('words alone are a motive; sent with keepalive (it may be flushed on tab close)', async () => {
       const calls = declineApi()
       renderPage()
       await screen.findByText('1 of 3 decided')
       vi.useFakeTimers()
-      press(1, 'Decline')
+      declineWith(1, 'Trop lent')
       await closeUndoWindow()
-      await waitFor(() => expect(posts(calls)).toEqual([['/api/assets/1/decline', { reason_codes: [] }]]))
+      await waitFor(() => expect(posts(calls)).toEqual([
+        ['/api/assets/1/decline', { reason_codes: [], text: 'Trop lent' }]]))
       const init = vi.mocked(fetch).mock.calls.find(([u]) => String(u).endsWith('/decline'))![1]
       expect(init?.keepalive).toBe(true)
+    })
+
+    it('the key d opens it too; Cancel decides nothing', async () => {
+      const calls = declineApi()
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      fireEvent.keyDown(window, { key: 'd' })
+      fireEvent.click(within(declineSheet()).getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      vi.useFakeTimers()
+      await closeUndoWindow()
+      expect(posts(calls)).toEqual([])
     })
 
     it('undo cancels it', async () => {
@@ -329,10 +360,9 @@ describe('InboxPage feed', () => {
       renderPage()
       await screen.findByText('1 of 3 decided')
       vi.useFakeTimers()
-      press(1, 'Decline')
+      declineWith(1)
       fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
       expect(cards()).toEqual(['Video 1', 'Video 2'])
-      expect(screen.queryByRole('group', { name: 'Why decline? (optional)' })).toBeNull()
       await closeUndoWindow()
       expect(posts(calls)).toEqual([])
     })
@@ -341,7 +371,7 @@ describe('InboxPage feed', () => {
       const calls = declineApi()
       renderPage()
       await screen.findByText('1 of 3 decided')
-      press(1, 'Decline')
+      declineWith(1)
       Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
       try {
         fireEvent(document, new Event('visibilitychange'))
@@ -356,11 +386,22 @@ describe('InboxPage feed', () => {
       const calls = declineApi()
       const { unmount } = renderPage()
       await screen.findByText('1 of 3 decided')
-      press(1, 'Decline')
+      declineWith(1)
       unmount()
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
         ['/api/assets/1/decline']))
     })
+  })
+
+  it('a revised video shows what the owner asked: Changé : « … »', async () => {
+    stubApi({ 'GET /api/assets': [200, [
+      asset(1, { change_request: { text: 'Plus court', reason_codes: [] } }),
+      asset(2, { change_request: { text: null, reason_codes: ['weak_hook'] } }), asset(3)]] })
+    renderPage()
+    await screen.findByText('0 of 3 decided')
+    expect(within(card(1)).getByText('Changé : « Plus court »')).toBeTruthy()
+    expect(await within(card(2)).findByText('Changé : « Weak hook »')).toBeTruthy()
+    expect(within(card(3)).queryByText(/Changé/)).toBeNull()
   })
 
   it('shows the DM pick sender and the commentary chip a row carries', async () => {
@@ -481,7 +522,7 @@ describe('InboxPage feed', () => {
     fireEvent.keyDown(window, { key: 'j' })
     fireEvent.keyDown(window, { key: 'ArrowDown' })
     fireEvent.keyDown(window, { key: 'k' })
-    fireEvent.keyDown(window, { key: 'd' }) // on video 2
+    declineWith(null) // on video 2: d opens the motive sheet
     expect(cards()).toEqual(['Video 1', 'Video 3'])
     fireEvent.keyDown(window, { key: 'm' })
     expect(card(3).querySelector('video')!.muted).toBe(false)
@@ -510,7 +551,7 @@ describe('InboxPage feed', () => {
     stubApi({ 'GET /api/assets': [200, [asset(1), asset(3, { status: 'scheduled' })]] })
     renderPage()
     await screen.findByText('1 of 2 decided')
-    press(1, 'Decline')
+    declineWith(1)
     expect(screen.getByText('2 of 2 decided')).toBeTruthy()
     expect(screen.getByText('All done')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open the Calendar' }).getAttribute('href')).toBe('/calendar')
@@ -562,7 +603,7 @@ describe('InboxPage feed', () => {
       })
       renderPage()
       await screen.findByText('1 of 3 decided')
-      press(1, 'Decline')
+      declineWith(1)
       fireEvent.click(screen.getByRole('tab', { name: 'Saved (4)' }))
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
         ['/api/assets/1/decline']))

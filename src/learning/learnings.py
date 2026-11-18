@@ -63,18 +63,83 @@ def _labels() -> Dict[str, str]:
     return {r["id"]: r["label"] for r in load_taxonomy()["feedback_reasons"]["values"]}
 
 
+def change_outcome(store: CampaignStore, revised: Dict[str, Any],
+                   labels: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """A revised video (step 133): the version the owner sent back (before), what they
+    asked (its wants-changes comments), what the agent says it changed (the new version's
+    self_score_reason), and the owner's decision on the new version: approved, declined
+    (with its motives), sent_back (asked_again: more changes), archived or pending."""
+    labels = labels or _labels()
+    before = revised["parent_asset_id"]
+
+    def comments(asset_id: int, wants: bool) -> List[Dict[str, Any]]:
+        return [{"feedback_id": fb["id"], "text": fb["text"],
+                 "reasons": [labels.get(c, c) for c in fb["reason_codes"]]}
+                for fb in store.list_feedback(asset_id=asset_id, limit=MAX_LIST)
+                if bool(fb["wants_changes"]) == wants]
+
+    sent_back = comments(revised["id"], True)
+    outcome = ("approved" if revised["approved_at"]
+               else "declined" if revised["verdict"] == "disliked"
+               else "sent_back" if sent_back
+               else "archived" if revised["status"] == "archived" else "pending")
+    return {"before_asset_id": before, "after_asset_id": revised["id"],
+            "asked": comments(before, True), "changed": revised["self_score_reason"],
+            "outcome": outcome,
+            "decline_motives": comments(revised["id"], False) if outcome == "declined" else [],
+            "asked_again": sent_back}
+
+
+def _change_for(store: CampaignStore, fb: Dict[str, Any], asset: Dict[str, Any],
+                labels: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """The change a comment belongs to: a comment on a revised video, or a change request
+    whose new version exists (the newest one). None for any other comment."""
+    if asset["parent_asset_id"]:
+        return change_outcome(store, asset, labels)
+    if fb["wants_changes"]:
+        child = store._select("SELECT * FROM assets", {"parent_asset_id": asset["id"]},
+                              "id DESC", 1)
+        return change_outcome(store, child[0], labels) if child else None
+    return None
+
+
 def get_feedback(store: CampaignStore, *, undigested: bool = True,
                  limit: int = 50) -> List[Dict[str, Any]]:
     """Owner comments, oldest first (undigested=False: read ones too), each with its
-    reason labels and its asset's context."""
+    reason labels, its asset's context and `change` (change_outcome, or None). A change
+    request comes back undigested when the owner decides on its new version (step 133)."""
     rows = store.list_feedback(undigested=True if undigested else None, limit=_limit(limit))
     labels, assets = _labels(), {}
     out = []
     for fb in rows:
+        asset = store.get_asset(fb["asset_id"])
         if fb["asset_id"] not in assets:
-            assets[fb["asset_id"]] = asset_context(store, store.get_asset(fb["asset_id"]))
-        out.append({**_comment(fb, labels), "asset": assets[fb["asset_id"]]})
+            assets[fb["asset_id"]] = asset_context(store, asset)
+        out.append({**_comment(fb, labels), "asset": assets[fb["asset_id"]],
+                    "change": _change_for(store, fb, asset, labels)})
     return out
+
+
+def owner_decisions(store: CampaignStore, *, limit: int = 20) -> Dict[str, Any]:
+    """What the owner turned down and which changes they approved, newest first, read or
+    not (step 133): the creative brief lists these first so the next batch avoids the
+    motives and repeats what worked."""
+    labels, limit = _labels(), _limit(limit)
+    with store._tx() as c:
+        motive_ids = [r[0] for r in c.execute(
+            "SELECT f.id FROM feedback f JOIN assets a ON a.id = f.asset_id"
+            " WHERE a.verdict = 'disliked' AND f.wants_changes = 0"
+            " ORDER BY f.id DESC LIMIT ?", (limit,))]
+    motives = []
+    for i in motive_ids:
+        fb = store.get_feedback(i)
+        asset = store.get_asset(fb["asset_id"])
+        motives.append({**_comment(fb, labels), "asset": asset_context(store, asset),
+                        "change": _change_for(store, fb, asset, labels)})
+    approved = store._select("SELECT * FROM assets WHERE parent_asset_id IS NOT NULL"
+                             " AND approved_at IS NOT NULL", {}, "approved_at DESC", limit)
+    return {"decline_motives": motives,
+            "approved_changes": [change_outcome(store, a, labels) for a in approved]}
 
 
 def mark_feedback_digested(store: CampaignStore, ids: Sequence[int]) -> Dict[str, int]:

@@ -13,7 +13,7 @@ from ..store import CampaignStore
 from ..studio.scheduling import bench
 from ..studio.seed import local_today
 from .experiments import explore_plan
-from .learnings import get_feedback, list_learnings, list_revision_requests
+from .learnings import get_feedback, list_learnings, list_revision_requests, owner_decisions
 from .mix import batch_mix, with_counts
 from .quotas import todays_quotas
 
@@ -53,6 +53,8 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
     mix = batch_mix(store, settings, today, now=now)  # first: the quotas read its humour share
     quotas = todays_quotas(store, settings, today, now)
     return {
+        # 133: first, what the owner turned down (with why) and the changes they approved
+        "owner_decisions": owner_decisions(store),
         "bible": bible,
         "bible_note": None if bible else NO_BIBLE,
         "learnings": [{k: row[k] for k in ("id", "statement", "kind", "confidence", "origin",

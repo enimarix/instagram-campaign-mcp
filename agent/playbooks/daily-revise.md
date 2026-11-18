@@ -43,6 +43,22 @@ learnings with origin `taste` exactly as the night playbook does: one comment �
 explicit owner rule ("always …", "never …") → `owner_instruction=True`. Then
 `mark_feedback_digested` with every id you read, including ones that taught nothing.
 
+Owner decisions teach the most; the same rules apply to them:
+- **Decline motives.** Every decline carries a motive (reason chips and/or the owner's
+  words). Treat it like any comment: one → a `hypothesis` (what to avoid) citing it; the
+  same motive on 2 or more videos → `dont`; an explicit "never …" → owner instruction.
+- **Changes.** A comment with a `change` block is a change request whose new version
+  the owner has now judged (it comes back undigested for that). `asked` is what the owner
+  wanted, `changed` what was done, `outcome` the verdict:
+  - `approved`: the change worked: what the owner asked, done this way. Cite the
+    `asked` feedback ids and name both videos (`before_asset_id` → `after_asset_id`) in
+    the statement. One approved change → `hypothesis`; the same kind of change approved
+    again → `do`, or `update_learning` adding the evidence to the existing learning.
+  - `declined`: the change did not satisfy; learn from its `decline_motives` (cite them)
+    and note that the asked change alone was not enough.
+  - `sent_back`: not there yet; `asked_again` says what is still wrong.
+  - `pending` or `archived`: nothing to learn yet.
+
 ## Step 2: change requests
 
 Skip this step in a dry run. For each video in `revisions.json`:
@@ -53,7 +69,9 @@ Skip this step in a dry run. For each video in `revisions.json`:
 3. `render_motion(template=…, props=…, asset_id=<that asset>)`; keep the job id.
 4. `wait_for_renders(job_ids=…)`, then `get_asset_frames(asset_id)` on each new
    version: the change is there, text fits, nothing broken. Fix and render once more if
-   needed, then `submit_asset` it (honest `self_score` and one-line reason, `caption`).
+   needed, then `submit_asset` it (honest `self_score`, `caption`, and a one-line reason
+   that starts with "Changed: " and says what you changed: the owner's feed shows their
+   request on the new version, and the learning step reads your line as what was done).
    Renders still pending at the end are picked up by the night run.
 
 ## Step 3: DM picks

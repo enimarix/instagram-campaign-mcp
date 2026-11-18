@@ -82,7 +82,9 @@ def test_every_key_on_an_empty_db(store, settings):
     assert set(mix) == {"template", "hook_type", "pillar", "humour", "moved"}
     # 10 ideas, 3 explore: 7 exploit ideas split in every dimension
     assert all(sum(r["count"] for r in mix[d]) == 7 for d in mix if d != "moved")
+    assert list(b)[0] == "owner_decisions"  # 133: first, what the owner turned down
     assert b == {
+        "owner_decisions": {"decline_motives": [], "approved_changes": []},
         "bible": None, "bible_note": B.NO_BIBLE, "learnings": [], "feedback": [],
         "change_requests": [], "last_daily_report": None, "experiments": [],
         "explore_plan": [], "quotas": todays_quotas(store, settings, DAY, NOW), "today": [], "recent_hooks": [],
@@ -133,3 +135,28 @@ async def test_no_recipe_props_and_mcp_door(store, settings, monkeypatch):
     b = await srv.get_creative_brief()
     assert b["feedback"] and b["change_requests"] and b["bench"]["count"] == 1
     assert "SECRET_PROP" not in json.dumps(b) and '"props"' not in json.dumps(b)
+
+
+def test_decline_motives_and_approved_changes_come_first(store, settings):
+    from src.studio.feedback import add_comment, decline
+
+    declined = _asset(store, hook="boring one")
+    decline(store, declined, reason_codes=["weak_hook"], text="On s'ennuie")
+    store.mark_feedback_digested([f["id"] for f in store.list_feedback()])  # read: still listed
+    before = _asset(store, hook="good one")
+    ask = add_comment(store, before, text="Plus court", wants_changes=True)["feedback"]
+    after = store.add_asset(store.get_asset(before)["idea_id"], batch_date="2026-11-10",
+                            parent_asset_id=before, self_score_reason="Changed: cut to 12 s")
+    transition(store, after["id"], "ready", actor="worker")
+    transition(store, after["id"], "approved", actor="owner")
+    b = B.creative_brief(store, settings, NOW)
+    assert list(b)[0] == "owner_decisions"
+    [motive] = b["owner_decisions"]["decline_motives"]
+    assert (motive["text"], motive["reasons"]) == (
+        "On s'ennuie", [{"code": "weak_hook", "label": "Weak hook"}])
+    assert motive["asset"]["id"] == declined and motive["asset"]["hook"] == "boring one"
+    assert b["owner_decisions"]["approved_changes"] == [{
+        "before_asset_id": before, "after_asset_id": after["id"],
+        "asked": [{"feedback_id": ask["id"], "text": "Plus court", "reasons": []}],
+        "changed": "Changed: cut to 12 s", "outcome": "approved", "decline_motives": [],
+        "asked_again": []}]
