@@ -137,6 +137,44 @@ def test_money_changes_are_audited(store):
                                            "ads_dsa_payor": [None, "Macrobody"]}})]
 
 
+# --- Studio (125) ----------------------------------------------------------------------
+STUDIO = {"batch_size": 25, "max_posts_per_day": 2, "explore_share": 0.2, "humour_share": 0.7}
+
+
+def test_studio_fields_editable_validated_no_password(store):
+    s = _settings()
+    out = ov.update(store, s, STUDIO)  # never PasswordNeeded, never audited
+    assert {k: _field(out, k)["value"] for k in STUDIO} == STUDIO
+    assert {_field(out, k)["section"] for k in STUDIO} == {"studio"}
+    assert _field(out, "humour_share") | {"description": None} == {
+        "name": "humour_share", "section": "studio", "value": 0.7, "default": 0.5,
+        "overridden": True, "type": "float", "ge": 0, "le": 1, "description": None}
+    assert budget.audit_log(store)["rows"] == []
+    for bad in ({"batch_size": 0}, {"max_posts_per_day": 0}, {"explore_share": 1.5},
+                {"humour_share": -0.1}):
+        with pytest.raises(ov.SettingsInvalid, match=next(iter(bad))):
+            ov.update(store, s, bad)
+    assert s.batch_size == 25
+
+
+def test_studio_readers_see_the_change(store):
+    from datetime import date, datetime, timezone
+
+    from src.learning import brief, slots
+
+    stale, api = _settings(), _settings()  # e.g. the MCP server and the website
+    now = datetime(2026, 11, 18, 6, tzinfo=timezone.utc)
+    day = date(2026, 11, 19)
+    ov.update(store, api, STUDIO)
+    ov.refresh(store, stale)
+    quotas = brief.creative_brief(store, stale, now)["quotas"]
+    assert (quotas["batch_size"], quotas["limits"]["explore"]) == (25, 5)
+    # no verdicts yet: the owner's share (the learned split is ~50/50, Thompson draws)
+    assert abs(quotas["humour_target"] - 25 * 0.7) <= 1
+    planned = slots.plan_slots_from_settings(stale, day, 5, [], now=now)
+    assert len(planned) == 2
+
+
 # --- API -------------------------------------------------------------------------------
 @pytest.fixture
 def tc():
@@ -178,3 +216,12 @@ def test_api_raising_a_cap_asks_the_password(tc):
     assert _field(r.json(), "ads_lifetime_cap")["value"] == "200"
     r = tc.patch("/api/settings", json={"values": {"ads_lifetime_cap": "150"}})  # lower
     assert r.status_code == 200
+
+
+def test_api_studio_settings_need_no_password(tc):
+    r = tc.patch("/api/settings", json={"values": {"batch_size": 25, "humour_share": 0.6}})
+    assert r.status_code == 200 and _field(r.json(), "batch_size")["value"] == 25
+    r = tc.patch("/api/settings", json={"values": {"explore_share": 2}})
+    assert r.status_code == 422 and r.json()["field"] == "explore_share"
+    r = tc.patch("/api/settings", json={"reset": ["batch_size"]})
+    assert _field(r.json(), "batch_size") | {"value": 10, "overridden": False} ==         _field(r.json(), "batch_size")

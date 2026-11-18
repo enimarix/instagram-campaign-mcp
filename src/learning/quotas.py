@@ -9,7 +9,8 @@ brief (055) shows the same numbers to the agent.
 - explore: at most ceil(BATCH_SIZE x EXPLORE_SHARE) ideas with strategy `explore`, from the
   configured size (the cut comes out of exploit), capped at the effective batch.
 - humour: target round(batch x share), allowed +/- 1, where share is the humour share of
-  the day's batch mix (086a, stored when the brief is made) or HUMOUR_SHARE before that,
+  the day's batch mix (086a, stored when the brief is made; it starts from HUMOUR_SHARE)
+  or HUMOUR_SHARE before that,
   so humour <= target + 1 and informative (every other idea, with or without a pillar) <= batch - target + 1. A humour
   idea is one whose pillar has `"humour": true` in brand/taxonomy.json.
 - reactions (track `remix`): at most MAX_REACTIONS_PER_DAY + REACTION_MARGIN, and never more

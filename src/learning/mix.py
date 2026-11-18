@@ -13,6 +13,8 @@ pillar and humour vs informative gets. A pure function with tests, not a prompt.
   never exceed the whole), the rest is split by score.
 - owner rules: an active `dont` learning at confidence `owner` whose scope predicate names
   an option (081) sets its share to 0, outside the floor.
+- humour vs informative starts from the owner's HUMOUR_SHARE (website setting, 125): the
+  learned shares weigh it, so with no verdicts the split is the owner's.
 - pillars are split inside humour vs informative (taxonomy pillar flag `humour`, every
   other pillar or none is informative): pillar share = group share x share inside the
   group, so the two dimensions always agree. A pillar's floor is therefore a floor inside
@@ -153,6 +155,14 @@ def _why(rule: bool, likes: int, dislikes: int, posts: int, index: Optional[floa
     return why
 
 
+def _owner_humour(learned: Dict[str, float], owner: float) -> Dict[str, float]:
+    """The owner's HUMOUR_SHARE is where the humour split starts; likes move it from there:
+    each side's learned share is weighted by the owner's (no data, 50/50 learned: exactly
+    the owner's share; an owner rule's zero stays zero)."""
+    h, i = learned["humour"] * owner, learned["informative"] * (1 - owner)
+    return learned if h + i == 0 else {"humour": h / (h + i), "informative": i / (h + i)}
+
+
 def batch_mix(store: CampaignStore, settings: InstagramMCPSettings,
               batch_date: Union[date, str], *, now: Optional[datetime] = None) -> Dict[str, Any]:
     """{template, hook_type, pillar, humour: [{option, share, likes, dislikes, posts, index,
@@ -187,7 +197,7 @@ def batch_mix(store: CampaignStore, settings: InstagramMCPSettings,
                         rng=random.Random(f"{day.isoformat()}:{seed}"), **kw)
 
     shares = {d: mix(d, options[d], d) for d in ("template", "hook_type")}
-    shares["humour"] = mix("humour", HUMOUR, "humour")
+    shares["humour"] = _owner_humour(mix("humour", HUMOUR, "humour"), settings.humour_share)
     shares["pillar"] = {}
     for g in HUMOUR:
         inner = mix("pillar", [p for p in options["pillar"] if group[p] == g], f"pillar:{g}")

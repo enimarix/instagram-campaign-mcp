@@ -138,3 +138,14 @@ def test_brief_mix_counts_exploit_ideas(store, settings):
     for dim in ("template", "hook_type", "pillar", "humour"):
         assert sum(r["count"] for r in b["mix"][dim]) == 7  # 10 ideas - 3 explore
     assert _rows(b["mix"], "template")["PixelSkit"]["count"] >= 3
+
+
+def test_the_owners_humour_share_is_where_the_split_starts():
+    from src.learning.mix import _owner_humour
+
+    learned = {"humour": 0.8, "informative": 0.2}
+    assert _owner_humour(learned, 0.5) == learned  # 50/50: the likes alone
+    assert _owner_humour({"humour": 0.5, "informative": 0.5}, 0.7)["humour"] == pytest.approx(0.7)
+    assert _owner_humour({"humour": 0.0, "informative": 1.0}, 0.9)["humour"] == 0  # owner rule
+    assert _owner_humour({"humour": 1.0, "informative": 0.0}, 0.0) == {"humour": 1.0,
+                                                                     "informative": 0.0}
