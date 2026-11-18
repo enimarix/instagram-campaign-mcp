@@ -24,10 +24,13 @@ const REFRESH: RefreshResult = {
   errors: {}, stopped: null, hashtag_budget: { limit: 30, used: 3, left: 27 },
 }
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
+// a real GET /api/work-orders?source=dm row (136, read from the owner's DB copy)
 const order = (id: number, over: Partial<WorkOrder> = {}): WorkOrder => ({
-  id, source: 'dm', sender: 'amine_xenima', received_at: hoursAgo(2), reel_url: `https://www.instagram.com/reel/D${id}/`,
-  embed_url: `https://www.instagram.com/reel/D${id}/embed`, instruction: null, mode: null, status: 'needs_instruction',
-  skip_reason: null, blocked_reason: null, asset_id: null, ...over,
+  id, source_id: null, pick_id: id, mode: 'owner', instruction: null, own_reel: false, status: 'needs_instruction',
+  skip_reason: null, blocked_reason: null, analysis: null, scheduled_at: null, idea_id: null, asset_id: null,
+  created_at: hoursAgo(1), permalink: `https://www.instagram.com/reel/D${id}/`, sender_username: 'amine_xenima',
+  received_at: hoursAgo(2), source: 'dm', embed_url: `https://www.instagram.com/reel/D${id}/embed`, topic: null,
+  caption_quote: null, likes: null, comments: null, views: null, thumbnail_url: null, ...over,
 })
 
 type Route = [number, unknown]
@@ -165,7 +168,7 @@ describe('Tendances', () => {
   it("tells the AI what to do with one Reel, and cancels a new order", async () => {
     const calls = stubApi({
       'GET /api/research/feed?limit=50': [[200, [item(1)]],
-        [200, [item(1, { work_order: { id: 5, mode: 'inspired', instruction: 'version sans sucre', status: 'new' } })]], [200, [item(1)]]],
+        [200, [item(1, { work_order: { id: 5, mode: 'inspired', instruction: 'version sans sucre', status: 'scheduled' } })]], [200, [item(1)]]],
       'POST /api/research/work-orders': [200, []],
       'DELETE /api/research/work-orders/5': [204, null],
     })
@@ -176,7 +179,7 @@ describe('Tendances', () => {
     fireEvent.change(within(sheet).getByLabelText('Ta consigne'), { target: { value: ' version sans sucre ' } })
     fireEvent.click(within(sheet).getByRole('button', { name: "Envoyer à l'IA" }))
     expect(await within(card(1)).findByText('version sans sucre')).toBeTruthy()
-    expect(within(card(1)).getByText('Envoyé au travail')).toBeTruthy()
+    expect(within(card(1)).getByText('Programmé')).toBeTruthy()
     expect(within(card(1)).queryByRole('button', { name: "Dire à l'IA quoi faire" })).toBeNull()
     expect(calls.find((c) => c.key === 'POST /api/research/work-orders')?.body).toEqual({
       items: [{ source_id: 1, mode: 'inspired', instruction: 'version sans sucre' }] })
@@ -238,13 +241,19 @@ describe('Mes envois', () => {
 
   it('lists DM orders with sender, age, status, instruction and the feed link', async () => {
     stubApi({ 'GET /api/work-orders?source=dm': [200, [
+      order(4, { status: 'analysed', own_reel: true, instruction: 'ça a bien marché, analyse-la', analysis: 'Le hook tient 3 s.' }),
       order(3, { status: 'in_feed', asset_id: 42, instruction: 'analyse-la', mode: 'inspired' }),
       order(2, { status: 'skipped', skip_reason: 'pas un Reel' }),
       order(1, { status: 'in_production', blocked_reason: 'téléchargement refusé' }),
     ]] })
     renderPage('/trending?tab=envois')
     const list = await screen.findByRole('list', { name: 'Mes envois' })
-    const [feed, skipped, blocked] = within(list).getAllByRole('listitem')
+    const [analysed, feed, skipped, blocked] = within(list).getAllByRole('listitem')
+    expect(within(analysed).getByText('Analysé')).toBeTruthy()
+    expect(within(analysed).getByText('Ton Reel')).toBeTruthy()
+    expect(within(analysed).getByText('Ta consigne · Mon instruction')).toBeTruthy()
+    expect(within(analysed).getByText("Analyse de l'IA : Le hook tient 3 s.")).toBeTruthy()
+    expect(within(feed).queryByText('Ton Reel')).toBeNull()
     expect(within(feed).getByText('Dans ton feed')).toBeTruthy()
     expect(within(feed).getByText('envoyé par @amine_xenima, il y a 2 h')).toBeTruthy()
     expect(within(feed).getByText('analyse-la').tagName).toBe('Q')
@@ -271,11 +280,12 @@ describe('Mes envois', () => {
     const list = await screen.findByRole('list', { name: 'Mes envois' })
     const waiting = within(list).getByRole('listitem', { name: 'Envoi 1' })
     expect(within(waiting).getByText("En attente d'instruction")).toBeTruthy()
+    expect(within(waiting).getByRole('button', { name: 'Mon instruction' }).getAttribute('aria-pressed')).toBe('true')
     fireEvent.change(within(waiting).getByLabelText("Que doit faire l'IA ?"), { target: { value: 'refais-la' } })
     fireEvent.click(within(waiting).getByRole('button', { name: 'Envoyer' }))
     expect(await within(waiting).findByText('Programmé')).toBeTruthy()
     expect(within(waiting).getByText('refais-la')).toBeTruthy()
-    expect(calls.find((c) => c.key === 'PATCH /api/work-orders/1')?.body).toEqual({ instruction: 'refais-la', mode: 'inspired' })
+    expect(calls.find((c) => c.key === 'PATCH /api/work-orders/1')?.body).toEqual({ instruction: 'refais-la', mode: 'owner' })
 
     const scheduled = within(list).getByRole('listitem', { name: 'Envoi 2' })
     fireEvent.click(within(scheduled).getByRole('button', { name: 'Modifier la consigne' }))

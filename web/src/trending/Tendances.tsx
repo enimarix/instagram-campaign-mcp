@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   addWatch, ApiError, cancelWorkOrder, createWorkOrders, errorMessage, getResearchFeed, getSuggestedTopics,
   listWatchlist, refreshResearch, removeWatch, setFeedReaction,
-  type FeedItem, type RefreshResult, type SuggestedTopics, type Watch, type WorkMode,
+  type FeedItem, type RefreshResult, type SuggestedTopics, type TrendMode, type Watch,
 } from '../api/client'
 import { safeUrl } from '../inbox/ui'
 import { Button, IconButton } from '../ui/Button'
@@ -12,7 +12,7 @@ import { CloseIcon, PlayIcon, SoundOffIcon, SoundOnIcon, ThumbDownIcon, ThumbUpI
 import { Sheet } from '../ui/Sheet'
 import { field, link, verdictButton } from '../ui/styles'
 import { useToast } from '../ui/useToast'
-import { ago, compact, embedSrc, FEED_ORDER, modeLabel } from './format'
+import { ago, compact, embedSrc, modeLabel, ORDER_STATUS, TREND_MODES } from './format'
 import { Embed, ModePicker } from './shared'
 
 const watchLabel = (w: Pick<Watch, 'kind' | 'value'>) => (w.kind === 'hashtag' ? '#' : '@') + w.value
@@ -115,9 +115,9 @@ function FeedCard({ item, selecting, selected, onSelect, onReact, onInstruct, on
       {caption && <q className="line-clamp-2 block break-words">{caption}</q>}
       {order && (
         <div className="flex flex-wrap items-center gap-2 rounded-control bg-surface-2 p-3">
-          <Chip tone={FEED_ORDER[order.status][1]}>{FEED_ORDER[order.status][0]}</Chip>
+          <Chip tone={ORDER_STATUS[order.status][1]}>{ORDER_STATUS[order.status][0]}</Chip>
           <span className="text-muted">{modeLabel(order.mode)}</span>
-          {order.status === 'new' && <Button size="sm" variant="ghost" className="ml-auto" onClick={onCancel}>Annuler</Button>}
+          {order.status !== 'in_production' && <Button size="sm" variant="ghost" className="ml-auto" onClick={onCancel}>Annuler</Button>}
           {order.instruction && <q className="w-full break-words">{order.instruction}</q>}
         </div>
       )}
@@ -139,7 +139,7 @@ function FeedCard({ item, selecting, selected, onSelect, onReact, onInstruct, on
 
 /** One Reel, the owner's exact words: one work order. */
 function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: () => void; onSent: () => void }) {
-  const [mode, setMode] = useState<WorkMode>('inspired')
+  const [mode, setMode] = useState<TrendMode>('inspired')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -160,7 +160,7 @@ function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: 
   return (
     <Sheet title="Dire à l'IA quoi faire" onClose={onClose}>
       <form lang="fr" onSubmit={(e) => void submit(e)} className="mt-3 space-y-3">
-        <ModePicker value={mode} onChange={setMode} />
+        <ModePicker modes={TREND_MODES} value={mode} onChange={setMode} />
         <label className="block text-sm font-medium">Ta consigne
           <textarea required value={text} maxLength={500} rows={6} onChange={(e) => setText(e.target.value)}
             placeholder="Ex. : garde le format, fais-en une version sans sucre (tu peux dicter)"
@@ -255,7 +255,7 @@ export default function Tendances() {
   const [refreshing, setRefreshing] = useState(false)
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [bulkMode, setBulkMode] = useState<WorkMode>('inspired')
+  const [bulkMode, setBulkMode] = useState<TrendMode>('inspired')
   const [sending, setSending] = useState(false)
   const [instructFor, setInstructFor] = useState<FeedItem | null>(null)
 
@@ -392,7 +392,7 @@ export default function Tendances() {
         <div role="region" aria-label="Envoyer la sélection"
           className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface/95 px-4 py-3 shadow-overlay backdrop-blur-md lg:bottom-0 lg:left-60">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
-            <div className="sm:flex-1"><ModePicker value={bulkMode} onChange={setBulkMode} /></div>
+            <div className="sm:flex-1"><ModePicker modes={TREND_MODES} value={bulkMode} onChange={setBulkMode} /></div>
             <Button variant="primary" size="lg" disabled={selected.size === 0} loading={sending} onClick={() => void sendSelected()}
               className="w-full sm:w-auto">
               Envoyer au travail ({selected.size})

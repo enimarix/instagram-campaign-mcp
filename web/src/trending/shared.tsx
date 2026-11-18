@@ -1,17 +1,17 @@
 import type { WorkMode } from '../api/client'
 import { Chip } from '../ui/Chip'
-import { MODES } from './format'
+import type { ModeOption } from './format'
 
-/** Inspiré / Réaction, with what the chosen one means. */
-export function ModePicker({ value, onChange }: { value: WorkMode; onChange: (m: WorkMode) => void }) {
+/** The order's mode (Mon instruction / Inspiré / Réaction), with what the chosen one means. */
+export function ModePicker<M extends WorkMode>({ modes, value, onChange }: { modes: ModeOption<M>[]; value: M; onChange: (m: M) => void }) {
   return (
     <div>
-      <div role="group" aria-label="Mode" className="flex gap-2">
-        {MODES.map((m) => (
+      <div role="group" aria-label="Mode" className="flex flex-wrap gap-2">
+        {modes.map((m) => (
           <Chip key={m.id} pressed={value === m.id} onClick={() => onChange(m.id)}>{m.label}</Chip>
         ))}
       </div>
-      <p className="mt-1 text-xs text-muted">{MODES.find((m) => m.id === value)?.hint}</p>
+      <p className="mt-1 text-xs text-muted">{modes.find((m) => m.id === value)?.hint}</p>
     </div>
   )
 }

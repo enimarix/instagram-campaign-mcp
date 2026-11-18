@@ -416,14 +416,16 @@ describe('InboxPage feed', () => {
   it('badges a video made from a work order with its instruction', async () => {
     const order = { id: 4, mode: 'inspired' as const, instruction: 'version sans sucre', permalink: null }
     stubApi({ 'GET /api/assets': [200, [
-      asset(1, { work_order: order }), asset(2, { work_order: { ...order, instruction: null, source: 'dm' } }), asset(3)]] })
+      asset(1, { work_order: order }), asset(2, { work_order: { ...order, instruction: null, mode: 'owner' } }), // real rows: no source, DM orders are owner
+      asset(3, { work_order: { ...order, mode: 'owner', source: 'trend' } }), asset(4)]] })
     renderPage()
-    await screen.findByText('0 of 3 decided')
+    await screen.findByText('0 of 4 decided')
     expect(within(card(1)).getByText('Tendance')).toBeTruthy()
     expect(within(card(1)).getByText('Ta consigne : « version sans sucre »')).toBeTruthy()
     expect(within(card(2)).getByText('Mes envois')).toBeTruthy()
     expect(within(card(2)).queryByText(/Ta consigne/)).toBeNull()
-    expect(within(card(3)).queryByText(/Tendance|Mes envois/)).toBeNull()
+    expect(within(card(3)).getByText('Tendance')).toBeTruthy() // an explicit source wins
+    expect(within(card(4)).queryByText(/Tendance|Mes envois/)).toBeNull()
   })
 
   describe('save for later', () => {
