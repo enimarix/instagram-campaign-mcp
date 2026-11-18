@@ -106,12 +106,19 @@
   {audioSrc?, lines?: hook, each beat, outro when given}, `music` (`music-marimba`|none), `loop`
   (default false), `pixelate` (default 2), `safeZone`. Every visible text refuses prices
   (`src/lib/noPrice.ts`). Still: `npm run still:voxelquest`.
-- End cards (`src/endcards/`): `<EndCard style=…>` picks the style's animated card (one per style;
-  `voxel` now, step 137 adds the others); props in `schema.ts` (`tagline?`, `accent`, `cameo`,
-  `address`, `pixelate`), never a price. `VoxelEndCard`: crane up from the kitchen to a podium
-  where the mB tile assembles from falling cubes (`VoxelCubes`, one instanced mesh), wordmark
-  letter by letter, tagline, « 7 jours gratuits » pill, macrobody.fr, the cameo waving. Preview
-  composition `EndCard`; still: `npm run still:endcard`.
+- End cards (`src/endcards/`, steps 130, 137): `<EndCard style=…>` picks the style's animated
+  card; every template ends on its style's card. Fixed base (`base.tsx`: mB tile, wordmark,
+  « 7 jours gratuits », macrobody.fr) adapted per video by the props in `schema.ts`: `tagline?`,
+  `accent`, `cameo?` (per style, `CAMEOS`), `address`, `backdrop` (live only), `font` (paper),
+  `note` (pixel), `pixelate` (voxel), `seconds` (standalone clip; default `CARD_S`). Never a
+  price. Each card settles by `SETTLE_S` and holds ≥ 1 s. `voxel`: crane up to a podium where
+  the tile assembles from falling cubes. `paper`: kraft cover tears open on the cream sheet,
+  cut-out pieces slide in at 12 fps steps, a cut-out character waves. `clean`: v5 light
+  surface, drifting accent glows, kicker pill, tile scales up, wordmark rises from a mask.
+  `pixel`: PRESS START, the tile dissolves in cell by cell, the texts type in. `live`: the last
+  frame freezes, blurs and dims under the clean stack in light text. Composition `EndCard`
+  (`EndCardClip`) renders one card alone; Track A recipes use it (src/studio/motion.py
+  `render_end_card`). Stills: `npm run still:endcard`, `npm run still:endcards`.
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).
 - 8-bit kit: `src/lib/` (palette, pixel scale helpers, typewriter maths, font loading,
   game maths in `game.ts`, code-drawn sprites in `sprites.ts`), `src/components/` (`PixelText`,

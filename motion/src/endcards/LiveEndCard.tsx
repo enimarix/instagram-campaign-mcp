@@ -1,7 +1,7 @@
 // The live style's end card (step 137), over real footage: the video's last frame (backdrop)
 // freezes, then blurs, dims and pushes in slowly while the card's stack (the clean card's
 // choreography, in light text) animates over it. Settles by SETTLE_S.live, then holds.
-import { AbsoluteFill, Img, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Img, Sequence, useCurrentFrame } from "remotion";
 import { easeOut, span } from "../voxel/anim.ts";
 import { CardStack } from "./CleanEndCard";
 import type { CardProps } from "./schema.ts";
@@ -31,7 +31,9 @@ export const LiveEndCard = ({ tagline, accent, address, backdrop }: Omit<CardPro
         />
       )}
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(14,17,23,0.25) 0%, rgba(14,17,23,0.05) 45%, rgba(14,17,23,0.45) 100%)", opacity: t }} />
-      <CardStack frame={frame - STACK_DELAY} tagline={tagline} accent={accent} address={address} dark />
+      <Sequence from={STACK_DELAY} layout="none">
+        <CardStack tagline={tagline} accent={accent} address={address} dark />
+      </Sequence>
     </AbsoluteFill>
   );
 };

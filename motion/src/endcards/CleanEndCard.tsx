@@ -76,8 +76,6 @@ const RingCard = ({ frame, color }: { frame: number; color: string }) => {
 };
 
 type Stack = Pick<CardProps, "tagline" | "accent" | "address"> & {
-  /** Frames from the card's start (live delays it behind the freeze). */
-  frame: number;
   /** Light text over footage (live) instead of ink on the light surface. */
   dark?: boolean;
   /** The kicker pill on top (clean). */
@@ -86,7 +84,8 @@ type Stack = Pick<CardProps, "tagline" | "accent" | "address"> & {
 };
 
 /** The card's stack, centred on the frame: [kicker], tile [+ ring card], wordmark, tagline, pill, url. */
-export const CardStack = ({ frame, tagline, accent, address, dark = false, kicker = false, ring = false }: Stack) => {
+export const CardStack = ({ tagline, accent, address, dark = false, kicker = false, ring = false }: Stack) => {
+  const frame = useCurrentFrame();
   const color = ACCENTS[accent];
   const words = taglineOf({ tagline, address }).split(" ");
   const tile = ease(frame, AT.tile, 22);
@@ -194,7 +193,7 @@ export const CleanEndCard = ({ tagline, accent, address, cameo }: Omit<CardProps
         <Glow x={300} y={1500} r={420} color={brand.colors.macros.weight} frame={frame} phase={4} alpha={0.16} />
         <Glow x={900} y={1650} r={360} color={brand.colors.brand_light} frame={frame} phase={1} alpha={0.2} />
       </AbsoluteFill>
-      <CardStack frame={frame} tagline={tagline} accent={accent} address={address} kicker ring={cameoOf("clean", cameo) === "ring"} />
+      <CardStack tagline={tagline} accent={accent} address={address} kicker ring={cameoOf("clean", cameo) === "ring"} />
     </AbsoluteFill>
   );
 };
