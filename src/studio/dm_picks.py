@@ -104,6 +104,17 @@ def mark_pick(store: CampaignStore, pick_id: int, status: str,
                           else None})
 
 
+def mark_posted(store: CampaignStore, asset_id: int) -> int:
+    """The asset was published: picks of its idea's source that are being made (downloaded,
+    in_production) become posted. Returns how many moved."""
+    with store._tx() as c:
+        return c.execute(
+            "UPDATE dm_picks SET status='posted', skip_reason=NULL, updated_at=?"
+            " WHERE status IN ('downloaded','in_production') AND source_id IN"
+            " (SELECT i.source_id FROM assets a JOIN ideas i ON i.id = a.idea_id"
+            " WHERE a.id = ?)", (to_iso(utcnow()), asset_id)).rowcount
+
+
 # ---------------------------------------------------------------- polling
 def _reel(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The first shared item that may be a Reel: {url, id}, or None."""

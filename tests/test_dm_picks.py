@@ -13,6 +13,7 @@ from src.agent import packet
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.studio import dm_picks as D
+from src.studio.assets import transition
 
 from .conftest import API, LOCAL
 from .test_api_assets import _settings
@@ -219,3 +220,23 @@ def test_api(store):
         assert tc.post("/api/dm-picks/1/skip", json={"reason": " "}).status_code == 422
         assert tc.delete("/api/pinned-accounts/1").status_code == 204
         assert tc.delete("/api/pinned-accounts/1").status_code == 404
+
+
+def test_publishing_a_remix_marks_its_picks_posted(store):
+    src, other = (store.add_source("downloader", rights_basis="commentary", author="c")
+                  for _ in range(2))
+    asset = store.add_asset(store.add_idea("remix", source_id=src["id"])["id"])
+    rows = [("m1", src, "in_production"), ("m2", src, "downloaded"), ("m3", src, "skipped"),
+            ("m4", other, "in_production")]
+    with store._tx() as c:
+        for mid, s, status in rows:
+            c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url, received_at,"
+                      " status, source_id, created_at, updated_at)"
+                      " VALUES (?, 'f', 'https://x', 't', ?, ?, 't', 't')",
+                      (mid, status, s["id"]))
+    for to, actor in [("ready", "worker"), ("approved", "owner"), ("scheduled", "system")]:
+        transition(store, asset["id"], to, actor=actor)
+    assert D.list_picks(store, "posted") == []  # approved and scheduled are not posted
+    transition(store, asset["id"], "published", actor="worker")
+    status = {p["message_id"]: p["status"] for p in D.list_picks(store, None)}
+    assert status == {"m1": "posted", "m2": "posted", "m3": "skipped", "m4": "in_production"}

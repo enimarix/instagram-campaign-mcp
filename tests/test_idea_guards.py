@@ -4,7 +4,7 @@ from difflib import SequenceMatcher
 
 import pytest
 
-from src.learning.quotas import todays_quotas
+from src.learning.quotas import reaction_plan, todays_quotas
 from src.studio import production
 
 DAY = "2026-11-17"
@@ -130,3 +130,26 @@ def test_citations_ok_and_optional_elsewhere(store, settings):
     idea = _new(store, settings, "Honey never spoils", pillar="fun_facts", citations=CITE)
     assert idea["citations"] == CITE
     assert _new(store, settings, "A short story")["citations"] == []
+
+
+@pytest.mark.parametrize("made, picks, plan", [
+    (0, 0, {"room": 5, "picks": 0, "viral": 5}),  # no clips, no picks: all from viral finds
+    (0, 2, {"room": 5, "picks": 2, "viral": 3}),  # picks first, the rest viral
+    (1, 9, {"room": 4, "picks": 4, "viral": 0}),  # picks over the cap wait
+    (6, 1, {"room": 0, "picks": 0, "viral": 0}),  # cap passed (margin used up)
+])
+def test_reaction_plan(settings, made, picks, plan):
+    assert reaction_plan(settings, made, picks) == plan  # 3 a day + margin 2
+
+
+def test_reaction_plan_margin_and_quotas(store, settings):
+    settings.reaction_margin = 0
+    assert reaction_plan(settings, 0, 5) == {"room": 3, "picks": 3, "viral": 0}
+    with store._tx() as c:
+        for mid, status in (("m1", "new"), ("m2", "downloaded"), ("m3", "skipped")):
+            c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url, received_at,"
+                      " status, created_at, updated_at) VALUES (?, 'f', 'https://x', 't', ?,"
+                      " 't', 't')", (mid, status))
+    store.add_idea("remix", batch_date=DAY)
+    assert todays_quotas(store, settings, DAY)["reactions_plan"] == {
+        "room": 2, "picks": 2, "viral": 0}
