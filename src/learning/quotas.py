@@ -54,7 +54,7 @@ def reaction_plan(settings: InstagramMCPSettings, made: int, picks: int) -> Dict
     REACTION_MARGIN minus the `made` ones), DM picks first; picks over the cap wait for
     the next day."""
     room = max(0, settings.max_reactions_per_day + settings.reaction_margin - made)
-    from_picks = min(max(0, picks), room)
+    from_picks = min(picks, room)
     return {"room": room, "picks": from_picks, "viral": room - from_picks}
 
 
