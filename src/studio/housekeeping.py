@@ -207,6 +207,7 @@ def restore_database(settings: InstagramMCPSettings, backup: Path, now: datetime
             current.close()
     db.parent.mkdir(parents=True, exist_ok=True)
     tmp = db.with_name(f"{db.name}.restore-tmp")
+    tmp.unlink(missing_ok=True)  # a crashed earlier restore's leftover
     src = sqlite3.connect(f"{backup.resolve().as_uri()}?mode=ro", uri=True)
     try:
         _backup(src, tmp)
