@@ -22,6 +22,7 @@ from ..learning.experiments import check_idea
 from ..learning.quotas import flagged_pillars, todays_quotas
 from ..store import CampaignStore
 from ..taxonomy import load_taxonomy, validate
+from . import work_orders
 from .assets import edit_asset
 from .render import auto_description
 from .rights import caption_credit_problem
@@ -35,15 +36,19 @@ _JOBS = ("SELECT j.id AS job_id, j.asset_id, j.state, j.progress, j.failure, a.s
          " FROM render_jobs j JOIN assets a ON a.id = j.asset_id")
 
 
-def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str,
-                **fields: Any) -> Dict[str, Any]:
+def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str, *,
+                work_order_id: Optional[int] = None, **fields: Any) -> Dict[str, Any]:
     """Store an idea in today's batch (owner-local date); None fields are left unset.
     Everything is checked before writing; the ValueError says what to change: unknown tags
     (TaxonomyError lists the valid ones), today's quotas (src/learning/quotas.py; a DM
     pick's remix may pass a full batch, _dm_pick_extra), a near-duplicate of a recent
     idea, a fact pillar without citations, an experiment that is not an open one's variant
-    (src/learning/experiments.py check_idea, which may fill in the idea's tag)."""
+    (src/learning/experiments.py check_idea, which may fill in the idea's tag).
+    work_order_id: the owner's work order this idea makes (work_orders.check_idea); it may
+    pass a full batch like a DM pick, and the order moves to in_production."""
     fields = {k: v for k, v in fields.items() if v is not None}
+    if work_order_id is not None:
+        work_orders.check_idea(store, work_order_id, track, fields.get("source_id"))
     check_idea(store, track, fields)
     fields.setdefault("batch_date", local_today(settings.timezone))
     validate("tracks", track)
@@ -51,9 +56,13 @@ def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str
     _check_citations(pillar, fields.get("citations"))
     q = todays_quotas(store, settings, fields["batch_date"])
     _check_quotas(q, track, pillar, fields.get("strategy"),
-                  extra=_dm_pick_extra(store, settings, q, track, fields.get("source_id")))
+                  extra=work_order_id is not None
+                  or _dm_pick_extra(store, settings, q, track, fields.get("source_id")))
     _check_duplicates(store, settings, fields)
-    return store.add_idea(track, **fields)
+    idea = store.add_idea(track, **fields)
+    if work_order_id is not None:
+        work_orders.start(store, work_order_id, idea["id"])
+    return idea
 
 
 def _check_citations(pillar: Optional[str], citations: Any) -> None:
@@ -297,5 +306,6 @@ def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
             store.get_idea(asset["idea_id"]), asset)
     edit_asset(store, asset_id, caption=caption, best_before=best_before,  # checks them
                description=description)
+    work_orders.mark_in_feed(store, asset)  # 134: an owner's order is in the feed now
     return compact_asset(store.update_asset(asset_id, self_score=self_score,
                                             self_score_reason=reason))

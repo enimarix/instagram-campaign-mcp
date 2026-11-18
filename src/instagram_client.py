@@ -855,7 +855,8 @@ class InstagramClient(GraphClient):
             f"{ids[0]}/{edge}",
             params={
                 "user_id": self.account_id,
-                "fields": "id,caption,media_type,permalink,timestamp,like_count,comments_count",
+                "fields": "id,caption,media_type,media_url,permalink,timestamp,"
+                          "like_count,comments_count",
                 "limit": min(limit, 50),
             },
         )
@@ -868,8 +869,8 @@ class InstagramClient(GraphClient):
         fields = (
             f"business_discovery.username({user}){{username,name,biography,"
             f"followers_count,media_count,media.limit({min(media_limit, 50)})"
-            "{id,caption,media_type,media_product_type,permalink,timestamp,"
-            "like_count,comments_count,view_count}}"
+            "{id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,"
+            "timestamp,like_count,comments_count,view_count}}"
         )
         data = await self._make_request(
             "GET", self.account_id, params={"fields": fields}, use_cache=True

@@ -1,18 +1,20 @@
 """Research routes (thin doors): the watchlist (the store's, step 051), the hashtags and
 accounts research_trends looks up, for the owner to edit; GET /api/trends, the ranked
 trend report (studio/research.py trend_report, step 052); /api/inspirations, the Reel
-links the owner pastes with a note (store, step 051b)."""
+links the owner pastes with a note (store, step 051b); /api/research/*, the Trending page
+(step 134): refresh, feed, reactions, suggested topics (studio/research.py) and work
+orders (studio/work_orders.py)."""
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, Field
 
-from ..store import CampaignStore
-from ..studio import research
+from ..store import CampaignStore, utcnow
+from ..studio import research, work_orders
 from .assets import call, get_store
 
 router = APIRouter(prefix="/api")
@@ -82,3 +84,67 @@ def trends(request: Request, days: int = Query(14, ge=1, le=365),
            store: CampaignStore = Depends(get_store)):
     return research.trend_report(store, request.app.state.settings, days=days, limit=limit,
                                  kind=kind)
+
+
+# --- Trending page (134) ---------------------------------------------------------------
+class ReactionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reaction: Literal["like", "dislike", "none"]
+
+
+class WorkOrderItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_id: int
+    mode: Literal["inspired", "react"]
+    instruction: Optional[str] = None
+
+
+class WorkOrdersIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: List[WorkOrderItem] = Field(min_length=1)
+
+
+@router.post("/research/refresh")
+async def refresh(request: Request):
+    state = request.app.state
+    if state.client is None:
+        return JSONResponse(status_code=503, content={"error": "instagram_not_configured"})
+    try:
+        return await research.refresh(state.client, state.store, now=utcnow())
+    except research.RefreshRunning as e:
+        return JSONResponse(status_code=409, content={"error": "already_running",
+                                                      "message": str(e)})
+
+
+@router.get("/research/feed")
+def feed(topic: Optional[str] = None, limit: int = Query(50, ge=1, le=research.FEED_MAX),
+         store: CampaignStore = Depends(get_store)):
+    return research.trending_feed(store, topic=topic, limit=limit)
+
+
+@router.get("/research/suggested-topics")
+def suggested_topics(store: CampaignStore = Depends(get_store)):
+    return research.suggested_topics(store, utcnow())
+
+
+@router.post("/research/feed/{source_id}/reaction")
+def set_reaction(source_id: int, body: ReactionIn, store: CampaignStore = Depends(get_store)):
+    return call(research.set_reaction, store, source_id, body.reaction)
+
+
+@router.post("/research/work-orders")
+def create_work_orders(body: WorkOrdersIn, store: CampaignStore = Depends(get_store)):
+    return call(work_orders.create_orders, store, [i.model_dump() for i in body.items])
+
+
+@router.get("/research/work-orders")
+def list_work_orders(status: Optional[Literal["new", "in_production", "in_feed",
+                                              "skipped"]] = None,
+                     store: CampaignStore = Depends(get_store)):
+    return work_orders.list_orders(store, status)
+
+
+@router.delete("/research/work-orders/{order_id}", status_code=204)
+def delete_work_order(order_id: int, store: CampaignStore = Depends(get_store)):
+    out = call(work_orders.delete_order, store, order_id)
+    return out if isinstance(out, Response) else Response(status_code=204)

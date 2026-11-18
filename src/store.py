@@ -528,6 +528,32 @@ CREATE TRIGGER ads_audit_no_delete BEFORE DELETE ON ads_audit
 BEGIN SELECT RAISE(ABORT, 'ads_audit is append-only'); END;
 """
 
+# Migration 21: the Trending page (134). sources.reaction: the owner's like / dislike of a
+# reference. work_orders: references the owner sends the agent to make (inspired: an
+# original video on the same idea; react: a commentary remix), with the owner's own
+# instruction; idea_id / asset_id link what the agent made from it. Own table, not
+# inspirations: other statuses, and one Reel may get several orders over time.
+TRENDING_SCHEMA = """
+ALTER TABLE sources ADD COLUMN reaction TEXT CHECK (reaction IN ('like','dislike'));
+ALTER TABLE sources ADD COLUMN reacted_at TEXT;
+CREATE TABLE work_orders (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id   INTEGER NOT NULL REFERENCES sources(id),
+    mode        TEXT NOT NULL CHECK (mode IN ('inspired','react')),
+    instruction TEXT,
+    status      TEXT NOT NULL DEFAULT 'new' CHECK (status IN
+        ('new','in_production','in_feed','skipped')),
+    skip_reason TEXT,
+    idea_id     INTEGER REFERENCES ideas(id),
+    asset_id    INTEGER REFERENCES assets(id),
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_work_orders_open ON work_orders(source_id)
+    WHERE status IN ('new','in_production');
+CREATE INDEX idx_work_orders_idea ON work_orders(idea_id);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -536,7 +562,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
-                         AD_TESTS_SCHEMA]
+                         AD_TESTS_SCHEMA, TRENDING_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -564,7 +590,7 @@ EXPERIMENT_FIELDS = ("hypothesis", "variable", "variants", "target_per_variant",
                      "status", "result", "learning_id", "report_date", "opened_at")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
                "facts", "usage", "silences", "timeline", "analysis", "variants", "result",
-               "spec", "needed", "detail", "change_request")
+               "spec", "needed", "detail", "change_request", "work_order")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),
@@ -578,6 +604,7 @@ _INSERT_STAMPS = {
     "ad_entities": ("created_at", "updated_at"),
     "ad_tests": ("created_at", "updated_at"),
     "ads_audit": ("at",),
+    "work_orders": ("created_at", "updated_at"),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")
@@ -1473,14 +1500,19 @@ class CampaignStore:
         Rows carry their idea's track, strategy (explore/exploit) and experiment, its source's
         rights_basis (None: no source) and dm_pick_sender (the pinned account that sent the
         source by DM, else None) for the inbox, and change_request: on a revised video, the
-        owner's newest change request on the version it replaces {text, reason_codes}."""
+        owner's newest change request on the version it replaces {text, reason_codes}, and
+        work_order: the owner's trending work order its idea was made for {id, mode,
+        instruction, permalink} (every version of that idea), else None."""
         return self._select(
             "SELECT a.*, i.track, i.strategy, i.experiment, s.rights_basis,"
             " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
             "  ORDER BY d.id LIMIT 1) AS dm_pick_sender,"
             " (SELECT json_object('text', f.text, 'reason_codes', json(f.reason_codes))"
             "  FROM feedback f WHERE f.asset_id = a.parent_asset_id AND f.wants_changes = 1"
-            "  ORDER BY f.id DESC LIMIT 1) AS change_request"
+            "  ORDER BY f.id DESC LIMIT 1) AS change_request,"
+            " (SELECT json_object('id', w.id, 'mode', w.mode, 'instruction', w.instruction,"
+            "  'permalink', ws.url) FROM work_orders w JOIN sources ws ON ws.id = w.source_id"
+            "  WHERE w.idea_id = a.idea_id ORDER BY w.id DESC LIMIT 1) AS work_order"
             " FROM assets a JOIN ideas i ON i.id = a.idea_id"
             " LEFT JOIN sources s ON s.id = i.source_id",
             {"a.batch_date": _sql_value(batch_date), "a.status": status,
