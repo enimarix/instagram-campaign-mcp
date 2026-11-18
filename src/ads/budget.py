@@ -4,15 +4,18 @@ Ad budget guard (step 091): nothing spends ad money without passing `authorize_s
 - Caps in settings (`ADS_DAILY_CAP`, `ADS_TEST_CAP`, `ADS_LIFETIME_CAP`, in `ADS_CURRENCY`);
   0, the default, allows no spend at all.
 - The ledger (`ad_spend_ledger`) counts what is used: every `authorized` row not yet
-  `released`, plus every `reported` row (Meta's spend, step 095). The daily cap counts rows
+  `released`, plus every `reported` row (Meta's spend, written by step 095's sync as the
+  increase since the last sync: `report_spend`). An authorization with reported rows (its
+  `authorization_id`) counts max(authorized, reported), never both: what Meta already
+  spent plus what is still reserved, and all of Meta's spend when Meta spent more. A
+  released authorization counts its reported rows only. The daily cap counts rows
   created on the owner-local day (`settings.timezone`), or a row's `daily_amount` on every
   day from its creation to its `daily_until` (an ad set's lifetime budget spread over its
   days, 092); the test cap, rows of that test.
-  ponytail: while a test runs, its authorization and its reported spend both count, so the
-  guard over-counts (the safe side) until 095 reconciles.
 - One `BEGIN IMMEDIATE` transaction reads the kill switch and the ledger and writes the
   authorization, so two processes can never both pass the same cap.
-- The kill switch blocks every new authorization. 095's worker pauses ads while it is on.
+- The kill switch blocks every new authorization. The ads sync (src/ads/sync.py) pauses
+  every active campaign, ad set and ad of the account while it is on.
 - Functions that can spend are marked `@spends`; tests/test_ads_budget.py fails when an
   src/ads module sends a write request outside one (or outside a `@pauses` function, whose
   writes only send status=PAUSED), or a `@spends` function skips `authorize_spend()`.
@@ -118,22 +121,33 @@ def _usage(c, settings: InstagramMCPSettings, now: datetime) -> Dict[str, Any]:
     released = {r["authorization_id"] for r in rows if r["kind"] == "released"}
     start, end, today = _day_bounds(settings.timezone, now)
     usage: Dict[str, Any] = {"daily": ZERO, "lifetime": ZERO, "tests": {}, "currencies": set()}
+    # authorization id (a lone row: its own id) -> [test_id, reserved lifetime, reserved
+    # daily, reported lifetime, reported daily]
+    held: Dict[int, List[Any]] = {}
     for r in rows:
         if r["kind"] == "released" or r["id"] in released:
             continue
         amount = Decimal(r["amount"])
         usage["currencies"].add(r["currency"])
-        usage["lifetime"] += amount
         if r["daily_amount"] is not None:
             # Spread rows count on every day of their span. A later day is never fuller
             # than today (every span covering it covers today too), so checking today is
             # enough.
-            if r["created_at"] < end and r["daily_until"] >= today:
-                usage["daily"] += Decimal(r["daily_amount"])
-        elif start <= r["created_at"] < end:
-            usage["daily"] += amount
-        if r["test_id"] is not None:
-            usage["tests"][r["test_id"]] = usage["tests"].get(r["test_id"], ZERO) + amount
+            daily = (Decimal(r["daily_amount"]) if r["created_at"] < end
+                     and r["daily_until"] >= today else ZERO)
+        else:
+            daily = amount if start <= r["created_at"] < end else ZERO
+        reported = r["kind"] == "reported"
+        key = r["authorization_id"] if reported and r["authorization_id"] else r["id"]
+        h = held.setdefault(key, [r["test_id"], ZERO, ZERO, ZERO, ZERO])
+        h[3 if reported else 1] += amount
+        h[4 if reported else 2] += daily
+    for test_id, lifetime, daily, rep_lifetime, rep_daily in held.values():
+        lifetime = max(lifetime, rep_lifetime)
+        usage["lifetime"] += lifetime
+        usage["daily"] += max(daily, rep_daily)
+        if test_id is not None:
+            usage["tests"][test_id] = usage["tests"].get(test_id, ZERO) + lifetime
     return usage
 
 
@@ -235,6 +249,34 @@ def release(store: CampaignStore, authorization_id: int, *, reason: str = "relea
     return out
 
 
+def report_spend(store: CampaignStore, settings: InstagramMCPSettings, authorization_id: int,
+                 meta_total: Decimal, *, ad_entity_id: Optional[str] = None,
+                 now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Record Meta's total spend for an authorization's ad set as a `reported` row of the
+    increase over what the ledger already holds, so its reported rows sum to Meta's total.
+    One transaction: two syncs never both write the same increase. A lower total (Meta
+    revised its numbers) writes nothing: the ledger never goes down. `over`: Meta spent
+    more than was authorized. KeyError if the authorization is missing."""
+    with store.immediate() as c:
+        auth = c.execute("SELECT * FROM ad_spend_ledger WHERE id=? AND kind='authorized'",
+                         (authorization_id,)).fetchone()
+        if auth is None:
+            raise KeyError(f"No authorization with id {authorization_id}")
+        have = sum((Decimal(r[0]) for r in c.execute(
+            "SELECT amount FROM ad_spend_ledger WHERE kind='reported' AND authorization_id=?",
+            (authorization_id,))), ZERO)
+        delta = meta_total - have
+        if delta > 0:
+            c.execute(
+                "INSERT INTO ad_spend_ledger (kind, amount, currency, test_id, ad_entity_id,"
+                " authorization_id, reason, created_at) VALUES ('reported',?,?,?,?,?,?,?)",
+                (str(delta), settings.ads_currency, auth["test_id"], ad_entity_id,
+                 authorization_id, "spend Meta reports", to_iso(now or utcnow())))
+    reported = max(meta_total, have)
+    return {"reported": str(reported), "delta": str(max(delta, ZERO)),
+            "authorized": auth["amount"], "over": reported > Decimal(auth["amount"])}
+
+
 def open_authorizations(store: CampaignStore, test_id: int) -> List[int]:
     """Ids of the test's authorizations not yet released."""
     with store.immediate() as c:
@@ -254,6 +296,11 @@ def kill(store: CampaignStore, reason: str = "kill switch",
     logger.warning("ads_killed", reason=reason)
 
 
+def is_killed(store: CampaignStore) -> bool:
+    with store.immediate() as c:
+        return bool(_kill_state(c)["killed"])
+
+
 def unkill(store: CampaignStore) -> None:
     """Allow spend again. The API asks the website password first."""
     store.set_state(KILL_KEY, {"killed": False, "killed_at": None, "killed_reason": None})
@@ -262,9 +309,9 @@ def unkill(store: CampaignStore) -> None:
 
 
 def paused_ids_needed(store: CampaignStore) -> List[str]:
-    """While killed: the ad ids of open authorizations, which 092/095 must pause on Meta.
-    Empty when not killed. ponytail: ledger ids only; 095 also pauses every other ACTIVE
-    ad of the account it lists, since ads made outside the studio are not in the ledger."""
+    """While killed: the campaign ids of open authorizations, which must be paused on Meta.
+    Empty when not killed. Ledger ids only: the sync (src/ads/sync.py) also pauses every
+    other active object of the account, since ads made outside the studio are not here."""
     with store.immediate() as c:
         if not _kill_state(c)["killed"]:
             return []

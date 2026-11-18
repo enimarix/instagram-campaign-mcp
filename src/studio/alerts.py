@@ -4,8 +4,9 @@ Alerts (step 098): what needs the owner's attention, for the website's bell.
 Computed on every call from state that already exists (no event pipeline): failed
 publishes, publishes waiting for a check, re-planned late slots, the token, the latest run
 of each agent playbook, a QC failure spike in the last batch, a stale worker heartbeat, the
-Reel downloader's health and skipped DM picks. Experiment and ad alerts come with their
-steps (086's facts warning, ads 089+).
+Reel downloader's health and skipped DM picks. Experiment alerts come with 086's facts
+warning. Jobs whose alert is an event, not a state (the ads sync, 095), keep it with
+`raise_alert`.
 
 An alert's `id` is stable (kind, or kind:subject), so the owner can dismiss it: the time is
 kept in worker state, and the alert stays hidden until its `since` moves past that time
@@ -26,6 +27,7 @@ from ..worker import ALIVE_WITHIN
 from . import downloader_service, token
 
 STATE_KEY = "alerts_dismissed"
+RAISED_KEY = "alerts_raised"
 FAILED_WITHIN = timedelta(days=7)  # failed publishes this recent
 RECENT = timedelta(days=1)  # re-plans and skipped DM picks
 CHECK_STUCK = timedelta(minutes=30)  # reconcile runs every 10 min: longer is stuck
@@ -44,6 +46,24 @@ def _alert(kind: str, subject: Any, severity: str, title: str, detail: str, link
 
 def _plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def raise_alert(store: CampaignStore, kind: str, subject: Any, severity: str, title: str,
+                detail: str, link: str, now: datetime, *, renew: bool = False) -> None:
+    """Keep an alert a job raised for FORGET_AFTER. Raised again with the same id it keeps
+    its first `since` (once per id, a dismissal holds), unless `renew` (a new failure:
+    shown again after a dismissal). ponytail: read-modify-write; only the worker raises."""
+    kept = {k: a for k, a in (store.get_state(RAISED_KEY) or {}).items()
+            if now - parse_dt(a["since"]) < FORGET_AFTER}
+    a = _alert(kind, subject, severity, title, detail, link, to_iso(now))
+    if renew or a["id"] not in kept:
+        kept[a["id"]] = a
+    store.set_state(RAISED_KEY, kept)
+
+
+def _raised(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
+    return [a for a in (store.get_state(RAISED_KEY) or {}).values()
+            if now - parse_dt(a["since"]) < FORGET_AFTER]
 
 
 def _publishes(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
@@ -175,7 +195,7 @@ async def alerts(store: CampaignStore, settings: InstagramMCPSettings, now: date
         t = None
     found = [*_publishes(store, now), *_replanned(store, now), *_token(t),
              *_agent_runs(store), *_qc_spike(store), *_worker(store, now),
-             *_downloader(store), *_dm_skipped(store, now)]
+             *_downloader(store), *_dm_skipped(store, now), *_raised(store, now)]
     dismissed = store.get_state(STATE_KEY) or {}
     shown = [a for a in found if a["id"] not in dismissed
              or (a["since"] is not None and parse_dt(a["since"]) > parse_dt(dismissed[a["id"]]))]
