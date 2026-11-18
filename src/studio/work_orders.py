@@ -26,6 +26,7 @@ INSTRUCTION_MAX = 500
 REASON_MAX = 300
 MAX_ITEMS = 20
 CAPTION_LINE = 120
+TRENDING_PROVIDER = "instagram"  # research.PROVIDER (research imports this module)
 AGENT_KEYS = ("id", "source_id", "mode", "instruction", "status", "permalink", "topic",
               "caption_quote", "likes", "comments", "views", "created_at", "skip_reason",
               "idea_id", "asset_id")
@@ -63,8 +64,9 @@ def list_orders(store: CampaignStore, status: Optional[str] = None, limit: int =
 
 def create_orders(store: CampaignStore, items: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Store the owner's orders, all or none: [{source_id, mode, instruction?}]. ValueError
-    names the first problem: an empty list, an unknown source or one with no permalink, a
-    bad mode, an instruction too long, a Reel twice or one with an open order already."""
+    names the first problem: an empty list, an unknown source, one research did not find
+    (not in the Trending feed) or with no permalink, a bad mode, an instruction too long,
+    a Reel twice or one with an open order already."""
     if not items:
         raise ValueError("pick at least one Reel")
     if len(items) > MAX_ITEMS:
@@ -78,6 +80,8 @@ def create_orders(store: CampaignStore, items: Sequence[Dict[str, Any]]) -> List
             source = store.get_source(source_id)
         except KeyError:
             raise ValueError(f"no Reel with id {source_id}") from None
+        if source["provider"] != TRENDING_PROVIDER or not source["external_id"]:
+            raise ValueError(f"source {source_id} is not a Reel from the Trending feed")
         if not source["url"]:
             raise ValueError(f"Reel {source_id} has no permalink")
         instruction = (item.get("instruction") or "").strip() or None
