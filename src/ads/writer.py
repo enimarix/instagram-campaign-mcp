@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from ..config import InstagramMCPSettings
+from ..config import PLACEHOLDERS, InstagramMCPSettings
 from ..store import CampaignStore
 from .budget import authorize_spend, release, spends
 from .client import AdsClient
@@ -56,7 +56,8 @@ def missing_settings(settings: InstagramMCPSettings) -> List[str]:
     are required for every ad set we create: the owner is in the EU."""
     need = ("instagram_access_token", "instagram_business_account_id", "meta_ad_account_id",
             "meta_page_id", "ads_dsa_beneficiary", "ads_dsa_payor")
-    return [n.upper() for n in need if not (getattr(settings, n) or "").strip()]
+    return [n.upper() for n in need
+            if (getattr(settings, n) or "").strip() in ("", *PLACEHOLDERS)]
 
 
 class AdsWriter(AdsClient):

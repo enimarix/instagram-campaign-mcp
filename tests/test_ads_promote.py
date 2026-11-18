@@ -163,6 +163,7 @@ async def test_licensed_with_ads_allowed_passes(store, meta):
     ({"settings": {"ads_dsa_payor": None}}, "not_configured"),
     ({"settings": {"meta_page_id": None}}, "not_configured"),
     ({"settings": {"meta_ad_account_id": None}}, "not_configured"),
+    ({"settings": {"instagram_access_token": "your_long_lived_access_token"}}, "not_configured"),
 ])
 async def test_refusals_before_any_request(store, meta, kw, code):
     _post(store)
