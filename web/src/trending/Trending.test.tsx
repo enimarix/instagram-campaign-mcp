@@ -37,7 +37,7 @@ type Route = [number, unknown]
 function stubApi(overrides: Record<string, Route | Route[]> = {}) {
   const calls: { key: string; body?: unknown }[] = []
   const routes: Record<string, Route | Route[]> = {
-    'GET /api/research/feed?limit=50': [200, [item(1), item(2)]],
+    'GET /api/research/feed?limit=200': [200, [item(1), item(2)]],
     'GET /api/watchlist': [200, WATCH],
     'GET /api/research/suggested-topics': [200, SUGGESTED],
     'GET /api/dm-picks': [200, []],
@@ -74,7 +74,7 @@ afterEach(() => {
 
 describe('Tendances', () => {
   it('shows the feed: topic, outlier, French stats, the caption first line, a safe link', async () => {
-    stubApi({ 'GET /api/research/feed?limit=50': [200, [item(1), item(2, { permalink: 'javascript:alert(1)', embed_url: null })]] })
+    stubApi({ 'GET /api/research/feed?limit=200': [200, [item(1), item(2, { permalink: 'javascript:alert(1)', embed_url: null })]] })
     renderPage()
     await screen.findByRole('list', { name: 'Tendances' })
     expect(within(card(1)).getByText('#fitness')).toBeTruthy()
@@ -89,7 +89,7 @@ describe('Tendances', () => {
   })
 
   it('plays a Reel with media inline, muted, with its poster', async () => {
-    stubApi({ 'GET /api/research/feed?limit=50': [200, [item(1, {
+    stubApi({ 'GET /api/research/feed?limit=200': [200, [item(1, {
       media_url: 'https://scontent.cdninstagram.com/v.mp4', thumbnail_url: 'https://scontent.cdninstagram.com/t.jpg' })]] })
     renderPage()
     await screen.findByRole('list', { name: 'Tendances' })
@@ -102,6 +102,30 @@ describe('Tendances', () => {
     expect(video.muted).toBe(false)
   })
 
+  it('shows Reels by default; Tout adds carousels and images with their picture', async () => {
+    const carousel = item(2, { media_type: 'CAROUSEL_ALBUM', product_type: 'FEED', media_url: 'https://scontent.cdninstagram.com/c.jpg' })
+    stubApi({ 'GET /api/research/feed?limit=200': [200, [item(1), carousel]] })
+    renderPage()
+    const kinds = await screen.findByRole('group', { name: 'Type de média' })
+    expect(within(kinds).getByRole('button', { name: 'Reels (1)' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('listitem', { name: 'Reel 2' })).toBeNull()
+    fireEvent.click(within(kinds).getByRole('button', { name: 'Tout (2)' }))
+    expect(card(2).querySelector('img')!.getAttribute('src')).toBe('https://scontent.cdninstagram.com/c.jpg')
+    expect(within(card(2)).getByRole('link', { name: 'Instagram' })).toBeTruthy()
+  })
+
+  it('without Reels, points to adding an account to watch', async () => {
+    stubApi({ 'GET /api/research/feed?limit=200': [200, [item(1, { media_type: 'IMAGE', product_type: 'FEED' })]] })
+    renderPage()
+    expect(await screen.findByText('Pas encore de Reels : ajoute des comptes à suivre')).toBeTruthy()
+    const topics = screen.getByText('Gérer les sujets').closest('details')!
+    expect(topics.open).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un compte' }))
+    expect(topics.open).toBe(true)
+    expect((screen.getByLabelText('Type') as HTMLSelectElement).value).toBe('account')
+    expect(document.activeElement).toBe(screen.getByLabelText('Hashtag ou compte'))
+  })
+
   it('refreshes: a toast says what was found, the budget updates and the feed reloads', async () => {
     const calls = stubApi({ 'POST /api/research/refresh': [200, { ...REFRESH, hashtags_skipped_budget: ['gym'], errors: { 'account:x': 'no' } }] })
     renderPage()
@@ -110,7 +134,7 @@ describe('Tendances', () => {
     expect((await screen.findByRole('status')).textContent).toContain(
       'Trouvé : 4 nouveaux Reels, 1 mis à jour. 1 hashtag(s) en attente : limite de la semaine atteinte. 1 sujet(s) en erreur.')
     expect(screen.getByText('27/30 hashtags restants cette semaine')).toBeTruthy()
-    await vi.waitFor(() => expect(calls.filter((c) => c.key === 'GET /api/research/feed?limit=50')).toHaveLength(2))
+    await vi.waitFor(() => expect(calls.filter((c) => c.key === 'GET /api/research/feed?limit=200')).toHaveLength(2))
   })
 
   it.each([
@@ -145,7 +169,7 @@ describe('Tendances', () => {
 
   it('selects several Reels and sends them to work in the chosen mode', async () => {
     const calls = stubApi({
-      'GET /api/research/feed?limit=50': [200, [item(1), item(2), item(3, { work_order: { id: 9, mode: 'react', instruction: null, status: 'in_production' } })]],
+      'GET /api/research/feed?limit=200': [200, [item(1), item(2), item(3, { work_order: { id: 9, mode: 'react', instruction: null, status: 'in_production' } })]],
       'POST /api/research/work-orders': [200, []],
     })
     renderPage()
@@ -167,7 +191,7 @@ describe('Tendances', () => {
 
   it("tells the AI what to do with one Reel, and cancels a new order", async () => {
     const calls = stubApi({
-      'GET /api/research/feed?limit=50': [[200, [item(1)]],
+      'GET /api/research/feed?limit=200': [[200, [item(1)]],
         [200, [item(1, { work_order: { id: 5, mode: 'inspired', instruction: 'version sans sucre', status: 'scheduled' } })]], [200, [item(1)]]],
       'POST /api/research/work-orders': [200, []],
       'DELETE /api/research/work-orders/5': [204, null],
@@ -191,7 +215,7 @@ describe('Tendances', () => {
 
   it('filters by topic, adds a suggested topic in one tap, removes one', async () => {
     const calls = stubApi({
-      'GET /api/research/feed?topic=fitness&limit=50': [200, [item(1)]],
+      'GET /api/research/feed?topic=fitness&limit=200': [200, [item(1)]],
       'POST /api/watchlist': [200, { id: 4, kind: 'hashtag', value: 'mealprep', note: null }],
       'DELETE /api/watchlist/3': [204, null],
     })
@@ -199,7 +223,7 @@ describe('Tendances', () => {
     await screen.findByRole('list', { name: 'Tendances' })
     const filter = screen.getByRole('group', { name: 'Filtrer par sujet' })
     fireEvent.click(within(filter).getByRole('button', { name: '#fitness' }))
-    await vi.waitFor(() => expect(calls.map((c) => c.key)).toContain('GET /api/research/feed?topic=fitness&limit=50'))
+    await vi.waitFor(() => expect(calls.map((c) => c.key)).toContain('GET /api/research/feed?topic=fitness&limit=200'))
     expect(screen.getByText(/Chaque nouveau hashtag utilise 1 des 30 recherches/).textContent).toContain('il en reste 28')
 
     const suggestions = screen.getByRole('group', { name: 'Suggestions' })
@@ -223,7 +247,7 @@ describe('Tendances', () => {
   })
 
   it('opens the topics editor and an empty state when nothing is watched', async () => {
-    stubApi({ 'GET /api/research/feed?limit=50': [200, []], 'GET /api/watchlist': [200, []] })
+    stubApi({ 'GET /api/research/feed?limit=200': [200, []], 'GET /api/watchlist': [200, []] })
     renderPage()
     expect(await screen.findByText("Aucune tendance pour l'instant")).toBeTruthy()
     expect(screen.getByText('Gérer les sujets').closest('details')!.open).toBe(true)

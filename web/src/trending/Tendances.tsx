@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type Ref } from 'react'
 import {
   addWatch, ApiError, cancelWorkOrder, createWorkOrders, errorMessage, getResearchFeed, getSuggestedTopics,
   listWatchlist, refreshResearch, removeWatch, setFeedReaction,
@@ -17,6 +17,12 @@ import { Embed, ModePicker } from './shared'
 
 const watchLabel = (w: Pick<Watch, 'kind' | 'value'>) => (w.kind === 'hashtag' ? '#' : '@') + w.value
 const firstLine = (s: string | null) => s?.split('\n').map((l) => l.trim()).find(Boolean) ?? null
+
+/** Hashtag search returns mostly carousels and images; Reels come from watched accounts. */
+const isReel = (i: FeedItem) => i.media_type === 'VIDEO' || i.product_type === 'REELS'
+// ponytail: the whole feed (API max) filtered here, at most 50 cards shown; server-side filter if it grows
+const FEED_MAX = 200
+const CARDS_MAX = 50
 
 /** What a refresh found, in one toast line. */
 function refreshMessage(r: RefreshResult) {
@@ -66,7 +72,7 @@ function ReelMedia({ item }: { item: FeedItem }) {
   const media = safeUrl(item.media_url)
   const poster = safeUrl(item.thumbnail_url) ?? undefined
   if (media && item.media_type === 'VIDEO') return <InlineVideo src={media} poster={poster} />
-  const picture = (item.media_type === 'IMAGE' && media) || poster
+  const picture = media || poster // an image, or a carousel's cover
   if (picture) return <img src={picture} alt="" loading="lazy" className="max-h-[75dvh] w-full rounded-control bg-surface-2 object-contain" />
   const embed = embedSrc(item.embed_url)
   return embed ? <Embed src={embed} title={`Reel ${item.topic ?? item.id}`} /> : null
@@ -175,8 +181,15 @@ function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: 
 }
 
 /** The watched topics (the watchlist): add, remove, and the one-tap starter hashtags. */
-function TopicsEditor({ watch, suggested, onChanged }: { watch: Watch[]; suggested?: SuggestedTopics; onChanged: () => Promise<void> }) {
-  const [kind, setKind] = useState<Watch['kind']>('hashtag')
+type TopicsProps = {
+  watch: Watch[]
+  suggested?: SuggestedTopics
+  onChanged: () => Promise<void>
+  kind: Watch['kind']
+  setKind: (k: Watch['kind']) => void
+  inputRef: Ref<HTMLInputElement>
+}
+function TopicsEditor({ watch, suggested, onChanged, kind, setKind, inputRef }: TopicsProps) {
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -218,7 +231,7 @@ function TopicsEditor({ watch, suggested, onChanged }: { watch: Watch[]; suggest
           <option value="hashtag">Hashtag</option>
           <option value="account">Compte</option>
         </select>
-        <input aria-label="Hashtag ou compte" value={value} onChange={(e) => setValue(e.target.value)}
+        <input ref={inputRef} aria-label="Hashtag ou compte" value={value} onChange={(e) => setValue(e.target.value)}
           placeholder={kind === 'hashtag' ? '#fitness' : '@compte'} className={`${field} min-w-0 flex-1`} />
         <Button type="submit" variant="primary">Ajouter</Button>
       </form>
@@ -258,10 +271,21 @@ export default function Tendances() {
   const [bulkMode, setBulkMode] = useState<TrendMode>('inspired')
   const [sending, setSending] = useState(false)
   const [instructFor, setInstructFor] = useState<FeedItem | null>(null)
+  const [reelsOnly, setReelsOnly] = useState(true)
+  const [addKind, setAddKind] = useState<Watch['kind']>('hashtag')
+  const topicsRef = useRef<HTMLDetailsElement>(null)
+  const addInputRef = useRef<HTMLInputElement>(null)
+  const shown = (reelsOnly ? feed?.filter(isReel) : feed)?.slice(0, CARDS_MAX)
+
+  function addAccount() { // the "no Reels" shortcut: the topics editor, account field focused
+    setAddKind('account')
+    if (topicsRef.current) topicsRef.current.open = true
+    addInputRef.current?.focus()
+  }
 
   useEffect(() => {
     let live = true
-    getResearchFeed(topic).then((f) => {
+    getResearchFeed(topic, FEED_MAX).then((f) => {
       if (!live) return
       setFeed(f)
       setFeedError(null)
@@ -363,15 +387,29 @@ export default function Tendances() {
         </div>
       )}
       {watch && (
-        <details open={watch.length === 0} className="mt-3 rounded-card border border-line/60 bg-surface p-4 shadow-card">
+        <details ref={topicsRef} open={watch.length === 0} className="mt-3 rounded-card border border-line/60 bg-surface p-4 shadow-card">
           <summary className="min-h-6 cursor-pointer font-medium">Gérer les sujets</summary>
-          <TopicsEditor watch={watch} suggested={suggested} onChanged={loadTopics} />
+          <TopicsEditor watch={watch} suggested={suggested} onChanged={loadTopics}
+            kind={addKind} setKind={setAddKind} inputRef={addInputRef} />
         </details>
       )}
 
       {feedError && <p role="alert" className="mt-4 text-sm text-danger">{feedError}</p>}
-      {feed === undefined ? (
+      {feed && feed.length > 0 && (
+        <div role="group" aria-label="Type de média" className="mt-4 flex gap-2">
+          <Chip pressed={reelsOnly} onClick={() => setReelsOnly(true)}>Reels ({feed.filter(isReel).length})</Chip>
+          <Chip pressed={!reelsOnly} onClick={() => setReelsOnly(false)}>Tout ({feed.length})</Chip>
+        </div>
+      )}
+      {feed === undefined || shown === undefined ? (
         !feedError && <Skeleton className="mt-4 h-96" />
+      ) : shown.length === 0 && feed.length > 0 ? (
+        <div className="mt-4">
+          <EmptyState title="Pas encore de Reels : ajoute des comptes à suivre"
+            action={<Button variant="primary" onClick={addAccount}>Ajouter un compte</Button>}>
+            Les hashtags renvoient surtout des carrousels et des photos ; les Reels viennent des comptes suivis.
+          </EmptyState>
+        </div>
       ) : feed.length === 0 ? (
         <div className="mt-4">
           <EmptyState title="Aucune tendance pour l'instant">
@@ -380,7 +418,7 @@ export default function Tendances() {
         </div>
       ) : (
         <ul aria-label="Tendances" className="mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {feed.map((item) => (
+          {shown.map((item) => (
             <FeedCard key={item.id} item={item} selecting={selecting} selected={selected.has(item.id)}
               onSelect={() => toggle(item.id)} onReact={(r) => void react(item, r)}
               onInstruct={() => setInstructFor(item)} onCancel={() => void cancel(item)} />
