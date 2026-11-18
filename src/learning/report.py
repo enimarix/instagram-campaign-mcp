@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
 from ..studio.seed import local_today
+from .analytics import _urls, studio_side
 
 SUMMARY_CHARS = 4000
 MAX_PICKS = 3
@@ -78,3 +79,61 @@ def save_daily_report(store: CampaignStore, settings: InstagramMCPSettings, repo
         raise ValueError(f"not a matured post of the facts: {', '.join(sorted(unknown))}")
     return store.save_daily_analysis(day, summary, {
         k: [m.model_dump() for m in v] for k, v in analysis.items()})
+
+
+# --- The report page (step 085) ---
+ARCHIVE_MAX = 365
+TITLE_CHARS = 80
+_ARCHIVE = (
+    "SELECT report_date, summary,"
+    " json_extract(facts, '$.yesterday.published.count') AS published,"
+    " json_extract(facts, '$.yesterday.matured.count') AS matured,"
+    " COALESCE(json_array_length(analysis, '$.best'), 0) AS best,"
+    " COALESCE(json_array_length(analysis, '$.worst'), 0) AS worst,"
+    " COALESCE(json_array_length(analysis, '$.experiments'), 0) AS experiments"
+    " FROM daily_reports")
+
+
+def report_archive(store: CampaignStore, limit: int = 60) -> List[Dict[str, Any]]:
+    """The stored days, newest first: date, the summary's first line (None on a quiet day the
+    agent skipped) and counts. ValueError: limit outside 1–ARCHIVE_MAX."""
+    if not 1 <= limit <= ARCHIVE_MAX:
+        raise ValueError(f"limit must be 1–{ARCHIVE_MAX}")
+    rows = store._select(_ARCHIVE, {}, "report_date DESC", limit)  # store.py is a hot file
+    for r in rows:
+        r["first_line"] = (r.pop("summary") or "").strip().split("\n", 1)[0].lstrip("# ") or None
+    return rows
+
+
+def report_page(store: CampaignStore, report_date: Optional[str] = None) -> Dict[str, Any]:
+    """One stored day (default: the newest with a summary) with `posts`: per media id named in
+    best / worst / winners / losers, its permalink, thumbnail, title (caption's first line),
+    asset id and retention findings, so the page links to /analytics/posts/:id.
+    KeyError: no such day (or no report yet)."""
+    report = (store.get_daily_report(report_date) if report_date
+              else store.latest_daily_report())
+    if not report:
+        raise KeyError(f"No daily report for {report_date or 'any day'}")
+    facts, analysis = report["facts"] or {}, report.get("analysis") or {}
+    rows: Dict[str, Dict[str, Any]] = {}  # facts rows by media id, matured ones carry retention
+    for window in ("last_7_days", "yesterday"):
+        w = facts.get(window) or {}
+        for p in (w.get("matured") or {}).get("posts", []) + w.get("winners", []) \
+                + w.get("losers", []):
+            rows[p["media_id"]] = {**rows.get(p["media_id"], {}), **p}
+    ids = {p["media_id"] for k in ("best", "worst") for p in analysis.get(k, [])}
+    ids |= {p["media_id"] for w in ("yesterday", "last_7_days")
+            for k in ("winners", "losers") for p in (facts.get(w) or {}).get(k, [])}
+    latest = {s["media_id"]: s for s in store.latest_snapshots()} if ids else {}
+    posts = {}
+    for mid in sorted(ids):
+        snap, row = latest.get(mid) or {}, rows.get(mid) or {}
+        asset_id = (store.get_label(mid) or {}).get("asset_id")
+        caption = (snap.get("caption") or "").strip().split("\n", 1)[0][:TITLE_CHARS]
+        posts[mid] = {"media_id": mid, "permalink": snap.get("permalink") or row.get("permalink"),
+                      "title": caption or None, "asset_id": asset_id,
+                      "thumbnail_url": _urls(studio_side(store, asset_id)["asset"])[
+                          "thumbnail_url"],
+                      "verdict": row.get("verdict"), "retention": row.get("retention", [])}
+    return {"report_date": report["report_date"], "summary": report["summary"],
+            "facts": facts, "analysis": analysis, "posts": posts}

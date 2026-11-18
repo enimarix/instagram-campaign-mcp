@@ -11,6 +11,7 @@ import { InfoIcon } from '../ui/icons'
 import { PageHeader } from '../ui/PageHeader'
 import { card, link } from '../ui/styles'
 import { num, pct, useLoad, VERDICT_TONE, type Load } from './load'
+import { TodayReport } from './Report'
 
 // The definitions of src/learning/funnel.py's docstring, behind the ⓘ toggles.
 const HELP = {
@@ -176,6 +177,8 @@ export default function Analytics() {
           </Link>
         </nav>
       </PageHeader>
+
+      <TodayReport />
 
       <Section title="This week" help={HELP.streak}>
         <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">

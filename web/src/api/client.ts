@@ -555,3 +555,47 @@ export type DownloaderStatus = {
   health: DownloaderHealth | null
 }
 export const getDownloaderStatus = () => request<DownloaderStatus>('/api/downloader/status')
+
+// --- Daily report (steps 082, 083; page 085; src/api/reports.py) ---
+type Window = {
+  published?: { count: number }
+  matured?: { count: number }
+  funnel?: FunnelStats
+}
+/** A best / worst pick of the nightly analysis (083). */
+export type ReportPick = { media_id: string; why: string }
+export type ReportExperiment = { hypothesis: string; variable: string; variants: string[] }
+/** GET /api/reports/latest | /api/reports/{date}: `posts` describes every media id it names. */
+export type DailyReport = {
+  report_date: string
+  summary: string | null // markdown; null on a quiet day the analysis skipped
+  facts: {
+    yesterday?: Window
+    last_7_days?: Window
+    // other people's words: shown as quotes, never as the studio's
+    audience_comments?: { note: string | null; posts: { media_id: string; permalink: string | null; comments: { quote: string; likes: number }[] }[] }
+  }
+  analysis: { best?: ReportPick[]; worst?: ReportPick[]; experiments?: ReportExperiment[] }
+  posts: Record<string, {
+    media_id: string
+    permalink: string | null
+    title: string | null
+    asset_id: number | null
+    thumbnail_url: string | null
+    verdict: string | null
+    retention: RetentionFinding[]
+  }>
+}
+/** A row of GET /api/reports: the archive, newest first. */
+export type ReportDay = {
+  report_date: string
+  first_line: string | null
+  published: number | null
+  matured: number | null
+  best: number
+  worst: number
+  experiments: number
+}
+export const getReport = (date?: string) =>
+  request<DailyReport>(`/api/reports/${date ? encodeURIComponent(date) : 'latest'}`)
+export const listReports = (limit = 60) => request<ReportDay[]>(`/api/reports?limit=${limit}`)
