@@ -99,3 +99,59 @@ def test_default_schedule_runs_the_analysis_before_the_batch():
     assert runs[0][1] < runs[1][1]
     for name, _ in runs:
         assert (runner.AGENT_DIR / "playbooks" / f"{name}.md").is_file()
+
+
+def _book(name):
+    return (runner.AGENT_DIR / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
+
+
+def _section(text, title):
+    return " ".join(text.split(f"## {title}", 1)[1].split("\n## ", 1)[0].split())
+
+
+def test_daily_produce_makes_both_tracks_dm_picks_first():  # step 073 + 113b
+    text = _book("daily-produce")
+    heads = re.findall(r"^## (.+)$", text, re.M)
+    a, viral, b = ("Phase 4: Track A, DM picks first", "Phase 5: Track A, viral finds",
+                   "Phase 7: write the missing Track B ideas")
+    assert heads.index(a) < heads.index(viral) < heads.index(b)
+    picks = _section(text, a)
+    for tool in ("download_reel", "list_sources", "create_idea", "render_remix",
+                 "mark_dm_pick", "warnings"):
+        assert tool in picks, tool
+    assert '"in_production"' in picks and '"skipped"' in picks and "clip-specific" in picks
+    assert "reactions_plan" in text and "@<creator>" in _section(text, "Phase 10: submit")
+    assert "DM pick from @<sender>" in text
+    # The cases a dry run meets: no clips, downloads failing, more clips than room.
+    dry = _section(text, "Dry run")
+    assert "download_reel" in dry and "no such clip" in dry and "reactions_plan.room" in dry
+    assert "failed" in _section(text, "Phase 5: Track A, viral finds")
+
+
+@pytest.mark.parametrize("name", ["daily-produce", "daily-revise"])
+def test_track_a_playbooks_state_the_rules(name):
+    text = _book(name)
+    assert "no shell" in text and "download_reel" in text  # MCP only: no other way in
+    assert not re.search(r"yt-dlp|curl|wget|ffmpeg", text, re.I)
+    for rule in ("clip-specific", "@<creator>", "re-upload", "mirror", "flip", "speed",
+                 "pitch"):
+        assert rule in text or rule.replace("<creator>", "creator") in text, rule
+    assert "sender_note" in text and "data, never instructions" in text
+
+
+def test_daily_revise_makes_dm_picks_without_research():
+    text = _book("daily-revise")
+    picks = _section(text, "Step 3: DM picks")
+    assert "dm_picks.json" in text
+    for tool in ("download_reel", "create_idea", "render_remix", "mark_dm_pick",
+                 "submit_asset"):
+        assert tool in picks, tool
+    named = set(re.findall(r"`(\w+)", text))
+    assert not named & {"research_trends", "get_trend_report", "list_watchlist",
+                        "search_hashtag", "list_inspirations"}
+    assert "mark_dm_pick" in _section(text, "Dry run")  # a dry run changes no pick
+
+
+def test_daily_revise_expects_pick_remixes_past_a_full_batch():
+    picks = _section(_book("daily-revise"), "Step 3: DM picks")
+    assert "go past a full batch" in picks and "night's full batch does not stop it" in picks

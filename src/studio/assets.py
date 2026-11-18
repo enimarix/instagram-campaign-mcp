@@ -14,6 +14,7 @@ from typing import Any, Dict, Set, Tuple
 
 from ..instagram_client import caption_problem
 from ..store import CampaignStore, to_iso, utcnow
+from .dm_picks import mark_posted
 
 ACTORS = ("owner", "agent", "worker", "system")
 VERDICTS = ("none", "liked", "disliked")
@@ -78,6 +79,8 @@ def transition(
             f"asset {asset_id} is no longer {frm} (changed meanwhile);"
             f" {frm} -> {to_status} not applied"
         )
+    if to_status == "published":  # every publish path (run_due, reconcile) passes here
+        mark_posted(store, asset_id)
     return store.get_asset(asset_id)
 
 

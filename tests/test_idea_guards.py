@@ -4,7 +4,7 @@ from difflib import SequenceMatcher
 
 import pytest
 
-from src.learning.quotas import todays_quotas
+from src.learning.quotas import reaction_plan, todays_quotas
 from src.studio import production
 
 DAY = "2026-11-17"
@@ -130,3 +130,61 @@ def test_citations_ok_and_optional_elsewhere(store, settings):
     idea = _new(store, settings, "Honey never spoils", pillar="fun_facts", citations=CITE)
     assert idea["citations"] == CITE
     assert _new(store, settings, "A short story")["citations"] == []
+
+
+@pytest.mark.parametrize("made, picks, plan", [
+    (0, 0, {"room": 5, "picks": 0, "viral": 5}),  # no clips, no picks: all from viral finds
+    (0, 2, {"room": 5, "picks": 2, "viral": 3}),  # picks first, the rest viral
+    (1, 9, {"room": 4, "picks": 4, "viral": 0}),  # picks over the cap wait
+    (6, 1, {"room": 0, "picks": 0, "viral": 0}),  # cap passed (margin used up)
+])
+def test_reaction_plan(settings, made, picks, plan):
+    assert reaction_plan(settings, made, picks) == plan  # 3 a day + margin 2
+
+
+def test_reaction_plan_margin_and_quotas(store, settings):
+    settings.reaction_margin = 0
+    assert reaction_plan(settings, 0, 5) == {"room": 3, "picks": 3, "viral": 0}
+    with store._tx() as c:
+        for mid, status in (("m1", "new"), ("m2", "downloaded"), ("m3", "skipped")):
+            c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url, received_at,"
+                      " status, created_at, updated_at) VALUES (?, 'f', 'https://x', 't', ?,"
+                      " 't', 't')", (mid, status))
+    store.add_idea("remix", batch_date=DAY)
+    assert todays_quotas(store, settings, DAY)["reactions_plan"] == {
+        "room": 2, "picks": 2, "viral": 0}
+
+
+def _clip(store, pick_status=None):
+    s = store.add_source("downloader", local_path="clips/a.mp4", rights_basis="commentary",
+                         author="creator")
+    if pick_status:
+        with store._tx() as c:
+            c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url, received_at,"
+                      " status, source_id, created_at, updated_at)"
+                      " VALUES (?, 'f', 'https://x', 't', ?, ?, 't', 't')",
+                      (f"m{s['id']}", pick_status, s["id"]))
+    return s["id"]
+
+
+def test_dm_pick_remixes_may_pass_a_full_batch_up_to_the_daily_extras(store, settings):
+    settings.batch_size = 2
+    _fill(store, settings, 2, pillar="everyday_humor")  # full, humour limit 2 reached
+    plain, skipped = _clip(store), _clip(store, "skipped")
+    for source in (plain, skipped):  # not a pick being made: the batch is full
+        with pytest.raises(ValueError, match="batch full: 2/2"):
+            _new(store, settings, "React to this", "remix", source_id=source)
+    picks = [_clip(store, s) for s in ("downloaded", "in_production", "downloaded",
+                                       "downloaded")]
+    for word, source in zip(WORDS[5:8], picks):  # the afternoon run: accepted past the cap
+        _new(store, settings, word * 3, "remix", pillar="everyday_humor", source_id=source)
+    with pytest.raises(ValueError, match="batch full: 5/2"):  # the 4th extra
+        _new(store, settings, "One pick too many", "remix", source_id=picks[3])
+    assert todays_quotas(store, settings, DAY)["counts"]["reactions"] == 3
+
+
+def test_dm_pick_extras_keep_the_reaction_quota(store, settings):
+    settings.batch_size, settings.max_reactions_per_day, settings.reaction_margin = 1, 0, 0
+    _fill(store, settings, 1)
+    with pytest.raises(ValueError, match="reaction quota used"):
+        _new(store, settings, "React to this", "remix", source_id=_clip(store, "downloaded"))

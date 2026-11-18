@@ -17,6 +17,9 @@ brief (055) shows the same numbers to the agent.
   references never count), downloaded (a source with a
   `local_path`), its rights are known (rights_basis != unknown: such a clip is never
   queued) and no idea uses it yet.
+- reactions_plan (073): how many reactions a run still makes, DM picks first (picks `new`
+  or `downloaded`, not made yet), then viral finds; limits.reactions grows as downloads
+  land, the plan says how many to download.
 """
 
 from __future__ import annotations
@@ -46,6 +49,15 @@ def available_clips(store: CampaignStore) -> int:
         return c.execute(_AVAILABLE_CLIPS).fetchone()[0]
 
 
+def reaction_plan(settings: InstagramMCPSettings, made: int, picks: int) -> Dict[str, int]:
+    """{room, picks, viral}: reactions still allowed today (MAX_REACTIONS_PER_DAY +
+    REACTION_MARGIN minus the `made` ones), DM picks first; picks over the cap wait for
+    the next day."""
+    room = max(0, settings.max_reactions_per_day + settings.reaction_margin - made)
+    from_picks = min(picks, room)
+    return {"room": room, "picks": from_picks, "viral": room - from_picks}
+
+
 def effective_batch_size(settings: InstagramMCPSettings, bench_count: int) -> Dict[str, int]:
     """{effective_batch_size, bench_surplus}: the configured size minus the bench surplus,
     never below batch_floor nor above batch_size."""
@@ -56,7 +68,7 @@ def effective_batch_size(settings: InstagramMCPSettings, bench_count: int) -> Di
 
 def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
                   day: Union[date, str], now: Optional[datetime] = None) -> Dict[str, Any]:
-    """{date, limits, counts, humour_target, clips_available, batch_size,
+    """{date, limits, counts, humour_target, clips_available, reactions_plan, batch_size,
     effective_batch_size, bench_surplus} for the batch of `day`; the bench is read at `now`.
     limits and counts share the keys ideas, explore, humour, informative, reactions."""
     day = date.fromisoformat(day) if isinstance(day, str) else day
@@ -82,6 +94,10 @@ def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
         "reactions": min(settings.max_reactions_per_day + settings.reaction_margin,
                          counts["reactions"] + clips),
     }
+    with store._tx() as c:
+        picks = c.execute("SELECT COUNT(*) FROM dm_picks"
+                          " WHERE status IN ('new','downloaded')").fetchone()[0]
     return {"date": day.isoformat(), "limits": limits, "counts": counts,
             "humour_target": target, "clips_available": clips,
+            "reactions_plan": reaction_plan(settings, counts["reactions"], picks),
             "batch_size": settings.batch_size, **sizes}

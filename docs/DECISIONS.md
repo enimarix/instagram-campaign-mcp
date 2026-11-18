@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: DM picks may exceed the batch cap, up to 3 a day (073)
+A remix idea whose source is a DM pick being made (`downloaded` or `in_production`) may be
+created when today's batch is already full, up to `MAX_DM_PICK_EXTRAS_PER_DAY` (default 3,
+owner-local batch day) such extras. They sit outside the batch's humour / informative
+split; the explore quota and the reaction quota (`MAX_REACTIONS_PER_DAY` + margin) still
+apply, and picks still come first in the night run's `reactions_plan`. Checked in
+`src/studio/production.py` (create_idea).
+Reason: the owner's request 2026-11-17: a Reel a pinned account sends by DM is reworked
+promptly ("when somebody sends you reels from that account… rework it so we can repost
+it"), so the afternoon run (`daily-revise`) can make a morning pick although the night run
+filled the batch.
+
 ## 2026-11-18: A remix's uncovered clip speech is shown as captions, not kept ducked (069)
 Changes GOAL.md §3.1 Track A step 6 ("the clip's speech stays, ducked under the reaction").
 When a source's `audio_rights` is not `covered`, `src/studio/remix.py` mutes the whole

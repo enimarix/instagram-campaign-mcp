@@ -38,15 +38,17 @@ def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str
                 **fields: Any) -> Dict[str, Any]:
     """Store an idea in today's batch (owner-local date); None fields are left unset.
     Everything is checked before writing; the ValueError says what to change: unknown tags
-    (TaxonomyError lists the valid ones), today's quotas (src/learning/quotas.py), a
-    near-duplicate of a recent idea, a fact pillar without citations."""
+    (TaxonomyError lists the valid ones), today's quotas (src/learning/quotas.py; a DM
+    pick's remix may pass a full batch, _dm_pick_extra), a near-duplicate of a recent
+    idea, a fact pillar without citations."""
     fields = {k: v for k, v in fields.items() if v is not None}
     fields.setdefault("batch_date", local_today(settings.timezone))
     validate("tracks", track)
     pillar = fields.get("pillar") and validate("pillars", fields["pillar"])
     _check_citations(pillar, fields.get("citations"))
-    _check_quotas(todays_quotas(store, settings, fields["batch_date"]), track, pillar,
-                  fields.get("strategy"))
+    q = todays_quotas(store, settings, fields["batch_date"])
+    _check_quotas(q, track, pillar, fields.get("strategy"),
+                  extra=_dm_pick_extra(store, settings, q, track, fields.get("source_id")))
     _check_duplicates(store, settings, fields)
     return store.add_idea(track, **fields)
 
@@ -67,10 +69,29 @@ def _check_citations(pillar: Optional[str], citations: Any) -> None:
             raise ValueError(f"citation {c!r} needs an http(s) url: {{url, title}}")
 
 
+def _dm_pick_extra(store: CampaignStore, settings: InstagramMCPSettings, q: Dict[str, Any],
+                   track: str, source_id: Optional[int]) -> bool:
+    """A remix of a DM pick being made may go past a full batch, up to
+    MAX_DM_PICK_EXTRAS_PER_DAY (DECISIONS 2026-11-18). Every idea over the cap is such an
+    extra, so the ones already made are counts - limits.
+    ponytail: a bench that grows during the day lowers limits.ideas and eats into it."""
+    if track != "remix" or source_id is None:
+        return False
+    if q["counts"]["ideas"] - q["limits"]["ideas"] >= settings.max_dm_pick_extras_per_day:
+        return False
+    with store._tx() as c:
+        return c.execute("SELECT 1 FROM dm_picks WHERE source_id = ?"
+                         " AND status IN ('downloaded','in_production')",
+                         (source_id,)).fetchone() is not None
+
+
 def _check_quotas(q: Dict[str, Any], track: str, pillar: Optional[str],
-                  strategy: Optional[str]) -> None:
+                  strategy: Optional[str], *, extra: bool = False) -> None:
+    """extra: a DM-pick remix that may go past a full batch; it is outside the batch's
+    humour / informative split, the explore and reaction quotas still apply."""
     limits, counts = q["limits"], q["counts"]
-    if counts["ideas"] >= limits["ideas"]:
+    full = counts["ideas"] >= limits["ideas"]
+    if full and not extra:
         raise ValueError(f"batch full: {counts['ideas']}/{limits['ideas']} ideas today")
     if strategy == "explore" and counts["explore"] >= limits["explore"]:
         raise ValueError(f"explore quota used: {counts['explore']}/{limits['explore']};"
@@ -79,7 +100,7 @@ def _check_quotas(q: Dict[str, Any], track: str, pillar: Optional[str],
         kind, other = "humour", "pick an informative pillar"
     else:
         kind, other = "informative", "pick a humour pillar"
-    if counts[kind] >= limits[kind]:
+    if not full and counts[kind] >= limits[kind]:
         raise ValueError(f"{kind} {counts[kind] + 1}/{limits[kind]}: {other}")
     if track == "remix" and counts["reactions"] >= limits["reactions"]:
         raise ValueError(f"reaction quota used: {counts['reactions']}/{limits['reactions']}"
