@@ -290,3 +290,79 @@ async def test_mcp_tools_call_the_services(monkeypatch):
     monkeypatch.setattr(motion, "queue_motion_render", bad)
     with pytest.raises(ToolError, match="invalid props"):
         await srv.render_motion("Hello", {}, idea_id=1)
+
+
+@needs_motion
+@pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
+                                      "PixelSkit"])
+def test_schema_events_end_on_the_pixel_end_card(template):
+    """Step 137: every 8-bit template ends on the pixel end card, long enough to hold."""
+    v = motion.validate_props(template, _example(template.lower()))
+    total = v["durationInFrames"] / v["fps"]
+    [card] = [e for e in v["events"] if e["e"].startswith("end card (pixel)")]
+    assert total - card["t"] >= 4.0  # CARD_S.pixel (the loop fade comes on top)
+
+
+def test_render_end_card_is_cached_and_stages_the_backdrop(tmp_path, monkeypatch):
+    rendered = []
+
+    def fake_render(template, props, out, work, *, timeout_s, extra=()):
+        rendered.append((template, props))
+        out.write_bytes(b"mp4")
+
+    bundle = tmp_path / "bundle"
+    monkeypatch.setattr(motion, "_render", fake_render)
+    monkeypatch.setattr(motion, "bundle_dir", lambda: bundle)
+    frame = tmp_path / "last.jpg"
+    frame.write_bytes(b"frame one")
+    props = {"style": "live", "tagline": "Ton tour.", "accent": "kcal", "seconds": 3.5}
+    first = motion.render_end_card(tmp_path, props, frame, timeout_s=60)
+    assert first.parent == tmp_path / "endcards" and first.read_bytes() == b"mp4"
+    [(template, staged)] = rendered
+    assert template == "EndCard" and staged["backdrop"].startswith("public/endcards/")
+    assert (bundle / staged["backdrop"]).read_bytes() == b"frame one"
+    assert motion.render_end_card(tmp_path, props, frame, timeout_s=60) == first  # cached
+    assert len(rendered) == 1
+    frame.write_bytes(b"another video's last frame")
+    assert motion.render_end_card(tmp_path, props, frame, timeout_s=60) != first
+    clean = motion.render_end_card(tmp_path, {**props, "style": "clean"}, None, timeout_s=60)
+    assert "backdrop" not in rendered[-1][1] and clean.is_file() and len(rendered) == 3
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("works", [True, False])
+def test_ffmpeg_render_uses_the_motion_end_card_or_warns(store, tmp_path, monkeypatch, works):
+    make_clip(tmp_path / "src.mp4", "1080x1920", duration=1)
+    calls = []
+
+    def fake_card(media_root, props, backdrop, *, timeout_s):
+        calls.append(props)
+        if not works:
+            raise motion.MotionError("Node.js not found")
+        clip = tmp_path / "card.mp4"
+        make_clip(clip, "1080x1920", duration=props["seconds"])
+        return clip
+
+    monkeypatch.setattr(motion, "render_end_card", fake_card)
+    env = {"kind": "ffmpeg", "inputs": {"source": "src.mp4"},
+           "recipe": {"ops": [{"op": "end_card", "text": "Ton tour.", "duration_s": 3}]}}
+    a = store.add_asset(store.add_idea("remix")["id"], recipe=env)
+    info, files = render.render_files(a, tmp_path, lambda p: None, preset="ultrafast")
+    assert info.duration == pytest.approx(4.0, abs=0.1)
+    assert calls[0]["style"] == "live" and calls[0]["tagline"] == "Ton tour."
+    if works:
+        assert "render_warnings" not in files
+    else:
+        [warning] = files["render_warnings"]
+        assert warning.startswith("static end card (fallback)") and "Node.js" in warning
+
+
+@needs_motion
+@needs_ffmpeg
+def test_real_end_card_clip(tmp_path):
+    """One real card render (~15 s with the bundle): the clean card at its own length."""
+    clip = motion.render_end_card(tmp_path, {"style": "clean", "accent": "fat",
+                                             "seconds": 2.5}, None, timeout_s=300)
+    info = motion.ffmpeg.probe(clip)
+    assert (info.width, info.height) == (1080, 1920)
+    assert info.duration == pytest.approx(2.5, abs=0.1)

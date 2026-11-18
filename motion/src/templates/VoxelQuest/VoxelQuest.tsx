@@ -12,7 +12,7 @@ import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { EndCard } from "../../endcards/EndCard";
 import { BACKGROUND } from "../../endcards/VoxelEndCard";
-import { ACCENTS, type FormId } from "../../endcards/schema";
+import { ACCENTS, type FormId, TEXT_ACCENT } from "../../endcards/schema";
 import { fonts } from "../../lib/font";
 import { frenchSpaces } from "../../lib/french";
 import { loopFade, type Scene, sceneAt } from "../../lib/timeline";
@@ -58,7 +58,6 @@ const PHONE_STEPS = 8;
 const PHONES = Array.from({ length: PHONE_STEPS + 1 }, (_, i) => phone(i / PHONE_STEPS).voxels());
 
 const RAD = Math.PI / 180;
-const TEXT_ACCENT = { ...ACCENTS, fat: "#B7862A", carbs: "#2E9E66" } as const;
 const ink = brand.colors.light.ink;
 const display = { fontFamily: `"${fonts.display}", sans-serif`, fontWeight: fonts.displayWeight, letterSpacing: "-0.035em" } as const;
 

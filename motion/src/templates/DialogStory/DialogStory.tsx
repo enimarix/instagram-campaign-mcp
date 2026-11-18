@@ -9,9 +9,11 @@ import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
 import { Wipe } from "../../components/Transitions";
+import { EndCard } from "../../endcards/EndCard";
+import { CARD_S } from "../../endcards/schema";
 import { colors } from "../../lib/palette";
 import { snap } from "../../lib/pixel";
-import { buildTimeline, loopFade, sceneAt } from "../../lib/timeline";
+import { buildTimeline, fitEndCard, loopFade, sceneAt } from "../../lib/timeline";
 import { BEAT, type DialogStoryProps, dialogStoryScript, sceneRoles, talkSpan } from "./schema";
 
 // DialogStory (step 047): an RPG-style dialogue between two characters. Hook card with the cast
@@ -19,8 +21,9 @@ import { BEAT, type DialogStoryProps, dialogStoryScript, sceneRoles, talkSpan } 
 // the speaker's lit and bouncing while it talks, the listener dimmed; the line types into a dialog
 // box with the speaker's name tag in the band below (`sfx-select` as it opens, after a short beat
 // with the empty box). An optional moral ends it in a box without a name tag (`sfx-confirm`).
-// Scenes come from the script timeline: 0 = hook, 1..N = lines, N+1 = moral. The last scene holds
-// through the outro, where `loop` fades the hook and cast back in so the last frame matches frame 0.
+// Scenes come from the script timeline: 0 = hook, 1..N = lines, N+1 = moral, then the pixel end
+// card (step 137, `tagline`) in the outro, where `loop` fades the hook and cast back in over its
+// last frames so the last frame matches frame 0.
 
 const HOOK_S = 1.5;
 const OUTRO_S = 0.5;
@@ -43,7 +46,13 @@ const MUSIC_VOLUME = 0.25;
 const DEFAULT_SPRITE = ["mascot", "slime"] as const;
 
 export const timelineOf = (props: DialogStoryProps, fps: number) =>
-  buildTimeline({ ...dialogStoryScript(props), fps, hookSeconds: HOOK_S, outroSeconds: OUTRO_S, loop: props.loop });
+  fitEndCard(
+      (outroSeconds) => buildTimeline({ ...dialogStoryScript(props), fps, hookSeconds: HOOK_S, outroSeconds, loop: props.loop }),
+      OUTRO_S,
+      (t) => t.outroStart,
+      CARD_S.pixel,
+      fps,
+    );
 
 type Colors = typeof colors;
 type Area = ReturnType<typeof scriptAreas>["hook"];
@@ -111,7 +120,7 @@ export const DialogStory = (props: DialogStoryProps) => {
   const c = { ...colors, ...props.palette };
   const { scenes } = timeline;
   const last = scenes[scenes.length - 1];
-  // The last scene holds through the outro (no scene there).
+  // The last scene stays up under the end card (no scene in the outro).
   const scene = sceneAt(scenes, frame) ?? (frame >= last.startFrame ? last : undefined);
   const role = scene ? roles[scene.index] : undefined;
   const fade = loopFade(frame, timeline);
@@ -150,6 +159,14 @@ export const DialogStory = (props: DialogStoryProps) => {
         >
           <PixelText text={note} scale={3} color={c.text} maxWidth={band.width} />
         </div>
+      )}
+      {/* The pixel end card (step 137) after the last scene; the hook fades back in over its end. */}
+      {frame >= timeline.outroStart && (
+        <AbsoluteFill style={{ opacity: 1 - fade }}>
+          <Sequence from={timeline.outroStart} layout="none">
+            <EndCard style="pixel" tagline={props.tagline} cameo="mascot" note={note} accent="brand" address={"vous"} pixelate={1} />
+          </Sequence>
+        </AbsoluteFill>
       )}
       <HookCard text={props.hook} timeline={timeline} color={c.primary} />
       {/* Wipes into the dialogue and into the moral; lines follow each other in the same box. */}

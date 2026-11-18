@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { AbsoluteFill, Html5Audio, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { scriptAreas } from "../../brand";
 import { Captions } from "../../components/Captions";
 import { CRTOverlay } from "../../components/CRTOverlay";
@@ -10,17 +10,19 @@ import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
 import { Wipe } from "../../components/Transitions";
+import { EndCard } from "../../endcards/EndCard";
+import { CARD_S } from "../../endcards/schema";
 import { progress } from "../../lib/game";
 import { colors } from "../../lib/palette";
-import { fitTextScale, snap } from "../../lib/pixel";
+import { snap } from "../../lib/pixel";
 import { coin, slime } from "../../lib/sprites";
-import { buildTimeline, loopFade, sceneAt } from "../../lib/timeline";
-import { wrap } from "../../lib/typewriter";
+import { buildTimeline, fitEndCard, loopFade, sceneAt } from "../../lib/timeline";
 import { factQuestScript, type FactQuestProps } from "./schema";
 
-// FactQuest (step 044): hook card, one "LEVEL n" scene per fact, end card with the outro.
-// Scenes come from the script timeline: 0 = hook, 1..N = facts, N+1 = end card (held through
-// the outro, where `loop` fades the hook back in so the last frame matches frame 0).
+// FactQuest (step 044): hook card, one "LEVEL n" scene per fact, then the pixel end card
+// (step 137) with the outro as its tagline. Scenes come from the script timeline: 0 = hook,
+// 1..N = facts, N+1 = end card (lengthened to the card's own length; `loop` fades the hook back
+// in over its last frames so the last frame matches frame 0).
 
 const HOOK_S = 1.5;
 const OUTRO_S = 0.5;
@@ -35,7 +37,13 @@ const HEARTS = 3;
 const GAP = 24;
 
 export const timelineOf = (props: FactQuestProps, fps: number) =>
-  buildTimeline({ ...factQuestScript(props), fps, hookSeconds: HOOK_S, outroSeconds: OUTRO_S, loop: props.loop });
+  fitEndCard(
+    (outroSeconds) => buildTimeline({ ...factQuestScript(props), fps, hookSeconds: HOOK_S, outroSeconds, loop: props.loop }),
+    OUTRO_S,
+    (t) => t.scenes[t.scenes.length - 1].startFrame,
+    CARD_S.pixel,
+    fps,
+  );
 
 type Colors = typeof colors;
 type Area = ReturnType<typeof scriptAreas>["hook"];
@@ -56,37 +64,6 @@ const Level = ({ n, total, title, start, area, c }: { n: number; total: number; 
         <Sprite art={coin} scale={SPRITE / 2} />
       </div>
     </div>
-  );
-};
-
-const EndCard = ({ outro, note, opacity, c }: { outro: string; note?: string; opacity: number; c: Colors }) => {
-  const { hook: area, captions: band } = scriptAreas();
-  const s = outro.normalize("NFC");
-  const coinPx = 8 * (SPRITE / 2);
-  const scale = fitTextScale((cols) => wrap(s, cols).length, area.width, area.height - coinPx - GAP, 6);
-  return (
-    <AbsoluteFill style={{ opacity }}>
-      <div
-        style={{
-          position: "absolute",
-          ...area,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          textAlign: "center",
-          gap: GAP,
-        }}
-      >
-        <Sprite art={coin} scale={SPRITE / 2} />
-        <PixelText text={s} scale={scale} color={c.primary} maxWidth={area.width} />
-      </div>
-      {note && (
-        <div style={{ position: "absolute", ...band, display: "flex", justifyContent: "center", textAlign: "center" }}>
-          <PixelText text={note} scale={3} color={c.text} maxWidth={band.width} />
-        </div>
-      )}
-    </AbsoluteFill>
   );
 };
 
@@ -114,13 +91,12 @@ export const FactQuest = (props: FactQuestProps) => {
       {/* Fact text types into the caption band (sound-off captions). */}
       {level && <Captions timeline={timeline} speed={TYPE_CPS} />}
       {frame >= end.startFrame && (
-        <EndCard
-          outro={props.outro}
-          note={props.citations.length ? props.sourcesNote : undefined}
-          // Gives way to the hook as it fades back in: the last frame is frame 0's picture.
-          opacity={1 - loopFade(frame, timeline)}
-          c={c}
-        />
+        // Gives way to the hook as it fades back in: the last frame is frame 0's picture.
+        <AbsoluteFill style={{ opacity: 1 - loopFade(frame, timeline) }}>
+          <Sequence from={end.startFrame} layout="none">
+            <EndCard style="pixel" tagline={props.outro} cameo="coin" note={props.citations.length ? props.sourcesNote : undefined} accent="brand" address="vous" pixelate={1} />
+          </Sequence>
+        </AbsoluteFill>
       )}
       <HookCard text={props.hook} timeline={timeline} color={c.primary} />
       {timeline.scenes.slice(1).map((s) => (

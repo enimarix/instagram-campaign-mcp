@@ -10,9 +10,10 @@ type Sound = { music?: string; voice?: { audioSrc?: string } };
 
 /**
  * Events of a script timeline: one per scene (`labels[i]`, default "line i") with its text, the
- * voice-over when there is an audio file, the music bed, and the outro (loop fade or end hold).
+ * voice-over when there is an audio file, the music bed, and the outro (`outro`, e.g. the end
+ * card, else the loop fade or end hold).
  */
-export const scriptEvents = (t: Timeline, fps: number, labels: string[], p: Sound): Event[] => {
+export const scriptEvents = (t: Timeline, fps: number, labels: string[], p: Sound, outro?: string): Event[] => {
   const s = (frames: number) => frames / fps;
   const events: Event[] = t.scenes.map((x) => ({
     t: s(x.startFrame),
@@ -23,7 +24,7 @@ export const scriptEvents = (t: Timeline, fps: number, labels: string[], p: Soun
   if (p.music && p.music !== "none") events.push({ t: 0, d: s(t.totalFrames), e: `music bed (${p.music})` });
   if (p.voice?.audioSrc) events.push({ t: 0, d: s(t.outroStart), e: "voice-over reads the lines" });
   if (t.totalFrames > t.outroStart) {
-    events.push({ t: s(t.outroStart), d: s(t.totalFrames - t.outroStart), e: t.loop ? "loop fade back to the hook" : "end hold" });
+    events.push({ t: s(t.outroStart), d: s(t.totalFrames - t.outroStart), e: outro ?? (t.loop ? "loop fade back to the hook" : "end hold") });
   }
   return events;
 };

@@ -60,12 +60,12 @@ def test_reaction_collage_credit_logo_and_audio_span_the_clip():
 
 
 def test_end_card_extends_the_video_and_music_after_it_spans_both():
-    ops = [{"op": "music", "loop": False}, {"op": "end_card", "text": "Follow!", "duration_s": 2},
+    ops = [{"op": "music", "loop": False}, {"op": "end_card", "text": "Follow!", "duration_s": 3},
            {"op": "music"}]
     assert _timeline(ops, 10.0) == [
-        {"t": 0, "d": 8.0, "e": "music bed"},
+        {"t": 0, "d": 7.0, "e": "music bed"},
         {"t": 0, "d": 10.0, "e": "music bed (looped)"},
-        {"t": 8.0, "d": 2, "e": "end card: 'Follow!'"}]
+        {"t": 7.0, "d": 3, "e": "end card (live): 'Follow!'"}]
 
 
 def test_long_text_is_quoted_and_truncated():

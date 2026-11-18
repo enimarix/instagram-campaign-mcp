@@ -1,6 +1,7 @@
-// FactQuest props and script mapping. Imports only zod, so `node --test` runs it directly
+// FactQuest props and script mapping. Imports only zod and pure modules, so `node --test` runs it directly
 // (test/factquest.test.ts).
 import { z } from "zod";
+import { screenText } from "../../endcards/schema.ts";
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "a #RRGGBB colour");
 
@@ -20,12 +21,12 @@ export const factQuestSchema = z
       .array(z.strictObject({ title: z.string().min(1).max(24).optional(), text: z.string().min(1).max(120) }))
       .min(3)
       .max(5),
-    /** End card, e.g. "Follow for level 2". */
-    outro: z.string().min(1).max(60),
+    /** The end card's tagline (pixel card, step 137), e.g. "Follow for level 2". Never a price. */
+    outro: screenText(60),
     /** Sources of the facts (GOAL.md §5.6), carried from the idea. Not shown, kept with the asset. */
     citations: z.array(z.strictObject({ url: z.url({ protocol: /^https?$/ }), title: z.string().optional() })),
     /** Small end-card line shown when there are citations, e.g. "Sources in caption". */
-    sourcesNote: z.string().min(1).max(40).optional(),
+    sourcesNote: screenText(40).optional(),
     /**
      * Voice track (step 048). `lines` = one timing per script line: hook, each fact, outro;
      * none = timings estimated from the text length. `audioSrc`: URL or `staticFile()` path.

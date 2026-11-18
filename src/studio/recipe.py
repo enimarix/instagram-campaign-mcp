@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import (
     Annotated,
     Any,
+    Callable,
     ClassVar,
     Dict,
     List,
@@ -37,6 +38,7 @@ from typing import (
 )
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -81,6 +83,10 @@ class Op(BaseModel):
     def events(self, length: float) -> List[Dict[str, Any]]:
         """What the op shows or plays in a clip of `length` seconds, for recipe_timeline():
         [{t, d, e, text?}] (step 110). Ops that only reshape the picture add none."""
+        return []
+
+    def texts(self) -> List[str]:
+        """The texts the op draws on screen (QC checks them: never a price, step 137)."""
         return []
 
 
@@ -292,6 +298,8 @@ MAX_TEXT = 60  # characters, hook and credit
 TEXT_PAD = 16  # px of background box around text
 OverlayText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
                                                max_length=MAX_TEXT)]
+# Text the agent writes for the screen: never a price (owner rule, brand.no_price).
+ScreenText = Annotated[OverlayText, AfterValidator(brand.no_price)]
 
 
 def _brand_kit(info: MediaInfo) -> Tuple[Dict[str, Any], Path]:
@@ -433,7 +441,7 @@ class HookText(Op):
     The text keeps its case."""
 
     op: Literal["hook_text"] = "hook_text"
-    text: OverlayText
+    text: ScreenText
     start_s: float = Field(0.0, ge=0)
     end_s: float = Field(3.0, gt=0)
     position: Literal["top", "center"] = "top"
@@ -453,6 +461,9 @@ class HookText(Op):
     def events(self, length):
         return _window(self.start_s, self.end_s, length, "hook text", self.text)
 
+    def texts(self):
+        return [self.text]
+
 
 @register
 class Credit(Op):
@@ -460,7 +471,7 @@ class Credit(Op):
     Pexels" (GOAL.md §5.1), at the bottom of the safe area. The brand font has no emoji."""
 
     op: Literal["credit"] = "credit"
-    text: OverlayText
+    text: ScreenText
     position: Literal["bottom_left", "bottom_right"] = "bottom_left"
 
     def apply(self, src, info, out, *, inputs, timeout_s, preset):
@@ -471,6 +482,9 @@ class Credit(Op):
 
     def events(self, length):
         return [{"t": 0, "d": length, "e": "credit", "text": self.text}]
+
+    def texts(self):
+        return [self.text]
 
 
 MAX_CAPTION = 80  # characters per caption line
@@ -593,21 +607,45 @@ class Captions(Op):
         return [e for line in self.lines
                 for e in _window(line.start_s, line.end_s, length, "caption", line.text)]
 
+    def texts(self):
+        return [line.text for line in self.lines]
+
+
+# Renders the animated end card (motion EndCard, step 137): (its props, the backdrop picture
+# or None) -> the card clip, or None when Remotion is unavailable. render() gets one from the
+# render job (src/studio/render.py, which caches the clips under the media root).
+CardRenderer = Callable[[Dict[str, Any], Optional[Path]], Optional[Path]]
+END_CARD_MIN_S = 2.5  # owner: an end card lasts at least 2.5 s (= motion END_CARD_MIN_S)
+Accent = Literal["brand", "protein", "carbs", "fat", "kcal"]
+
 
 @register
 class EndCard(Op):
-    """The brand's call-to-action card appended after the clip, on the light surface, as
-    in the owner's own end cards. Centred on the frame's vertical axis inside the safe
-    area: the logo tile (with_logo), the wordmark (brand name, from its second capital in
-    emerald: "macro" + "Body"), the optional tagline `text`, the brand kit's `cta.trial`
-    in an emerald pill and `cta.url`. Never a price. The video gets `duration_s` longer
-    and the audio goes on under the card as silence; to run a music bed under the card
-    too, put `music` after `end_card` in the recipe."""
+    """The brand's animated call-to-action card appended after the clip (owner, 2026-11-18:
+    end cards are motion design, one per style): the motion `EndCard` of `style` live (the
+    clip's last frame freezes, blurs and dims, the card animates over it) or clean (the light
+    v5 look), with the tagline `text` and the topic's `accent`; the mB tile, the wordmark,
+    the brand kit's `cta.trial` pill and `cta.url` are the fixed base. Never a price. The clip
+    comes from the CardRenderer render() is given. Without one, or when it returns None
+    (Remotion unavailable), the static card below is drawn instead, as in the owner's own
+    end cards on the light surface: the logo tile (with_logo), the wordmark (brand name, from
+    its second capital in emerald: "macro" + "Body"), the tagline, the pill and the url,
+    centred on the frame's vertical axis inside the safe area; the render job then adds a QC
+    warning. The video gets `duration_s` longer (at least END_CARD_MIN_S) and the audio goes
+    on under the card as silence; to run a music bed under the card too, put `music` after
+    `end_card` in the recipe."""
 
     op: Literal["end_card"] = "end_card"
-    text: Optional[OverlayText] = None
-    duration_s: float = Field(2.0, ge=1, le=4)
+    text: Optional[ScreenText] = None
+    style: Literal["live", "clean"] = "live"
+    accent: Accent = "brand"
+    duration_s: float = Field(3.5, gt=0, le=6)
     with_logo: bool = True
+
+    @field_validator("duration_s")
+    @classmethod
+    def _long_enough(cls, value: float) -> float:
+        return max(value, END_CARD_MIN_S)  # older recipes asked for 2 s
 
     LOGO_W: ClassVar[int] = 260  # px, the tile
     SIZES: ClassVar[Dict[str, int]] = {"text": 44, "pill": 52, "url": 44}
@@ -615,7 +653,36 @@ class EndCard(Op):
     PILL_PAD: ClassVar[int] = 56  # px left and right of the pill text
     GAP: ClassVar[int] = 40  # px between blocks (the tagline's lines touch)
 
-    def apply(self, src, info, out, *, inputs, timeout_s, preset):
+    def card_props(self, kit: Dict[str, Any]) -> Dict[str, Any]:
+        """Props of the motion EndCard (motion/src/endcards/schema.ts) for this card."""
+        props: Dict[str, Any] = {"style": self.style, "accent": self.accent,
+                                 "seconds": self.duration_s,
+                                 "address": kit["address"]["live" if self.style == "live"
+                                                           else "default"]}
+        return {**props, "tagline": self.text} if self.text else props
+
+    def apply(self, src, info, out, *, inputs, timeout_s, preset,
+              card: Optional[CardRenderer] = None):
+        kit, _ = _brand_kit(info)
+        clip = None
+        if card is not None:
+            backdrop = None
+            if self.style == "live":  # the clip's last frame: -update keeps overwriting it
+                backdrop = out.with_name(f"{out.stem}-last.jpg")
+                ffmpeg.run(["-sseof", "-1", "-i", src, "-update", "1", "-q:v", "2", backdrop],
+                           timeout_s=timeout_s)
+            clip = card(self.card_props(kit), backdrop)
+        if clip is None:
+            return self._static(src, info, out, timeout_s=timeout_s, preset=preset)
+        graph = (f"[0:v]setsar=1,fps={FPS},format=yuv420p[clip];"
+                 f"[1:v]scale={WIDTH}:{HEIGHT},setsar=1,fps={FPS},format=yuv420p,"
+                 f"trim=duration={self.duration_s},setpts=PTS-STARTPTS[card];"
+                 f"[clip][card]concat=n=2:v=1:a=0,{VIDEO_TAIL}")
+        encode(src, info, out, filter_complex=graph, timeout_s=timeout_s, preset=preset,
+               extra_inputs=[clip], extend_s=self.duration_s)
+
+    def _static(self, src, info, out, *, timeout_s, preset):
+        """The static card (step 050): the fallback when no animated card can be rendered."""
         kit, root = _brand_kit(info)
         font = _brand_font(kit, root)
         _, sy, sw, sh = brand.safe_area(kit)
@@ -676,8 +743,11 @@ class EndCard(Op):
                extra_inputs=extra, extend_s=self.duration_s)
 
     def events(self, length):  # appended: starts where the clip ends
-        event = {"t": length, "d": self.duration_s, "e": "end card"}
+        event = {"t": length, "d": self.duration_s, "e": f"end card ({self.style})"}
         return [{**event, "text": self.text} if self.text else event]
+
+    def texts(self):
+        return [self.text] if self.text else []
 
 
 @register
@@ -824,11 +894,12 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
 
 
 def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
-           timeout_s: float = DEFAULT_TIMEOUT_S, preset: str = DEFAULT_PRESET) -> MediaInfo:
+           timeout_s: float = DEFAULT_TIMEOUT_S, preset: str = DEFAULT_PRESET,
+           end_card: Optional[CardRenderer] = None) -> MediaInfo:
     """Run `recipe` on `inputs["source"]` and write `out`. Other named inputs (music,
-    voice-over, reaction) are for the ops that use them. Every output gets a final loudness
-    pass (LOUDNESS_*). Returns the output's MediaInfo. `timeout_s` applies to each
-    ffmpeg run."""
+    voice-over, reaction) are for the ops that use them; `end_card` renders the animated end
+    card clips (none: the static card). Every output gets a final loudness pass
+    (LOUDNESS_*). Returns the output's MediaInfo. `timeout_s` applies to each ffmpeg run."""
     paths = {k: Path(v) for k, v in inputs.items()}
     if "source" not in paths:
         raise ValueError("inputs must contain 'source'")
@@ -846,8 +917,9 @@ def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
         current = paths["source"]
         for i, op in enumerate(recipe.ops):
             nxt = Path(work) / f"{i:02d}-{op.op}.mp4"
+            extra = {"card": end_card} if isinstance(op, EndCard) else {}
             op.apply(current, ffmpeg.probe(current), nxt, inputs=paths, timeout_s=timeout_s,
-                     preset=preset)
+                     preset=preset, **extra)
             current = nxt
         loud = Path(work) / "loudnorm.mp4"
         normalize_loudness(current, loud, timeout_s=timeout_s,

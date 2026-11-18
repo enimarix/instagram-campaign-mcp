@@ -11,16 +11,18 @@ import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
+import { EndCard } from "../../endcards/EndCard";
+import { CARD_S } from "../../endcards/schema";
 import { progress } from "../../lib/game";
 import { colors } from "../../lib/palette";
 import { snap } from "../../lib/pixel";
-import { buildTimeline, loopFade, sceneAt } from "../../lib/timeline";
+import { buildTimeline, fitEndCard, loopFade, sceneAt } from "../../lib/timeline";
 import { type BossBattleProps, bossBattleScript, foe, type Health, healthSteps, type Side } from "./schema";
 
 // BossBattle (step 045): hook card (with "A VS B" in the band), one "ROUND n" scene per
 // argument, then the verdict. Scenes come from the script timeline: 0 = hook, 1..N = rounds,
-// N+1 = verdict (held through the outro, where `loop` fades the hook back in so the last frame
-// matches frame 0). In each round the attacker dashes in and lands a hit (flash + sfx, the foe's
+// N+1 = verdict, then the pixel end card (step 137, `tagline`) in the outro, where `loop`
+// fades the hook back in over its last frames so the last frame matches frame 0. In each round the attacker dashes in and lands a hit (flash + sfx, the foe's
 // health bar drops); in the verdict the winner knocks the loser out, or a draw is called.
 
 const HOOK_S = 1.5;
@@ -45,7 +47,13 @@ const CELLS = 12;
 const GAP = 24;
 
 export const timelineOf = (props: BossBattleProps, fps: number) =>
-  buildTimeline({ ...bossBattleScript(props), fps, hookSeconds: HOOK_S, outroSeconds: OUTRO_S, loop: props.loop });
+  fitEndCard(
+      (outroSeconds) => buildTimeline({ ...bossBattleScript(props), fps, hookSeconds: HOOK_S, outroSeconds, loop: props.loop }),
+      OUTRO_S,
+      (t) => t.outroStart,
+      CARD_S.pixel,
+      fps,
+    );
 
 type Colors = typeof colors;
 type Fighter = BossBattleProps["left"];
@@ -138,7 +146,7 @@ export const BossBattle = (props: BossBattleProps) => {
   const c = { ...colors, ...props.palette };
   const { scenes } = timeline;
   const last = scenes[scenes.length - 1];
-  // The verdict holds through the outro (no scene there).
+  // The verdict stays up under the end card (no scene in the outro).
   const scene = sceneAt(scenes, frame) ?? (frame >= last.startFrame ? last : undefined);
   const fade = loopFade(frame, timeline);
   const band = scriptAreas().captions;
@@ -162,6 +170,14 @@ export const BossBattle = (props: BossBattleProps) => {
         >
           <PixelText text={note} scale={3} color={c.text} maxWidth={band.width} />
         </div>
+      )}
+      {/* The pixel end card (step 137) after the last scene; the hook fades back in over its end. */}
+      {frame >= timeline.outroStart && (
+        <AbsoluteFill style={{ opacity: 1 - fade }}>
+          <Sequence from={timeline.outroStart} layout="none">
+            <EndCard style="pixel" tagline={props.tagline} cameo="mascot" note={note} accent="brand" address={"vous"} pixelate={1} />
+          </Sequence>
+        </AbsoluteFill>
       )}
       <HookCard text={props.hook} timeline={timeline} color={c.primary} />
       {scenes.slice(1).map((s) => (

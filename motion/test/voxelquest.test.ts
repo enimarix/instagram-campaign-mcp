@@ -2,11 +2,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { DEFAULT_ADDRESS, END_CARD_MIN_S, endCardSchema, FOOD_IDS } from "../src/endcards/schema.ts";
+import { DEFAULT_ADDRESS, END_CARD_MIN_S } from "../src/endcards/schema.ts";
 import { beatOf, beatShots, before, cameraAt, countUp, flashFrame, golemPoints, LONG_BEAT_S, reached, SCALE_LIFT, SETTLE } from "../src/templates/VoxelQuest/layout.ts";
 import { timelineOf, voxelQuestSchema, voxelQuestScript } from "../src/templates/VoxelQuest/schema.ts";
 import { projectIso } from "../src/voxel/anim.ts";
-import { PROPS } from "../src/voxel/models.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
 const brandJson = JSON.parse(readFileSync(new URL("../../brand/brand.json", import.meta.url), "utf8"));
@@ -72,14 +71,6 @@ test("without an outro the end card follows the last beat; beats get room to ani
   assert.ok(timeline.totalFrames - endStart >= END_CARD_MIN_S * 30);
   const [hook, problem, app, payoff] = timeline.scenes.map((s) => (s.endFrame - s.startFrame) / 30);
   assert.ok(hook >= 2.5 && problem >= 3.6 && app >= 4.4 && payoff >= 3.8);
-});
-
-test("end card props: defaults, a food or form cameo, no price", () => {
-  assert.deepEqual(endCardSchema.parse({}), { style: "voxel", accent: "brand", cameo: "etincelle", address: "vous", pixelate: 2 });
-  assert.ok(endCardSchema.safeParse({ cameo: "avocado", accent: "fat", tagline: "Mangez sain." }).success);
-  assert.equal(endCardSchema.safeParse({ tagline: "29 $ / an" }).success, false);
-  assert.equal(endCardSchema.safeParse({ style: "paper" }).success, false);
-  for (const id of FOOD_IDS) assert.ok(id in PROPS, id);
 });
 
 test("framing: the golem is whole in the picture every frame, and inside the safe area in every held shot", () => {

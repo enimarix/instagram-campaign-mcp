@@ -17,6 +17,7 @@ from __future__ import annotations
 import atexit
 import contextlib
 import functools
+import hashlib
 import json
 import os
 import shutil
@@ -254,6 +255,32 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
             os.replace(raw, out)
     return (ffmpeg.probe(out), round((v["coverFrame"] or 0) * 1000 / v["fps"]),
             recipe.compress_timeline(v["events"]))
+
+
+def render_end_card(media_root: PathLike, props: Dict[str, Any], backdrop: Optional[Path] = None,
+                    *, timeout_s: float) -> Path:
+    """The animated end card (motion `EndCard`, step 137) as a clip, rendered once and cached
+    as `<media root>/endcards/<key>.mp4`, the key hashing the props and the backdrop's bytes
+    (the live card animates over `backdrop`, the video's last frame). MotionError when Node or
+    Remotion fails (the recipe then draws the static card)."""
+    picture = hashlib.sha256(backdrop.read_bytes()).hexdigest()[:16] if backdrop else None
+    out = Path(media_root) / "endcards" / f"{render.recipe_hash([props, picture])}.mp4"
+    if out.is_file():
+        return out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    staged = dict(props)
+    if backdrop:  # into the bundle, like the voice audio (_stage_audio)
+        name = f"{picture}{backdrop.suffix}"
+        dest = bundle_dir() / "public" / "endcards" / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(backdrop, dest)
+        staged["backdrop"] = f"public/endcards/{name}"
+    with tempfile.TemporaryDirectory(prefix="endcard-", dir=out.parent) as work:
+        clip = Path(work) / "card.mp4"
+        _render("EndCard", staged, clip, Path(work), timeout_s=timeout_s,
+                extra=["--concurrency", RENDER_CONCURRENCY])
+        os.replace(clip, out)  # atomic: a parallel render of the same card is harmless
+    return out
 
 
 def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,

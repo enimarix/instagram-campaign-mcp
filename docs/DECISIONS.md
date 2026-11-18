@@ -395,3 +395,38 @@ llms.txt) and the owner's own Reels (macrobody-video: README, logo, drawing code
   samples go to `data/samples/`, never the inbox, and new styles (voxel, paper, clean brand
   film) come as their own templates.
 Reason: owner's art direction, 2026-11-18.
+
+## 2026-11-18: End cards are animated motion design, one per style, never a price (137)
+
+Owner: "the end card must be animated; depending on the style of the video we need a
+different card; all motion graphics, motion design. The kit is a small base adapted for
+each scenario, and never show the price."
+- One shared `EndCard` (`motion/src/endcards/`, `style` prop) with a card per style:
+  `voxel` (the podium, 130), `paper` (kraft cover tearing open on the cream sheet, cut-out
+  pieces, stepped 12 fps), `clean` (the v5 light surface, soft accent glows, kicker pill,
+  `cubic-bezier(.22,1,.36,1)`), `pixel` (PRESS START, then the tile assembles cell by
+  cell) and `live` (the video's last frame freezes, blurs and dims, the card animates
+  over it). Each settles in about 2-3 s and holds at least 1 s; every card lasts at least
+  2.5 s (`CARD_S`).
+- Fixed base everywhere: the mB tile, the wordmark macro**Body**, « 7 jours gratuits »,
+  macrobody.fr. Adapted per video through props the agent fills from the story: `tagline`
+  (the payoff, else the app's tagline in the video's address), `accent` (the topic's macro
+  colour, default emerald), `cameo` (a character / prop of the style) and the backdrop
+  (the voxel kitchen; live: the last frame).
+- Every motion template ends on its style's card (the five 8-bit templates on `pixel`,
+  VoxelQuest on `voxel`); their outro / cta became the card's tagline, BossBattle,
+  DialogStory and PixelSkit gained an optional unspoken `tagline`. Voice scripts are
+  unchanged.
+- Track A: the `end_card` recipe op appends a pre-rendered `live` card (or `clean`),
+  cached under `<media root>/endcards/` by its props and the backdrop's bytes. The static
+  drawtext card (050) is only the fallback when Remotion is unavailable, and QC then adds a
+  warning. The op's default length is 3.5 s; shorter values are raised to 2.5 s.
+- Never a price: the same patterns in `motion/src/lib/noPrice.ts` and
+  `src/studio/brand.py` (`has_price`). Zod refuses a price in every end-card text and the
+  8-bit templates' outro / cta / tagline / sources note; the recipe ops refuse one in the
+  hook, credit and end card; QC fails any render whose on-screen texts carry one
+  (captions included: they are the clip's speech).
+- The paper card's display font is a prop (`font`, default Fredoka) falling back to
+  Inter Tight, and its url uses Caveat falling back to Inter italic, until step 131 adds
+  Fredoka and Caveat.
+Reason: owner's art direction, 2026-11-18.

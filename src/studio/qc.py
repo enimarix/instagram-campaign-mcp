@@ -5,7 +5,8 @@ run_qc() returns what is saved as `assets.qc`:
   {"passed": bool, "checks": [{"name", "ok", "detail"}], "reasons": [<detail of each failed
    check>], "warnings": [...], "loudness_lufs": float | None}
 Checks: output spec (size, fps, codec), duration bounds, audio present, loudness, black and
-frozen stretches (one ffmpeg analysis pass) and the caption (length, hashtags). Motion
+frozen stretches (one ffmpeg analysis pass), the caption (length, hashtags) and the texts
+drawn on screen (never a price, owner rule; screen_texts()). Motion
 renders (`recipe.kind == "motion"`) get a longer freeze limit: their hook and end cards are
 still on purpose (`qc_max_freeze_s_motion`). Health, medical or income promises are only
 warnings: the owner can overrule them in review.
@@ -21,8 +22,9 @@ from typing import Any, Dict, List, Optional
 from ..config import InstagramMCPSettings
 from ..instagram_client import caption_problem
 from . import ffmpeg, media
+from .brand import has_price
 from .ffmpeg import PathLike
-from .recipe import FPS, HEIGHT, LOUDNESS_I, WIDTH
+from .recipe import FPS, HEIGHT, LOUDNESS_I, WIDTH, Recipe
 
 ANALYSIS_TIMEOUT_S = 600.0
 
@@ -50,6 +52,36 @@ def claim_warnings(*texts: Optional[str]) -> List[str]:
                 warning = f"{kind}: {m.group(0)!r}"
                 if warning not in found:
                     found.append(warning)
+    return found
+
+
+# Motion props that are never drawn: sources, the voice (its lines repeat the drawn texts) and
+# asset ids.
+_NOT_DRAWN = {"citations", "voice", "music", "palette"}
+
+
+def screen_texts(recipe: Optional[Dict[str, Any]]) -> List[str]:
+    """Every text a render of the stored recipe envelope draws: the ffmpeg ops' texts (hook,
+    credit, captions, end card) or the motion props' strings (ids such as sprite names come
+    along: they never look like a price)."""
+    env = recipe or {}
+    if env.get("kind") == "ffmpeg":
+        ops = Recipe.model_validate(env["recipe"]).ops if env.get("recipe") else []
+        return [t for op in ops for t in op.texts()]
+    found: List[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            found.append(value)
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                if k not in _NOT_DRAWN:
+                    walk(v)
+        elif isinstance(value, list):
+            for v in value:
+                walk(v)
+
+    walk(env.get("props") or {})
     return found
 
 
@@ -109,6 +141,9 @@ def run_qc(asset: Dict[str, Any], idea: Optional[Dict[str, Any]], master_path: s
                     for t in found["freeze"]) or f"no frozen stretch of {max_freeze:g} s")
     problem = caption_problem(asset.get("caption"), s.max_hashtags)
     check("caption", problem is None, problem or "caption ok")
+    priced = [t for t in screen_texts(asset.get("recipe")) if has_price(t)]
+    check("price", not priced, "; ".join(f"a price on screen: {t!r}" for t in priced)
+          or "no price on screen")
     idea = idea or {}
     return {
         "passed": all(c["ok"] for c in checks),

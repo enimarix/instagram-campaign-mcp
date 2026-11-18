@@ -10,9 +10,11 @@ import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
+import { EndCard } from "../../endcards/EndCard";
+import { CARD_S } from "../../endcards/schema";
 import type { PixelArt } from "../../lib/game";
 import { colors } from "../../lib/palette";
-import { buildTimeline, loopFade, sceneAt } from "../../lib/timeline";
+import { buildTimeline, fitEndCard, loopFade, sceneAt } from "../../lib/timeline";
 import { type Action, actionPose, BEAT, comicTiming, type PixelSkitProps, pixelSkitScript, SFX, voiceParts } from "./schema";
 
 // PixelSkit (step 047a): the humour template, a short "POV:" sketch. Hook card with the cast
@@ -21,8 +23,9 @@ import { type Action, actionPose, BEAT, comicTiming, type PixelSkitProps, pixelS
 // while the line types into a dialog box in the band below (the speaker's name tag, if any).
 // Comic timing (`comicTiming`): the beat before the punchline holds a moment, the punchline's
 // `sting` plays as it lands (typed or voiced), and the picture freezes there with a flash. An
-// optional tag beat follows. The last scene holds through the outro, where `loop` fades the hook
-// and cast back in so the last frame matches frame 0.
+// optional tag beat follows, then the pixel end card (step 137, `tagline`, tu) in the outro,
+// where `loop` fades the hook and cast back in over its last frames so the last frame matches
+// frame 0.
 
 const HOOK_S = 1.5;
 const OUTRO_S = 0.5;
@@ -47,7 +50,13 @@ const hand: PixelArt = {
 
 export const timelineOf = (props: PixelSkitProps, fps: number) =>
   comicTiming(
-    buildTimeline({ ...pixelSkitScript(props), fps, hookSeconds: HOOK_S, outroSeconds: OUTRO_S, loop: props.loop }),
+    fitEndCard(
+      (outroSeconds) => buildTimeline({ ...pixelSkitScript(props), fps, hookSeconds: HOOK_S, outroSeconds, loop: props.loop }),
+      OUTRO_S,
+      (t) => t.outroStart,
+      CARD_S.pixel,
+      fps,
+    ),
     props,
     TYPE_CPS,
     fps,
@@ -130,7 +139,7 @@ export const PixelSkit = (props: PixelSkitProps) => {
   const c: Colors = { ...colors, ...props.palette };
   const { scenes } = timeline;
   const last = scenes[scenes.length - 1];
-  // The last scene holds through the outro (no scene there).
+  // The last scene stays up under the end card (no scene in the outro).
   const scene = sceneAt(scenes, frame) ?? (frame >= last.startFrame ? last : undefined);
   const beat = scene && scene.index ? props.beats[scene.index - 1] : undefined;
   const fade = loopFade(frame, timeline);
@@ -172,6 +181,14 @@ export const PixelSkit = (props: PixelSkitProps) => {
         >
           <PixelText text={note} scale={3} color={c.text} maxWidth={band.width} />
         </div>
+      )}
+      {/* The pixel end card (step 137) after the last scene; the hook fades back in over its end. */}
+      {frame >= timeline.outroStart && (
+        <AbsoluteFill style={{ opacity: 1 - fade }}>
+          <Sequence from={timeline.outroStart} layout="none">
+            <EndCard style="pixel" tagline={props.tagline} cameo="mascot" note={note} accent="brand" address={"tu"} pixelate={1} />
+          </Sequence>
+        </AbsoluteFill>
       )}
       <HookCard text={props.hook} timeline={timeline} color={c.primary} />
       <Wipe direction="right" startFrame={scenes[1].startFrame - WIPE / 2} duration={WIPE} color={c.accent} />
