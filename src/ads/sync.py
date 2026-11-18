@@ -46,7 +46,6 @@ logger = structlog.get_logger(__name__)
 HOURLY, DAILY = timedelta(hours=1), timedelta(days=1)
 LATE_SPEND = timedelta(days=3)
 NEAR_CAP = Decimal("0.8")
-STOPPED = {PAUSED, "DELETED", "ARCHIVED"}  # anything else may deliver: pause it
 REJECTED = {"DISAPPROVED", "WITH_ISSUES"}
 # The result an objective optimizes for. ponytail: awareness = reach, engagement on video
 # = the video_view action; H6 checks them against Ads Manager's Results column.
@@ -82,7 +81,10 @@ async def enforce_kill(store: CampaignStore, w: AdsWriter, now: datetime) -> Dic
     except Exception as e:  # pause what we know anyway
         logger.exception("ads_kill_listing_failed")
         error = repr(e)
-    todo = [i for i in dict.fromkeys(ledger + listed) if seen.get(i) not in STOPPED]
+    # Meta's list edges leave out archived and deleted objects unless asked ("A request
+    # with no filters returns only campaigns that were not archived or deleted"): every
+    # listed object not PAUSED may deliver.
+    todo = [i for i in dict.fromkeys(ledger + listed) if seen.get(i) != PAUSED]
     paused, failed = [], []
     for meta_id in todo:
         try:
