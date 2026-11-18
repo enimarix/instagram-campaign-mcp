@@ -92,6 +92,14 @@ class InstagramMCPSettings(BaseSettings):
     slot_jitter_minutes: int = Field(
         7, ge=0, description="Random shift of each planned slot, in minutes either way"
     )
+    slot_min_posts: int = Field(
+        5, ge=1, description="Matured Reels a posting window needs before its results"
+                             " weigh its slots"
+    )
+    slot_explore_share: float = Field(
+        0.15, ge=0, le=1, description="Share of days whose first slot goes to the least-tried"
+                                      " window, to keep learning"
+    )
     max_late_minutes: int = Field(
         30, ge=1, description="A post later than this (e.g. PC asleep) moves to the next slot"
     )

@@ -13,8 +13,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from ..campaign import _next_free_slot, free_slot
+from ..campaign import _next_free_slot, free_slot, slot_inputs
 from ..config import InstagramMCPSettings
+from ..learning.slots import explain_slot
 from ..store import CampaignStore, parse_dt, to_iso
 from .assets import InvalidTransition, transition
 from .publish import _source, cancel_post, queue_asset
@@ -37,11 +38,14 @@ def propose_slot(
 ) -> Dict[str, Any]:
     """The next free slot (today or the next days) for the asset, with the planner's rules
     and the audience profile. `needs_confirmation`: a `commentary` source needs the
-    owner's per-video confirmation at queue time (§5.1). KeyError for an unknown asset."""
+    owner's per-video confirmation at queue time (§5.1). `why`: one line on the window's
+    results (None without results). KeyError for an unknown asset."""
     asset = store.get_asset(asset_id)
     rights = _source(store, store.get_idea(asset["idea_id"])).get("rights_basis")
-    at = _next_free_slot(store, settings, _taken(store, now), now)
-    return {**_slot(settings, at), "needs_confirmation": rights == "commentary"}
+    inputs = slot_inputs(store, settings, now)
+    at = _next_free_slot(store, settings, _taken(store, now), now, inputs)
+    return {**_slot(settings, at), "needs_confirmation": rights == "commentary",
+            "why": explain_slot(settings, at, inputs[1])}
 
 
 def schedule_asset(
