@@ -13,7 +13,7 @@ import { field, type Tone } from '../ui/styles'
 import { Tabs } from '../ui/Tabs'
 import { dateTime, humanize, num, pct, useLoad } from './load'
 
-// Steps 094 (API), 094b (this page), 095b (results) and 126 (the AI runs the ads).
+// Steps 094 (API), 094b (this page), 095b (results), 126 and 128 (the AI proposes, you launch).
 const VARIABLES: { id: AdVariable; label: string }[] = [
   { id: 'creative', label: 'Video' }, { id: 'audience', label: 'Audience' }, { id: 'placement', label: 'Placement' },
 ]
@@ -112,7 +112,7 @@ function BudgetCard({ b, act }: { b?: AdsBudget; act: Act }) {
     <Card as="section" aria-label="Budget">
       <h2 className="font-semibold">Budget</h2>
       <p className="mt-1 text-sm text-muted">
-        The AI runs your ads within these caps. <a href="/settings" className="text-accent underline">Change them in Settings, Ads</a>.
+        A test spends only once you approve it, within these caps. <a href="/settings" className="text-accent underline">Change them in Settings, Ads</a>.
       </p>
       {b.killed && (
         <div role="status" className="mt-2 rounded-control bg-danger/12 p-3 text-sm text-danger">
@@ -411,6 +411,9 @@ function TestRow({ t, labels, act }: { t: AdTest; labels: Labels; act: Act }) {
     <li className="py-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone={STATUS_TONE[t.status]}>{t.status}</Chip>
+        {t.status === 'proposed' && <Chip tone="warn">
+          {t.proposed_by === 'agent' ? 'Proposed by the AI' : 'Proposed by you'}, waiting for you
+        </Chip>}
         {t.launched_by && <Chip tone={t.launched_by === 'agent' ? 'accent' : 'neutral'}>
           {t.launched_by === 'agent' ? 'Launched by the AI' : 'Launched by you'}
         </Chip>}
@@ -499,6 +502,7 @@ export default function Ads() {
   const tests = useLoad(listAdTests, version)
   const presets = useLoad(listAdPresets, 0).data ?? []
   const labels: Labels = Object.fromEntries(presets.map((p) => [p.id, p.label]))
+  const waiting = tests.data?.filter((t) => t.status === 'proposed').length ?? 0
 
   // Runs one action, reloads everything; the error in plain words, or null.
   const act: Act = async (fn) => {
@@ -516,7 +520,7 @@ export default function Ads() {
   return (
     <>
       <PageHeader title="Ads" actions={<Button variant="primary" onClick={() => setProposing(true)}>Propose a test</Button>}>
-        Paid A/B tests on your proven winners, launched and stopped by the AI within your caps.
+        Paid A/B tests on your proven winners. The AI proposes them; nothing spends until you approve it.
       </PageHeader>
       <div className="grid gap-4">
         {unset && <p role="status" className="rounded-card bg-info/12 p-4 text-sm text-info">{H6_NOTE}</p>}
@@ -527,6 +531,11 @@ export default function Ads() {
           : <BudgetCard b={budget.data} act={act} />}
         <Card as="section" aria-label="Tests">
           <h2 className="font-semibold">Tests</h2>
+          {waiting > 0 && (
+            <p role="status" className="mt-1 text-sm text-warn">
+              {waiting === 1 ? '1 proposal waits' : `${waiting} proposals wait`} for you: Approve launches it, Cancel drops it.
+            </p>
+          )}
           {tests.error && <p role="alert" className="mt-2 text-sm text-danger">{tests.error}</p>}
           {!tests.data ? !tests.error && <Skeleton className="mt-3 h-12" /> : tests.data.length === 0 ? (
             <div className="mt-3"><EmptyState title="No tests yet">Propose one from your winners.</EmptyState></div>

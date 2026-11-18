@@ -1,5 +1,5 @@
-"""Steps 096 and 126: the agent's ads tools (propose, launch, stop, read), the proposal
-cap, the `weekly-ads` work packet, and the proof that money moves only through the guard."""
+"""Steps 096, 126 and 128: the agent's ads tools (propose, stop, read; never launch), the
+proposal cap, the `weekly-ads` work packet, and the proof that no agent tool spends."""
 
 import ast
 import json
@@ -25,8 +25,8 @@ from .test_ads_tests import (  # noqa: F401 - meta: the Meta fixture
 )
 
 SRC = Path(srv.__file__).parent
-ADS_TOOLS = {"list_ad_winners", "propose_ad_test", "launch_ad_test", "stop_ad_test",
-             "list_ad_tests", "get_ad_test_results"}
+ADS_TOOLS = {"list_ad_winners", "propose_ad_test", "stop_ad_test", "list_ad_tests",
+             "get_ad_test_results"}
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ async def test_every_tool_says_ads_not_configured_and_sends_nothing(store, tools
     tools(_settings(meta_ad_account_id=None))
     outs = [await srv.list_ad_winners(), await srv.list_ad_tests(),
             await srv.get_ad_test_results(1), await _agent_proposal(store),
-            await srv.launch_ad_test(1), await srv.stop_ad_test(1, "why")]
+            await srv.stop_ad_test(1, "why")]
     for out in outs:
         assert out["error"] == "ads_not_configured" and "META_AD_ACCOUNT_ID" in out["message"]
     assert not graph.calls and tests.list_tests(store, _settings()) == []
@@ -109,82 +109,79 @@ async def test_agent_proposals_are_capped_and_owner_ones_are_not(store, tools, g
     assert (await _agent_proposal(store))["proposed_by"] == "agent"
 
 
-# --- launch and stop --------------------------------------------------------------------
+# --- the owner launches, the agent stops (128) --------------------------------------------
 def _caps(store, **values):
     """The owner changes a setting in the website (another process's settings object)."""
     settings_overrides.update(store, _settings(), values, confirmed=True)
 
 
-async def test_agent_launch_within_caps_creates_paused_then_activates(store, tools, graph):
-    tools(_settings())
-    t = await _agent_proposal(store)
-    out = await srv.launch_ad_test(t["id"])
-    assert out["status"] == "running" and out["budget_total"] == "426.94"  # the need
-    creates = [c for c in _posts(graph) if c.request.url.path.startswith("/v25.0/act_42/")]
-    assert _posts(graph)[:8] == creates and {s for _, s in _status_calls(graph)} == {"ACTIVE"}
-    assert all(json.loads(c.request.content).get("status", "PAUSED") == "PAUSED"
-               for c in creates)
-    rows = budget.audit_log(store, limit=10)["rows"]
-    assert [(r["action"], r["actor"]) for r in reversed(rows)] == [
-        ("propose", "agent"), ("approve", "agent"), ("activate", "agent"),
-        ("activate", "agent")]
-    [shown] = (await srv.list_ad_tests())["tests"]
-    assert shown["launched_by"] == "agent" and shown["proposed_by"] == "agent"
+async def test_agent_profile_cannot_launch_or_spend():
+    """The agent's ads tools, by name: none launches, activates or spends (128)."""
+    agent = {t.name for t in await srv.build_server("agent").list_tools()}
+    assert {n for n in agent if "ad" in n.split("_")} == ADS_TOOLS == {
+        "list_ad_winners", "propose_ad_test", "stop_ad_test", "list_ad_tests",
+        "get_ad_test_results"}
+    every = {t.name for t in await srv.mcp.list_tools()}
+    assert not {n for n in every if re.search(r"launch|activat|approve", n)}
 
 
-async def test_agent_budget_is_capped_by_the_current_caps(store, tools, graph):
+async def test_the_agent_cannot_launch_and_the_owner_can(store, tools, graph):
     s = tools(_settings())
     t = await _agent_proposal(store)
-    _caps(store, ads_test_cap="300")  # lowered in the website a moment ago
     sent = len(graph.calls)
-    with pytest.raises(srv.ToolError, match="^underpowered: budget 300.00 is below the 426"):
-        await srv.launch_ad_test(t["id"])
-    assert s.ads_test_cap == 300 and len(graph.calls) == sent  # read fresh, nothing sent
-    _caps(store, ads_test_cap="0", ads_daily_cap="0")
-    with pytest.raises(srv.ToolError, match="^underpowered: the caps leave nothing"):
-        await srv.launch_ad_test(t["id"])
-    with pytest.raises(tests.AdTestRefused, match="the need and the caps"):
-        await tests.launch(store, s, t["id"], "5000", actor="agent")  # no budget of its own
-    with pytest.raises(tests.AdTestRefused, match="the need and the caps"):
-        await tests.launch(store, s, t["id"], actor="agent", underpowered_ok=True)
+    for kw in ({}, {"underpowered_ok": True}):
+        with pytest.raises(tests.AdTestRefused) as e:
+            await tests.launch(store, s, t["id"], "427", actor="agent", **kw)
+        assert e.value.code == "owner_only" and "Approve on the Ads page" in e.value.message
+    with pytest.raises(tests.AdTestRefused, match="only the owner"):
+        await tests.launch(store, s, t["id"], "427", actor="worker")
     assert len(graph.calls) == sent and store._get("ad_tests", t["id"])["status"] == "proposed"
+    out = await tests.launch(store, s, t["id"], "427", actor="owner")  # Approve, as before
+    assert out["status"] == "running" and out["budget_total"] == "427.00"
+    rows = budget.audit_log(store, limit=10)["rows"]
+    assert [(r["action"], r["actor"]) for r in reversed(rows)] == [
+        ("propose", "agent"), ("approve", "owner"), ("activate", "owner"),
+        ("activate", "owner")]
+    [shown] = (await srv.list_ad_tests())["tests"]
+    assert shown["launched_by"] == "owner" and shown["proposed_by"] == "agent"
 
 
-async def test_agent_launch_refused_when_killed_or_at_the_max_running(store, tools, graph):
-    tools(_settings())
+async def test_owner_launch_reads_the_caps_fresh_and_the_max_running(store, tools, graph):
+    s = tools(_settings())
     first, second = [(await _agent_proposal(store))["id"] for _ in range(2)]
-    budget.kill(store, "owner pressed Stop all ads")
-    with pytest.raises(srv.ToolError, match="^killed"):
-        await srv.launch_ad_test(first)
-    assert not _posts(graph)
-    budget.unkill(store)  # the owner, in the website
-    _caps(store, ads_max_running_tests=1, ads_lifetime_cap="5000", ads_daily_cap="1000")
-    await srv.launch_ad_test(first)
+    _caps(store, ads_test_cap="300")  # lowered in the website a moment ago
+    with pytest.raises(budget.BudgetRefused) as e:
+        await tests.launch(store, s, first, "427", actor="owner", underpowered_ok=True)
+    assert e.value.code == "test_cap" and s.ads_test_cap == 300 and not _posts(graph)
+    _caps(store, ads_max_running_tests=1, ads_test_cap="1000", ads_lifetime_cap="5000",
+          ads_daily_cap="1000")
+    await tests.launch(store, s, first, "427", actor="owner")
     sent = len(graph.calls)
-    with pytest.raises(srv.ToolError, match="^max_running: 1 tests already run"):
-        await srv.launch_ad_test(second)
-    assert len(graph.calls) == sent
+    with pytest.raises(tests.AdTestRefused) as e:
+        await tests.launch(store, s, second, "427", actor="owner")
+    assert e.value.code == "max_running" and len(graph.calls) == sent
     with pytest.raises(tests.AdTestRefused) as e:  # the transaction's own count, too
         tests._set_status(store, second, "approved", expect=("proposed",), max_running=1)
     assert e.value.code == "max_running"
 
 
-async def test_agent_launch_refused_for_posts_no_longer_advertisable(store, tools, graph):
-    tools(_settings())
+async def test_owner_launch_refused_for_posts_no_longer_advertisable(store, tools, graph):
+    s = tools(_settings())
     t = await _agent_proposal(store)
     asset = store.get_label("111")["asset_id"]
     with store._tx() as c:
         c.execute("UPDATE assets SET status='scheduled' WHERE id=?", (asset,))
-    with pytest.raises(srv.ToolError, match="^not_published: post 111's video is scheduled"):
-        await srv.launch_ad_test(t["id"])
+    with pytest.raises(tests.AdTestRefused, match="post 111's video is scheduled") as e:
+        await tests.launch(store, s, t["id"], "427", actor="owner")
+    assert e.value.code == "not_published"
     src = store.add_source("x", rights_basis="commentary", author="a")["id"]
     with store._tx() as c:
         c.execute("UPDATE assets SET status='published' WHERE id=?", (asset,))
         c.execute("UPDATE ideas SET source_id=?, track='remix' WHERE id=(SELECT idea_id FROM"
                   " assets WHERE id=?)", (src, asset))
-    with pytest.raises(srv.ToolError, match="^rights"):
-        await srv.launch_ad_test(t["id"])
-    assert not _posts(graph)
+    with pytest.raises(tests.AdTestRefused) as e:
+        await tests.launch(store, s, t["id"], "427", actor="owner")
+    assert e.value.code == "rights" and not _posts(graph)
 
 
 async def test_propose_refuses_posts_not_published(store, tools, graph):
@@ -196,22 +193,10 @@ async def test_propose_refuses_posts_not_published(store, tools, graph):
         await _agent_proposal(store)
 
 
-async def test_agent_does_not_launch_the_owners_proposals(store, tools, graph):
-    s = tools(_settings())
-    for v in CREATIVE:
-        _post(store, v["media_id"])
-    t = await tests.propose(store, s, hypothesis="h", variable="creative", variants=CREATIVE)
-    with pytest.raises(srv.ToolError, match="^owner_test"):
-        await srv.launch_ad_test(t["id"])
-    with pytest.raises(srv.ToolError):
-        await srv.launch_ad_test(999)
-    assert not _posts(graph)
-
-
 async def test_agent_stop_pauses_and_is_audited(store, tools, graph):
-    tools(_settings())
+    s = tools(_settings())
     t = await _agent_proposal(store)
-    await srv.launch_ad_test(t["id"])
+    await tests.launch(store, s, t["id"], "427", actor="owner")
     graph.reset()
     with pytest.raises(srv.ToolError, match="^invalid: a reason"):
         await srv.stop_ad_test(t["id"], " ")
@@ -226,9 +211,9 @@ async def test_agent_stop_pauses_and_is_audited(store, tools, graph):
 
 
 # --- money only through the guard --------------------------------------------------------
-# The two gates an agent tool may pass through; the walk does not enter them (inside, the
-# guard does its work: tests/test_ads_tests.py and the tests above).
-GATES = {("tests.py", "launch"), ("tests.py", "cancel")}
+# The one gate an agent tool may pass through: stop -> cancel (a pause); the walk does not
+# enter it. tests.launch is no gate since 128: an agent tool reaching it is a violation.
+GATES = {("tests.py", "cancel")}
 # Identifiers no function an agent tool reaches outside a gate may use (src/ads and src/).
 FORBIDDEN = {"AdsWriter", "authorize_spend", "unkill", "kill", "enforce_kill", "activate",
              "release", "report_spend", "create_paused_promotion", "pause", "_pause_active",
@@ -289,7 +274,7 @@ def violations(path, name):
     return ({f"uses {n}" for n in names & FORBIDDEN}
             | {f"reaches {f}.{fn}" for f, fn in reached
                if (f, fn) in {("settings_overrides.py", "update"), ("sync.py", "sync"),
-                              ("budget.py", "unkill")}})
+                              ("budget.py", "unkill"), ("tests.py", "launch")}})
 
 
 async def test_agent_money_only_through_the_guard():
@@ -300,9 +285,7 @@ async def test_agent_money_only_through_the_guard():
     for tool in sorted(agent):
         assert not violations(SRC / "instagram_mcp_server.py", tool), tool
         gated |= reach(SRC / "instagram_mcp_server.py", tool, GATES)[0] & GATES
-    assert gated == GATES  # launch and stop do pass the gates: the walk is not vacuous
-    reached, _ = reach(SRC / "instagram_mcp_server.py", "launch_ad_test", GATES)
-    assert {("agent.py", "launch"), ("tests.py", "launch")} <= reached
+    assert gated == GATES  # stop does pass the gate: the walk is not vacuous
     assert ("sync.py", "results") in reach(SRC / "instagram_mcp_server.py",
                                            "get_ad_test_results", GATES)[0]
 
@@ -321,9 +304,10 @@ def test_the_walk_catches_money_power(tmp_path):
     assert "reaches budget.py.unkill" in violations(ads / "budget.py", "unkill")
     assert "reaches settings_overrides.py.update" in violations(SRC / "settings_overrides.py",
                                                                  "update")
-    # the gate shields exactly this: launch's insides spend
-    assert {"activate", "AdsWriter", "authorize_spend"} <= reach(ads / "tests.py", "launch")[1]
-    assert violations(ads / "tests.py", "launch") == set()
+    launch = violations(ads / "tests.py", "launch")  # the owner's launch, never the agent's
+    assert {"reaches tests.py.launch", "uses activate", "uses AdsWriter",
+            "uses authorize_spend"} <= launch
+    assert violations(ads / "tests.py", "cancel") == set()  # the gate shields a pause
 
 
 def test_only_known_modules_import_ads():
@@ -360,9 +344,10 @@ async def test_weekly_ads_packet(store, tools, graph, monkeypatch, tmp_path):
     _finish(store, done)
     out = packet.write_packet(store, s, "weekly-ads", tmp_path)
     data = json.loads((tmp_path / "work" / "ads.json").read_bytes())
-    # a test to learn, a winner, a proposal to launch (2 more may run)
-    assert not out["skip"] and out["manifest"]["sections"]["ads"]["count"] == 3
-    assert data["launches_left"] == 2 and [t["launched_by"] for t in data["open_tests"]] == [None]
+    # a test to learn and a winner; the waiting proposal is the owner's to launch (128)
+    assert not out["skip"] and out["manifest"]["sections"]["ads"]["count"] == 2
+    assert "launches_left" not in data
+    assert [t["launched_by"] for t in data["open_tests"]] == [None]
     assert data["proposals_left"] == 2 and [w["media_id"] for w in data["winners"]] == ["111"]
     assert [t["id"] for t in data["open_tests"]] == [still]
     [learn] = data["to_learn"]
@@ -375,10 +360,8 @@ async def test_weekly_ads_packet(store, tools, graph, monkeypatch, tmp_path):
     await _agent_proposal(store)  # 3 waiting: no room, so no winners either
     out = packet.write_packet(store, s, "weekly-ads", tmp_path)
     data = json.loads((tmp_path / "work" / "ads.json").read_bytes())
-    assert out["manifest"]["sections"]["ads"]["count"] == 3  # the 3 proposals to launch
     assert data["to_learn"] == [] and data["winners"] == [] and data["proposals_left"] == 0
-    s.ads_max_running_tests = 0  # as if the most tests at once already ran
-    assert packet.write_packet(store, s, "weekly-ads", tmp_path)["skip"]  # no room to launch
+    assert out["skip"]  # 3 proposals wait for the owner: nothing for the agent to do
 
 
 def test_daily_produce_packet_has_no_ads_section(store, tmp_path):

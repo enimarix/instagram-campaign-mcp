@@ -72,7 +72,7 @@ describe('Ads page', () => {
     expect(within(card).getByText('€100.00 at most')).toBeTruthy()
     expect(within(card).getByText(/Test #4: €5.00 used/)).toBeTruthy()
     expect(screen.queryByText(/A cap at 0/)).toBeNull()
-    expect(within(card).getByText(/The AI runs your ads within these caps/)).toBeTruthy()
+    expect(within(card).getByText(/A test spends only once you approve it, within these caps/)).toBeTruthy()
     expect(within(card).getByRole('link', { name: 'Change them in Settings, Ads' }).getAttribute('href')).toBe('/settings')
     fireEvent.click(within(card).getByRole('button', { name: 'Stop all ads' }))
     await vi.waitFor(() => expect(posts(calls)).toEqual([{ key: 'POST /api/ads/kill', body: undefined }]))
@@ -195,6 +195,25 @@ describe('Ads page', () => {
     fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Run underpowered anyway' }))
     fireEvent.click(go)
     await vi.waitFor(() => expect(posts(calls).at(-1)?.body).toEqual({ budget: '50', underpowered_ok: true }))
+  })
+
+  it('shows the proposals waiting for the owner with Approve and Cancel (128)', async () => {
+    stubApi({ 'GET /api/ads/tests': { tests: [
+      TEST, { ...TEST, id: 6, proposed_by: 'owner' }, { ...TEST, id: 5, status: 'running', launched_by: 'owner' },
+    ] } })
+    render(<Ads />)
+    const list = await screen.findByRole('region', { name: 'Tests' })
+    expect((await within(list).findByRole('status')).textContent).toBe('2 proposals wait for you: Approve launches it, Cancel drops it.')
+    expect(within(list).getByText('Proposed by the AI, waiting for you')).toBeTruthy()
+    expect(within(list).getByText('Proposed by you, waiting for you')).toBeTruthy()
+    const rows = within(list).getAllByRole('listitem')
+    for (const row of rows.slice(0, 2)) {
+      expect(within(row).getByRole('button', { name: 'Approve' })).toBeTruthy()
+      expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy()
+    }
+    expect(within(rows[2]).queryByRole('button', { name: 'Approve' })).toBeNull()
+    expect(within(rows[2]).queryByText(/waiting for you/)).toBeNull()
+    expect(screen.getByText(/The AI proposes them; nothing spends until you approve it/)).toBeTruthy()
   })
 
   it('cancels a test only after the confirm step', async () => {

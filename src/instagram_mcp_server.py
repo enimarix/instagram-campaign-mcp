@@ -1007,7 +1007,7 @@ async def list_learnings(kind: Optional[str] = None, status: Optional[str] = "ac
 
 
 # ----------------------------------------------------------------------
-# Ads for the agent (096, AI-run since 126): propose, launch and stop within the caps
+# Ads for the agent (096; 128): propose, stop and read; every launch is the owner's
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=LOCAL_READ)
 async def list_ad_winners() -> Dict[str, Any]:
@@ -1021,27 +1021,18 @@ async def list_ad_winners() -> Dict[str, Any]:
 async def propose_ad_test(hypothesis: str, variable: str, variants: List[Dict[str, str]],
                           min_lift: float = 0.2, primary_metric: str = "ctr"
                           ) -> Dict[str, Any]:
-    """Propose a paid A/B test; it spends nothing until launch_ad_test. One variable
+    """Propose a paid A/B test; it spends nothing: it waits for the owner, who launches
+    it (Approve on the Ads page) or cancels it. One variable
     (creative | audience | placement), 2-4 variants {media_id, preset} (preset ids from
     `presets` in the ads work packet): creative = different winner posts with one preset;
     audience / placement = one post, presets that differ only in that. A specific,
     falsifiable hypothesis; min_lift = the relative lift worth detecting; primary_metric
     ctr. Returns the test with the budget it needs and
-    `underpowered` (the caps cannot fund it); refused beyond a few proposals not launched
-    yet."""
+    `underpowered` (the caps cannot fund it); refused beyond a few proposals still waiting
+    for the owner."""
     return await _studio_async(ads_agent.propose(
         store(), get_settings(), hypothesis=hypothesis, variable=variable,
         variants=variants, min_lift=min_lift, primary_metric=primary_metric))
-
-
-@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
-                                      open_world_hint=True))
-async def launch_ad_test(test_id: int) -> Dict[str, Any]:
-    """Launch one of your own proposed tests: it starts spending. The budget is what the test
-    needs, within the money caps the owner set in the website. Refused (nothing sent) when
-    the kill switch is on, a cap is reached, the most tests at once already run, the
-    caps cannot fund it (underpowered), or a post is no longer advertisable."""
-    return await _studio_async(ads_agent.launch(store(), get_settings(), test_id))
 
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True,
@@ -1175,13 +1166,12 @@ AGENT_TOOLS = frozenset({
     # (the key stays in it); licence, credit and ads_allowed are recorded in code.
     "search_stock",
     "add_stock_clip",
-    # Ads (096, AI-run since 126): propose, launch and stop tests, read results. Money
-    # moves only through the guard: launch -> tests.launch (caps, kill switch, max tests
-    # at once), stop -> tests.cancel (a pause). No agent tool unkills, changes a setting
-    # or reaches the writer (tests/test_ads_agent.py walks the calls).
+    # Ads (096; 128: the owner decides what is promoted): propose and stop tests, read
+    # results. No agent tool launches or activates (the owner's Approve in the website is
+    # the only launch), unkills, changes a setting or reaches the writer; stop ->
+    # tests.cancel (a pause). tests/test_ads_agent.py walks the calls.
     "list_ad_winners",
     "propose_ad_test",
-    "launch_ad_test",
     "stop_ad_test",
     "list_ad_tests",
     "get_ad_test_results",

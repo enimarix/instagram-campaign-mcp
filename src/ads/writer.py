@@ -10,7 +10,7 @@ Nothing is ever created ACTIVE: `_paused()` puts `status=PAUSED` last in every c
 set and ad body, and no method takes a status. (A creative has no delivery status: its
 enum is ACTIVE/IN_PROCESS/WITH_ISSUES/DELETED and is not a creation parameter.)
 `activate()` is the one write that sets ACTIVE; only `tests.launch` calls it, when a test
-is launched within the caps, by the owner or the agent (094, 126; source-checked in
+is launched within the caps by the owner's Approve (094, 128; source-checked in
 tests/test_ads_tests.py).
 `pause()` is `@pauses`, not `@spends`: it works while killed.
 
