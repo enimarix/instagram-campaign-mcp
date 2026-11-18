@@ -214,7 +214,7 @@ try { & $Igc doctor; if ($LASTEXITCODE -ne 0) { $script:Failed = $true } } final
 
 Write-Host ""
 if ($script:Failed) {
-    Write-Host "Almost done: fix the $Cross lines above, then re-run install.ps1." -ForegroundColor Yellow
+    Write-Host "Almost done: do what the -> lines above say, then re-run install.ps1." -ForegroundColor Yellow
 } else {
     Write-Host "Done." -ForegroundColor Green
 }

@@ -170,7 +170,7 @@ step "Checks (ig-campaign doctor, re-run it any time)"
 
 echo
 if [ "$FAILED" = 1 ]; then
-  printf '\033[33mAlmost done: fix the ✖ lines above, then re-run ./install.sh.\033[0m\n'
+  printf '\033[33mAlmost done: do what the -> lines above say, then re-run ./install.sh.\033[0m\n'
 else
   printf '\033[32mDone.\033[0m\n'
 fi
