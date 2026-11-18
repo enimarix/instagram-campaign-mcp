@@ -262,6 +262,14 @@ async def test_asset_queued_without_the_flag_is_labelled(store, cfg):
     assert fake.payload["ai_generated"] is True
 
 
+async def test_mcp_reel_queued_without_the_flag_is_labelled(store):
+    # 121: a schedule_post Reel from before the flag (no asset) is labelled too.
+    store.schedule("reel", {"video_url": "https://cdn/x.mp4"}, utcnow() - timedelta(seconds=5))
+    fake = FakeClient(None)
+    await camp.run_due(fake, store)
+    assert fake.payload == {"video_url": "https://cdn/x.mp4", "ai_generated": True}
+
+
 @respx.mock
 async def test_refused_ai_label_fails_the_publish_with_an_alert(store, cfg, settings):
     a, post = _due(store, cfg)  # motion: AI-made
@@ -369,10 +377,11 @@ def test_release_route_needs_session_with_password(store, cfg):
 # ------------------------------------------------------------- 019b: MCP bypass closed
 class ReelClient:
     def __init__(self):
-        self.paths = []
+        self.paths, self.labels = [], []
 
-    async def publish_reel(self, *args, video_path=None, **kw):
+    async def publish_reel(self, *args, video_path=None, ai_generated=False, **kw):
         self.paths.append(video_path)
+        self.labels.append(ai_generated)
         return {"media_id": "M1", "permalink": None}
 
 
@@ -404,3 +413,17 @@ async def test_mcp_tools_allow_other_media_files(store, cfg, mcp_env):
     post = await srv.schedule_post("reel", (utcnow() + LATER).isoformat(), "hi",
                                    video_path="own.mp4")
     assert post["payload"]["video_path"] == "own.mp4"
+
+
+async def test_mcp_tools_label_reels_by_default(store, cfg, mcp_env):
+    # 121: the owner's tools send Instagram's AI label unless told the video is not AI-made.
+    (Path(cfg.media_root) / "own.mp4").write_bytes(b"mp4")
+    await srv.publish_reel(video_path="own.mp4")
+    await srv.publish_reel(video_path="own.mp4", ai_generated=False)
+    assert mcp_env.labels == [True, False]
+    at = (utcnow() + LATER).isoformat()
+    for flag in (True, False):
+        post = await srv.schedule_post("reel", at, "hi", video_path="own.mp4", ai_generated=flag)
+        assert post["payload"]["ai_generated"] is flag
+    assert (await srv.schedule_post("reel", at, video_url="https://cdn/x.mp4"))[
+        "payload"]["ai_generated"] is True

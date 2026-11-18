@@ -16,7 +16,9 @@ anything unsure; no only for an ffmpeg edit without a voice-over of an idea with
 script. The flag is stored in the queued post's payload. When Meta refuses the parameter
 (an error naming it at container creation), the post fails for good with the reason and
 the publish-failed alert, and the asset goes back to `approved`. No setting for "publish
-without the label" yet: add one only if the owner asks.
+without the label" yet: add one only if the owner asks. The owner's MCP tools
+`publish_reel` and `schedule_post` (reel) take `ai_generated`, default true (121); any
+queued Reel whose payload predates the flag is labelled.
 Reason: posting AI content unlabelled is the worse outcome; the label can't be added
 later through the API (IG Media updates take only `comment_enabled`).
 
