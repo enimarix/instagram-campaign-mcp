@@ -337,8 +337,8 @@ async def schedule_post(
 ) -> Dict[str, Any]:
     """Queue a post for later. A reel takes video_url or video_path (relative to the
     media root; a studio asset's video is refused) and ai_generated (default true:
-    Instagram's AI info label; false only for a video made without AI). publish_at is ISO 8601; without an
-    offset it is read in the configured time zone (default Europe/Paris), e.g. "2026-11-20T18:30".
+    Instagram's AI info label; false only for a video made without AI). publish_at is
+    ISO 8601; without an offset it is read in the configured time zone (default Europe/Paris), e.g. "2026-11-20T18:30".
     Needs the scheduler running (python -m src.scheduler daemon) or run_due_posts."""
     _not_an_asset(video_path)
     payload: Dict[str, Any]
