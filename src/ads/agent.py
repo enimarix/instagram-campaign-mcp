@@ -17,6 +17,7 @@ from . import sync, tests
 from .writer import missing_settings
 
 OPEN = ("proposed", "approved", "running")
+MAX_HYPOTHESIS = 500
 
 
 def not_configured(settings: InstagramMCPSettings) -> Optional[Dict[str, str]]:
@@ -47,6 +48,8 @@ async def propose(store: CampaignStore, settings: InstagramMCPSettings, *, hypot
     refused = not_configured(settings)
     if refused:
         return refused
+    if len(hypothesis or "") > MAX_HYPOTHESIS:  # the website's limit (api/ads.py)
+        raise ValueError(f"invalid: a hypothesis has at most {MAX_HYPOTHESIS} characters")
     try:
         return await tests.propose(store, settings, hypothesis=hypothesis, variable=variable,
                                    variants=variants, min_lift=min_lift,

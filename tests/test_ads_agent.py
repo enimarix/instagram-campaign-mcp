@@ -76,6 +76,8 @@ async def test_tools_propose_as_agent_and_read(store, tools, graph, monkeypatch)
         await srv.get_ad_test_results(999)
     with pytest.raises(srv.ToolError, match="^invalid: variants must differ in audience"):
         await srv.propose_ad_test("x", "audience", CREATIVE)
+    with pytest.raises(srv.ToolError, match="at most 500"):
+        await srv.propose_ad_test("x" * 501, "creative", CREATIVE)
     assert not [c for c in graph.calls if c.request.method != "GET"]  # reads only
 
 
