@@ -107,6 +107,10 @@ const post = <T>(path: string, body?: unknown) =>
     }),
   })
 
+export type Session = { authenticated: boolean; password_required: boolean }
+export const getSession = () => request<Session>('/api/session')
+export const login = (password: string) => post<{ authenticated: true }>('/api/login', { password })
+
 export const listAssets = (query: Record<string, string>) =>
   request<Asset[]>(`/api/assets?${new URLSearchParams(query)}`)
 export const setVerdict = (id: number, verdict: Verdict) =>

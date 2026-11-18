@@ -3,11 +3,12 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
+import Login from './Login.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <Login><App /></Login>
     </BrowserRouter>
   </StrictMode>,
 )
