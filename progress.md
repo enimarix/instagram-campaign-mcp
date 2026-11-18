@@ -262,6 +262,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 118 — Follow-up sweep — https://github.com/enimarix/instagram-campaign-mcp/pull/107 (2026-11-18) — one-call Decline, commentary and "DM pick from @sender" chips in the feed, quiet setup-mode account route, shorter Settings on phones, Ads explanation, bigger links, revision list hides re-renders in progress, update_learning takes a predicate
 - [x] 084 — Learnings page — https://github.com/enimarix/instagram-campaign-mcp/pull/106 (2026-11-18) — what the studio learned with its evidence and conflicts; the owner adds, edits, confirms or retires rules, and owner rules always win over the agent and the nightly check
 - [x] 073 + 113b — Both tracks in the playbook, DM picks first — https://github.com/enimarix/instagram-campaign-mcp/pull/105 (2026-11-18) — nightly and afternoon playbooks make reaction remixes from DM picks first, then viral finds, then Track B; picks may exceed the batch cap (3/day); a pick becomes posted when its remix is published
 - [x] 072 — Reaction compose and approval — https://github.com/enimarix/instagram-campaign-mcp/pull/104 (2026-11-18) — remixes go straight to review; the video page shows the reaction piece and creator, "Use the next reaction piece", and editable clip speech that re-renders the captions; nothing waits for a recording any more
@@ -378,19 +379,19 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - H9 — content language(s), target countries, what the account is for
 
 ## Follow-ups (parked from reviews)
-- [ ] (from 115) The bench no longer fills from the feed (no Like action): decide in 116 whether the feed needs a "save for later" action or the bench a new definition.
-- [ ] (from 115) Decline is three calls (verdict, archive, reason); a flush on tab close may land only the first. One thin `decline` route would make it atomic.
+- [x] (from 115) The bench no longer fills from the feed (no Like action): decide in 116 whether the feed needs a "save for later" action or the bench a new definition.
+- [x] (from 115) Decline is three calls (verdict, archive, reason); a flush on tab close may land only the first. One thin `decline` route would make it atomic.
 - [ ] (from 083) `update_learning` cannot attach audience evidence to an existing learning (081 evidence engine).
-- [ ] (from 081) Expose `scope` (predicate) and `evaluate` on the `update_learning` MCP tool (the service has them).
-- [ ] (from 116) `/api/account` returns 503 in setup mode: a console error on every Settings visit (return an empty state instead).
-- [ ] (from 116) Settings is ~4000 px on a phone because of the Clips list: collapse it or move Clips to its own page.
-- [ ] (from 116) Learnings and Ads placeholders say only "Coming soon": say what will be there and when.
-- [ ] (from 116) AssetPage source links are under 44 px.
-- [ ] (from 072) `list_assets` rows lack the source `rights_basis`, so the feed's "commentary" chip never shows: join it in.
+- [x] (from 081) Expose `scope` (predicate) and `evaluate` on the `update_learning` MCP tool (the service has them).
+- [x] (from 116) `/api/account` returns 503 in setup mode: a console error on every Settings visit (return an empty state instead).
+- [x] (from 116) Settings is ~4000 px on a phone because of the Clips list: collapse it or move Clips to its own page.
+- [x] (from 116) Learnings and Ads placeholders say only "Coming soon": say what will be there and when.
+- [x] (from 116) AssetPage source links are under 44 px.
+- [x] (from 072) `list_assets` rows lack the source `rights_basis`, so the feed's "commentary" chip never shows: join it in.
 - [ ] (from 073) A tool for the agent to look at a downloaded clip's frames and store its timeline (110 format) on the source before rendering (113b analysis step).
-- [ ] (from 073) A "DM pick" badge in the feed (join dm_picks via the idea's source in list_assets).
+- [x] (from 073) A "DM pick" badge in the feed (join dm_picks via the idea's source in list_assets).
 - [ ] (from 073) A DM share that arrives as a CDN link (not a permalink) is refused by download_reel: verify the live payload at H5 and map it.
-- [ ] (from 112) `list_revision_requests` (MCP) should also hide requests whose new version is still rendering, like the work packet does.
+- [x] (from 112) `list_revision_requests` (MCP) should also hide requests whose new version is still rendering, like the work packet does.
 - Clip intake (063 review): add a `sources.licence` column (cc licence is kept in stats.licence today, so publishing refuses cc clips: fails safe) and a store setter for local_path; optional streamed upload route for clips.
 - Inspirations (051b review): playbook Safety rule 1 should say the owner's inspiration notes are taste guidance while the Reels themselves are outside data; accept a mixed-case host (Instagram.com) in pasted links; check Trends + Inspirations at 375 px.
 - Recipe ops (066 review): a 3 s clip with AAC audio comes out 3.1 s through any ffmpeg op (pre-existing, audio priming/padding): trim to the video duration; the brand pixel font has no emoji, so add a fallback font for credits/captions (067).
