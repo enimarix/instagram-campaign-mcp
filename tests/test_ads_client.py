@@ -1,9 +1,11 @@
+import inspect
 import json
 
 import httpx
 import pytest
 import respx
 
+from src.ads import client as ads_module
 from src.ads.client import AdsClient, usage_wait_s
 from src.config import InstagramMCPSettings
 from src.instagram_client import InstagramAPIError, NotConfigured, RateLimitExceeded
@@ -146,9 +148,5 @@ def test_ad_account_id_setting_rejects_non_digits(raw):
 
 def test_client_has_no_write_method():
     """Read only: no code path in the ads client names another HTTP verb."""
-    import inspect
-
-    from src.ads import client
-
-    src = inspect.getsource(client)
+    src = inspect.getsource(ads_module)
     assert all(verb not in src for verb in ('"POST"', '"DELETE"', ".post(", ".delete("))
