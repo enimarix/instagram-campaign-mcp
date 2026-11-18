@@ -61,6 +61,16 @@ describe('ScheduleSheet', () => {
       body: { publish_at: SLOT.publish_at, confirmed: false } }])
   })
 
+  it('an eligible (explore) video can be scheduled as a trial Reel', async () => {
+    const calls = stubApi({ 'GET /api/assets/3/proposed-slot': [200, { ...SLOT, needs_confirmation: false, ai_label: false, trial_eligible: true }] })
+    const onScheduled = sheet()
+    const box = await screen.findByRole('checkbox', { name: 'Trial Reel (non-followers first)' })
+    fireEvent.click(box)
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(onScheduled).toHaveBeenCalled())
+    expect(scheduled(calls)[0].body).toEqual({ publish_at: SLOT.publish_at, confirmed: false, trial: 'SS_PERFORMANCE' })
+  })
+
   it('picks another time and sends it as ISO with an offset', async () => {
     const calls = stubApi()
     const onScheduled = sheet()

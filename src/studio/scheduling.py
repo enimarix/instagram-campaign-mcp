@@ -45,14 +45,16 @@ def propose_slot(
     and the audience profile. `needs_confirmation`: a `commentary` source needs the
     owner's per-video confirmation at queue time (§5.1). `why`: one line on the window's
     results (None without results). `ai_label`: published with Instagram's AI label (§5.6).
-    KeyError for an unknown asset."""
+    `trial_eligible`: it may go out as a trial Reel (trial_problem). KeyError for an
+    unknown asset."""
     asset = store.get_asset(asset_id)
     idea = store.get_idea(asset["idea_id"])
     rights = _source(store, idea).get("rights_basis")
     inputs = slot_inputs(store, settings, now)
     at = _next_free_slot(store, settings, _taken(store, now), now, inputs)
     return {**_slot(settings, at), "needs_confirmation": rights == "commentary",
-            "why": explain_slot(settings, at, inputs[1]), "ai_label": ai_generated(asset, idea)}
+            "why": explain_slot(settings, at, inputs[1]), "ai_label": ai_generated(asset, idea),
+            "trial_eligible": trial_problem(store, asset_id) is None}
 
 
 TRIAL_GRADUATIONS = ("MANUAL", "SS_PERFORMANCE")

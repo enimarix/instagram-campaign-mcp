@@ -152,3 +152,10 @@ def test_trial_routes(store, cfg):
         r = tc.post(f"/api/assets/{b['id']}/schedule",
                     json={"publish_at": to_iso(_day()), "trial": "SOMETIMES"}, headers=H)
         assert r.status_code == 422
+
+
+def test_proposed_slot_says_whether_a_trial_is_possible(store, cfg):
+    explore = _idea_is(store, _asset(store, cfg), strategy="explore")
+    normal = _idea_is(store, _asset(store, cfg), strategy="exploit")
+    assert scheduling.propose_slot(store, cfg, explore["id"], _day())["trial_eligible"] is True
+    assert scheduling.propose_slot(store, cfg, normal["id"], _day())["trial_eligible"] is False

@@ -22,7 +22,8 @@ from .rights import can_publish, caption_credit_problem
 
 
 class QueueRefused(ValueError):
-    """The asset may not be queued. `code`: not_approved, rights, no_file, qc, caption."""
+    """The asset may not be queued. `code`: not_approved, rights, no_file, qc, caption,
+    trial (scheduling.trial_problem)."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -58,10 +59,12 @@ def queue_asset(
     publish_at: datetime,
     *,
     confirmed: bool = False,
+    trial: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Queue an approved asset as a Reel at `publish_at`; return the scheduled_posts row.
 
     `confirmed` is the owner's per-video confirmation a `commentary` source needs.
+    `trial`: a trial Reel's graduation strategy, checked by the caller (scheduling).
     Raises QueueRefused (with a code) when a rule says no, KeyError for an unknown asset.
     """
     if publish_at <= utcnow():
@@ -95,7 +98,7 @@ def queue_asset(
     payload = {"video_path": asset["file_path"], "caption": asset["caption"] or "",
                "audio_name": asset["audio_name"],
                "thumb_offset_ms": (asset["recipe"] or {}).get("thumb_offset_ms"),
-               "ai_generated": ai_generated(asset, idea)}
+               "ai_generated": ai_generated(asset, idea), "trial_graduation": trial}
     post = store.schedule("reel", {k: v for k, v in payload.items() if v is not None},
                           publish_at, asset_id=asset_id)
     # The row goes in first: if we crash before the move, the worker finds the asset
