@@ -11,6 +11,12 @@ export const FINDING: Record<RetentionFinding['kind'], [Tone, string]> = {
   hook: ['warn', 'Hook'], exit: ['neutral', 'Exit'], payoff: ['warn', 'Payoff'], strong: ['success', 'Strong'],
 }
 
+// The tag dimensions of src/learning/breakdowns.py, in plain words (080, 084).
+export const TAGS = [
+  ['track', 'Track'], ['pillar', 'Pillar'], ['hook_type', 'Hook type'], ['template', 'Template'],
+  ['strategy', 'Explore / exploit'], ['hour', 'Hour posted'], ['duration', 'Length'],
+]
+
 export const num = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString('en'))
 export const pct = (r: number | null | undefined) => (r == null ? '–' : `${Math.round(r * 100)} %`)
 

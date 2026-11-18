@@ -32,6 +32,7 @@ from . import (
     context,
     dm_picks,
     feedback,
+    learnings,
     media,
     reactions,
     render,
@@ -173,6 +174,7 @@ def create_app(
     app.include_router(render.router)
     app.include_router(analytics_router)
     app.include_router(reports.router)
+    app.include_router(learnings.router)
     app.include_router(sources.router)
     app.include_router(reactions.router)
     app.include_router(dm_picks.router)

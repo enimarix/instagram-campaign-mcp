@@ -8,8 +8,10 @@ The rules that protect the owner's voice live here, not in the prompt:
 - an explicit owner instruction (one comment with text) is stored at confidence `owner`;
 - the agent never sets `owner` or `high` (high is for audience-backed rules, later), and
   never changes or retires a learning at confidence `owner`.
-Every function takes `actor` ("agent" by default): the future owner UI calls the same
-functions with actor="owner", which lifts the agent's limits.
+Every function takes `actor` ("agent" by default): the owner's Learnings page (084) calls
+the same functions with actor="owner", which lifts the agent's limits. Owner edits win: a
+learning the owner edits or confirms is set to confidence `owner`, which the agent and the
+evidence engine never change.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from typing import Any, Dict, List, Literal, Optional, Sequence
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, utcnow
+from ..studio.media import media_url
 from ..studio.production import MAX_LIST, compact_asset
 from ..taxonomy import load_taxonomy
 from .evidence import evaluate_learning, predicate
@@ -199,6 +202,8 @@ def update_learning(store: CampaignStore, learning_id: int, *,
         _check_caps(fields.get("kind", current["kind"]),
                     fields.get("confidence", current["confidence"]),
                     fields.get("evidence", current["evidence"]))
+    if actor == "owner" and fields.keys() & {"statement", "kind", "scope"}:
+        fields["confidence"] = "owner"  # owner edits win over the agent and the numbers
     recheck = ((evaluate or fields.keys() & {"statement", "kind", "scope"})
                and predicate(fields.get("scope", current["scope"])))  # ValueError before writing
     row = store.update_learning(learning_id, **fields)
@@ -209,6 +214,36 @@ def update_learning(store: CampaignStore, learning_id: int, *,
 
 def list_learnings(store: CampaignStore, *, kind: Optional[str] = None,
                    status: Optional[str] = "active", origin: Optional[str] = None,
-                   limit: int = 50) -> List[Dict[str, Any]]:
+                   confidence: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
     """Learnings, strongest first (owner > high > medium > low, then newest)."""
-    return store.list_learnings(kind=kind, status=status, origin=origin, limit=_limit(limit))
+    if confidence is None:
+        return store.list_learnings(kind=kind, status=status, origin=origin,
+                                    limit=_limit(limit))
+    _one_of("confidence", confidence, CONFIDENCES)
+    # ponytail: filtered after one full read (the store has no confidence filter)
+    rows = store.list_learnings(kind=kind, status=status, origin=origin, limit=1_000_000)
+    return [r for r in rows if r["confidence"] == confidence][:_limit(limit)]
+
+
+def _linked(store: CampaignStore, item: Dict[str, Any]) -> Dict[str, Any]:
+    """A feedback evidence item plus the comment's text and its asset (a deleted comment
+    stays a bare id)."""
+    if "feedback_id" not in item:
+        return item
+    try:
+        fb = store.get_feedback(item["feedback_id"])
+    except KeyError:
+        return item
+    asset = store.get_asset(fb["asset_id"])
+    return {**item, "text": fb["text"], "asset_id": asset["id"],
+            "thumbnail_url": media_url(asset.get("thumbnail_path"))}
+
+
+def learnings_page(store: CampaignStore, *, kind: Optional[str] = None,
+                   status: Optional[str] = None, origin: Optional[str] = None,
+                   confidence: Optional[str] = None) -> List[Dict[str, Any]]:
+    """The owner's Learnings page (084): every learning matching the filters (any status by
+    default), its feedback evidence linked to the comment and the video."""
+    rows = list_learnings(store, kind=kind, status=status, origin=origin,
+                          confidence=confidence, limit=MAX_LIST)
+    return [{**r, "evidence": [_linked(store, e) for e in r["evidence"]]} for r in rows]

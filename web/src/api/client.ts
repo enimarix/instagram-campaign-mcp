@@ -614,3 +614,43 @@ export type ReportDay = {
 export const getReport = (date?: string) =>
   request<DailyReport>(`/api/reports/${date ? encodeURIComponent(date) : 'latest'}`)
 export const listReports = (limit = 60) => request<ReportDay[]>(`/api/reports?limit=${limit}`)
+
+// --- Learnings (steps 081, 084; src/api/learnings.py) ---
+export type LearningKind = 'do' | 'dont' | 'hypothesis'
+export type Predicate = { tag: string; value: string }
+/** One evidence item: a comment (with its video), the numbers (081), a conflict, or the agent's own. */
+export type Evidence = {
+  feedback_id?: number
+  text?: string | null
+  asset_id?: number
+  thumbnail_url?: string | null
+  kind?: 'audience_index' | 'conflict' | string
+  n?: number
+  index?: number | null
+  verdict?: 'supports' | 'contradicts' | 'inconclusive' | 'needs_n' | 'untested'
+  note?: string
+  with?: number | null
+  detail?: string
+}
+export type Learning = {
+  id: number
+  statement: string
+  kind: LearningKind
+  origin: 'taste' | 'audience' | 'ads'
+  confidence: 'low' | 'medium' | 'high' | 'owner'
+  status: 'active' | 'retired' | 'contradicted'
+  scope: Partial<Predicate>
+  evidence: Evidence[]
+  created_at: string
+  updated_at: string
+}
+export type LearningFilters = Partial<Record<'kind' | 'status' | 'origin' | 'confidence', string>>
+export type RuleInput = { statement: string; kind: LearningKind; predicate: Predicate | null }
+export const listLearnings = (filters: LearningFilters) =>
+  request<Learning[]>(`/api/learnings?${new URLSearchParams(filters as Record<string, string>)}`)
+export const addRule = (rule: RuleInput) => post<Learning>('/api/learnings', rule)
+export const editLearning = (id: number, rule: RuleInput) => send<Learning>('PATCH', `/api/learnings/${id}`, rule)
+export const setLearning = (id: number, action: 'confirm' | 'retire' | 'reactivate') =>
+  post<Learning>(`/api/learnings/${id}/${action}`)
+export const refreshLearnings = () =>
+  post<{ evaluated: number; contradicted: number[]; conflicts: number[] }>('/api/learnings/refresh')

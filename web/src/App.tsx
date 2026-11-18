@@ -5,6 +5,7 @@ import InboxPage from './inbox/InboxPage'
 import Agent from './pages/Agent'
 import Analytics from './pages/Analytics'
 import Breakdowns from './pages/Breakdowns'
+import Learnings from './pages/Learnings'
 import Placeholder from './pages/Placeholder'
 import Posts, { PostPage } from './pages/Posts'
 import ReportPage from './pages/Report'
@@ -77,7 +78,7 @@ export default function App() {
               <Route path="/reports" element={<ReportPage />} />
               <Route path="/reports/:date" element={<ReportPage />} />
               <Route path="/trends" element={<Trends />} />
-              <Route path="/learnings" element={<Placeholder title="Learnings" />} />
+              <Route path="/learnings" element={<Learnings />} />
               <Route path="/ads" element={<Placeholder title="Ads" />} />
               <Route path="/agent" element={<Agent />} />
               <Route path="/settings" element={<Settings />} />
