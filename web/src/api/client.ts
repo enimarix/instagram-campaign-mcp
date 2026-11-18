@@ -794,6 +794,9 @@ export type AdTest = {
   end_date: string | null
   status: AdTestStatus
   reason: string | null
+  proposed_by: 'owner' | 'agent'
+  /** GET /api/ads/tests only (126): who launched it, the owner's Approve or the AI; null before. */
+  launched_by?: 'owner' | 'agent' | null
   /** Proposed tests only: why the caps cannot fund the test, or null. */
   underpowered: string | null
   created_at: string
@@ -857,7 +860,8 @@ export const listAdTests = () => request<{ tests: AdTest[] }>('/api/ads/tests').
 export const listAdWinners = () => request<{ winners: AdWinner[] }>('/api/ads/winners').then((r) => r.winners)
 export const listAdPresets = () => request<{ presets: AdPreset[] }>('/api/ads/presets').then((r) => r.presets)
 export const proposeAdTest = (p: AdProposal) => post<AdTest>('/api/ads/tests', p)
-export const approveAdTest = (id: number, body: { budget: string; password: string; underpowered_ok: boolean }) =>
+/** The owner's Approve: launches the test within the caps, no password (126). */
+export const approveAdTest = (id: number, body: { budget: string; underpowered_ok: boolean }) =>
   post<AdTest>(`/api/ads/tests/${id}/approve`, body)
 export const getAdTest = (id: number) => request<AdTestResults>(`/api/ads/tests/${id}`)
 export const cancelAdTest = (id: number) => post<AdTest>(`/api/ads/tests/${id}/cancel`)

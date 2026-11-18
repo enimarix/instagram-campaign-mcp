@@ -14,6 +14,7 @@ const TEST: AdTest = {
   variants: [{ media_id: '1', preset: 'fr_reels' }, { media_id: '2', preset: 'fr_reels' }],
   min_lift: 0.2, spec: { min_days: 7, max_days: 30, min_sample: 5000, primary_metric: 'ctr' }, needed: { total: 84, per_variant: 42, sample_per_variant: 4000 },
   budget_total: null, currency: 'EUR', end_date: null, status: 'proposed', reason: null, underpowered: null,
+  proposed_by: 'agent', launched_by: null,
   created_at: '2026-11-18T08:00:00+00:00', result: null,
 }
 const WINNERS = [
@@ -69,7 +70,9 @@ describe('Ads page', () => {
     expect(within(card).getByText('€5.00 used of €20.00')).toBeTruthy()
     expect(within(card).getByText('€100.00 at most')).toBeTruthy()
     expect(within(card).getByText(/Test #4: €5.00 used/)).toBeTruthy()
-    expect(screen.queryByText(/ADS_DAILY_CAP/)).toBeNull()
+    expect(screen.queryByText(/A cap at 0/)).toBeNull()
+    expect(within(card).getByText(/The AI runs your ads within these caps/)).toBeTruthy()
+    expect(within(card).getByRole('link', { name: 'Change them in Settings, Ads' }).getAttribute('href')).toBe('/settings')
     fireEvent.click(within(card).getByRole('button', { name: 'Stop all ads' }))
     await vi.waitFor(() => expect(posts(calls)).toEqual([{ key: 'POST /api/ads/kill', body: undefined }]))
   })
@@ -77,7 +80,20 @@ describe('Ads page', () => {
   it('says how to allow spend when a cap is 0', async () => {
     stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('0') } })
     render(<Ads />)
-    expect(await screen.findByText('Set ADS_DAILY_CAP / ADS_TEST_CAP / ADS_LIFETIME_CAP in .env to allow spend.')).toBeTruthy()
+    expect(await screen.findByText('A cap at 0 allows no spend: raise it in Settings, Ads.')).toBeTruthy()
+  })
+
+  it('shows who launched each test', async () => {
+    stubApi({ 'GET /api/ads/tests': { tests: [
+      { ...TEST, id: 5, status: 'running', launched_by: 'agent' },
+      { ...TEST, id: 6, status: 'running', launched_by: 'owner', proposed_by: 'owner' },
+      TEST,
+    ] } })
+    render(<Ads />)
+    const list = await screen.findByRole('region', { name: 'Tests' })
+    expect((await within(list).findAllByText('Launched by the AI')).length).toBe(1)
+    expect(within(list).getAllByText('Launched by you').length).toBe(1)
+    expect(within(list).queryAllByText(/Launched by/).length).toBe(2) // the proposed one: none yet
   })
 
   it('asks the password to allow ads again and maps the password errors', async () => {
@@ -157,7 +173,7 @@ describe('Ads page', () => {
     expect(screen.getByRole('region', { name: 'Budget' })).toBeTruthy()
   })
 
-  it('approves with budget and password, the underpowered box only when needed, and shows refusals', async () => {
+  it('approves with a budget and no password, the underpowered box only when needed, and shows refusals', async () => {
     const calls = stubApi({ 'POST /api/ads/tests/4/approve': [409, { error: 'daily_cap', message: 'over the daily cap' }] })
     render(<Ads />)
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
@@ -165,11 +181,11 @@ describe('Ads page', () => {
     const budget = within(sheet).getByLabelText('Budget (EUR)') as HTMLInputElement
     expect(budget.value).toBe('84.00')
     expect(within(sheet).queryByRole('checkbox')).toBeNull()
-    fireEvent.change(within(sheet).getByLabelText('Password'), { target: { value: 'pw' } })
+    expect(within(sheet).queryByLabelText('Password')).toBeNull()
     fireEvent.click(within(sheet).getByRole('button', { name: 'Approve and spend' }))
     expect((await within(sheet).findByRole('alert')).textContent).toBe('over the daily cap')
     expect(posts(calls)).toEqual([{ key: 'POST /api/ads/tests/4/approve',
-      body: { budget: '84.00', password: 'pw', underpowered_ok: false } }])
+      body: { budget: '84.00', underpowered_ok: false } }])
 
     fireEvent.change(budget, { target: { value: '50' } })
     expect(within(sheet).getByText(/Too small to trust: the budget is below the €84.00/)).toBeTruthy()
@@ -177,7 +193,7 @@ describe('Ads page', () => {
     expect(go.disabled).toBe(true)
     fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Run underpowered anyway' }))
     fireEvent.click(go)
-    await vi.waitFor(() => expect(posts(calls).at(-1)?.body).toEqual({ budget: '50', password: 'pw', underpowered_ok: true }))
+    await vi.waitFor(() => expect(posts(calls).at(-1)?.body).toEqual({ budget: '50', underpowered_ok: true }))
   })
 
   it('cancels a test only after the confirm step', async () => {

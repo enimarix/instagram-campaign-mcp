@@ -8,6 +8,23 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: The AI runs the ads within the owner's caps (126)
+Owner's words: "Let's leave the ad management to the AI. The app will all just validate
+creations that gets to be published, and all the parameters … editable in the website."
+The agent launches (`launch_ad_test`), stops (`stop_ad_test`) and judges paid A/B tests
+on its own; there is no per-test approval. Any published post the owner approved whose
+rights allow ads may be advertised. The agent's budget is the test's need, capped by
+what the caps allow; it never launches an underpowered test and launches only its own
+proposals. Refused before any request: kill switch on, a cap reached, `ads_max_running_tests`
+already running, a post not published or no longer advertisable. Every action is audited
+with `actor = "agent"`. The owner keeps Stop all ads and an Approve button for proposed
+tests, now without the password; the password stays for raising a cap and for turning ads
+back on. Replaces GOAL.md §3.6 "nothing spends money without the owner's approval in the
+UI" and §5.4 "approving a budget asks for the website password again".
+Reason: the owner's answer of 2026-11-18; the caps, the kill switch and Meta's account
+spending limit (H6) bound the money, and a source test proves the agent's tools reach
+money only through `tests.launch` and `tests.cancel`.
+
 ## 2026-11-18: Settings editable on the website, over .env (124)
 Owner's answer: the ad settings (caps, currency, objective, test length, tests at once,
 EU DSA fields, ad account and Page ids) are edited on the website, Settings > Ads. They

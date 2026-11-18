@@ -1,20 +1,23 @@
-"""Paid A/B tests (step 094): propose, approve (the one place ads go ACTIVE), cancel.
+"""Paid A/B tests (step 094, AI-run since 126): propose, launch (the one place ads go
+ACTIVE), cancel.
 
 - `propose`: 2-4 variants {media_id, preset} that differ in ONE variable: `creative` =
   different posts with one preset; `audience` / `placement` = one post with presets that
-  differ only in audience keys / only in placement keys. Every post is a studio asset that
-  may be advertised (rights, `can_advertise`) and that Meta does not call unboostable
-  (`boost_eligibility_info`, e.g. copyrighted music). The budget it needs is
+  differ only in audience keys / only in placement keys. Every post is a published studio
+  asset that may be advertised (rights, `can_advertise`) and that Meta does not call
+  unboostable (`boost_eligibility_info`, e.g. copyrighted music). The budget it needs is
   `abtest.budget_needed` at the account's usual rates: spend × 1000 / impressions (CPM)
   and clicks / impressions (the CTR baseline) of its last 90 days of insights, else
   `ADS_DEFAULT_CPM` and DEFAULT_CTR. `underpowered` says whether the caps can fund it.
-- `approve`: the route has checked the website password. Refuses (before any request)
-  unless the test is proposed, the budget covers the need (or `underpowered_ok`, stored
-  and audited) and the caps allow the whole budget. Splits it equally per variant,
-  creates each paused (`promote.create_paused_promotion`), then activates ad → ad set →
-  campaign of every variant. On any failure: what was activated is paused again, the
-  reservations of variants never activated are released, and the test is cancelled with
-  the reason.
+- `launch`: by the owner (Approve in the website, no password since 126) or the agent
+  (`budget=None`: the need, capped by what the caps allow; never underpowered). Refuses
+  (before any request) unless the test is proposed, every post is still advertisable,
+  the budget covers the need (or the owner's `underpowered_ok`, stored and audited),
+  fewer than `ads_max_running_tests` run and the caps (read fresh) allow the whole
+  budget. Splits it equally per variant, creates each paused
+  (`promote.create_paused_promotion`), then activates ad → ad set → campaign of every
+  variant. On any failure: what was activated is paused again, the reservations of
+  variants never activated are released, and the test is cancelled with the reason.
   ponytail: one campaign per variant with equal budgets, not a Meta ad_studies SPLIT_TEST
   (it needs a Business ID, not set before H6): audiences may overlap between variants.
 - `cancel`: pauses the test's campaigns, ad sets and ads (a pause write: no spend).
@@ -35,6 +38,7 @@ import structlog
 from ..config import InstagramMCPSettings
 from ..instagram_client import InstagramAPIError, NotConfigured
 from ..learning.analytics import scored_posts
+from ..settings_overrides import refresh
 from ..store import CampaignStore, to_iso, utcnow
 from ..studio.media import media_url
 from . import abtest
@@ -60,12 +64,13 @@ PLACEMENT_KEYS = {"publisher_platforms", "instagram_positions"}
 DEFAULT_CTR = 0.01  # ponytail: a low guess (larger sample) until the account has insights
 MIN_IMPRESSIONS = 1000  # fewer: the account's own rates are noise, use the defaults
 PAUSE_ORDER = {"campaign": 0, "adset": 1, "ad": 2}  # the campaign first stops everything
-MAX_AGENT_PROPOSALS = 3  # agent proposals waiting for the owner at once (096)
+MAX_AGENT_PROPOSALS = 3  # agent proposals not launched yet, at once (096)
+OPEN_RUNNING = ("approved", "running")  # count against ads_max_running_tests
 
 
 class AdTestRefused(Exception):
-    """Nothing was sent. code: invalid | rights | not_ours | not_boostable | status |
-    underpowered | not_configured | cap."""
+    """Nothing was sent. code: invalid | rights | not_ours | not_published | not_boostable |
+    status | underpowered | not_configured | cap | max_running."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -225,8 +230,13 @@ def _shown(store: CampaignStore, settings: InstagramMCPSettings,
 
 def list_tests(store: CampaignStore, settings: InstagramMCPSettings, *,
                status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
-    return [_shown(store, settings, t) for t in store._select(
-        "SELECT * FROM ad_tests", {"status": status}, "id DESC", limit)]
+    """Newest first; `launched_by` owner | agent (the audit's launch row), else None."""
+    with store._tx() as c:
+        by = dict(c.execute("SELECT test_id, actor FROM ads_audit WHERE action='approve'"
+                            " AND test_id IS NOT NULL").fetchall())
+    return [{**_shown(store, settings, t), "launched_by": by.get(t["id"])}
+            for t in store._select("SELECT * FROM ad_tests", {"status": status}, "id DESC",
+                                   limit)]
 
 
 def eligible_winners(store: CampaignStore, settings: InstagramMCPSettings) -> List[Dict]:
@@ -275,11 +285,21 @@ async def _pause_active(store: CampaignStore, settings: InstagramMCPSettings,
     return failed
 
 
+def _running(c) -> int:
+    return c.execute(f"SELECT COUNT(*) FROM ad_tests WHERE status IN {OPEN_RUNNING}"
+                     ).fetchone()[0]
+
+
 def _set_status(store: CampaignStore, test_id: int, new: str, *, expect: tuple,
-                **fields: Any) -> Dict[str, Any]:
-    """Compare-and-set the status; AdTestRefused('status') when it is not in `expect`."""
+                max_running: Optional[int] = None, **fields: Any) -> Dict[str, Any]:
+    """Compare-and-set the status; AdTestRefused('status') when it is not in `expect`,
+    ('max_running') when `max_running` tests already run (counted in the same
+    transaction, so two launches never both pass the limit)."""
     sets = {"status": new, "updated_at": to_iso(utcnow()), **fields}
     with store.immediate() as c:
+        if max_running is not None and _running(c) >= max_running:
+            raise AdTestRefused("max_running", f"{max_running} tests already run (the "
+                                "most at once, set in the website): wait for one to end")
         cur = c.execute(
             f"UPDATE ad_tests SET {', '.join(f'{k}=?' for k in sets)} WHERE id=? AND status"
             f" IN ({','.join('?' * len(expect))})", [*sets.values(), test_id, *expect])
@@ -289,24 +309,51 @@ def _set_status(store: CampaignStore, test_id: int, new: str, *, expect: tuple,
     return store._get("ad_tests", test_id)
 
 
-async def approve(
+def _agent_budget(store: CampaignStore, settings: InstagramMCPSettings,
+                  test: Dict[str, Any]) -> Decimal:
+    """The agent's budget: the test's need (rounded up to whole cents per variant), capped
+    by what the caps allow over its days; ZERO when they allow nothing."""
+    n = len(test["variants"])
+    want = (Decimal(str(test["needed"]["total"])) / n).quantize(CENT, rounding=ROUND_UP) * n
+    room = _affordable(store, settings, test["spec"]["min_days"])
+    return min(want, (room / n).quantize(CENT, rounding=ROUND_DOWN) * n)
+
+
+async def launch(
     store: CampaignStore,
     settings: InstagramMCPSettings,
     test_id: int,
-    budget: Any,
+    budget: Any = None,
     *,
+    actor: str,
     underpowered_ok: bool = False,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Create the variants paused, then activate them. The caller has re-checked the
-    owner's password. Raises AdTestRefused / BudgetRefused before any request,
-    AdTestFailed after (the test is then cancelled)."""
+    """Create the variants paused, then activate them. `actor` owner (the website's
+    Approve) or agent (`budget` None: picked by `_agent_budget`; never underpowered).
+    Raises AdTestRefused / BudgetRefused before any request, AdTestFailed after (the test
+    is then cancelled)."""
+    if actor not in ("owner", "agent"):
+        raise AdTestRefused("invalid", "actor is owner or agent")
+    if actor == "agent" and (budget is not None or underpowered_ok):
+        raise AdTestRefused("invalid", "the agent's budget comes from the need and the caps")
     test = store._get("ad_tests", test_id)
     if test["status"] != "proposed":
         raise AdTestRefused("status", f"test {test_id} is {test['status']}, not proposed")
     missing = missing_settings(settings)
     if missing:
         raise AdTestRefused("not_configured", f"set {', '.join(missing)} in .env")
+    refresh(store, settings)  # the caps and limits the owner set a moment ago count
+    for media in dict.fromkeys(v["media_id"] for v in test["variants"]):
+        try:  # rights or status may have changed since the proposal
+            _advertisable_asset(store, media)
+        except PromotionRefused as e:
+            raise AdTestRefused(e.code, e.message) from None
+    if budget is None:
+        budget = _agent_budget(store, settings, test)
+        if budget <= 0:
+            raise AdTestRefused("underpowered", "the caps leave nothing to spend on this "
+                                "test now: wait, or propose a smaller one")
     amount = _amount(budget)
     variants, spec, need = test["variants"], abtest.TestSpec(**test["spec"]), test["needed"]
     per = (amount / len(variants)).quantize(CENT, rounding=ROUND_DOWN)
@@ -314,21 +361,27 @@ async def approve(
     short = abtest.underpowered(spec, float(total), test["baseline_rate"], test["min_lift"],
                                 cpm=need["cpm"], cpc=need["cpc"])
     if short and not underpowered_ok:
-        raise AdTestRefused("underpowered", f"{short}; tick 'run underpowered anyway' to "
-                            "run it regardless")
+        raise AdTestRefused("underpowered", f"{short}; " + (
+            "propose a larger lift or wait for room under the caps" if actor == "agent"
+            else "tick 'run underpowered anyway' to run it regardless"))
+    with store._tx() as c:
+        if _running(c) >= settings.ads_max_running_tests:  # checked again in _set_status
+            raise AdTestRefused("max_running", f"{settings.ads_max_running_tests} tests "
+                                "already run (the most at once, set in the website)")
     now = now or utcnow()
     today = now.astimezone(ZoneInfo(settings.timezone)).date()
     end_date = today + timedelta(days=max(spec.min_days - 1, 1))
     days = (end_date - today).days + 1
     daily = (per / days).quantize(CENT, rounding=ROUND_UP) * len(variants)
     authorize_spend(store, settings, total, test_id=test_id, daily_amount=daily,
-                    daily_until=end_date, reason=f"test {test_id} approval", check_only=True,
+                    daily_until=end_date, reason=f"test {test_id} launch", check_only=True,
                     now=now)
-    _set_status(store, test_id, "approved", expect=("proposed",), budget_total=str(total),
+    _set_status(store, test_id, "approved", expect=("proposed",),
+                max_running=settings.ads_max_running_tests, budget_total=str(total),
                 end_date=end_date.isoformat(), approved_at=to_iso(now),
                 underpowered_ok=int(bool(short)))
-    audit(store, "approve", test_id=test_id, budget=str(total), per_variant=str(per),
-          end_date=end_date.isoformat(), underpowered=short)
+    audit(store, "approve", actor=actor, test_id=test_id, budget=str(total),
+          per_variant=str(per), end_date=end_date.isoformat(), underpowered=short)
 
     created: List[Dict[str, Any]] = []
     live: set = set()  # authorizations with something activated
@@ -340,7 +393,7 @@ async def approve(
         async with AdsWriter(settings, store=store) as w:
             for p in created:
                 if store._get("ad_tests", test_id)["status"] != "approved":
-                    raise AdTestRefused("status", "the test was cancelled during approval")
+                    raise AdTestRefused("status", "the test was cancelled during the launch")
                 for kind in ("ad", "adset", "campaign"):
                     try:
                         await w.activate(p[kind]["meta_id"], test_id=test_id,
@@ -352,22 +405,24 @@ async def approve(
                         raise
                     _mark(store, p[kind], ACTIVE)
                     live.add(p["authorization_id"])
-                audit(store, "activate", test_id=test_id, media_id=p["ad"]["media_id"],
+                audit(store, "activate", actor=actor, test_id=test_id,
+                      media_id=p["ad"]["media_id"],
                       campaign=p["campaign"]["meta_id"], adset=p["adset"]["meta_id"],
                       ad=p["ad"]["meta_id"])
     except Exception as e:
         failed = await _pause_active(store, settings, test_id)
         for auth_id in open_authorizations(store, test_id):
             if auth_id not in live:
-                release(store, auth_id, reason=f"test {test_id} approval failed")
-        reason = f"approval failed: {getattr(e, 'message', None) or e}"
+                release(store, auth_id, reason=f"test {test_id} launch failed")
+        reason = f"launch failed: {getattr(e, 'message', None) or e}"
         _set_status(store, test_id, "cancelled", expect=("approved", "cancelled"),
                     reason=reason, finished_at=to_iso(utcnow()))
-        audit(store, "cancel", test_id=test_id, reason=reason, pause_failed=failed)
-        logger.warning("ad_test_approval_failed", test_id=test_id, pause_failed=failed)
+        audit(store, "cancel", actor=actor, test_id=test_id, reason=reason,
+              pause_failed=failed)
+        logger.warning("ad_test_launch_failed", test_id=test_id, pause_failed=failed)
         raise AdTestFailed(reason + (f"; could not pause {failed}: press the kill switch"
                                      if failed else "; everything is paused")) from e
-    logger.info("ad_test_running", test_id=test_id, budget=str(total))
+    logger.info("ad_test_running", test_id=test_id, budget=str(total), actor=actor)
     return {**_set_status(store, test_id, "running", expect=("approved",)), "entities":
             _entities(store, test_id)}
 

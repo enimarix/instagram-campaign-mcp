@@ -5,6 +5,7 @@ approve" at source level."""
 import ast
 import itertools
 import json
+from functools import partial
 from pathlib import Path
 
 import httpx
@@ -25,6 +26,7 @@ from .conftest import API
 ACT = f"{API}/act_42"
 SRC = Path(tests.__file__).parents[1]
 PASSWORD = "correct horse"
+_launch = partial(tests.launch, actor="owner")  # the owner's Approve in the website
 CREATIVE = [{"media_id": "111", "preset": "fr_reels"}, {"media_id": "222", "preset": "fr_reels"}]
 
 
@@ -40,8 +42,9 @@ def _post(store, media_id, **source):
     idea = (store.add_idea("remix", source_id=store.add_source("x", **source)["id"])
             if source else store.add_idea("motion"))
     asset = store.add_asset(idea["id"])
+    store._set_asset_status(asset["id"], "rendering", "published")  # approved, then posted
     store.label_post(media_id, asset_id=asset["id"])
-    return asset
+    return store.get_asset(asset["id"])
 
 
 @pytest.fixture
@@ -206,7 +209,7 @@ def test_presets_name_what_they_vary():
 async def test_approve_creates_paused_then_activates(store, meta):
     s = _settings()
     t = await _propose(store, s)
-    out = await tests.approve(store, s, t["id"], "427")
+    out = await _launch(store, s, t["id"], "427")
     assert out["status"] == "running" and out["budget_total"] == "427.00"
     assert out["approved_at"] and out["end_date"] and out["underpowered_ok"] == 0
     posts = _posts(meta)
@@ -230,20 +233,20 @@ async def test_approve_refuses_unless_proposed(store, meta):
     t = await _propose(store, s)
     await tests.cancel(store, s, t["id"])
     with pytest.raises(AdTestRefused) as e:
-        await tests.approve(store, s, t["id"], "427")
+        await _launch(store, s, t["id"], "427")
     assert e.value.code == "status" and not _posts(meta)
     with pytest.raises(KeyError):
-        await tests.approve(store, s, 999, "427")
+        await _launch(store, s, 999, "427")
 
 
 async def test_approve_underpowered_needs_the_tick(store, meta):
     s = _settings()
     t = await _propose(store, s)
     with pytest.raises(AdTestRefused) as e:
-        await tests.approve(store, s, t["id"], "100")
+        await _launch(store, s, t["id"], "100")
     assert e.value.code == "underpowered" and "426.94" in e.value.message
     assert not _posts(meta) and store._get("ad_tests", t["id"])["status"] == "proposed"
-    out = await tests.approve(store, s, t["id"], "100", underpowered_ok=True)
+    out = await _launch(store, s, t["id"], "100", underpowered_ok=True)
     assert out["status"] == "running" and out["underpowered_ok"] == 1
     row = budget.audit_log(store)["rows"][-2]  # oldest first: propose, approve
     assert row["action"] == "approve" and "426.94" in row["detail"]["underpowered"]
@@ -257,7 +260,7 @@ async def test_approve_underpowered_needs_the_tick(store, meta):
 async def test_approve_over_a_cap_refused_before_any_request(store, meta, settings_kw, code):
     t = await _propose(store, _settings())
     with pytest.raises(BudgetRefused) as e:
-        await tests.approve(store, _settings(**settings_kw), t["id"], "427",
+        await _launch(store, _settings(**settings_kw), t["id"], "427",
                             underpowered_ok=True)
     assert e.value.code == code, e.value.message
     assert not _posts(meta) and store._get("ad_tests", t["id"])["status"] == "proposed"
@@ -267,14 +270,14 @@ async def test_approve_killed_or_not_configured_refused_before_any_request(store
     s = _settings()
     t = await _propose(store, s)
     with pytest.raises(AdTestRefused) as e:
-        await tests.approve(store, _settings(meta_page_id=None), t["id"], "427")
+        await _launch(store, _settings(meta_page_id=None), t["id"], "427")
     assert e.value.code == "not_configured"
     budget.kill(store, "stop")
     with pytest.raises(BudgetRefused) as e:
-        await tests.approve(store, s, t["id"], "427")
+        await _launch(store, s, t["id"], "427")
     assert e.value.code == "killed" and not _posts(meta)
     with pytest.raises(BudgetRefused):
-        await tests.approve(store, s, t["id"], "abc")
+        await _launch(store, s, t["id"], "abc")
 
 
 async def test_failure_mid_creation_leaves_all_paused_and_cancels(store, meta):
@@ -285,7 +288,7 @@ async def test_failure_mid_creation_leaves_all_paused_and_cancels(store, meta):
                                     else respx.MockResponse(400, json={"error": {
                                         "message": "Invalid parameter", "code": 100}}))
     with pytest.raises(AdTestFailed, match="everything is paused"):
-        await tests.approve(store, s, t["id"], "427")
+        await _launch(store, s, t["id"], "427")
     assert _status_calls(meta) == []  # nothing activated, nothing to pause
     row = store._get("ad_tests", t["id"])
     assert row["status"] == "cancelled" and "Invalid parameter" in row["reason"]
@@ -300,7 +303,7 @@ async def test_failure_mid_activation_pauses_what_was_activated(store, meta):
     t = await _propose(store, s)
     meta.fail.add("907")
     with pytest.raises(AdTestFailed, match="Ad rejected"):
-        await tests.approve(store, s, t["id"], "427")
+        await _launch(store, s, t["id"], "427")
     assert _status_calls(meta) == [
         ("903", "ACTIVE"), ("901", "ACTIVE"), ("900", "ACTIVE"),  # variant 1 went live
         ("907", "ACTIVE"),  # variant 2's ad: refused
@@ -324,7 +327,7 @@ async def test_network_error_mid_activation_pauses_the_unsure_object(store, meta
 
     meta.routes[-1].side_effect = timeout  # the ad set: ad 903 went live, then this
     with pytest.raises(AdTestFailed):
-        await tests.approve(store, s, t["id"], "427")
+        await _launch(store, s, t["id"], "427")
     assert _status_calls(meta)[-2:] == [("901", "PAUSED"), ("903", "PAUSED")]
     assert len(budget.open_authorizations(store, t["id"])) == 1  # it may have spent
 
@@ -340,7 +343,7 @@ async def test_kill_mid_activation(store, meta, monkeypatch):
 
     monkeypatch.setattr(writer.AdsWriter, "activate", then_kill)
     with pytest.raises(AdTestFailed, match="kill switch"):
-        await tests.approve(store, s, t["id"], "427")
+        await _launch(store, s, t["id"], "427")
     assert _status_calls(meta) == [("903", "ACTIVE"), ("903", "PAUSED")]  # pause while killed
 
 
@@ -357,9 +360,9 @@ async def test_activate_refuses_a_released_authorization(store, meta):
     assert not meta.calls
 
 
-def test_active_only_via_approve():
-    """writer.ACTIVE is read only by AdsWriter.activate (and tests.approve marking rows),
-    and .activate() is called only inside tests.approve: every other src/ path pauses."""
+def test_active_only_via_launch():
+    """writer.ACTIVE is read only by AdsWriter.activate (and tests.launch marking rows),
+    and .activate() is called only inside tests.launch: every other src/ path pauses."""
     readers, callers = set(), set()
     for f in sorted(SRC.rglob("*.py")):
         tree = ast.parse(f.read_text(encoding="utf-8"))
@@ -374,15 +377,15 @@ def test_active_only_via_approve():
                     callers.add((f.name, fn.name))
         consts = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant)]
         assert consts.count("ACTIVE") == (1 if f.name == "writer.py" else 0), f.name
-    assert readers == {("writer.py", "activate"), ("tests.py", "approve")}
-    assert callers == {("tests.py", "approve")}
+    assert readers == {("writer.py", "activate"), ("tests.py", "launch")}
+    assert callers == {("tests.py", "launch")}
 
 
 # --- cancel ----------------------------------------------------------------------------
 async def test_cancel_running_pauses_and_keeps_reservations(store, meta):
     s = _settings()
     t = await _propose(store, s)
-    await tests.approve(store, s, t["id"], "427")
+    await _launch(store, s, t["id"], "427")
     meta.reset()
     budget.kill(store)  # pausing works while killed
     out = await tests.cancel(store, s, t["id"], reason="changed my mind")
@@ -397,7 +400,7 @@ async def test_cancel_running_pauses_and_keeps_reservations(store, meta):
 async def test_cancel_pause_failure_keeps_the_test(store, meta):
     s = _settings()
     t = await _propose(store, s)
-    await tests.approve(store, s, t["id"], "427")
+    await _launch(store, s, t["id"], "427")
     meta.fail.add("904")
     with pytest.raises(AdTestFailed, match="904"):
         await tests.cancel(store, s, t["id"])
@@ -446,6 +449,7 @@ def _send(tc, path, body=None):
 
 
 def test_api_propose_approve_cancel(api, meta):
+    """The owner's Approve launches without the password since 126 (the caps guard money)."""
     tc, store = api
     for v in CREATIVE:
         _post(store, v["media_id"])
@@ -456,35 +460,35 @@ def test_api_propose_approve_cancel(api, meta):
     assert _send(tc, "/api/ads/tests", {"hypothesis": "h", "variable": "creative",
                                         "variants": CREATIVE[:1]}).json()["error"] == "invalid"
     url = f"/api/ads/tests/{tid}/approve"
-    assert _send(tc, url, {"budget": "427"}).status_code == 422  # no password
-    assert _send(tc, url, {"budget": "427", "password": ""}).json() == {
-        "error": "password_required"}
-    r = _send(tc, url, {"budget": "427", "password": "wrong"})
-    assert r.status_code == 403 and r.json() == {"error": "bad_password"}
-    r = _send(tc, url, {"budget": "100", "password": PASSWORD})
+    assert _send(tc, url, {}).status_code == 422  # no budget
+    r = _send(tc, url, {"budget": "100"})
     assert r.status_code == 409 and r.json()["error"] == "underpowered"
     assert not _status_calls(meta)
-    r = _send(tc, url, {"budget": "427", "password": PASSWORD})
+    r = _send(tc, url, {"budget": "427"})
     assert r.status_code == 200 and r.json()["status"] == "running"
-    assert tc.get("/api/ads/tests").json()["tests"][0]["status"] == "running"
+    [row] = tc.get("/api/ads/tests").json()["tests"]
+    assert row["status"] == "running" and row["launched_by"] == "owner"
     assert tc.get("/api/ads/tests?status=proposed").json()["tests"] == []
     assert _send(tc, f"/api/ads/tests/{tid}/cancel").json()["status"] == "cancelled"
     assert _send(tc, "/api/ads/tests/999/cancel").status_code == 404
     log = tc.get("/api/ads/audit?limit=2").json()
     assert log["total"] == 5 and [r["action"] for r in log["rows"]] == ["cancel", "activate"]
-    assert "password" not in json.dumps(log)
+    assert {r["actor"] for r in log["rows"]} == {"owner"}
     assert tc.get("/api/ads/audit?limit=0").status_code == 422
 
 
-def test_api_approve_without_ui_password_refused(meta):
-    s = _settings()
-    store = CampaignStore(":memory:")
+def test_api_approve_needs_no_ui_password_but_the_caps(meta, store):
+    s = _settings(ads_test_cap="0")
+    for v in CREATIVE:
+        _post(store, v["media_id"])
     with TestClient(create_app(s, auth=Auth(s), store=store),
                     base_url="http://127.0.0.1") as tc:
-        r = _send(tc, "/api/ads/tests/1/approve", {"budget": "1", "password": "x"})
-        assert r.status_code == 403 and r.json() == {"error": "password_not_set"}
-    store.close()
-    assert not meta.calls
+        tid = _send(tc, "/api/ads/tests", {"hypothesis": "h", "variable": "creative",
+                                           "variants": CREATIVE}).json()["id"]
+        r = _send(tc, f"/api/ads/tests/{tid}/approve",
+                  {"budget": "427", "underpowered_ok": True})
+        assert r.status_code == 409 and r.json()["error"] == "test_cap"
+    assert not _posts(meta)
 
 
 def test_api_winners_and_kill_audit(api, monkeypatch):

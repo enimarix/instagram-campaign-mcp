@@ -44,8 +44,9 @@ def _post(store, media_id="m1", **source):
     else:
         idea = store.add_idea("motion")  # sourceless motion = own
     asset = store.add_asset(idea["id"])
+    store._set_asset_status(asset["id"], "rendering", "published")  # approved, then posted
     store.label_post(media_id, asset_id=asset["id"])
-    return asset
+    return store.get_asset(asset["id"])
 
 
 @pytest.fixture
