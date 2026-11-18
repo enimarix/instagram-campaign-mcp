@@ -159,3 +159,16 @@ def test_proposed_slot_says_whether_a_trial_is_possible(store, cfg):
     normal = _idea_is(store, _asset(store, cfg), strategy="exploit")
     assert scheduling.propose_slot(store, cfg, explore["id"], _day())["trial_eligible"] is True
     assert scheduling.propose_slot(store, cfg, normal["id"], _day())["trial_eligible"] is False
+
+
+async def test_a_trial_published_from_the_mcp_tool_is_tagged(store, monkeypatch):
+    import src.instagram_mcp_server as srv
+
+    class Client:
+        async def publish_reel(self, *args, **kw):
+            return {"media_id": "m_mcp"}
+
+    monkeypatch.setattr(srv, "store", lambda: store)
+    monkeypatch.setattr(srv, "client", lambda: Client())
+    res = await srv.publish_reel("https://cdn/x.mp4", "hi", trial_graduation="MANUAL")
+    assert res["trial"] == "MANUAL" and store.get_label("m_mcp")["trial"] == 1

@@ -103,8 +103,8 @@ def approve_and_queue(
     trial: Optional[str] = None,
 ) -> Dict[str, Any]:
     """The feed's one-tap Approve (step 115): ready -> approved, then queued into the
-    planner's next free slot (as a trial Reel when `trial`). No free slot within the planner's week: approved only
-    (`slot` None) and the owner picks a time in the Calendar. Any refusal (rights, QC,
+    planner's next free slot (as a trial Reel when `trial`). No free slot within the
+    planner's week: approved only (`slot` None) and the owner picks a time in the Calendar. Any refusal (rights, QC,
     file, caption) takes the approval back, so the asset stays `ready`, and passes through.
     Returns {asset, post, slot}."""
     status = store.get_asset(asset_id)["status"]

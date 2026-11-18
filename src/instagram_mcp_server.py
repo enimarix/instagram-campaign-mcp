@@ -125,9 +125,10 @@ def _not_an_asset(video_path: Optional[str]) -> None:
 
 
 def _label(result: Dict[str, Any], kind: str, campaign: Optional[str],
-           variant: Optional[str], hypothesis: Optional[str]) -> Dict[str, Any]:
-    if campaign or variant or hypothesis:
-        result["label"] = store().label_post(result["media_id"], campaign, variant, hypothesis, kind)
+           variant: Optional[str], hypothesis: Optional[str], trial: bool = False) -> Dict[str, Any]:
+    if campaign or variant or hypothesis or trial:  # a trial Reel is always labelled (088)
+        result["label"] = store().label_post(result["media_id"], campaign, variant, hypothesis,
+                                             kind, trial=trial)
     return result
 
 
@@ -294,7 +295,7 @@ async def publish_reel(
         raise _err(e)
     if trial_graduation:
         res["trial"] = trial_graduation
-    return _label(res, "reel", campaign, variant, hypothesis)
+    return _label(res, "reel", campaign, variant, hypothesis, trial=bool(trial_graduation))
 
 
 @mcp.tool(annotations=PUBLISH)
