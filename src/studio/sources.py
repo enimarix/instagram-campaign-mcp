@@ -16,7 +16,7 @@ import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path, PurePath
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
@@ -84,7 +84,33 @@ def check_rights(rights_basis: str, rights_note: Optional[str], *, author: Optio
         raise ValueError(decision.reason)
 
 
-def _move_into(src: Path, folder: Path, name: str) -> Path:
+def probe_clip(settings: InstagramMCPSettings, path: Path, audio_rights: Optional[str]
+               ) -> Tuple[Dict[str, Any], str]:
+    """(stats, audio_rights) of a clip file within the caps (max_clip_mb, max_clip_seconds).
+    ValueError when it is not a video, too big or too long, or has sound and `audio_rights`
+    does not say whether the sound is covered (a silent clip is always `no_audio`)."""
+    if audio_rights is not None and audio_rights not in AUDIO_RIGHTS:
+        raise ValueError(f"audio_rights must be one of {', '.join(AUDIO_RIGHTS)}")
+    if path.stat().st_size > settings.max_clip_mb * 1_000_000:
+        raise ValueError(f"the clip is larger than {settings.max_clip_mb:g} MB")
+    try:
+        info = ffmpeg.probe(path)
+    except ffmpeg.FFmpegError as e:
+        raise ValueError(f"not a video file: {e}") from e
+    if not info.video_codec or not info.width or info.duration <= 0:
+        raise ValueError("not a video file")
+    if info.duration > settings.max_clip_seconds:
+        raise ValueError(f"the clip is longer than {settings.max_clip_seconds:g} s")
+    if not info.has_audio:
+        audio_rights = "no_audio"
+    elif audio_rights not in ("covered", "not_covered"):
+        raise ValueError("the clip has sound: say whether the sound is covered")
+    return ({"duration_s": round(info.duration, 3), "width": info.width,
+             "height": info.height, "has_audio": info.has_audio,
+             "size_bytes": info.size_bytes, "original_name": path.name}, audio_rights)
+
+
+def move_into(src: Path, folder: Path, name: str) -> Path:
     """Move `src` to `folder/name` atomically: readers see no file or the whole file."""
     folder.mkdir(parents=True, exist_ok=True)
     dest = folder / name
@@ -117,28 +143,8 @@ class LocalInboxProvider:
         author, url, licence = (v.strip() if v and v.strip() else None
                                 for v in (author, url, licence))
         check_rights(rights_basis, rights_note, author=author, licence=licence)
-        if audio_rights is not None and audio_rights not in AUDIO_RIGHTS:
-            raise ValueError(f"audio_rights must be one of {', '.join(AUDIO_RIGHTS)}")
         path = Path(path)
-        max_bytes = self.settings.max_clip_mb * 1_000_000
-        if path.stat().st_size > max_bytes:
-            raise ValueError(f"the clip is larger than {self.settings.max_clip_mb:g} MB")
-        try:
-            info = ffmpeg.probe(path)
-        except ffmpeg.FFmpegError as e:
-            raise ValueError(f"not a video file: {e}") from e
-        if not info.video_codec or not info.width or info.duration <= 0:
-            raise ValueError("not a video file")
-        if info.duration > self.settings.max_clip_seconds:
-            raise ValueError(f"the clip is longer than {self.settings.max_clip_seconds:g} s")
-        if not info.has_audio:
-            audio_rights = "no_audio"
-        elif audio_rights not in ("covered", "not_covered"):
-            raise ValueError("the clip has sound: say whether the sound is covered")
-
-        stats = {"duration_s": round(info.duration, 3), "width": info.width,
-                 "height": info.height, "has_audio": info.has_audio,
-                 "size_bytes": info.size_bytes, "original_name": path.name}
+        stats, audio_rights = probe_clip(self.settings, path, audio_rights)
         if licence:
             # ponytail: no sources.licence column yet (store.py is busy); rights.py reads a
             # `licence` key, so list_clips lifts it out of stats. Move to a column later.
@@ -148,7 +154,7 @@ class LocalInboxProvider:
             rights_basis=rights_basis, rights_note=rights_note.strip(), audio_rights=audio_rights)
         try:
             folder = Path(self.settings.media_root) / "sources" / str(row["id"])
-            dest = _move_into(path, folder, "clip" + path.suffix.lower())
+            dest = move_into(path, folder, "clip" + path.suffix.lower())
             rel = media.relative(self.settings.media_root, dest)
             with self.store._tx() as c:  # ponytail: a store setter once store.py is free
                 c.execute("UPDATE sources SET local_path=? WHERE id=?", (rel, row["id"]))

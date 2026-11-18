@@ -12,6 +12,7 @@ import { CloseIcon } from '../ui/icons'
 import { PageHeader } from '../ui/PageHeader'
 import { field, link, type Tone } from '../ui/styles'
 import { useToast } from '../ui/useToast'
+import { AskPermissionButton } from './Permissions'
 
 const label = (w: Pick<Watch, 'kind' | 'value'>) => (w.kind === 'hashtag' ? '#' : '@') + w.value
 
@@ -73,6 +74,7 @@ function TrendCard({ item }: { item: TrendItem }) {
           </a>
         )}
         {href && <DownloadButton target={{ source_id: item.source_id }} />}
+        <AskPermissionButton target={{ source_id: item.source_id }} />
       </div>
     </Card>
   )
@@ -156,6 +158,7 @@ function Inspirations() {
                     </a>
                   )}
                   {href && <DownloadButton target={{ url: i.url }} />}
+                  {href && <AskPermissionButton target={{ url: i.url }} />}
                   {i.status !== 'dismissed' && (
                     <Button size="sm" variant="ghost" onClick={() => void act(() => setInspirationStatus(i.id, 'dismissed'))}>
                       Dismiss

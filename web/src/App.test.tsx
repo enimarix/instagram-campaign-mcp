@@ -39,7 +39,7 @@ describe('App', () => {
     // every route answers the health body, except the lists the Settings page maps over
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
       new Response(JSON.stringify(
-        ['/api/agent/schedule', '/api/reactions', '/api/pinned-accounts', '/api/dm-picks'].includes(url) || url.startsWith('/api/sources')
+        ['/api/agent/schedule', '/api/reactions', '/api/pinned-accounts', '/api/dm-picks', '/api/permissions'].includes(url) || url.startsWith('/api/sources')
           ? [] : health))))
     render(
       <MemoryRouter initialEntries={['/settings']}>

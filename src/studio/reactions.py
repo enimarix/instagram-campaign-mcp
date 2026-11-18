@@ -113,6 +113,18 @@ def add_reel(store: CampaignStore, settings, path: Path) -> Dict[str, Any]:
     return activate(store, reel["id"])
 
 
+async def save_upload(chunks: AsyncIterator[bytes], dest: Path, cap_bytes: float) -> None:
+    """Write an upload to `dest` chunk by chunk; UploadTooLarge past `cap_bytes` (the caller
+    removes the partial file)."""
+    size = 0
+    with dest.open("wb") as f:
+        async for chunk in chunks:
+            size += len(chunk)
+            if size > cap_bytes:
+                raise UploadTooLarge(f"the file is larger than {cap_bytes / 1e6:g} MB")
+            f.write(chunk)
+
+
 async def upload_reel(store: CampaignStore, settings, chunks: AsyncIterator[bytes],
                       filename: str, content_length: Optional[int]) -> Dict[str, Any]:
     """Stream an upload to disk (never whole in memory), refusing it past
@@ -127,14 +139,7 @@ async def upload_reel(store: CampaignStore, settings, chunks: AsyncIterator[byte
     inbox.mkdir(parents=True, exist_ok=True)
     tmp = inbox / f"upload-{uuid.uuid4().hex}{suffix}"
     try:
-        size = 0
-        with tmp.open("wb") as f:
-            async for chunk in chunks:
-                size += len(chunk)
-                if size > cap:
-                    raise UploadTooLarge(
-                        f"the file is larger than {settings.reaction_upload_max_mb} MB")
-                f.write(chunk)
+        await save_upload(chunks, tmp, cap)
         return await asyncio.to_thread(add_reel, store, settings, tmp)
     finally:
         tmp.unlink(missing_ok=True)

@@ -6,6 +6,7 @@ import {
 import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
 import { field as fieldClass } from '../ui/styles'
+import { AskPermissionButton } from './Permissions'
 
 // GOAL.md §5.1; `unknown` is never offered: a clip without rights is never stored.
 const BASES: { id: RightsBasis; label: string }[] = [
@@ -129,6 +130,7 @@ export default function ClipsSection() {
                 <span className="font-medium">#{c.id} {c.stats.original_name ?? c.provider}</span>
                 {' · '}{BASES.find((b) => b.id === c.rights_basis)?.label ?? c.rights_basis}
                 {' · '}{c.attribution ?? 'no credit needed'}
+                {c.rights_basis === 'commentary' && <> <AskPermissionButton target={{ source_id: c.id }} /></>}
               </li>
             ))}
           </ul>
