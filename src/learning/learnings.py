@@ -84,10 +84,17 @@ def mark_feedback_digested(store: CampaignStore, ids: Sequence[int]) -> Dict[str
 
 def list_revision_requests(store: CampaignStore) -> List[Dict[str, Any]]:
     """Assets the owner sent back (`revision_requested`) with their wanting-changes
-    comments, newest first: re-render each with render_motion(asset_id=...)."""
+    comments, newest first: re-render each with render_motion(asset_id=...). A request whose
+    new version is still rendering is being handled: left out."""
+    with store._tx() as c:
+        pending = {r[0] for r in c.execute(
+            "SELECT parent_asset_id FROM assets WHERE status = 'rendering'"
+            " AND parent_asset_id IS NOT NULL")}
     labels = _labels()
     out = []
     for asset in store.list_assets(status="revision_requested", limit=MAX_LIST):
+        if asset["id"] in pending:
+            continue
         comments = [_comment(fb, labels) for fb in store.list_feedback(asset_id=asset["id"],
                                                                        limit=MAX_LIST)
                     if fb["wants_changes"]]

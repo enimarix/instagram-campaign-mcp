@@ -35,6 +35,12 @@ class CommentEdit(BaseModel):
     wants_changes: bool = False
 
 
+class DeclineIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason_codes: List[str] = []
+    text: Optional[str] = None
+
+
 def _out(result: dict) -> dict:
     return {**result, "asset": with_urls(result["asset"])}
 
@@ -47,6 +53,12 @@ def list_feedback(asset_id: int, store: CampaignStore = Depends(get_store)):
 @router.post("/assets/{asset_id}/feedback")
 def add_feedback(asset_id: int, body: CommentIn, store: CampaignStore = Depends(get_store)):
     return call(lambda: _out(feedback.add_comment(store, asset_id, **body.model_dump())))
+
+
+@router.post("/assets/{asset_id}/decline")
+def decline(asset_id: int, body: DeclineIn, store: CampaignStore = Depends(get_store)):
+    # The feed's Decline in one call: disliked + archived + the optional reasons.
+    return call(lambda: with_urls(feedback.decline(store, asset_id, **body.model_dump())))
 
 
 @router.patch("/feedback/{feedback_id}")

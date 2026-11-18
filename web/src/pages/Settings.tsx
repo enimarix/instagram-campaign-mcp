@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  ApiError, errorMessage, getAccount, getAgentSchedule, getDownloaderStatus, getHealth, getStorage, getToken,
+  errorMessage, getAccount, getAgentSchedule, getDownloaderStatus, getHealth, getStorage, getToken,
   getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type DownloaderStatus, type RunResult,
   type TokenStatus,
 } from '../api/client'
@@ -122,8 +122,7 @@ export default function Settings() {
   const [downloader] = useLoad(getDownloaderStatus)
   const [toggleError, setToggleError] = useState<string | null>(null)
 
-  const setupMode = health.data?.instagram_configured === false ||
-    (account.error instanceof ApiError && account.error.code === 'instagram_not_configured')
+  const setupMode = health.data?.instagram_configured === false || account.data?.configured === false
 
   async function togglePause(paused: boolean) {
     const question = paused

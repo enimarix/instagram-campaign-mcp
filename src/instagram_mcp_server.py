@@ -833,13 +833,20 @@ async def add_learning(statement: str, kind: str, origin: str,
 async def update_learning(learning_id: int, statement: Optional[str] = None,
                           kind: Optional[str] = None, confidence: Optional[str] = None,
                           status: Optional[str] = None,
-                          evidence_feedback_ids_to_add: Optional[List[int]] = None
+                          evidence_feedback_ids_to_add: Optional[List[int]] = None,
+                          scope: Optional[Dict[str, Any]] = None, evaluate: bool = False
                           ) -> Dict[str, Any]:
     """Edit a learning, add evidence, re-rate it (low|medium) or set status
-    active|retired|contradicted. Learnings at confidence owner are refused."""
+    active|retired|contradicted. Learnings at confidence owner are refused.
+    scope replaces the learning's scope; a predicate {"tag": ..., "value": ...} (tag one of
+    track, pillar, hook_type, strategy, template, hour (owner-local 0-23), duration) ties
+    it to the numbers: matured Reels with that tag vs the baseline set its sample size,
+    index and confidence. A predicate learning is re-checked after a statement, kind or
+    scope change, or when evaluate=True."""
     return await _studio(learnings.update_learning, store(), learning_id, statement=statement,
                          kind=kind, confidence=confidence, status=status,
-                         evidence_feedback_ids_to_add=evidence_feedback_ids_to_add or ())
+                         evidence_feedback_ids_to_add=evidence_feedback_ids_to_add or (),
+                         scope=scope, evaluate=evaluate)
 
 
 @mcp.tool(annotations=LOCAL_READ)

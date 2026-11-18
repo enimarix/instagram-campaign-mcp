@@ -46,6 +46,17 @@ describe('ClipsSection', () => {
     expect(screen.getByText('#5 old.mp4')).toBeTruthy()
   })
 
+  it('lists the first 5 clips, then Show all', async () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({ ...CLIP, id: i + 1, stats: { original_name: `c${i + 1}.mp4` } }))
+    stubApi({ 'GET /api/sources?role=clip': [200, many] })
+    render(<ClipsSection />)
+    expect(await screen.findByText('#5 c5.mp4')).toBeTruthy()
+    expect(screen.queryByText('#6 c6.mp4')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 7 clips' }))
+    expect(screen.getByText('#7 c7.mp4')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull()
+  })
+
   it('requires the note and the sound answer, never offers unknown, and asks author + licence for cc', async () => {
     stubApi()
     render(<ClipsSection />)

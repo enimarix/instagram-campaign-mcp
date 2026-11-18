@@ -3,7 +3,8 @@ FastAPI app: thin routes onto service functions (GOAL.md §4).
 
 Build it with `create_app()`; `ig-campaign serve` runs it on uvicorn.
 Without an Instagram token the app still starts ("setup mode"): /api/health
-says so and Graph-backed routes answer 503 instagram_not_configured.
+says so, /api/account answers {"configured": false} and other Graph-backed routes
+answer 503 instagram_not_configured.
 With UI_PASSWORD set, /api/* needs a session cookie from POST /api/login (see auth.py).
 The built website (`web/dist`) is served at every other path, with an SPA fallback.
 """
@@ -154,8 +155,8 @@ def create_app(
     @app.get("/api/account")
     async def account(request: Request):
         client = request.app.state.client
-        if client is None:
-            return JSONResponse(status_code=503, content={"error": "instagram_not_configured"})
+        if client is None:  # setup mode: an empty state, not an error
+            return {"configured": False}
         return await campaign.account_status(client)
 
     app.state.media_root = settings.media_root

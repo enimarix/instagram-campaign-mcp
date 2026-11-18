@@ -132,7 +132,7 @@ describe('Settings', () => {
   it('shows the setup banner, not an error, in setup mode', async () => {
     stubApi({
       'GET /api/health': [200, { status: 'ok', instagram_configured: false, version: '1.2' }],
-      'GET /api/account': [503, { error: 'instagram_not_configured' }],
+      'GET /api/account': [200, { configured: false }],
       'GET /api/token': [200, { configured: false, valid: null, expires_at: null, days_left: null, can_refresh: false, scopes: [] }],
     })
     render(<Settings />)

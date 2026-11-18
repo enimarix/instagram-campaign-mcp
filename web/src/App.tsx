@@ -79,12 +79,18 @@ export default function App() {
               <Route path="/reports/:date" element={<ReportPage />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/learnings" element={<Learnings />} />
-              <Route path="/ads" element={<Placeholder title="Ads" />} />
+              <Route path="/ads" element={
+                <Placeholder title="Ads">
+                  Paid A/B tests on proven winners: the studio proposes a test with the budget it needs, you
+                  set the budget and approve it with your password, then see spend, results and the winner here.
+                  It needs your Meta ad account with a spending limit set in Meta first (setup step H6).
+                </Placeholder>
+              } />
               <Route path="/agent" element={<Agent />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/more" element={<More />} />
               <Route path="/assets/:id" element={<AssetPage />} />
-              <Route path="*" element={<Placeholder title="Not found" />} />
+              <Route path="*" element={<Placeholder title="Not found">There is no page at this address.</Placeholder>} />
             </Routes>
           </main>
         </div>

@@ -23,6 +23,7 @@ const SOUND: { id: AudioRights; label: string }[] = [
   { id: 'no_audio', label: 'The clip has no sound' },
 ]
 const field = `${fieldClass} mt-1 block w-full`
+const SHOWN = 5 // clips listed before "Show all": keeps Settings short on a phone
 
 /** The Add-clip form of one inbox file: rights basis, note, author, URL, licence, sound. */
 function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void }) {
@@ -99,6 +100,7 @@ export default function ClipsSection() {
   const [inbox, setInbox] = useState<InboxFile[]>()
   const [clips, setClips] = useState<Clip[]>()
   const [error, setError] = useState<unknown>()
+  const [all, setAll] = useState(false)
   const reload = useCallback(() => {
     Promise.all([listInbox(), listClips()]).then(([i, c]) => {
       setInbox(i)
@@ -122,7 +124,7 @@ export default function ClipsSection() {
           {inbox.length === 0 && <p className="mt-2 text-sm">No files waiting.</p>}
           {inbox.map((f) => <IntakeForm key={f.name} file={f} onAdded={reload} />)}
           <ul className="mt-3 divide-y divide-line/60 text-sm">
-            {clips.map((c) => (
+            {(all ? clips : clips.slice(0, SHOWN)).map((c) => (
               <li key={c.id} className="py-2 break-words">
                 <span className="font-medium">#{c.id} {c.stats.original_name ?? c.provider}</span>
                 {' · '}{BASES.find((b) => b.id === c.rights_basis)?.label ?? c.rights_basis}
@@ -130,6 +132,9 @@ export default function ClipsSection() {
               </li>
             ))}
           </ul>
+          {!all && clips.length > SHOWN && (
+            <Button className="mt-2 md:w-auto" onClick={() => setAll(true)}>Show all {clips.length} clips</Button>
+          )}
         </>
       )}
     </Card>
