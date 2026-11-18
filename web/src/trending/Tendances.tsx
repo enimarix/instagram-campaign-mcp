@@ -343,9 +343,11 @@ export default function Tendances() {
   const budget = suggested?.hashtag_budget
   return (
     <div className={selecting ? 'pb-36 lg:pb-24' : ''}>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" size="lg" loading={refreshing} onClick={() => void refresh()}>Actualiser</Button>
-        {budget && <p className="text-sm text-muted">{budget.left}/{budget.limit} hashtags restants cette semaine</p>}
+      <div className="flex items-start gap-3">
+        <div>
+          <Button variant="primary" size="lg" loading={refreshing} onClick={() => void refresh()}>Actualiser</Button>
+          {budget && <p className="mt-1 text-xs text-muted">{budget.left}/{budget.limit} hashtags restants cette semaine</p>}
+        </div>
         <Button className="ml-auto" variant={selecting ? 'secondary' : 'ghost'} aria-pressed={selecting}
           onClick={() => { setSelecting((s) => !s); setSelected(new Set()) }}>
           {selecting ? 'Terminer' : 'Sélectionner'}
@@ -389,9 +391,10 @@ export default function Tendances() {
       {selecting && (
         <div role="region" aria-label="Envoyer la sélection"
           className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface/95 px-4 py-3 shadow-overlay backdrop-blur-md lg:bottom-0 lg:left-60">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-start gap-3">
-            <div className="min-w-0 flex-1"><ModePicker value={bulkMode} onChange={setBulkMode} /></div>
-            <Button variant="primary" size="lg" disabled={selected.size === 0} loading={sending} onClick={() => void sendSelected()}>
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+            <div className="sm:flex-1"><ModePicker value={bulkMode} onChange={setBulkMode} /></div>
+            <Button variant="primary" size="lg" disabled={selected.size === 0} loading={sending} onClick={() => void sendSelected()}
+              className="w-full sm:w-auto">
               Envoyer au travail ({selected.size})
             </Button>
           </div>

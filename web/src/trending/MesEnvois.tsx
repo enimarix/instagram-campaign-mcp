@@ -65,7 +65,6 @@ function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () =>
         <Chip tone={tone}>{label}</Chip>
         <span className="text-muted">envoyé par @{o.sender ?? '?'}, {ago(o.received_at)}</span>
       </div>
-      {embed && <Embed src={embed} title={`Reel envoyé par @${o.sender ?? '?'}`} />}
       {o.blocked_reason && label === 'Bloqué' && <p className="text-danger">Bloqué : {o.blocked_reason}</p>}
       {o.status === 'skipped' && o.skip_reason && <p className="text-muted">Ignoré : {o.skip_reason}</p>}
       {showForm ? (
@@ -78,6 +77,13 @@ function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () =>
             <q className="block break-words">{o.instruction}</q>
           </div>
         )
+      )}
+      {embed && (
+        // closed: the iframe loads only when opened (the owner sent the Reel, he knows it)
+        <details>
+          <summary className="flex min-h-11 cursor-pointer items-center font-medium">Voir le Reel</summary>
+          <Embed src={embed} title={`Reel envoyé par @${o.sender ?? '?'}`} />
+        </details>
       )}
       <div className="flex flex-wrap items-center gap-2">
         {o.status === 'scheduled' && !editing && <Button size="sm" onClick={() => setEditing(true)}>Modifier la consigne</Button>}
