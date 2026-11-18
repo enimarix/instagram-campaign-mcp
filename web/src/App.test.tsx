@@ -80,4 +80,14 @@ describe('App', () => {
     const list = within(screen.getByRole('main')).getAllByRole('link')
     expect(list.map((l) => l.textContent)).toEqual(['Trends', 'Learnings', 'Ads', 'Settings'])
   })
+
+  it('says what the Ads page will hold and what it waits for', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+    render(
+      <MemoryRouter initialEntries={['/ads']}>
+        <App />
+      </MemoryRouter>,
+    )
+    expect(within(screen.getByRole('main')).getByText(/Paid A\/B tests on proven winners.*H6/)).toBeTruthy()
+  })
 })
