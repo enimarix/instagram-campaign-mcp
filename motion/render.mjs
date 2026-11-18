@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Render one template: node motion/render.mjs --template <id> --props <file> --out <file>
-//   [--still --frame N] [--bundle <dir>] [--concurrency N]
+//   [--still --frame N] [--bundle <dir>] [--concurrency N] [--gl <renderer>]
 //   or: node motion/render.mjs --bundle-only --bundle <dir>  (build the bundle, print {bundle})
 // Prints one JSON line {out, durationInFrames, renderMs[, coverFrame]} on stdout (coverFrame when
 // the template has one: the Reel cover, thumb_offset); errors go to stderr, exit 1.
@@ -31,6 +31,7 @@ const { values: a } = (() => {
         bundle: { type: "string" },
         concurrency: { type: "string" },
         "bundle-only": { type: "boolean", default: false },
+        gl: { type: "string" },
       },
     });
   } catch (e) {
@@ -56,6 +57,15 @@ const concurrency = a.concurrency === undefined ? null : Number(a.concurrency);
 if (concurrency !== null && !(Number.isInteger(concurrency) && concurrency > 0)) {
   fail(`--concurrency must be a positive integer, got ${a.concurrency}`);
 }
+
+// Chrome's OpenGL backend. WebGL (three.js, src/voxel) needs one that works headless:
+// Remotion docs (remotion.dev/docs/gl-options): "angle" on a desktop, "swangle" (software)
+// on a machine without a GPU, which includes Linux CI runners ("angle" fails there).
+// "angle-egl" is the Linux GPU form of angle: pass --gl angle-egl on a Linux GPU box.
+const GL = ["angle", "egl", "swiftshader", "swangle", "vulkan", "angle-egl"];
+const gl = a.gl ?? (process.platform === "linux" ? "swangle" : "angle");
+if (!GL.includes(gl)) fail(`--gl must be one of ${GL.join(", ")}, got ${a.gl}`);
+const chromiumOptions = { gl };
 
 let inputProps = {};
 if (a.props) {
@@ -85,11 +95,11 @@ try {
 
   // Throws on an unknown id or props that fail the template's Zod schema
   // (calculateMetadata in src/Root.tsx); composition.props are the parsed props.
-  const composition = await selectComposition({ serveUrl, id: a.template, inputProps, logLevel: "error" });
+  const composition = await selectComposition({ serveUrl, id: a.template, inputProps, chromiumOptions, logLevel: "error" });
   // src/Root.tsx adds the template's cover frame to the resolved props under this key
   // (= COVER_FRAME_PROP in src/registry.ts); the strict schemas must not see it.
   const { __coverFrame: coverFrame, ...props } = composition.props;
-  const common = { composition: { ...composition, props }, serveUrl, inputProps: props, logLevel: "error" };
+  const common = { composition: { ...composition, props }, serveUrl, inputProps: props, chromiumOptions, logLevel: "error" };
   if (a.still) {
     await renderStill({ ...common, output: out, frame });
   } else {

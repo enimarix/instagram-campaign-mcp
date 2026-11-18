@@ -15,22 +15,28 @@
     "still:bossbattle": "node render.mjs --template BossBattle --props props/bossbattle.json --out out/bossbattle.png --still --frame 300",
     "still:quizchest": "node render.mjs --template QuizChest --props props/quizchest.json --out out/quizchest.png --still --frame 230",
     "still:dialogstory": "node render.mjs --template DialogStory --props props/dialogstory.json --out out/dialogstory.png --still --frame 150",
-    "still:pixelskit": "node render.mjs --template PixelSkit --props props/pixelskit.json --out out/pixelskit.png --still --frame 240"
+    "still:pixelskit": "node render.mjs --template PixelSkit --props props/pixelskit.json --out out/pixelskit.png --still --frame 240",
+    "still:voxel": "node render.mjs --template VoxelPreview --props props/voxel-preview.json --out out/voxel.png --still --frame 150",
+    "check:voxel": "node scripts/check-determinism.mjs"
   },
   "dependencies": {
+    "@react-three/fiber": "9.2.0",
     "@remotion/bundler": "4.0.544",
     "@remotion/cli": "4.0.544",
     "@remotion/fonts": "4.0.544",
     "@remotion/renderer": "4.0.544",
+    "@remotion/three": "4.0.544",
     "esbuild": "0.28.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "remotion": "4.0.544",
+    "three": "0.178.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
+    "@types/three": "0.178.1",
     "oxlint": "^1.94.0",
     "typescript": "~7.0.2"
   },

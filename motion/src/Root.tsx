@@ -1,6 +1,7 @@
 import { Composition } from "remotion";
 import { z } from "zod";
 import { COVER_FRAME_PROP, FPS, HEIGHT, type Template, templates, WIDTH } from "./registry";
+import { SCENES, VOXEL_PREVIEW_DEFAULTS, VoxelPreview, voxelPreviewSchema } from "./templates/VoxelPreview";
 
 // ponytail: registry entries are typed one by one; the loop only sees them as plain-props templates.
 const entries = Object.entries(templates) as unknown as [string, Template<z.ZodType<Record<string, unknown>>>][];
@@ -31,5 +32,16 @@ export const Root = () => (
         }}
       />
     ))}
+    {/* Engine showcase (step 129), not in the template registry: the studio never picks it. */}
+    <Composition
+      id="VoxelPreview"
+      component={VoxelPreview}
+      schema={voxelPreviewSchema}
+      defaultProps={VOXEL_PREVIEW_DEFAULTS}
+      width={WIDTH}
+      height={HEIGHT}
+      fps={FPS}
+      durationInFrames={SCENES.end}
+    />
   </>
 );
