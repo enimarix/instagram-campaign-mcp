@@ -64,9 +64,9 @@ export const golemPoints = (form: FormId, lift = 0, extraTop = 1.5): Vec[] => {
 
 /** The form the golem reaches at the payoff. */
 export const reached = (p: VoxelQuestProps): FormId => p.beats[p.beats.length - 1].form ?? p.toForm;
-/** The form before the payoff's flash. */
+/** The form before the payoff's flash: the beat's own, the last app beat's in the payoff, else fromForm. */
 export const before = (p: VoxelQuestProps, beat?: Beat): FormId =>
-  beat?.kind === "payoff" || !beat ? (p.beats[p.beats.length - 2].form ?? p.fromForm) : (beat.form ?? p.fromForm);
+  beat?.kind === "payoff" ? (p.beats[p.beats.length - 2].form ?? p.fromForm) : (beat?.form ?? p.fromForm);
 
 export const beatOf = (p: VoxelQuestProps, scene?: Scene): Beat | undefined =>
   scene && scene.index >= 1 && scene.index <= p.beats.length ? p.beats[scene.index - 1] : undefined;

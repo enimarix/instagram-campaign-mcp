@@ -93,10 +93,14 @@
   with `projectIso`; a beat without foods goes close on the golem and the hook's prop), 1–2 app
   beats (the voxel phone fills its calorie ring in 8 steps, push-in), the payoff (hop, white flash,
   the golem pops into `toForm`, « Niveau n · Name » pill, `sfx-chime`), then the animated end card.
-  One iso camera eases between beats and drifts slowly within them; captions are dark text on a
+  Staging and camera live in `layout.ts` (pure): every shot is fitted (`fitShot`) so the golem
+  and its props stay inside the safe area under the captions (a test checks every frame of the
+  examples), a beat longer than 3.5 s swings to a second shot halfway, numbers count up.
+  One iso camera eases between shots and drifts slowly within them; captions are dark text on a
   white rounded card at the top of the safe area, numbers in the accent colour. Props in `schema.ts`
   (examples `props/voxelquest*.json`): `hook`, `hookProp` (scale|plate), `beats` [{kind:
-  problem|app|payoff, line, foods? (problem only, 1–3 × {prop, label, macro}), form?}] (1–2
+  problem|app|payoff, line, foods? (problem only, 1–3 × {prop, label, macro}), value? (app only:
+  the big number on the phone, counting up; default the ring's %), form?}] (1–2
   problem, 1–2 app, one payoff), `outro?` (= the end card's tagline), `address` (vous|tu, default
   brand), `fromForm`/`toForm` (form ids, toForm higher), `accent`, `cameo?`, `citations`, `voice`
   {audioSrc?, lines?: hook, each beat, outro when given}, `music` (`music-marimba`|none), `loop`
