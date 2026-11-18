@@ -43,7 +43,6 @@ const PLATE = plate().voxels();
 const PHONE_STEPS = 8;
 const PHONES = Array.from({ length: PHONE_STEPS + 1 }, (_, i) => phone(i / PHONE_STEPS).voxels());
 
-
 const RAD = Math.PI / 180;
 const WORKTOP_Y = 11;
 /** Food slots on the worktop for 1, 2 or 3 foods (x; z is the worktop's middle). */
@@ -120,7 +119,7 @@ const inOut = (frame: number, start: number, end: number, length = 8) => {
 const Caption = ({ scene, color, frame }: { scene: Scene; color: string; frame: number }) => {
   const area = safeArea();
   const hook = scene.index === 0;
-  const box = { left: area.left, width: area.width, top: area.top + 10, height: hook ? 330 : 330 };
+  const box = { left: area.left, width: area.width, top: area.top + 10, height: 330 };
   const size = fitSize(scene.text, box.width - (hook ? 20 : 96), box.height - (hook ? 0 : 60), hook ? [128, 116, 104, 96, 88, 80, 72] : [84, 76, 68, 62, 56]);
   // The hook is whole from frame 0 (the cover); later lines fade in.
   const style = hook ? { opacity: 1 - span(frame, scene.endFrame - 6, 6) } : inOut(frame, scene.startFrame, scene.endFrame);
