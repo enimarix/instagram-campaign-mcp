@@ -1021,11 +1021,12 @@ async def list_ad_winners() -> Dict[str, Any]:
 async def propose_ad_test(hypothesis: str, variable: str, variants: List[Dict[str, str]],
                           min_lift: float = 0.2, primary_metric: str = "ctr"
                           ) -> Dict[str, Any]:
-    """Propose a paid A/B test; it spends nothing until launch_ad_test. One variable (creative | audience | placement), 2-4 variants {media_id,
-    preset} (presets fr_reels, fr_feed_reels, francophone_reels): creative = different
-    winner posts with one preset; audience / placement = one post, presets that differ
-    only in that. A specific, falsifiable hypothesis; min_lift = the relative lift worth
-    detecting; primary_metric ctr. Returns the test with the budget it needs and
+    """Propose a paid A/B test; it spends nothing until launch_ad_test. One variable
+    (creative | audience | placement), 2-4 variants {media_id, preset} (presets fr_reels,
+    fr_feed_reels, francophone_reels): creative = different winner posts with one preset;
+    audience / placement = one post, presets that differ only in that. A specific,
+    falsifiable hypothesis; min_lift = the relative lift worth detecting; primary_metric
+    ctr. Returns the test with the budget it needs and
     `underpowered` (the caps cannot fund it); refused beyond a few proposals not launched
     yet."""
     return await _studio_async(ads_agent.propose(
@@ -1036,7 +1037,7 @@ async def propose_ad_test(hypothesis: str, variable: str, variants: List[Dict[st
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
                                       open_world_hint=True))
 async def launch_ad_test(test_id: int) -> Dict[str, Any]:
-    """Launch one of your proposed tests: it starts spending. The budget is what the test
+    """Launch one of your own proposed tests: it starts spending. The budget is what the test
     needs, within the money caps the owner set in the website. Refused (nothing sent) when
     the kill switch is on, a cap is reached, the most tests at once already run, the
     caps cannot fund it (underpowered), or a post is no longer advertisable."""

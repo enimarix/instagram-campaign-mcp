@@ -340,10 +340,10 @@ async def launch(
     test = store._get("ad_tests", test_id)
     if test["status"] != "proposed":
         raise AdTestRefused("status", f"test {test_id} is {test['status']}, not proposed")
+    refresh(store, settings)  # the caps, limits and ids the owner set a moment ago count
     missing = missing_settings(settings)
     if missing:
-        raise AdTestRefused("not_configured", f"set {', '.join(missing)} in .env")
-    refresh(store, settings)  # the caps and limits the owner set a moment ago count
+        raise AdTestRefused("not_configured", f"set {', '.join(missing)}")
     for media in dict.fromkeys(v["media_id"] for v in test["variants"]):
         try:  # rights or status may have changed since the proposal
             _advertisable_asset(store, media)
@@ -364,10 +364,6 @@ async def launch(
         raise AdTestRefused("underpowered", f"{short}; " + (
             "propose a larger lift or wait for room under the caps" if actor == "agent"
             else "tick 'run underpowered anyway' to run it regardless"))
-    with store._tx() as c:
-        if _running(c) >= settings.ads_max_running_tests:  # checked again in _set_status
-            raise AdTestRefused("max_running", f"{settings.ads_max_running_tests} tests "
-                                "already run (the most at once, set in the website)")
     now = now or utcnow()
     today = now.astimezone(ZoneInfo(settings.timezone)).date()
     end_date = today + timedelta(days=max(spec.min_days - 1, 1))
