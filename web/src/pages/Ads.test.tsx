@@ -1,12 +1,13 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AdEvaluation, AdsAudit, AdsBudget, AdTest, AdTestResults } from '../api/client'
+import type { AdEvaluation, AdPreset, AdsAudit, AdsBudget, AdTest, AdTestResults } from '../api/client'
 import Ads from './Ads'
 
 const scope = (cap: string, used = '0') => ({ cap, used, remaining: String(Number(cap) - Number(used)) })
 const BUDGET: AdsBudget = {
   killed: false, killed_at: null, killed_reason: null, currency: 'EUR', day: '2026-11-18',
   daily: scope('20', '5'), lifetime: scope('200', '5'), test_cap: '100', tests: [{ test_id: 4, ...scope('100', '5') }],
+  near_cap: { daily: false, lifetime: false, tests: [] },
 }
 const TEST: AdTest = {
   id: 4, hypothesis: 'Boss fight wins', variable: 'creative',
@@ -16,8 +17,14 @@ const TEST: AdTest = {
   created_at: '2026-11-18T08:00:00+00:00', result: null,
 }
 const WINNERS = [
-  { media_id: '1', permalink: null, posted_at: '2026-11-01T10:00:00+00:00', caption: 'Boss fight', asset_id: 1 },
-  { media_id: '2', permalink: null, posted_at: '2026-11-02T10:00:00+00:00', caption: 'Quiz chest', asset_id: 2 },
+  { media_id: '1', permalink: null, posted_at: '2026-11-01T10:00:00+00:00', caption: 'Boss fight', asset_id: 1,
+    thumbnail_url: '/api/media/1/thumb.jpg' },
+  { media_id: '2', permalink: null, posted_at: '2026-11-02T10:00:00+00:00', caption: 'Quiz chest', asset_id: 2, thumbnail_url: null },
+]
+const PRESETS: AdPreset[] = [
+  { id: 'fr_reels', label: 'France, Reels', varies: ['audience', 'placement'] },
+  { id: 'fr_feed_reels', label: 'France, Feed and Reels', varies: ['placement'] },
+  { id: 'francophone_reels', label: 'France, Belgium, Switzerland, Luxembourg, Reels', varies: ['audience'] },
 ]
 const AUDIT: AdsAudit = {
   total: 25, limit: 20, offset: 0,
@@ -30,6 +37,7 @@ function stubApi(answers: Record<string, unknown> = {}) {
   const calls: Call[] = []
   const base: Record<string, unknown> = {
     'GET /api/ads/budget': BUDGET, 'GET /api/ads/tests': { tests: [TEST] }, 'GET /api/ads/winners': { winners: WINNERS },
+    'GET /api/ads/presets': { presets: PRESETS },
     'POST /api/ads/kill': { ...BUDGET, killed: true }, 'POST /api/ads/unkill': BUDGET,
   }
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -104,8 +112,12 @@ describe('Ads page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Propose a test' }))
     const sheet = screen.getByRole('dialog', { name: 'Propose a test' })
     const submit = within(sheet).getByRole('button', { name: 'Work out the budget' })
-    fireEvent.click(await within(sheet).findByRole('checkbox', { name: /Boss fight/ }))
+    const boss = await within(sheet).findByRole('checkbox', { name: /Boss fight/ })
+    expect(boss.closest('label')?.querySelector('img')?.getAttribute('src')).toBe('/api/media/1/thumb.jpg')
+    fireEvent.click(boss)
     fireEvent.click(within(sheet).getByRole('checkbox', { name: /Quiz chest/ }))
+    expect(within(sheet).getByRole('checkbox', { name: /Quiz chest/ }).closest('label')?.querySelector('img')).toBeNull()
+    expect(within(sheet).getAllByRole('option').map((o) => o.textContent)).toEqual(PRESETS.map((p) => p.label))
     expect((submit as HTMLButtonElement).disabled).toBe(true) // no hypothesis yet
     fireEvent.change(within(sheet).getByLabelText('What you expect'), { target: { value: 'Boss fight wins' } })
     fireEvent.click(submit)
@@ -123,6 +135,7 @@ describe('Ads page', () => {
     const sheet = screen.getByRole('dialog')
     fireEvent.click(within(sheet).getByRole('tab', { name: 'Audience' }))
     fireEvent.click(await within(sheet).findByRole('radio', { name: /Boss fight/ }))
+    expect(within(sheet).queryByRole('button', { name: 'France, Feed and Reels' })).toBeNull() // placement only
     fireEvent.click(within(sheet).getByRole('button', { name: 'France, Reels' }))
     fireEvent.click(within(sheet).getByRole('button', { name: /Belgium/ }))
     fireEvent.change(within(sheet).getByLabelText('What you expect'), { target: { value: 'h' } })
@@ -266,11 +279,20 @@ describe('Ads page', () => {
       expect(await screen.findByText('Winner: B (Post 2)')).toBeTruthy()
     })
 
-    it('warns when spend nears a cap', async () => {
-      stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('20', '17'), tests: [] } })
+    it('warns when the server flags a scope near its cap', async () => {
+      stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('20', '17'), tests: [{ test_id: 4, ...scope('100', '90') }],
+        near_cap: { daily: true, lifetime: false, tests: [4] } } })
       render(<Ads />)
       expect(await screen.findByText("Today's ad spend is at 85 % of the daily cap.")).toBeTruthy()
+      expect(screen.getByText('Test #4 is at 90 % of its cap.')).toBeTruthy()
       expect(screen.queryByText(/lifetime cap/)).toBeNull()
+    })
+
+    it('shows no near-cap banner when the server does not flag one', async () => {
+      stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('20', '19') } })
+      render(<Ads />)
+      await screen.findByRole('region', { name: 'Budget' })
+      expect(screen.queryByText(/of the daily cap/)).toBeNull()
     })
   })
 })

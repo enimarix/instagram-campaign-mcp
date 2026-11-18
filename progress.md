@@ -248,7 +248,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 - [x] 099 — End-to-end smoke test — Playwright: seed, open inbox, like, comment, approve, slot appears in the calendar, worker "publishes" against a mocked Graph API; runs in CI.
 - [x] 100 — One-command setup and README — installers set up Python, Node dependencies, the website build, the Reel downloader (`git submodule update --init` and `ig-campaign downloader setup`), the ffmpeg check, the Claude Code CLI check and the scheduled tasks on Windows, macOS and Linux; README rewritten: setup, a normal day (including the AI label if it must be set by hand), recovery (expired token, failed publish, stuck render, restore from backup).
 - [x] 122 — Small follow-ups — audience evidence on `update_learning`, the feed's trial toggle for experiment videos, the old clip file removed when a granted file replaces it. — deps: 065, 083, 088 · touches: `src/learning/learnings.py`, `src/instagram_mcp_server.py#update_learning`, `src/studio/permissions.py`, `web/src/inbox/InboxPage.tsx`, `web/src/api/client.ts#Asset`, `src/api/assets.py`
-- [ ] 123 — Ads API gaps — winner thumbnails, `GET /api/ads/presets`, `near_cap` on the budget route; the Ads page drops its copies. — deps: 095b, 096 · touches: `src/ads/tests.py`, `src/api/ads.py`, `web/src/pages/Ads.tsx`
+- [x] 123 — Ads API gaps — winner thumbnails, `GET /api/ads/presets`, `near_cap` on the budget route; the Ads page drops its copies. — deps: 095b, 096 · touches: `src/ads/tests.py`, `src/api/ads.py`, `web/src/pages/Ads.tsx`
 - [ ] 101 — Final review — walk the checklist in GOAL.md §7 on the owner's machine with the owner, fix or file what fails.
 
 ### Milestones (what the owner can do after each phase)
@@ -266,6 +266,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 123 — Ads API gaps — https://github.com/enimarix/instagram-campaign-mcp/pull/130 (2026-11-18) — winner thumbnails, `GET /api/ads/presets`, `near_cap` on the budget routes; the Ads page drops its copies
 - [x] 096 — Ads for the agent — https://github.com/enimarix/instagram-campaign-mcp/pull/129 (2026-11-18) — agent tools list_ad_winners / propose_ad_test (max 3 waiting) / list_ad_tests / get_ad_test_results, proven to have no money power; weekly schedule entries (`weekly-ads@mon 04:00`); weekly-ads playbook, opt-in after H6. PHASE 9 BUILT (live at H6).
 - [x] 095b — Ad results on the Ads page — https://github.com/enimarix/instagram-campaign-mcp/pull/128 (2026-11-18) — per test: verdict in plain words with the lift interval, spend bar, versions table, p-values under Details, Meta review chips, near-cap banners
 - [x] 095 — Ad results (backend) — https://github.com/enimarix/instagram-campaign-mcp/pull/127 (2026-11-18) — `ads_sync` worker job: kill enforced on Meta, insights snapshots, ledger reconciled (never under-counts), over-spend alert + kill, review issues, stop rules, near-cap alerts; results API (web in 095b)
@@ -424,7 +425,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - [ ] (from 073) A DM share that arrives as a CDN link (not a permalink) is refused by download_reel: verify the live payload at H5 and map it.
 - [ ] (from 064) With the H4 key: one real Pexels search + add; confirm the file host (`videos.pexels.com` vs `player.vimeo.com`) that `stock.file_host_ok` allows.
 - [ ] (from 090) At H6: confirm `ads_read` alone can read campaigns / ad sets / ads (docs frame it as reporting only).
-- [ ] (from 094b, 095b) Ads API gaps the page works around: `eligible_winners` has no thumbnail (picker shows caption + date); no route lists the ad presets (the page mirrors them); `/api/ads/budget` has no `near_cap` flags (the page copies NEAR_CAP 0.8). Add `thumbnail_url`, `GET /api/ads/presets`, `sync.near_caps` on the budget route, and drop the web copies.
+- [x] (from 094b, 095b) Ads API gaps the page works around: `eligible_winners` has no thumbnail (picker shows caption + date); no route lists the ad presets (the page mirrors them); `/api/ads/budget` has no `near_cap` flags (the page copies NEAR_CAP 0.8). Add `thumbnail_url`, `GET /api/ads/presets`, `sync.near_caps` on the budget route, and drop the web copies.
 - [x] (from 112) `list_revision_requests` (MCP) should also hide requests whose new version is still rendering, like the work packet does.
 - Clip intake (063 review): add a `sources.licence` column (cc licence is kept in stats.licence today, so publishing refuses cc clips: fails safe) and a store setter for local_path; optional streamed upload route for clips.
 - Inspirations (051b review): playbook Safety rule 1 should say the owner's inspiration notes are taste guidance while the Reels themselves are outside data; accept a mixed-case host (Instagram.com) in pasted links; check Trends + Inspirations at 375 px.

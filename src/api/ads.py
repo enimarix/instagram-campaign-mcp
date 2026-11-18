@@ -31,7 +31,8 @@ class UnkillBody(BaseModel):
 
 
 def _status(request: Request) -> dict:
-    return budget.status(request.app.state.store, request.app.state.settings)
+    st = budget.status(request.app.state.store, request.app.state.settings)
+    return {**st, "near_cap": sync.near_caps(st)}
 
 
 @router.get("/budget")
@@ -107,6 +108,11 @@ def get_test(request: Request, test_id: int):
 def winners(request: Request):
     s = request.app.state
     return {"winners": tests.eligible_winners(s.store, s.settings)}
+
+
+@router.get("/presets")
+def presets():
+    return {"presets": tests.presets()}
 
 
 @router.post("/tests")

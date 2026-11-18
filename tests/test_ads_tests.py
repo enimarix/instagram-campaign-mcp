@@ -181,7 +181,7 @@ async def test_propose_refuses_other_posts_and_unboostable(store, meta):
 
 
 def test_eligible_winners(store, monkeypatch):
-    _post(store, "111")
+    store.update_asset(_post(store, "111")["id"], thumbnail_path="2026/1/thumb.jpg")
     _post(store, "222", rights_basis="commentary", author="a")
     rows = [({"media_id": m, "permalink": f"p/{m}", "posted_at": "t", "caption": "c"},
              {"verdict": v, "group": g, "engagement_index": 2.0})
@@ -191,6 +191,15 @@ def test_eligible_winners(store, monkeypatch):
     monkeypatch.setattr(tests, "scored_posts", lambda store, settings: rows)
     out = tests.eligible_winners(store, _settings())
     assert [w["media_id"] for w in out] == ["111"] and out[0]["engagement_index"] == 2.0
+    assert out[0]["thumbnail_url"] == "/api/media/2026/1/thumb.jpg"
+
+
+def test_presets_name_what_they_vary():
+    out = {p["id"]: p for p in tests.presets()}
+    assert {k: p["varies"] for k, p in out.items()} == {
+        "fr_reels": ["audience", "placement"], "fr_feed_reels": ["placement"],
+        "francophone_reels": ["audience"]}
+    assert all(p["label"] for p in out.values())
 
 
 # --- approve ---------------------------------------------------------------------------
@@ -482,5 +491,6 @@ def test_api_winners_and_kill_audit(api, monkeypatch):
     tc, store = api
     monkeypatch.setattr(tests, "scored_posts", lambda store, settings: [])
     assert tc.get("/api/ads/winners").json() == {"winners": []}
+    assert tc.get("/api/ads/presets").json() == {"presets": tests.presets()}
     _send(tc, "/api/ads/kill", {"reason": "panic"})
     assert tc.get("/api/ads/audit").json()["rows"][0]["detail"] == {"reason": "panic"}
