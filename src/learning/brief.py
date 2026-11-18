@@ -57,7 +57,7 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
     quotas = todays_quotas(store, settings, today, now)
     return {
         # 134: the owner's work orders come before anything else (made first, literally)
-        "work_orders": work_orders.for_agent(store, "new", WORK_ORDERS),
+        "work_orders": work_orders.for_agent(store, "scheduled", WORK_ORDERS),
         # 133: what the owner turned down (with why) and the changes they approved
         "owner_decisions": owner_decisions(store),
         "bible": bible,

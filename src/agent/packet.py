@@ -13,7 +13,8 @@ does it. Before every agent run, write_packet() rebuilds `<workspace>/work/`:
 
 Run kinds are playbook names (RUNS): `daily-produce` (night) needs every section but
 `ads` (only `weekly-ads` reads it), the light afternoon run is a second playbook,
-`daily-revise` (the owner's work orders, revisions, feedback, DM picks),
+`daily-revise` (the owner's work orders, DM picks included since 136, revisions,
+feedback),
 scheduled like any other: `AGENT_SCHEDULE=daily-produce@03:00,daily-revise@14:00`. A
 playbook not in the table gets every section.
 
@@ -95,7 +96,7 @@ def _dm_picks(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
 
 
 def _work_orders(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
-    orders = work_orders.for_agent(store, "new", MAX_ITEMS)
+    orders = work_orders.for_agent(store, "scheduled", MAX_ITEMS)
     return {"untrusted_captions": True, "orders": orders}, len(orders)
 
 

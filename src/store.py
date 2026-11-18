@@ -554,6 +554,60 @@ CREATE UNIQUE INDEX idx_work_orders_open ON work_orders(source_id)
 CREATE INDEX idx_work_orders_idea ON work_orders(idea_id);
 """
 
+# Migration 22: DM picks become work orders (136). The table is rebuilt (new CHECKs):
+# source_id may be null (a DM order reaches its Reel through pick_id), mode `owner` (follow
+# the owner's free-text instruction), statuses needs_instruction / scheduled (was `new`) /
+# analysed, own_reel (the Reel is one of ours), blocked_reason (why it waits), analysis,
+# scheduled_at (the at-once run's debounce). One open order per Trending Reel; a DM Reel
+# may be sent twice. Every existing pick gets its order.
+DM_ORDERS_SCHEMA = """
+CREATE TABLE work_orders_new (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id      INTEGER REFERENCES sources(id),
+    pick_id        INTEGER UNIQUE REFERENCES dm_picks(id),
+    mode           TEXT NOT NULL CHECK (mode IN ('inspired','react','owner')),
+    instruction    TEXT,
+    own_reel       INTEGER NOT NULL DEFAULT 0,
+    status         TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN
+        ('needs_instruction','scheduled','in_production','in_feed','analysed','skipped')),
+    skip_reason    TEXT,
+    blocked_reason TEXT,
+    analysis       TEXT,
+    scheduled_at   TEXT,
+    idea_id        INTEGER REFERENCES ideas(id),
+    asset_id       INTEGER REFERENCES assets(id),
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    CHECK (source_id IS NOT NULL OR pick_id IS NOT NULL)
+);
+INSERT INTO work_orders_new (id, source_id, mode, instruction, status, skip_reason,
+    scheduled_at, idea_id, asset_id, created_at, updated_at)
+SELECT id, source_id, mode, instruction,
+    CASE status WHEN 'new' THEN 'scheduled' ELSE status END, skip_reason,
+    CASE status WHEN 'new' THEN created_at END, idea_id, asset_id, created_at, updated_at
+FROM work_orders;
+DROP TABLE work_orders;
+ALTER TABLE work_orders_new RENAME TO work_orders;
+CREATE UNIQUE INDEX idx_work_orders_open ON work_orders(source_id)
+    WHERE pick_id IS NULL AND status IN ('needs_instruction','scheduled','in_production');
+CREATE INDEX idx_work_orders_idea ON work_orders(idea_id);
+CREATE INDEX idx_work_orders_status ON work_orders(status, scheduled_at);
+INSERT INTO work_orders (pick_id, mode, instruction, status, skip_reason, scheduled_at,
+    idea_id, created_at, updated_at)
+SELECT p.id, 'owner', p.sender_note,
+    CASE WHEN p.status = 'skipped' THEN 'skipped'
+         WHEN p.status = 'posted' THEN 'in_feed'
+         WHEN p.status = 'in_production' THEN 'in_production'
+         WHEN p.sender_note IS NULL THEN 'needs_instruction' ELSE 'scheduled' END,
+    CASE WHEN p.status = 'skipped' THEN p.skip_reason END,
+    CASE WHEN p.status IN ('new','downloaded') AND p.sender_note IS NOT NULL
+         THEN p.created_at END,
+    (SELECT MAX(i.id) FROM ideas i WHERE i.source_id = p.source_id
+     AND p.status IN ('in_production','posted')),
+    p.created_at, p.updated_at
+FROM dm_picks p ORDER BY p.id;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -562,7 +616,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
-                         AD_TESTS_SCHEMA, TRENDING_SCHEMA]
+                         AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -1501,7 +1555,7 @@ class CampaignStore:
         rights_basis (None: no source) and dm_pick_sender (the pinned account that sent the
         source by DM, else None) for the inbox, and change_request: on a revised video, the
         owner's newest change request on the version it replaces {text, reason_codes}, and
-        work_order: the owner's trending work order its idea was made for {id, mode,
+        work_order: the owner's work order (Trending or DM) its idea was made for {id, mode,
         instruction, permalink} (every version of that idea), else None."""
         return self._select(
             "SELECT a.*, i.track, i.strategy, i.experiment, s.rights_basis,"
@@ -1511,7 +1565,9 @@ class CampaignStore:
             "  FROM feedback f WHERE f.asset_id = a.parent_asset_id AND f.wants_changes = 1"
             "  ORDER BY f.id DESC LIMIT 1) AS change_request,"
             " (SELECT json_object('id', w.id, 'mode', w.mode, 'instruction', w.instruction,"
-            "  'permalink', ws.url) FROM work_orders w JOIN sources ws ON ws.id = w.source_id"
+            "  'permalink', COALESCE(ws.url, wp.reel_url)) FROM work_orders w"
+            "  LEFT JOIN sources ws ON ws.id = w.source_id"
+            "  LEFT JOIN dm_picks wp ON wp.id = w.pick_id"
             "  WHERE w.idea_id = a.idea_id ORDER BY w.id DESC LIMIT 1) AS work_order"
             " FROM assets a JOIN ideas i ON i.id = a.idea_id"
             " LEFT JOIN sources s ON s.id = i.source_id",

@@ -62,7 +62,6 @@ REPORTED = ("published", "retrying", "failed", "recovered_stuck", "replanned")
 DATA_SHARE = 0.8
 INSIGHTS_EVERY = timedelta(minutes=15)
 RECONCILE_EVERY = timedelta(minutes=10)  # it lists media while an asset waits for a check
-DM_PICKS_EVERY = timedelta(minutes=15)  # Reels pinned accounts sent by DM (step 113)
 DAILY_RETRY = timedelta(hours=1)  # a failing daily job (e.g. no insights permission) waits
 RENDER_TICK = 5.0  # s between queue polls and job heartbeats
 RENDER_STALE = timedelta(minutes=10)  # a running job without heartbeat this long is re-queued
@@ -174,7 +173,7 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
     if _every(store, "insights_at", INSIGHTS_EVERY, t):
         await job("insights", lambda: collect_due_insights(client, store, t,
                                                            lambda: data_budget_left(client)))
-    if _every(store, "dm_picks_at", DM_PICKS_EVERY, t):
+    if _every(store, "dm_picks_at", timedelta(minutes=settings.dm_poll_minutes), t):
         await job("dm_picks", lambda: dm_picks.poll_dm_picks(
             client, store, budget_left=lambda: data_budget_left(client)))
 

@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import re
 from datetime import timedelta
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
-from ..instagram_client import InstagramClient, RateLimitExceeded
+from ..instagram_client import InstagramAPIError, InstagramClient, RateLimitExceeded
 from ..store import CampaignStore, parse_dt, to_iso, utcnow
+from .downloader import _same_post
 
 STATUSES = ("new", "downloaded", "in_production", "posted", "skipped")
 NOTE_MAX = 300
@@ -32,6 +33,9 @@ MESSAGES = 20  # Meta: details only for the 20 most recent messages
 AGENT_KEYS = ("id", "status", "reel_url", "sender_username", "sender_note", "received_at",
               "skip_reason")
 _USERNAME = re.compile(r"[a-z0-9._]{1,30}")
+# a _select filter key: 1 = the pick is a work order
+_ORDERED = "(id IN (SELECT pick_id FROM work_orders WHERE pick_id IS NOT NULL))"
+OWN_MEDIA_PAGE = 100  # our newest media, asked at most once per poll
 # A shared feed post or a picture: never a Reel.
 _NOT_A_REEL = re.compile(r"https://(?:www\.)?instagram\.com/p/"
                          r"|[.](?:jpe?g|png|webp|heic)(?:[?#]|$)", re.IGNORECASE)
@@ -72,13 +76,16 @@ def list_pinned(store: CampaignStore) -> List[Dict[str, Any]]:
 
 # ---------------------------------------------------------------- picks
 def list_picks(store: CampaignStore, status: Optional[str] = "new",
-               limit: int = 100, *, newest: bool = False) -> List[Dict[str, Any]]:
+               limit: int = 100, *, newest: bool = False,
+               ordered: Optional[bool] = None) -> List[Dict[str, Any]]:
     """Oldest first (picks are made in the order they came), or the newest first for the
-    owner's list; all when status is None."""
+    owner's list; all when status is None. ordered: only picks that are (True) or are not
+    (False) a work order (136); None: both."""
     if status is not None and status not in STATUSES:
         raise ValueError(f"status must be one of {', '.join(STATUSES)}")
     order = "received_at DESC, id DESC" if newest else "received_at, id"
-    return store._select("SELECT * FROM dm_picks", {"status": status}, order, limit)
+    return store._select("SELECT * FROM dm_picks", {"status": status, _ORDERED: ordered},
+                         order, limit)
 
 
 def agent_view(pick: Dict[str, Any]) -> Dict[str, Any]:
@@ -88,7 +95,9 @@ def agent_view(pick: Dict[str, Any]) -> Dict[str, Any]:
 
 def for_agent(store: CampaignStore, status: Optional[str] = "new",
               limit: int = 100) -> List[Dict[str, Any]]:
-    return [agent_view(p) for p in list_picks(store, status, limit)]
+    """Picks that are not work orders: since 136 the agent makes every new pick as its
+    order (work_orders.py), so only picks from before that would show here."""
+    return [agent_view(p) for p in list_picks(store, status, limit, ordered=False)]
 
 
 def mark_pick(store: CampaignStore, pick_id: int, status: str,
@@ -145,12 +154,43 @@ def _match(pinned: List[Dict[str, Any]], who: Dict[str, Any]) -> Optional[Dict[s
                  or (uid and p["ig_user_id"] == uid)), None)
 
 
+async def _own_reel(client: InstagramClient, store: CampaignStore, url: str,
+                   budget_left: Callable[[], bool], cache: Dict[str, Set[str]]) -> bool:
+    """The Reel is one of ours: its permalink is one we published (scheduled_posts, insight
+    snapshots) or among our OWN_MEDIA_PAGE newest media (one Graph call per poll, when the
+    budget allows). Not a permalink, or not found: someone else's."""
+    try:
+        post = set(_same_post(url))
+    except ValueError:
+        return False
+    if "ours" not in cache:
+        with store._tx() as c:
+            links = [r[0] for r in c.execute(
+                "SELECT permalink FROM scheduled_posts WHERE permalink IS NOT NULL UNION"
+                " SELECT permalink FROM insight_snapshots WHERE permalink IS NOT NULL")]
+        if budget_left():
+            try:
+                links += [m.get("permalink") for m in
+                          (await client.get_media_posts(limit=OWN_MEDIA_PAGE))["posts"]]
+            except RateLimitExceeded:
+                raise
+            except InstagramAPIError:
+                pass  # e.g. no permission: only what we published here counts
+        cache["ours"] = {p.rstrip("/") + "/" for p in links if p}
+    return bool(post & cache["ours"])
+
+
 async def poll_dm_picks(client: Optional[InstagramClient], store: CampaignStore, *,
                         budget_left: Callable[[], bool]) -> Dict[str, Any]:
     """Record a pick for every Reel a pinned account shared in the brand account's recent
-    DMs (idempotent per message id). Returns {conversations, picks, stopped}; stopped: null,
-    "request_budget" or "rate_limited". No client (setup mode) or no pins: no call."""
+    DMs (idempotent per message id), each with its work order (136: scheduled at once when
+    the DM has a note, else waiting for the owner's instruction; own_reel when the Reel is
+    ours). Returns {conversations, picks, stopped}; stopped: null, "request_budget" or
+    "rate_limited". No client (setup mode) or no pins: no call."""
+    from . import work_orders  # here: work_orders imports this module
+
     pinned = list_pinned(store)
+    own: Dict[str, Set[str]] = {}
     if client is None or not pinned:
         return {"skipped": "not configured" if client is None else "no pinned accounts"}
     out: Dict[str, Any] = {"conversations": 0, "picks": 0, "stopped": None}
@@ -179,16 +219,23 @@ async def poll_dm_picks(client: Optional[InstagramClient], store: CampaignStore,
                 p, reel = _match(pinned, msg.get("from") or {}), _reel(msg)
                 if not p or not reel or not msg.get("id"):
                     continue
-                now = to_iso(utcnow())
                 with store._tx() as c:
-                    out["picks"] += c.execute(
+                    if c.execute("SELECT 1 FROM dm_picks WHERE message_id=?",
+                                 (msg["id"],)).fetchone():
+                        continue
+                own_reel = await _own_reel(client, store, reel["url"], budget_left, own)
+                note, now = _note(msgs, i), to_iso(utcnow())
+                with store._tx() as c:
+                    cur = c.execute(
                         "INSERT INTO dm_picks (message_id, pinned_account_id, sender_username,"
                         " reel_url, reel_media_id, sender_note, received_at, created_at,"
                         " updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
                         " ON CONFLICT(message_id) DO NOTHING",
                         (msg["id"], p["id"], p["username"], reel["url"], reel["id"],
-                         _note(msgs, i), to_iso(parse_dt(msg["created_time"])), now, now)
-                    ).rowcount
+                         note, to_iso(parse_dt(msg["created_time"])), now, now))
+                    if cur.rowcount:  # another poll may have stored it meanwhile
+                        work_orders.add_for_pick(c, cur.lastrowid, note, own_reel, now)
+                    out["picks"] += cur.rowcount
     except RateLimitExceeded:
         out["stopped"] = "rate_limited"
     return out

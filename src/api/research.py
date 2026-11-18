@@ -3,7 +3,8 @@ accounts research_trends looks up, for the owner to edit; GET /api/trends, the r
 trend report (studio/research.py trend_report, step 052); /api/inspirations, the Reel
 links the owner pastes with a note (store, step 051b); /api/research/*, the Trending page
 (step 134): refresh, feed, reactions, suggested topics (studio/research.py) and work
-orders (studio/work_orders.py)."""
+orders (studio/work_orders.py); /api/work-orders: every work order, Trending and DM
+(136), and the owner's instruction."""
 
 from __future__ import annotations
 
@@ -137,11 +138,34 @@ def create_work_orders(body: WorkOrdersIn, store: CampaignStore = Depends(get_st
     return call(work_orders.create_orders, store, [i.model_dump() for i in body.items])
 
 
+WorkOrderStatus = Literal["needs_instruction", "scheduled", "in_production", "in_feed",
+                          "analysed", "skipped"]
+
+
+class InstructionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    instruction: str
+    mode: Optional[Literal["inspired", "react", "owner"]] = None
+
+
 @router.get("/research/work-orders")
-def list_work_orders(status: Optional[Literal["new", "in_production", "in_feed",
-                                              "skipped"]] = None,
+def list_work_orders(status: Optional[WorkOrderStatus] = None,
                      store: CampaignStore = Depends(get_store)):
-    return work_orders.list_orders(store, status)
+    return work_orders.list_orders(store, status, source="trend")
+
+
+@router.get("/work-orders")
+def list_all_work_orders(source: Literal["all", "dm", "trend"] = "all",
+                         status: Optional[WorkOrderStatus] = None,
+                         limit: int = Query(100, ge=1, le=500),
+                         store: CampaignStore = Depends(get_store)):
+    return work_orders.list_orders(store, status, limit, source=source)
+
+
+@router.patch("/work-orders/{order_id}")
+def set_instruction(order_id: int, body: InstructionIn,
+                    store: CampaignStore = Depends(get_store)):
+    return call(work_orders.set_instruction, store, order_id, body.instruction, body.mode)
 
 
 @router.delete("/research/work-orders/{order_id}", status_code=204)

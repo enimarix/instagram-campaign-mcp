@@ -138,7 +138,7 @@ async def test_not_configured_or_nothing_pinned_is_a_no_op(store):
     assert await _poll(object(), store) == {"skipped": "no pinned accounts"}  # no call made
 
 
-async def test_worker_runs_it_every_15_minutes(store, monkeypatch):
+async def test_worker_runs_it_every_dm_poll_minutes(store, monkeypatch):
     seen = []
 
     async def fake_poll(client, store, *, budget_left):
@@ -146,9 +146,9 @@ async def test_worker_runs_it_every_15_minutes(store, monkeypatch):
         return {"picks": 0}
 
     monkeypatch.setattr(D, "poll_dm_picks", fake_poll)
-    cfg = InstagramMCPSettings(_env_file=None, database_path=":memory:")
+    cfg = InstagramMCPSettings(_env_file=None, database_path=":memory:")  # 5 min (136)
     fake = FakeClient()
-    for minutes in (0, 10, 15):
+    for minutes in (0, 3, 5):
         await worker.data_jobs(fake, store, cfg,
                                now=lambda m=minutes: T + timedelta(minutes=m))
     assert seen == [True, True]
