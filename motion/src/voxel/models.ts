@@ -190,11 +190,9 @@ export const phone = (): VoxelGrid => {
   // Ring: protein, carbs, fat clockwise from the top, the rest an empty track.
   for (let x = -5; x <= 5; x++)
     for (let y = 10; y <= 20; y++) {
-      const dx = x;
-      const dy = y - 15;
-      const r = Math.hypot(dx, dy);
+      const r = Math.hypot(x, y - 15);
       if (r < 3 || r > 4.6) continue;
-      const a = (Math.atan2(dx, dy) / (2 * Math.PI) + 1) % 1;
+      const a = (Math.atan2(x, y - 15) / (2 * Math.PI) + 1) % 1; // 0 at the top, clockwise
       g.set(x, y, 1, a < 0.3 ? "protein" : a < 0.58 ? "carbs" : a < 0.76 ? "fat" : "slate");
     }
   g.set(0, 15, 1, "kcal");

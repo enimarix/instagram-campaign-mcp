@@ -2,7 +2,7 @@
 // Registered in Root.tsx only (not a template the studio can pick).
 import { useCurrentFrame } from "remotion";
 import { z } from "zod";
-import { bob, hop, ISO, type Move, orbit, popIn, poseAt, pushIn, dolly, turntable } from "../voxel/anim.ts";
+import { bob, dolly, hop, ISO, type Move, orbit, popIn, type Pose, poseAt, pushIn, turntable } from "../voxel/anim.ts";
 import { golem, island, platform, PROPS } from "../voxel/models.ts";
 import { CameraRig, DEFAULT_PIXELATE, VoxelCanvas, VoxelMesh } from "../voxel/Stage.tsx";
 
@@ -21,8 +21,6 @@ const PROP_MODELS = Object.values(PROPS).map((make) => make().voxels());
 const GOLEM_BASE = platform(30).voxels();
 const ISLAND = island(7).voxels();
 const HERO_ISLAND = island(15, 7).voxels();
-
-type Pose = Parameters<typeof orbit>[0];
 
 // Golems by level: forms 1–3 in front, 4–6 behind (Titan, the widest, in the middle).
 const GOLEM_SPOTS: [number, number][] = [[-16, 13], [0, 13], [16, 13], [-16, -13], [16, -13], [0, -13]];
