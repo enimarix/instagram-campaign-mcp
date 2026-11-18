@@ -21,8 +21,8 @@
   "accent": "protein",
   "citations": [
     { "url": "https://bjsm.bmj.com/content/52/6/376", "title": "Morton et al. 2018, Br J Sports Med: protein beyond ~1.6 g/kg/day adds no further gain" },
-    { "url": "https://fdc.nal.usda.gov/food-details/171450/nutrients", "title": "USDA FoodData Central: Chicken drumstick, meat only, roasted (24 g protein / 100 g)" },
-    { "url": "https://fdc.nal.usda.gov/food-details/171287/nutrients", "title": "USDA FoodData Central: Egg, whole, raw (about 6 g protein in a large egg)" }
+    { "url": "https://fdc.nal.usda.gov/food-details/172376/nutrients", "title": "USDA FoodData Central: Chicken drumstick, meat only, roasted (24.2 g protein / 100 g)" },
+    { "url": "https://fdc.nal.usda.gov/food-details/171287/nutrients", "title": "USDA FoodData Central: Egg, whole, raw (12.6 g protein / 100 g, large egg 50 g = about 6 g)" }
   ],
   "music": "music-marimba",
   "loop": false,

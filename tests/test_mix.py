@@ -137,7 +137,9 @@ def test_brief_mix_counts_exploit_ideas(store, settings):
     b = B.creative_brief(store, settings, NOW)
     for dim in ("template", "hook_type", "pillar", "humour"):
         assert sum(r["count"] for r in b["mix"][dim]) == 7  # 10 ideas - 3 explore
-    assert _rows(b["mix"], "template")["PixelSkit"]["count"] >= 3
+    # the liked template leads (however many templates share the rest)
+    counts = {r["option"]: r["count"] for r in b["mix"]["template"]}
+    assert counts["PixelSkit"] >= 2 and all(n < counts["PixelSkit"] for k, n in counts.items() if k != "PixelSkit")
 
 
 def test_the_owners_humour_share_is_where_the_split_starts():

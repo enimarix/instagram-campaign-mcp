@@ -17,7 +17,7 @@
   "toForm": "combattant",
   "accent": "kcal",
   "citations": [
-    { "url": "https://fdc.nal.usda.gov/food-details/2344102/nutrients", "title": "USDA FoodData Central: Pizza, pepperoni, regular crust (about 300 kcal a slice)" }
+    { "url": "https://fdc.nal.usda.gov/food-details/173295/nutrients", "title": "USDA FoodData Central: 14\" pizza, pepperoni, regular crust: 282 kcal / 100 g, slice 111 g = about 313 kcal" }
   ],
   "music": "music-marimba",
   "loop": false,
