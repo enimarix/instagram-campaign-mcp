@@ -15,6 +15,7 @@ jobs:
           python-version: "3.12"
       - run: pip install "ruff>=0.15"
       - run: ruff check .
+      - run: bash -n install.sh
 
   test:
     runs-on: ubuntu-latest
