@@ -10,21 +10,24 @@ import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
+import { EndCard } from "../../endcards/EndCard";
+import { CARD_S } from "../../endcards/schema";
 import type { PixelArt } from "../../lib/game";
 import { progress } from "../../lib/game";
 import { colors } from "../../lib/palette";
 import { fitTextScale, fontPx, linePx, snap } from "../../lib/pixel";
-import { buildTimeline, loopFade } from "../../lib/timeline";
+import { buildTimeline, fitEndCard, loopFade } from "../../lib/timeline";
 import { wrap } from "../../lib/typewriter";
 import { countdownAt, countdownTicks, type QuizChestProps, quizChestScript, withCountdown } from "./schema";
 
 // QuizChest (step 046): hook card, then the question (whole, top) over 2–4 choices (band), a
 // countdown ticking next to a closed chest (sfx-select each second), the reveal (flash, the chest
 // opens and a coin pops out, the right choice lights up, the others dim), the explanation typed
-// into the band under the open chest, and the end card with the call to comment. Scenes: the
-// script timeline (0 hook, 1 question, 2 explanation, 3 cta) with the countdown and reveal
-// inserted into scene 1 (`withCountdown`); the cta holds through the outro, where `loop` fades
-// the hook back in so the last frame matches frame 0.
+// into the band under the open chest, and the pixel end card (step 137) with the call to
+// comment as its tagline. Scenes: the script timeline (0 hook, 1 question, 2 explanation, 3 cta)
+// with the countdown and reveal inserted into scene 1 (`withCountdown`); the cta scene lasts the
+// card's length, `loop` fades the hook back in over its last frames so the last frame matches
+// frame 0.
 
 const HOOK_S = 1.5;
 const OUTRO_S = 0.5;
@@ -67,12 +70,12 @@ const chest: PixelArt = {
 };
 const CHEST_H = chest.frames[0].length * CHEST_PX;
 
-export const timelineOf = (props: QuizChestProps, fps: number) =>
-  withCountdown(
-    buildTimeline({ ...quizChestScript(props), fps, hookSeconds: HOOK_S, outroSeconds: OUTRO_S, loop: props.loop }),
-    props.countdownSeconds,
-    fps,
-  );
+export const timelineOf = (props: QuizChestProps, fps: number) => {
+  const build = (outroSeconds: number) =>
+    withCountdown(buildTimeline({ ...quizChestScript(props), fps, hookSeconds: HOOK_S, outroSeconds, loop: props.loop }), props.countdownSeconds, fps);
+  // The cta is the pixel end card's tagline: its scene lasts the card's own length.
+  return { ...build(OUTRO_S), timeline: fitEndCard((o) => build(o).timeline, OUTRO_S, (t) => t.scenes[3].startFrame, CARD_S.pixel, fps) };
+};
 
 type Colors = typeof colors;
 type Choice = QuizChestProps["choices"][number];
@@ -190,27 +193,6 @@ const Answer = ({ choices, answer, start, c }: { choices: Choice[]; answer: numb
   );
 };
 
-const EndCard = ({ cta, note, opacity, c }: { cta: string; note?: string; opacity: number; c: Colors }) => {
-  const { hook: area, captions: band } = scriptAreas();
-  const s = cta.normalize("NFC");
-  const scale = fitTextScale((cols) => wrap(s, cols).length, area.width, area.height - COIN_ROOM - GAP, 6);
-  return (
-    <AbsoluteFill style={{ opacity }}>
-      <div
-        style={{ position: "absolute", ...area, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: GAP }}
-      >
-        <Sprite {...assetById("coin")} scale={CHEST_PX} fps={8} />
-        <PixelText text={s} scale={scale} color={c.primary} maxWidth={area.width} />
-      </div>
-      {note && (
-        <div style={{ position: "absolute", ...band, display: "flex", justifyContent: "center", textAlign: "center" }}>
-          <PixelText text={note} scale={3} color={c.text} maxWidth={band.width} />
-        </div>
-      )}
-    </AbsoluteFill>
-  );
-};
-
 /** One sound from `from` on (stills are silent). */
 const Sfx = ({ id, from }: { id: "sfx-select" | "sfx-confirm" | "sfx-coin"; from: number }) => (
   <Sequence from={from} layout="none">
@@ -237,13 +219,12 @@ export const QuizChest = (props: QuizChestProps) => {
         </>
       )}
       {frame >= cta.startFrame && (
-        <EndCard
-          cta={props.cta}
-          note={props.citations.length ? props.sourcesNote : undefined}
-          // Gives way to the hook as it fades back in: the last frame is frame 0's picture.
-          opacity={1 - loopFade(frame, timeline)}
-          c={c}
-        />
+        // Gives way to the hook as it fades back in: the last frame is frame 0's picture.
+        <AbsoluteFill style={{ opacity: 1 - loopFade(frame, timeline) }}>
+          <Sequence from={cta.startFrame} layout="none">
+            <EndCard style="pixel" tagline={props.cta} cameo="coin" note={props.citations.length ? props.sourcesNote : undefined} accent="brand" address="vous" pixelate={1} />
+          </Sequence>
+        </AbsoluteFill>
       )}
       <HookCard text={props.hook} timeline={timeline} color={c.primary} />
       {timeline.scenes.slice(1).map((s) => (

@@ -38,6 +38,9 @@ export type Template<S extends z.ZodType> = {
   events?: (props: z.infer<S>) => Event[];
 };
 
+/** What the 8-bit templates' end card shows (step 137), for their timelines. */
+const PIXEL_CARD = "end card (pixel): mB tile, macroBody, 7 jours gratuits, macrobody.fr";
+
 /** Key under which Root passes the cover frame out through the resolved props (render.mjs reads it). */
 export const COVER_FRAME_PROP = "__coverFrame";
 
@@ -103,7 +106,7 @@ export const templates = {
     durationInFrames: (p) => factQuestTimeline(p, FPS).totalFrames,
     coverFrame: (p) => factQuestTimeline(p, FPS).hookFrame,
     events: (p) =>
-      scriptEvents(factQuestTimeline(p, FPS), FPS, ["hook card", ...p.facts.map((_, i) => `fact ${i + 1}`), "outro card"], p),
+      scriptEvents(factQuestTimeline(p, FPS), FPS, ["hook card", ...p.facts.map((_, i) => `fact ${i + 1}`), PIXEL_CARD], p, "end card hold"),
   }),
   BossBattle: template({
     style: "pixel",
@@ -135,6 +138,7 @@ export const templates = {
           `verdict (${p.verdict.winner === "draw" ? "draw" : `${p[p.verdict.winner].name} wins`})`,
         ],
         p,
+        PIXEL_CARD,
       ),
   }),
   QuizChest: template({
@@ -163,7 +167,7 @@ export const templates = {
       const { timeline, countdownStart, reveal } = quizChestTimeline(p, FPS);
       const choice = p.choices[p.answer];
       return [
-        ...scriptEvents(timeline, FPS, ["hook card", "question + choices", "explanation", "cta card"], p),
+        ...scriptEvents(timeline, FPS, ["hook card", "question + choices", "explanation", PIXEL_CARD], p, "end card hold"),
         { t: countdownStart / FPS, d: p.countdownSeconds, e: `countdown ${p.countdownSeconds} s` },
         { t: reveal / FPS, d: REVEAL_S, e: "chest opens: the answer", text: `${choice.label}: ${choice.text}` },
       ];
@@ -198,6 +202,7 @@ export const templates = {
         FPS,
         ["hook card", ...p.lines.map((l) => `dialogue ${p.characters[l.speaker].name}`), "moral"],
         p,
+        PIXEL_CARD,
       ),
   }),
   PixelSkit: template({
@@ -227,7 +232,7 @@ export const templates = {
       const beat = (b: (typeof p.beats)[number], i: number) =>
         `${i + 1 === punch ? "punchline" : i + 1 > punch ? "tag" : `beat ${i + 1}`} (${b.action})`;
       return [
-        ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat)], p),
+        ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat)], p, PIXEL_CARD),
         ...(p.sting !== "none" ? [{ t: land / FPS, d: 0, e: `sting: ${p.sting}` }] : []),
         ...(freezeEnd > freezeStart ? [{ t: freezeStart / FPS, d: (freezeEnd - freezeStart) / FPS, e: "freeze on the punchline" }] : []),
       ];

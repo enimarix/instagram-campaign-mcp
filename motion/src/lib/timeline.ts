@@ -27,6 +27,8 @@ export type Timeline = {
   totalFrames: number;
   hookFrame: number;
   loop: boolean;
+  /** Frames of the loop fade at the very end (MIN_LOOP_S): a longer outro (an end card) holds before it. */
+  loopFrames: number;
 };
 
 export type TimelineInput = {
@@ -77,7 +79,7 @@ export const buildTimeline = ({ lines, timings, fps, hookSeconds, outroSeconds, 
     endFrame: index + 1 < lines.length ? starts[index + 1] : end,
   }));
   const outro = at(loop ? Math.max(outroSeconds, MIN_LOOP_S) : outroSeconds);
-  return { scenes, outroStart: end, totalFrames: end + outro, hookFrame: Math.min(HOOK_FRAME, fps - 1), loop };
+  return { scenes, outroStart: end, totalFrames: end + outro, hookFrame: Math.min(HOOK_FRAME, fps - 1), loop, loopFrames: at(MIN_LOOP_S) };
 };
 
 /** The scene on screen at `frame`, if any (none during the outro). */
@@ -85,11 +87,23 @@ export const sceneAt = (scenes: Scene[], frame: number): Scene | undefined =>
   scenes.find((s) => frame >= s.startFrame && frame < s.endFrame);
 
 /**
- * Opacity of frame 0's picture laid over the outro when looping: 0 before the outro, then rising
- * in `steps` hard steps to 1 on the last frame, so the replay starts where the video ended.
+ * Opacity of frame 0's picture laid over the end when looping: 0 before the last `loopFrames`
+ * of the outro, then rising in `steps` hard steps to 1 on the last frame, so the replay starts
+ * where the video ended.
  */
 export const loopFade = (frame: number, t: Timeline, steps = 4): number => {
-  if (!t.loop || frame < t.outroStart) return 0;
-  const p = Math.min(1, (frame - t.outroStart + 1) / (t.totalFrames - t.outroStart));
+  const start = Math.max(t.outroStart, t.totalFrames - t.loopFrames);
+  if (!t.loop || frame < start) return 0;
+  const p = Math.min(1, (frame - start + 1) / (t.totalFrames - start));
   return Math.floor(p * steps) / steps;
+};
+
+/**
+ * The timeline `build(outroSeconds)` gives, with the outro lengthened when needed so that the
+ * end card, from `cardStart(timeline)`, lasts `seconds` (plus the loop fade when looping).
+ */
+export const fitEndCard = (build: (outroSeconds: number) => Timeline, outroSeconds: number, cardStart: (t: Timeline) => number, seconds: number, fps: number): Timeline => {
+  const t = build(outroSeconds);
+  const short = Math.round(seconds * fps) + (t.loop ? t.loopFrames : 0) - (t.totalFrames - cardStart(t));
+  return short > 0 ? build((t.totalFrames - t.outroStart + short) / fps) : t;
 };

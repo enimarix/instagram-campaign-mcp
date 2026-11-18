@@ -1,7 +1,8 @@
-// End-card props shared by every style (step 130; 137 adds the other styles). The base is
-// fixed (mB tile, wordmark, « 7 jours gratuits » pill, macrobody.fr; never a price) and each
-// video adapts it: tagline from its payoff, accent from its topic, cameo from its story.
-// Imports only zod and pure modules, so `node --test` runs it (test/voxelquest.test.ts).
+// End-card props shared by every style (step 130, all styles in step 137). The base is fixed
+// (mB tile, wordmark, « 7 jours gratuits » pill, macrobody.fr; never a price) and each video
+// adapts it: tagline from its payoff, accent from its topic, cameo from its story, backdrop
+// from its set (live: the video's last frame).
+// Imports only zod and pure modules, so `node --test` runs it (test/endcards.test.ts).
 import { z } from "zod";
 import { NO_PRICE, noPrice } from "../lib/noPrice.ts";
 import { FORMS } from "../voxel/palette.ts";
@@ -17,6 +18,8 @@ export const ACCENTS = {
   fat: "#F5C242",
   kcal: "#3E8EF7",
 } as const;
+/** Accent colours dark enough for text on a light surface (fat and carbs darkened). */
+export const TEXT_ACCENT = { ...ACCENTS, fat: "#B7862A", carbs: "#2E9E66" } as const;
 export const accentSchema = z.enum(["brand", "protein", "carbs", "fat", "kcal"]);
 export type Accent = z.infer<typeof accentSchema>;
 
@@ -40,23 +43,80 @@ export const DEFAULT_TAGLINE = {
   tu: "Calcule. Personnalise. Atteins tes objectifs.",
 } as const;
 
-export const END_CARD_STYLES = ["voxel"] as const;
+/** One card per style; a template ends on its style's card. */
+export const END_CARD_STYLES = ["voxel", "paper", "clean", "pixel", "live"] as const;
+export type EndCardStyle = (typeof END_CARD_STYLES)[number];
 
-export const endCardSchema = z.strictObject({
-  /** Which style's card (one per style: voxel now; paper, clean, pixel, live in step 137). */
-  style: z.enum(END_CARD_STYLES).default("voxel"),
-  /** One line tied to the video's payoff; none = the app's tagline in the right address. */
-  tagline: screenText(70).optional(),
-  /** Macro colour of the topic (the rug under the tile, the url underline); default emerald. */
-  accent: accentSchema.default("brand"),
-  /** Who stands beside the tile: the golem in the form the story reached, or its food prop. */
-  cameo: z.union([formSchema, foodSchema]).default("etincelle"),
-  address: addressSchema.default(DEFAULT_ADDRESS),
-  /** Voxel pixelation (1 = off), as the story around it. */
-  pixelate: z.number().int().min(1).max(4).default(2),
-});
+/**
+ * Who or what stands beside the tile, per style (first = default; "none" works everywhere):
+ * voxel the golem in a form or a food prop, paper a cut-out character or food, clean an app
+ * card (the calorie ring), pixel a sprite of src/assets.ts, live nothing (the footage is the set).
+ */
+export const CAMEOS = {
+  voxel: [...FORM_IDS, ...FOOD_IDS],
+  paper: ["ines", "paul", "avocado"],
+  clean: ["ring"],
+  pixel: ["mascot", "slime", "coin", "heart"],
+  live: [],
+} as const satisfies Record<EndCardStyle, readonly string[]>;
 
-export type EndCardProps = z.infer<typeof endCardSchema>;
+/** The cameo a card shows: the one asked for, else its style's first. */
+export const cameoOf = (style: EndCardStyle, cameo?: string): string => cameo ?? CAMEOS[style][0] ?? "none";
+
+/**
+ * Each card's own length (a standalone clip, e.g. Track A recipes) and when its choreography
+ * has settled: every card then holds at least 1 s on the finished picture.
+ */
+export const CARD_S = { voxel: 3.5, paper: 3.5, clean: 3.5, pixel: 4, live: 4 } as const satisfies Record<EndCardStyle, number>;
+export const SETTLE_S = { voxel: 2.3, paper: 2.3, clean: 2.1, pixel: 2.8, live: 2.6 } as const satisfies Record<EndCardStyle, number>;
 
 /** Shortest end card (owner: a clean end card of 2 s or more; the reveal needs about 2 s). */
 export const END_CARD_MIN_S = 2.5;
+
+/** A CSS font family name (the paper card's display font): letters, digits and spaces only. */
+const fontFamily = z.string().regex(/^[A-Za-z0-9 ]{1,40}$/, "a font family name (letters, digits, spaces)");
+
+export const endCardSchema = z
+  .strictObject({
+    /** Which style's card. */
+    style: z.enum(END_CARD_STYLES).default("voxel"),
+    /** One line tied to the video's payoff; none = the app's tagline in the right address. */
+    tagline: screenText(70).optional(),
+    /** Macro colour of the topic (rings, underlines, glows); default emerald. */
+    accent: accentSchema.default("brand"),
+    /** Style-specific (CAMEOS); none = the style's default, "none" = nobody. */
+    cameo: z.string().optional(),
+    address: addressSchema.default(DEFAULT_ADDRESS),
+    /** live only, required: the picture the card animates over (the video's last frame), a URL or bundle path. */
+    backdrop: z.string().min(1).optional(),
+    /** paper only: the display font (Fredoka once step 131 adds it); falls back to Inter Tight. */
+    font: fontFamily.optional(),
+    /** pixel only: a small line under the card, e.g. the sources note. */
+    note: screenText(40).optional(),
+    /** Voxel pixelation (1 = off), as the story around it. */
+    pixelate: z.number().int().min(1).max(4).default(2),
+    /** Length of the standalone card clip (EndCard composition); none = CARD_S of the style. */
+    seconds: z.number().min(END_CARD_MIN_S).max(8).optional(),
+  })
+  .superRefine((p, ctx) => {
+    const cameos: readonly string[] = CAMEOS[p.style];
+    if (p.cameo !== undefined && p.cameo !== "none" && !cameos.includes(p.cameo)) {
+      ctx.addIssue({ code: "custom", path: ["cameo"], message: `${p.style} cameos: ${[...cameos, "none"].join(", ")}` });
+    }
+    if ((p.style === "live") !== (p.backdrop !== undefined)) {
+      ctx.addIssue({ code: "custom", path: ["backdrop"], message: "live needs a backdrop (the last frame); other styles take none" });
+    }
+    if (p.font !== undefined && p.style !== "paper") {
+      ctx.addIssue({ code: "custom", path: ["font"], message: "only the paper card takes a font" });
+    }
+    if (p.note !== undefined && p.style !== "pixel") {
+      ctx.addIssue({ code: "custom", path: ["note"], message: "only the pixel card shows a note" });
+    }
+  });
+
+export type EndCardProps = z.infer<typeof endCardSchema>;
+/** What one style's card component gets. */
+export type CardProps = Omit<EndCardProps, "style" | "seconds">;
+
+/** Frames of the standalone card clip. */
+export const cardFrames = (p: Pick<EndCardProps, "style" | "seconds">, fps: number) => Math.round((p.seconds ?? CARD_S[p.style]) * fps);

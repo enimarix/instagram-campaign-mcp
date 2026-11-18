@@ -1,6 +1,7 @@
-// DialogStory props, script mapping and talk timing. Imports only zod (and a type), so
+// DialogStory props, script mapping and talk timing. Imports only zod and pure modules (and a type), so
 // `node --test` runs it directly (test/dialogstory.test.ts).
 import { z } from "zod";
+import { screenText } from "../../endcards/schema.ts";
 import type { Timeline, Timing } from "../../lib/timeline";
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "a #RRGGBB colour");
@@ -44,7 +45,9 @@ export const dialogStorySchema = z
     /** Sources of the story's facts (GOAL.md §5.6), carried from the idea. Not shown, kept with the asset. */
     citations: z.array(z.strictObject({ url: z.url({ protocol: /^https?$/ }), title: z.string().optional() })),
     /** Small line under the last box when there are citations, e.g. "Sources in caption". */
-    sourcesNote: z.string().min(1).max(40).optional(),
+    sourcesNote: screenText(40).optional(),
+    /** The pixel end card's line (shown, not spoken; step 137); none = the app's tagline. Never a price. */
+    tagline: screenText(70).optional(),
     /**
      * Voice track (step 048). `lines` = one timing per script line: hook, each dialogue line,
      * moral (when given); none = timings estimated from the text length. `audioSrc`: URL or

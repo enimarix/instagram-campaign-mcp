@@ -188,3 +188,30 @@ def load_brand(path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
 def safe_area(brand: Dict[str, Any]) -> Tuple[int, int, int, int]:
     """`(x, y, w, h)` of the region no Reels UI covers; the right inset honours `right_rail`."""
     return _area(brand["safe_zone"])
+
+
+# --- Never a price on screen (owner rule, 2026-11-18; brand.json cta.never_show_price). The
+# same patterns as motion/src/lib/noPrice.ts: currency signs or names, per month / year, and
+# an amount with cents ("4,99") unless a unit follows ("1,75 m", "72,40 kg").
+PRICE_PATTERNS = [
+    r"[€$£]",
+    r"\b(?:eur|euros?|usd|dollars?)\b",
+    r"/\s*(?:mois|an|semaine|month|year)\b",
+    r"\bpar\s+(?:mois|an|semaine)\b",
+    r"\b(?:per\s+month|per\s+year|a\s+month)\b",
+    r"\d[.,]\d\d(?!\d)\s*(?![%\s]*(?:kg|g|mg|kcal|cal|l|ml|m|cm|km|h|min|s)\b)",
+]
+_PRICE = [re.compile(p, re.IGNORECASE) for p in PRICE_PATTERNS]
+NO_PRICE = "no price on screen (owner rule): remove the amount, currency or per-month wording"
+
+
+def has_price(text: str) -> bool:
+    """True when `text` holds price-like wording."""
+    return any(p.search(text) for p in _PRICE)
+
+
+def no_price(text: str) -> str:
+    """`text`, or ValueError(NO_PRICE): a pydantic validator for on-screen text."""
+    if has_price(text):
+        raise ValueError(NO_PRICE)
+    return text

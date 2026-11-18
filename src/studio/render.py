@@ -38,6 +38,7 @@ PREVIEW_ARGS = ("-vf", "scale=720:1280", "-c:v", "libx264", "-b:v", "1500k", "-m
                 "-bufsize", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k",
                 "-movflags", "+faststart")
 THUMB_WIDTH = 270
+WARNING_CHARS = 300
 
 Progress = Callable[[float], None]
 
@@ -127,19 +128,31 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
                  preset: str = DEFAULT_PRESET, timeout_s: float = DEFAULT_TIMEOUT_S
                  ) -> Tuple[MediaInfo, Dict[str, Any]]:
     """Render the master, preview, poster and thumbnail; return the master's MediaInfo and
-    the asset fields (relative paths, and the timeline: what happens when, step 110)."""
+    the asset fields (relative paths, and the timeline: what happens when, step 110), plus
+    `render_warnings` for QC when the render had to fall back (the static end card)."""
     env = _ENVELOPE.validate_python(asset["recipe"])
     folder = media.asset_dir(media_root, asset["batch_date"], asset["id"])
     video, preview = folder / "video.mp4", folder / "preview.mp4"
     poster, thumb = folder / "poster.jpg", folder / "thumb.jpg"
     cover_ms = env.thumb_offset_ms
+    warnings: List[str] = []
     if isinstance(env, MotionRecipe):
         info, template_cover_ms, timeline = motion.render_motion_asset(
             env.template, env.props, video, media_root, timeout_s=timeout_s)
         cover_ms = template_cover_ms if cover_ms is None else cover_ms
     else:
         inputs = {k: media.resolve(media_root, v) for k, v in env.inputs.items()}
-        info = render(env.recipe, inputs, video, timeout_s=timeout_s, preset=preset)
+
+        def end_card(props: Dict[str, Any], backdrop: Optional[Path]) -> Optional[Path]:
+            try:
+                return motion.render_end_card(media_root, props, backdrop, timeout_s=timeout_s)
+            except motion.MotionError as e:  # Remotion unavailable: the static card, flagged
+                warnings.append(f"static end card (fallback): the animated card could not be"
+                                f" rendered: {e}"[:WARNING_CHARS])
+                return None
+
+        info = render(env.recipe, inputs, video, timeout_s=timeout_s, preset=preset,
+                      end_card=end_card)
         timeline = recipe_timeline(env.recipe, info.duration, env.clip_timeline or ())
     progress(0.8)
     ffmpeg.run(["-i", video, *PREVIEW_ARGS, "-preset", preset, preview], timeout_s=timeout_s)
@@ -153,7 +166,7 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
     paths: Dict[str, Path] = {"file_path": video, "preview_path": preview,
                               "poster_path": poster, "thumbnail_path": thumb}
     return info, {**{k: media.relative(media_root, p) for k, p in paths.items()},
-                  "timeline": timeline}
+                  "timeline": timeline, **({"render_warnings": warnings} if warnings else {})}
 
 
 def auto_description(idea: Dict[str, Any], asset: Dict[str, Any]) -> str:
@@ -192,7 +205,10 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
         idea = store.get_idea(asset["idea_id"])
         info, files = render_fn(asset, media_root,
                                 lambda p: store.update_render_job(job_id, progress=p))
+        notes = files.pop("render_warnings", [])
         qc = qc_fn(asset, idea, files["file_path"], media_root, settings or get_settings())
+        if notes:
+            qc = {**qc, "warnings": [*qc.get("warnings", []), *notes]}
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason
         reason = f"{type(e).__name__}: {e}"[:FAILURE_CHARS]
         if isinstance(e, ValueError) or job["attempts"] >= MAX_ATTEMPTS:

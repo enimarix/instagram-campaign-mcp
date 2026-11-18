@@ -134,4 +134,5 @@ jobs:
       - run: npm run still:voxel
       - run: npm run still:voxelquest
       - run: npm run still:endcard
+      - run: npm run still:endcards
       - run: npm run check:voxel

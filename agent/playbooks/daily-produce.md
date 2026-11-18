@@ -297,6 +297,17 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 2. For each new idea, build the props from the idea: the hook, the script split into the
    template's parts, the citations in the template's `citations` prop when it has one.
    Voice-over is added by the studio; do not pass `voice` unless the schema asks for it.
+   **The end card, per video.** Every template ends on its style's animated end card (the
+   mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
+   write them, never a price anywhere). Adapt it to this video's story:
+   - **tagline**: one short line tied to the payoff, in the video's address (e.g. « Fini
+     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest), `cta`
+     (QuizChest) or `tagline` (BossBattle, DialogStory, PixelSkit); no line = the app's own.
+   - **accent**: the macro colour of the topic: `protein`, `carbs`, `fat`, `kcal`, or
+     `brand` (emerald) when none fits; on the templates that take an `accent` prop.
+   - **cameo**: who or what from the story stands by the tile: for VoxelQuest the golem
+     in the form the story reached or one of its foods (`cameo`), otherwise the
+     template's default.
 3. `preview_motion(template, props)` returns stills. Look at them: the hook readable in
    the first frame, no text cut off or overflowing, nothing hidden in the bottom third
    (Instagram's caption area), nothing crowded. Fix the props and preview again (at most

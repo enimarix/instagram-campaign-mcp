@@ -15,7 +15,7 @@ import { cellNoise, VoxelGrid } from "../voxel/mesh.ts";
 import { golem, KITCHEN_SPOT, KITCHEN_WIDE, kitchen, mbTile, PROPS } from "../voxel/models.ts";
 import { FORMS } from "../voxel/palette.ts";
 import { CameraRig, VoxelCanvas, VoxelCubes, VoxelMesh } from "../voxel/Stage.tsx";
-import { ACCENTS, type Accent, DEFAULT_TAGLINE, type EndCardProps } from "./schema.ts";
+import { ACCENTS, type Accent, type CardProps, cameoOf, DEFAULT_TAGLINE } from "./schema.ts";
 
 /** The kitchen sits this far below the podium: the crane up leaves it as the backdrop. */
 const KITCHEN_Y = -110;
@@ -73,12 +73,14 @@ const fade = (frame: number, start: number, length = 10) => ({
   transform: `translateY(${(1 - easeOut(span(frame, start, length))) * 36}px)`,
 });
 
-export const VoxelEndCard = ({ tagline, accent, cameo, address, pixelate }: Omit<EndCardProps, "style">) => {
+export const VoxelEndCard = ({ tagline, accent, cameo: asked, address, pixelate }: CardProps) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const area = safeArea();
   const color = ACCENTS[accent];
+  const cameo = cameoOf("voxel", asked);
   const isGolem = cameo in GOLEMS;
+  const cameoVoxels = isGolem ? GOLEMS[cameo] : FOODS[cameo];
   const arrive = hop(frame, AT.cameo, 18, 5);
   const wave = frame > AT.cameo + 18 ? Math.sin((frame - AT.cameo - 18) / 4) * 0.14 : 0;
   const pill = frame < AT.pill ? 0 : backOut(span(frame, AT.pill, 12), 0.35);
@@ -100,13 +102,13 @@ export const VoxelEndCard = ({ tagline, accent, cameo, address, pixelate }: Omit
         <group scale={popIn(frame, AT.podium, 14, 0.12)}>
           <VoxelMesh voxels={PODIUMS[accent]} build={{ center: false }} />
         </group>
-        <group
+        {cameoVoxels && <group
           position={[CAMEO_AT[0], arrive.y + bob(frame, 50, 0.2), CAMEO_AT[2]]}
           rotation={[0, Math.PI / 4, wave]}
           scale={arrive.scale.map((v) => v * (frame < AT.cameo ? 0 : isGolem ? 0.58 : 0.85)) as [number, number, number]}
         >
-          <VoxelMesh voxels={isGolem ? GOLEMS[cameo] : FOODS[cameo]} fit={isGolem ? undefined : 11} />
-        </group>
+          <VoxelMesh voxels={cameoVoxels} fit={isGolem ? undefined : 11} />
+        </group>}
       </VoxelCanvas>
       {/* The logo on its own layer, never pixelated: a crisp rounded square and "mB". An
           invisible floor catches its shadow on the podium below. */}

@@ -1,6 +1,7 @@
-// QuizChest props, script mapping and countdown maths. Imports only zod (and a type), so
+// QuizChest props, script mapping and countdown maths. Imports only zod and pure modules (and a type), so
 // `node --test` runs it directly (test/quizchest.test.ts).
 import { z } from "zod";
+import { screenText } from "../../endcards/schema.ts";
 import type { Timeline } from "../../lib/timeline";
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "a #RRGGBB colour");
@@ -33,11 +34,11 @@ export const quizChestSchema = z
     /** Script line 2: why that answer, typed into the caption band after the reveal. */
     explanation: z.string().min(1).max(120),
     /** Script line 3: end card inviting comments. */
-    cta: z.string().min(1).max(40).default("Comment your answer!"),
+    cta: screenText(40).default("Comment your answer!"),
     /** Sources of the answer (GOAL.md §5.6), carried from the idea. Not shown, kept with the asset. */
     citations: z.array(z.strictObject({ url: z.url({ protocol: /^https?$/ }), title: z.string().optional() })),
     /** Small line under the end card when there are citations, e.g. "Sources in caption". */
-    sourcesNote: z.string().min(1).max(40).optional(),
+    sourcesNote: screenText(40).optional(),
     /**
      * Voice track (step 048). `lines` = one timing per script line: hook, question (may read the
      * choices too), explanation, cta; none = timings estimated from the text length. The voice

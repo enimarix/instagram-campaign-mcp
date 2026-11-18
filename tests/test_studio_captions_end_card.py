@@ -1,4 +1,5 @@
-"""captions and end_card ops, and every op keeping the clip's length."""
+"""captions and end_card ops (animated card and static fallback), and every op keeping the
+clip's length."""
 
 import json
 import subprocess
@@ -36,11 +37,31 @@ def streams(path):
     return {s["codec_type"]: float(s["duration"]) for s in json.loads(out)["streams"]}
 
 
-def run(tmp_path, ops, *, duration):
+def run(tmp_path, ops, *, duration, end_card=None):
     src = make_flat(tmp_path / "in.mp4", duration=duration)
     out = tmp_path / "out.mp4"
-    info = render(Recipe(ops=ops), {"source": src}, out, timeout_s=120, preset="ultrafast")
+    info = render(Recipe(ops=ops), {"source": src}, out, timeout_s=120, preset="ultrafast",
+                  end_card=end_card)
     return src, out, info
+
+
+def fake_cards(tmp_path, calls):
+    """A CardRenderer drawing a white clip of the card's length (no Remotion), recording
+    (props, backdrop) and the backdrop's mean grey."""
+    def card(props, backdrop):
+        mean = None
+        if backdrop is not None:
+            raw = tmp_path / "backdrop.gray"
+            ffmpeg.run(["-i", backdrop, "-vf", "scale=8:8", "-f", "rawvideo", "-pix_fmt", "gray",
+                        raw], timeout_s=60)
+            mean = sum(raw.read_bytes()) / 64
+        calls.append((props, backdrop, mean))
+        clip = tmp_path / f"card-{len(calls)}.mp4"
+        ffmpeg.run(["-f", "lavfi", "-i", f"color=c=white:size={W}x{recipe.HEIGHT}:rate=30"
+                    f":duration={props['seconds']}", "-c:v", "libx264", "-preset", "ultrafast",
+                    "-pix_fmt", "yuv420p", clip], timeout_s=60)
+        return clip
+    return card
 
 
 @needs_ffmpeg
@@ -143,18 +164,41 @@ def test_ass_text_escapes_override_braces_and_backslashes():
 
 
 @needs_ffmpeg
-def test_end_card_extends_video_with_brand_background_and_continuous_audio(tmp_path):
-    src, out, info = run(tmp_path, [EndCard()], duration=1)
-    assert_spec(info, 3)
+@pytest.mark.parametrize("style", ["live", "clean"])
+def test_end_card_appends_the_animated_card(tmp_path, style):
+    calls = []
+    op = EndCard(text="Vos 308 kcal, sous contrôle.", style=style, accent="kcal", duration_s=3)
+    src, out, info = run(tmp_path, [op], duration=1, end_card=fake_cards(tmp_path, calls))
+    assert_spec(info, 4)
     s = streams(out)
-    assert s["video"] == pytest.approx(1 + 2.0, abs=FRAME + 0.005)
+    assert s["video"] == pytest.approx(1 + 3.0, abs=FRAME + 0.005)
     assert s["audio"] == pytest.approx(s["video"], abs=FRAME + 0.005)
-    clip, card = gray(tmp_path, out, 0.5), gray(tmp_path, out, 2.5)
-    assert clip[0] > 100  # the grey clip
-    bg = card[0]
-    assert bg > 220  # the light brand surface (#F5F7F8)
-    for x, y in ((W - 1, 0), (0, recipe.HEIGHT - 1), (W // 2, recipe.HEIGHT - 300)):
-        assert abs(card[y * W + x] - bg) <= 4
+    assert gray(tmp_path, out, 0.5)[0] < 160 and gray(tmp_path, out, 2.5)[0] > 240  # clip, card
+    [(props, backdrop, mean)] = calls
+    assert props == {"style": style, "accent": "kcal", "seconds": 3.0,
+                     "address": "tu" if style == "live" else "vous",
+                     "tagline": "Vos 308 kcal, sous contrôle."}
+    if style == "live":  # the clip's last frame (flat grey) is the backdrop
+        assert backdrop.suffix == ".jpg" and mean == pytest.approx(128, abs=8)
+    else:
+        assert backdrop is None
+
+
+@needs_ffmpeg
+def test_end_card_falls_back_to_the_static_card(tmp_path):
+    """No renderer, or one that says Remotion is unavailable: the static card (step 050)."""
+    for end_card in (None, lambda props, backdrop: None):
+        src, out, info = run(tmp_path, [EndCard(duration_s=2)], duration=1, end_card=end_card)
+        assert_spec(info, 3.5)  # 2 s is below the 2.5 s minimum
+        s = streams(out)
+        assert s["video"] == pytest.approx(1 + 2.5, abs=FRAME + 0.005)
+        assert s["audio"] == pytest.approx(s["video"], abs=FRAME + 0.005)
+        clip, card = gray(tmp_path, out, 0.5), gray(tmp_path, out, 2.5)
+        assert clip[0] > 100  # the grey clip
+        bg = card[0]
+        assert bg > 220  # the light brand surface (#F5F7F8)
+        for x, y in ((W - 1, 0), (0, recipe.HEIGHT - 1), (W // 2, recipe.HEIGHT - 300)):
+            assert abs(card[y * W + x] - bg) <= 4
 
 
 @needs_ffmpeg
@@ -184,11 +228,15 @@ def test_end_card_blocks_are_centred_on_the_frame_axis(tmp_path, with_logo):
 
 
 def test_end_card_validation():
-    for bad in ({"text": ""}, {"text": "x", "duration_s": 0.5}, {"text": "x", "duration_s": 5},
-                {"text": "x" * 61}):
+    for bad in ({"text": ""}, {"text": "x", "duration_s": 0}, {"text": "x", "duration_s": 7},
+                {"text": "x" * 61}, {"text": "Dès 4,99 € par mois"}, {"style": "pixel"},
+                {"accent": "red"}):
         with pytest.raises(ValidationError):
             EndCard(**bad)
-    assert EndCard().duration_s == 2.0 and EndCard().with_logo and EndCard().text is None
+    card = EndCard()
+    assert (card.duration_s, card.style, card.accent, card.text) == (3.5, "live", "brand", None)
+    assert EndCard(duration_s=1).duration_s == 2.5  # never shorter than END_CARD_MIN_S
+    assert card.texts() == [] and EndCard(text="Ton tour.").texts() == ["Ton tour."]
 
 
 @needs_ffmpeg

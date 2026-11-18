@@ -47,7 +47,7 @@ def test_good_clip_passes(tmp_path):
     r = check(tmp_path)
     assert r["passed"] and r["reasons"] == [] and r["warnings"] == []
     assert [c["name"] for c in r["checks"]] == ["spec", "duration", "audio", "loudness",
-                                                 "black", "freeze", "caption"]
+                                                 "black", "freeze", "caption", "price"]
     assert r["loudness_lufs"] == pytest.approx(-14, abs=1)
 
 
@@ -123,3 +123,58 @@ def test_render_job_moves_failing_asset_to_failed(store, tmp_path):
     a = store.get_asset(a["id"])
     assert job["state"] == "done" and a["status"] == "failed"
     assert a["qc"]["passed"] is False and a["qc"]["reasons"] == ["3.0 s (want 5-90 s)"]
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("recipe", [
+    # Captions are the clip's own speech: never refused up front, so QC catches the price.
+    {"kind": "ffmpeg", "inputs": {"source": "s.mp4"}, "recipe": {"ops": [
+        {"op": "captions", "lines": [{"start_s": 0, "end_s": 2, "text": "Seulement 9,99 € !"}]}]}},
+    {"kind": "motion", "template": "FactQuest", "props": {"hook": "Hook", "facts": [
+        {"text": "Abonnement 4,99 par mois"}], "citations": [{"url": "https://x.org/9,99€"}]}},
+])
+def test_a_price_on_screen_fails_qc(tmp_path, recipe):
+    make(tmp_path / "clip.mp4")
+    r = qc.run_qc({"caption": "Fun fact", "recipe": recipe}, None, "clip.mp4", tmp_path,
+                  _settings())
+    assert not r["passed"] and failed(r) == ["price"]
+    assert r["reasons"][0].startswith("a price on screen: ")
+
+
+def test_screen_texts():
+    env = {"kind": "ffmpeg", "recipe": {"ops": [
+        {"op": "hook_text", "text": "Hook"}, {"op": "credit", "text": "@creator"},
+        {"op": "captions", "lines": [{"start_s": 0, "end_s": 1, "text": "Said"}]},
+        {"op": "end_card", "text": "Tagline"}, {"op": "logo"}]}}
+    assert qc.screen_texts(env) == ["Hook", "@creator", "Said", "Tagline"]
+    motion = {"kind": "motion", "props": {"hook": "H", "beats": [{"line": "L"}], "music": "m",
+                                          "voice": {"lines": [{"text": "H"}]},
+                                          "citations": [{"url": "u"}]}}
+    assert qc.screen_texts(motion) == ["H", "L"]
+    assert qc.screen_texts(None) == []
+
+
+def test_price_patterns_match_the_motion_guard():
+    """= motion/test/noPrice.test.ts: the same wording is refused on both sides."""
+    from src.studio.brand import has_price
+    for bad in ["9,99 €", "€9", "4.99$", "10 euros", "12 EUR", "seulement 5 dollars",
+                "4,99 / mois", "60 par an", "abonnement par mois", "$5 a month", "2,49"]:
+        assert has_price(bad), bad
+    for ok in ["7 jours gratuits", "308 kcal restantes à 21 h", "1,6 g par kg", "72,4 kg",
+               "31 g de protéines", "Le 2e jour", "macrobody.fr", "Sans engagement", "0,25 l",
+               "1,75 m"]:
+        assert not has_price(ok), ok
+
+
+@needs_ffmpeg
+def test_render_warnings_join_the_qc_warnings(store, tmp_path):
+    a = _asset(store)
+    render.enqueue_render(store, a["id"])
+
+    def fallback_render(asset, media_root, progress):
+        info = ffmpeg.probe(make(media_root / "video.mp4"))
+        return info, {"file_path": "video.mp4", "render_warnings": ["static end card (fallback)"]}
+
+    render.run_job(store, tmp_path, _claim(store), render_fn=fallback_render, settings=_settings())
+    a = store.get_asset(a["id"])
+    assert a["status"] == "ready" and a["qc"]["warnings"] == ["static end card (fallback)"]
