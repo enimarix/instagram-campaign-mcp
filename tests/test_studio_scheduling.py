@@ -56,6 +56,7 @@ def test_proposed_slot_route(tc, store, cfg):
     comm = _asset(store, cfg, track="remix", source=COMMENTARY)
     r = tc.get(f"/api/assets/{comm['id']}/proposed-slot")
     assert r.status_code == 200 and r.json()["needs_confirmation"] is True
+    assert r.json()["ai_label"] is True
     assert parse_dt(r.json()["publish_at"]) > utcnow()
     assert tc.get("/api/assets/999/proposed-slot").status_code == 404
 

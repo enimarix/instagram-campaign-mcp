@@ -516,9 +516,12 @@ account.
 - No health, medical or income promises ("lose 5 kg in a week", "cures", "guaranteed").
   The quality check flags such wording; the owner can still overrule in review.
 - Voice-over is synthetic. Meta asks creators to label realistic AI-made audio and
-  video. **Verify in docs** whether the publishing API can set that label; if it
-  cannot, the README's daily routine tells the owner to set it in the app, and the
-  asset detail shows a reminder.
+  video. The publishing API sets that label (`is_ai_generated=true` on the media
+  container, Instagram Platform changelog 2026-06-22): every video with anything
+  AI-made in it (agent-written script, TTS voice, AI visuals; when unsure, yes) is
+  published with it, and the asset detail and the scheduling sheet say so. If
+  Instagram refuses the label, the publish fails with the reason and an alert: an
+  AI-made video is never posted unlabelled.
 
 ## 6. Non-goals
 

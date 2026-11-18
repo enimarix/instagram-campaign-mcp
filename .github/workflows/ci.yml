@@ -27,9 +27,21 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # The Ubuntu mirror often serves ffmpeg's ~63 MB of packages at ~80 kB/s (13 min of a
+      # 15 min job): keep the .deb files in the Actions cache. Only changed packages download.
+      - uses: actions/cache@v6
+        with:
+          path: ~/apt-archives
+          key: apt-ffmpeg-${{ runner.os }}-v1
+      - run: |
+          mkdir -p ~/apt-archives/partial
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            -o Dir::Cache::Archives="$HOME/apt-archives" \
+            -o APT::Keep-Downloaded-Packages=true ffmpeg
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
       - run: pip install -e ".[dev]"
-      - run: pytest -q
+      - run: pytest -q --durations=15
 
   web:
     runs-on: ubuntu-latest

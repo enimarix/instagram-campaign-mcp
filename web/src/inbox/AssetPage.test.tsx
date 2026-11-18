@@ -19,6 +19,7 @@ const CONTEXT: AssetContext = {
   source: { rights_basis: 'licensed', author: 'someone', url: 'https://example.org/clip' },
   parent: { ...ASSET, id: 5 },
   children: [],
+  ai_label: true,
 }
 const COMMENT = { id: 1, text: 'first', reason_codes: [], video_time_s: 1.5, wants_changes: 0, created_at: '' }
 
@@ -67,7 +68,7 @@ describe('AssetPage', () => {
     const panel = screen.getByRole('region', { name: 'About this video' })
     for (const text of ['HookWait for it', 'Hook typequestion', 'Hypothesisquestions hook better',
       'TrackremixExplore', 'Pillarmyths', 'Recipefit_vertical', 'Rightslicensed · credit: someone',
-      'Quality checkFailed: too quiet'])
+      'Quality checkFailed: too quiet', "Published with Instagram's AI label"])
       expect(panel.textContent).toContain(text)
     expect(screen.getByRole('link', { name: 'Older version' }).getAttribute('href')).toBe('/assets/5')
     const video = document.querySelector('video')!

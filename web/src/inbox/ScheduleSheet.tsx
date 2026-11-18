@@ -11,7 +11,7 @@ import {
 import { Button } from '../ui/Button'
 import { Sheet } from '../ui/Sheet'
 import { field } from '../ui/styles'
-import { COMMENTARY_CONFIRMATION, inputValue, wallClock } from './ui'
+import { AI_LABEL_LINE, COMMENTARY_CONFIRMATION, inputValue, wallClock } from './ui'
 
 type Props = {
   assetId: number
@@ -56,6 +56,7 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
       <p className="mt-2 text-sm text-muted">
         {slot ? <>Proposed time: <strong className="text-fg">{wallClock(slot.local)}</strong></> : !error && 'Finding a slot…'}
       </p>
+      {slot?.ai_label && <p className="mt-1 text-sm text-muted">{AI_LABEL_LINE}</p>}
       {slot?.needs_confirmation && (
         <label className="mt-3 flex items-start gap-2 text-sm">
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}

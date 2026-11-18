@@ -37,6 +37,20 @@ def _source(store: CampaignStore, idea: Dict[str, Any]) -> Dict[str, Any]:
     return {"rights_basis": "own" if idea["track"] == "motion" else "unknown"}
 
 
+def ai_generated(asset: Dict[str, Any], idea: Dict[str, Any]) -> bool:
+    """Does the video carry Instagram's AI label (GOAL.md §5.6)? Yes for a motion render
+    (agent-written script, TTS voice), a remix with a voice-over, an idea with a script
+    (written by the agent) and anything unknown. No only for an ffmpeg edit with no
+    voice-over of an idea without a script."""
+    env = asset.get("recipe") or {}
+    if env.get("kind") != "ffmpeg":
+        return True
+    ops = (env.get("recipe") or {}).get("ops") or []
+    if any(op.get("op") == "voice_over" for op in ops):
+        return True
+    return bool((idea.get("script") or "").strip())
+
+
 def queue_asset(
     store: CampaignStore,
     settings: InstagramMCPSettings,
@@ -55,7 +69,8 @@ def queue_asset(
     asset = store.get_asset(asset_id)
     if asset["status"] != "approved":
         raise QueueRefused("not_approved", f"asset {asset_id} is {asset['status']}, not approved")
-    source = _source(store, store.get_idea(asset["idea_id"]))
+    idea = store.get_idea(asset["idea_id"])
+    source = _source(store, idea)
     decision = can_publish(source, confirmed)
     if not decision:
         raise QueueRefused("rights", decision.reason)
@@ -79,7 +94,8 @@ def queue_asset(
 
     payload = {"video_path": asset["file_path"], "caption": asset["caption"] or "",
                "audio_name": asset["audio_name"],
-               "thumb_offset_ms": (asset["recipe"] or {}).get("thumb_offset_ms")}
+               "thumb_offset_ms": (asset["recipe"] or {}).get("thumb_offset_ms"),
+               "ai_generated": ai_generated(asset, idea)}
     post = store.schedule("reel", {k: v for k, v in payload.items() if v is not None},
                           publish_at, asset_id=asset_id)
     # The row goes in first: if we crash before the move, the worker finds the asset

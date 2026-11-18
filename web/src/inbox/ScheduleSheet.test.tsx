@@ -17,7 +17,7 @@ function stubApi(routes: Record<string, [number, unknown]> = {}) {
     const method = init?.method ?? 'GET'
     calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
     const all: Record<string, [number, unknown]> = {
-      'GET /api/assets/3/proposed-slot': [200, { ...SLOT, needs_confirmation: false }],
+      'GET /api/assets/3/proposed-slot': [200, { ...SLOT, needs_confirmation: false, ai_label: true }],
       'POST /api/assets/3/schedule': [200, { asset: { ...ASSET, status: 'scheduled' } }],
       ...routes,
     }
@@ -53,6 +53,7 @@ describe('ScheduleSheet', () => {
     const calls = stubApi()
     const onScheduled = sheet()
     expect((await screen.findByText('2030-11-19 11:00')).tagName).toBe('STRONG')
+    expect(screen.getByText("Published with Instagram's AI label")).toBeTruthy()
     expect(screen.queryByRole('checkbox')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(onScheduled).toHaveBeenCalledWith({ ...ASSET, status: 'scheduled' }))
@@ -87,9 +88,10 @@ describe('ScheduleSheet', () => {
 
   it('needs the confirmation for a commentary clip', async () => {
     const calls = stubApi({
-      'GET /api/assets/3/proposed-slot': [200, { ...SLOT, needs_confirmation: true }] })
+      'GET /api/assets/3/proposed-slot': [200, { ...SLOT, needs_confirmation: true, ai_label: false }] })
     sheet()
     const box = await screen.findByRole('checkbox')
+    expect(screen.queryByText("Published with Instagram's AI label")).toBeNull()
     const accept = screen.getByRole('button', { name: 'Accept' })
     expect(accept).toHaveProperty('disabled', true)
     fireEvent.click(box)

@@ -194,6 +194,8 @@ export type AssetContext = {
   source: { rights_basis: string; author: string | null; url: string | null } | null
   parent: Asset | null
   children: Asset[]
+  /** Published with Instagram's AI label (GOAL §5.6). */
+  ai_label: boolean
 }
 export const getAssetContext = (id: number) => request<AssetContext>(`/api/assets/${id}/context`)
 
@@ -206,8 +208,9 @@ export function errorMessage(e: unknown): string {
 
 /** A publish slot: `publish_at` in UTC, `local` in the owner's time zone (both ISO). */
 export type Slot = { publish_at: string; local: string }
-/** GET /api/assets/{id}/proposed-slot; `needs_confirmation`: a commentary clip (GOAL §5.1). */
-export type ProposedSlot = Slot & { needs_confirmation: boolean }
+/** GET /api/assets/{id}/proposed-slot; `needs_confirmation`: a commentary clip (GOAL §5.1);
+ * `ai_label`: published with Instagram's AI label (§5.6). */
+export type ProposedSlot = Slot & { needs_confirmation: boolean; ai_label: boolean }
 export const getProposedSlot = (id: number) => request<ProposedSlot>(`/api/assets/${id}/proposed-slot`)
 /** Where a scheduled asset sits in the queue (404 when it has no pending slot). */
 export const getSlot = (id: number) => request<Slot & { post_id: number }>(`/api/assets/${id}/slot`)
