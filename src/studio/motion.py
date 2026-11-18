@@ -55,6 +55,8 @@ SCRIPTS = {
     "DialogStory": lambda p: [p["hook"], *(line["text"] for line in p["lines"]),
                               *([p["moral"]] if p.get("moral") else [])],
     "PixelSkit": lambda p: [p["hook"], *(b["line"] for b in p["beats"])],
+    "VoxelQuest": lambda p: [p["hook"], *(b["line"] for b in p["beats"]),
+                             *([p["outro"]] if p.get("outro") else [])],
 }
 
 
@@ -90,7 +92,8 @@ def _node(script: str, args: Sequence[Any], *, timeout_s: float,
 
 @functools.lru_cache(maxsize=1)
 def list_templates() -> List[Dict[str, Any]]:
-    """[{id, jsonSchema, defaultProps, description}] (cached: restart after editing motion/)."""
+    """[{id, style, jsonSchema, defaultProps, description}] (cached: restart after editing
+    motion/). `style`: the template's visual style id (motion/src/registry.ts STYLES)."""
     return _node("schemas.mjs", [], timeout_s=SCHEMA_TIMEOUT_S)["templates"]
 
 

@@ -1,9 +1,10 @@
 // Voxel engine (step 129): builder, palette, models and animation maths. No GPU needed.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cameraPosition, easeInOut, hop, ISO, popIn, poseAt, turntable } from "../src/voxel/anim.ts";
+import * as THREE from "three";
+import { cameraPosition, easeInOut, hop, ISO, popIn, poseAt, projectIso, turntable } from "../src/voxel/anim.ts";
 import { buildMesh, VoxelGrid } from "../src/voxel/mesh.ts";
-import { golem, island, platform, PROPS } from "../src/voxel/models.ts";
+import { golem, island, kitchen, kitchenScale, mbTile, phone, plate, platform, PROPS } from "../src/voxel/models.ts";
 import { COLORS, FORMS, mix } from "../src/voxel/palette.ts";
 
 const PAL = { a: "#FF0000", b: "#0000FF" };
@@ -69,7 +70,14 @@ test("layers: rows back to front, characters through the key", () => {
 });
 
 test("every model uses palette colours only and gains parts per golem form", () => {
-  const models = { ...Object.fromEntries(Object.entries(PROPS).map(([k, f]) => [k, f()])), island: island(7), platform: platform(10) };
+  const models = {
+    ...Object.fromEntries(Object.entries(PROPS).map(([k, f]) => [k, f()])),
+    island: island(7),
+    platform: platform(10),
+    kitchen: kitchen(),
+    mbTile: mbTile(),
+    plate: plate(),
+  };
   for (const [name, g] of Object.entries(models)) {
     assert.ok(g.voxels().length > 50, name);
     for (const [, , , c] of g.voxels()) assert.ok(COLORS[c], `${name}: ${c} not in palette`);
@@ -107,4 +115,33 @@ test("animation helpers: pop-in overshoots, hop squashes and lands, turntable an
   assert.equal(poseAt(0, move).azimuth, 45);
   assert.equal(poseAt(20, move).azimuth, 67.5);
   assert.equal(poseAt(99, move).azimuth, 90);
+});
+
+test("projectIso lands where three.js's orthographic camera puts a point", () => {
+  const pose = { ...ISO, azimuth: 20, elevation: 30, distance: 160, target: [5, 20, -10] as [number, number, number], lens: 26 };
+  const camera = new THREE.OrthographicCamera(-540, 540, 960, -960, 0.5, 1000);
+  camera.position.set(...cameraPosition(pose));
+  camera.lookAt(...pose.target);
+  camera.zoom = pose.lens;
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  for (const p of [[0, 0, 0], [12, 11, -16], [-8, 25, -2]] as [number, number, number][]) {
+    const v = new THREE.Vector3(...p).project(camera);
+    const [x, y] = projectIso(pose, p);
+    assert.ok(Math.abs(x - (v.x + 1) * 540) < 1e-6 && Math.abs(y - (1 - v.y) * 960) < 1e-6, `${p}: ${x},${y}`);
+  }
+});
+
+test("step 130 props: a scale with a lit reading, a phone ring that fills, the mB tile", () => {
+  const lit = (g: ReturnType<typeof kitchenScale>) => g.voxels().filter(([, , , c]) => c === "lcdOn").length;
+  assert.ok(lit(kitchenScale("72.4")) > lit(kitchenScale("1")) && lit(kitchenScale("1")) > 0);
+  const size = buildMesh(kitchenScale().voxels(), COLORS).size;
+  assert.ok(size[1] <= 3 && size[0] >= 18, "flat and wide: a scale, not a toaster");
+  const ring = (f: number) => phone(f).voxels().filter(([, , , c]) => ["protein", "carbs", "fat"].includes(c)).length;
+  assert.equal(ring(0), 0);
+  assert.ok(ring(0.5) > 0 && ring(0.5) < ring(1));
+  assert.deepEqual(phone(1).voxels().length, phone(0).voxels().length); // same cubes, only colours change
+  const tile = mbTile().voxels();
+  assert.ok(tile.filter(([, , z, c]) => z === 1 && c === "white").length > 60, "mB letters stand proud");
+  assert.deepEqual(buildMesh(tile, COLORS).size.slice(0, 2), [26, 26]);
 });

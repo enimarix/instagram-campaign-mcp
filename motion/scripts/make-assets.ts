@@ -1,7 +1,8 @@
 // Builds our own (code-generated) assets into public/: sprite sheets from src/lib/sprites.ts as
-// SVG, chiptune loops and sound effects from a tiny square/triangle/noise synth as WAV.
+// SVG, chiptune loops and sound effects from a tiny square/triangle/noise synth as WAV, and a
+// warmer marimba bed (step 130) from the same synth's sine-based voices.
 // Run: `node scripts/make-assets.ts` (from motion/), then commit the files it writes.
-// Deterministic (no Math.random, no Math.sin): test/assets-licenses.test.ts checks the
+// Deterministic (no Math.random, no Math.sin: `sine` below is plain arithmetic): test/assets-licenses.test.ts checks the
 // committed files still match this script, so re-run it after editing art, songs or the palette.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -12,7 +13,8 @@ import * as art from "../src/lib/sprites.ts";
 
 const RATE = 22050; // Hz, mono 16-bit: plenty for square waves, half the size of 44.1 kHz
 
-type Wave = "square" | "triangle" | "noise";
+/** marimba: sine + a fast-fading 4th partial, struck; bass: soft sine; kick: falling sine thump. */
+type Wave = "square" | "triangle" | "noise" | "marimba" | "bass" | "kick";
 type Tone = {
   wave: Wave;
   /** Start and end frequency in Hz (linear sweep); noise: the rate it picks new values. */
@@ -29,6 +31,17 @@ type Tone = {
 const ATTACK = 0.002; // s, avoids clicks
 const RELEASE = 0.01;
 
+/** sin(2πx) for x in cycles, Bhaskara I's approximation (error < 0.2 %): same bytes on every platform. */
+const sine = (x: number) => {
+  const t = x - Math.floor(x);
+  const h = t < 0.5 ? t * 2 : t * 2 - 1; // half cycle, 0..1
+  const v = (16 * h * (1 - h)) / (5 - 4 * h * (1 - h));
+  return t < 0.5 ? v : -v;
+};
+
+/** Struck-bar decay: 1 at the hit, about a quarter after `half` × 2 seconds (no Math.exp). */
+const strike = (s: number, half: number) => 1 / (1 + s / half) ** 2;
+
 /** Adds `t` to `buf` from sample `start`; the tone ends at silence, so loops stay click-free. */
 const addTone = (buf: Float64Array, start: number, t: Tone, seed = 1) => {
   const n = Math.min(Math.round(t.seconds * RATE), buf.length - start);
@@ -38,16 +51,25 @@ const addTone = (buf: Float64Array, start: number, t: Tone, seed = 1) => {
     const p = i / n;
     phase += (from + (to - from) * p) / RATE;
     const x = phase % 1;
+    const s = i / RATE;
+    const ends = Math.min(1, s / ATTACK, (n - i) / RATE / RELEASE);
+    if (t.wave === "marimba" || t.wave === "bass" || t.wave === "kick") {
+      const v =
+        t.wave === "marimba"
+          ? sine(phase) * strike(s, 0.22) + 0.22 * sine(phase * 4) * strike(s, 0.03)
+          : t.wave === "bass"
+            ? sine(phase) * strike(s, 0.6)
+            : sine(phase) * (1 - p) ** 2;
+      buf[start + i] += v * ends * t.volume;
+      continue;
+    }
     const v =
       t.wave === "square"
         ? x < duty ? 1 : -1
         : t.wave === "triangle"
           ? 1 - 4 * Math.abs(x - 0.5)
           : seeded(seed, Math.floor(phase)) * 2 - 1;
-    const s = i / RATE;
-    const env = t.decay
-      ? Math.min(1, s / ATTACK) * (1 - p)
-      : Math.min(1, s / ATTACK, (n - i) / RATE / RELEASE);
+    const env = t.decay ? Math.min(1, s / ATTACK) * (1 - p) : ends;
     buf[start + i] += v * env * t.volume;
   }
 };
@@ -103,6 +125,7 @@ const song = ({ bpm, tracks }: Song): Float64Array => {
       while (tokens[i + len] === "-") len++;
       const tone = { ...track, seconds: (len * step) / RATE };
       if (tok === "x") addTone(buf, i * step, { ...tone, wave: "noise", from: 8000, seconds: 0.06, decay: true }, ti * 1000 + i);
+      else if (track.wave === "kick") addTone(buf, i * step, { ...tone, from: 150, to: 42, seconds: Math.min(tone.seconds, 0.2) });
       else addTone(buf, i * step, { ...tone, from: hz(tok) });
     });
   });
@@ -120,7 +143,9 @@ const sq = (from: number, seconds: number, extra: Partial<Tone> = {}): Tone => (
   wave: "square", from, seconds, volume: 0.3, duty: 0.5, decay: true, ...extra,
 });
 
-// Two 2-bar loops; the bar count keeps each file small (~140 KB).
+const mallet = (from: number, seconds: number, volume = 0.3): Tone => ({ wave: "marimba", from, seconds, volume });
+
+// Two 2-bar chiptune loops (the bar count keeps each file small, ~140 KB) and a 4-bar marimba bed.
 const songs: Record<string, Song> = {
   // Bright C major, 150 bpm.
   "music-overworld": {
@@ -158,6 +183,48 @@ const songs: Record<string, Song> = {
       },
     ],
   },
+  // Warm marimba bed (step 130), F major, 104 bpm, 4 bars: Fmaj7 Am7 Dm7 Bbmaj7, soft
+  // sine bass, a light kick and shaker. For the brand styles (voxel, later paper/clean).
+  "music-marimba": {
+    bpm: 104,
+    tracks: [
+      {
+        wave: "marimba", volume: 0.2,
+        steps: [
+          "F4 - C5 - A4 - E5 - C5 - A4 - E5 - C5 -",
+          "A4 - E5 - C5 - G5 - E5 - C5 - G5 - E5 -",
+          "D4 - A4 - F4 - C5 - A4 - F4 - C5 - A4 -",
+          "A#3 - F4 - D4 - A4 - F4 - D4 - A4 - C5 -",
+        ].join(" "),
+      },
+      {
+        wave: "marimba", volume: 0.14,
+        steps: [
+          "A5 - - - - - G5 - A5 - C6 - - - - -",
+          "E5 - - - - - D5 - E5 - G5 - - - - -",
+          "F5 - - - - - E5 - F5 - A5 - - - - -",
+          "D5 - - - - - C5 - D5 - F5 - G5 - - -",
+        ].join(" "),
+      },
+      {
+        wave: "bass", volume: 0.26,
+        steps: [
+          "F2 - - - - - - - - - F2 - C3 - - -",
+          "A2 - - - - - - - - - A2 - E2 - - -",
+          "D2 - - - - - - - - - D2 - A2 - - -",
+          "A#1 - - - - - - - - - A#1 - C2 - - -",
+        ].join(" "),
+      },
+      {
+        wave: "kick", volume: 0.3,
+        steps: "C2 - - - . . . . C2 - - - . . . . ".repeat(4).trim(),
+      },
+      {
+        wave: "noise", volume: 0.05,
+        steps: ". . x . . . x . . . x . . . x x ".repeat(4).trim(),
+      },
+    ],
+  },
 };
 
 const effects: Record<string, Float64Array> = {
@@ -169,6 +236,9 @@ const effects: Record<string, Float64Array> = {
   ),
   "sfx-select": sfx([0, sq(880, 0.05, { duty: 0.25 })]),
   "sfx-confirm": sfx([0, sq(660, 0.06, { duty: 0.25, decay: false })], [0.06, sq(990, 0.14, { duty: 0.25 })]),
+  // Soft brand sounds (step 130): a wooden pop, and a rising marimba chime for a level-up.
+  "sfx-pop": sfx([0, { wave: "kick", from: 900, to: 300, seconds: 0.09, volume: 0.45 }], [0, mallet(1397, 0.25, 0.2)]),
+  "sfx-chime": sfx([0, mallet(698.46, 0.9)], [0.08, mallet(880, 0.9)], [0.16, mallet(1046.5, 0.9)], [0.24, mallet(1396.91, 1.1)]),
 };
 
 /** Every generated file: path under motion/ → contents. */

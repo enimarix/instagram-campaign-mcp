@@ -1,0 +1,25 @@
+{
+  "hook": "21 h. Il vous reste 308 kcal.",
+  "hookProp": "plate",
+  "beats": [
+    {
+      "kind": "problem",
+      "line": "Une part de pizza ? Environ 300 kcal… et la faim reste.",
+      "foods": [{ "prop": "pizza", "label": "≈ 300 kcal", "macro": "kcal" }]
+    },
+    { "kind": "problem", "line": "Rien du tout ? La faim gagne à minuit." },
+    { "kind": "app", "line": "macroBody compose votre fin de journée avec ce qu'il vous reste.", "value": "308 kcal" },
+    { "kind": "payoff", "line": "Journée bouclée, pile sur l'objectif." }
+  ],
+  "outro": "Terminez la journée pile sur vos objectifs.",
+  "address": "vous",
+  "fromForm": "recrue",
+  "toForm": "combattant",
+  "accent": "kcal",
+  "citations": [
+    { "url": "https://fdc.nal.usda.gov/food-details/173295/nutrients", "title": "USDA FoodData Central: 14\" pizza, pepperoni, regular crust: 282 kcal / 100 g, slice 111 g = about 313 kcal" }
+  ],
+  "music": "music-marimba",
+  "loop": false,
+  "pixelate": 2
+}

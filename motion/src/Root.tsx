@@ -1,6 +1,8 @@
 import { Composition } from "remotion";
 import { z } from "zod";
 import { COVER_FRAME_PROP, FPS, HEIGHT, type Template, templates, WIDTH } from "./registry";
+import { EndCard } from "./endcards/EndCard";
+import { endCardSchema } from "./endcards/schema";
 import { SCENES, VOXEL_PREVIEW_DEFAULTS, VoxelPreview, voxelPreviewSchema } from "./templates/VoxelPreview";
 
 // ponytail: registry entries are typed one by one; the loop only sees them as plain-props templates.
@@ -42,6 +44,18 @@ export const Root = () => (
       height={HEIGHT}
       fps={FPS}
       durationInFrames={SCENES.end}
+    />
+    {/* End-card preview (step 130): one card alone, 3.5 s. */}
+    <Composition
+      id="EndCard"
+      component={EndCard}
+      schema={endCardSchema}
+      defaultProps={endCardSchema.parse({})}
+      calculateMetadata={({ props }) => ({ props: endCardSchema.parse(props) })}
+      width={WIDTH}
+      height={HEIGHT}
+      fps={FPS}
+      durationInFrames={105}
     />
   </>
 );

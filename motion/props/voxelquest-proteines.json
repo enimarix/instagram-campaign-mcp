@@ -1,0 +1,30 @@
+{
+  "hook": "Les protéines : combien vraiment ?",
+  "hookProp": "plate",
+  "beats": [
+    {
+      "kind": "problem",
+      "line": "Poulet, œufs… on en mange, mais au hasard.",
+      "foods": [
+        { "prop": "drumstick", "label": "24 g/100 g", "macro": "protein" },
+        { "prop": "egg", "label": "6 g/œuf", "macro": "protein" }
+      ]
+    },
+    { "kind": "problem", "line": "Repère des études : environ 1,6 g par kg de poids et par jour." },
+    { "kind": "app", "line": "macroBody calcule votre cible (112 g à 70 kg) et suit chaque repas.", "value": "112 g" },
+    { "kind": "payoff", "line": "Cible atteinte, jour après jour." }
+  ],
+  "outro": "Vos protéines, enfin au bon niveau.",
+  "address": "vous",
+  "fromForm": "combattant",
+  "toForm": "guerrier",
+  "accent": "protein",
+  "citations": [
+    { "url": "https://bjsm.bmj.com/content/52/6/376", "title": "Morton et al. 2018, Br J Sports Med: protein beyond ~1.6 g/kg/day adds no further gain" },
+    { "url": "https://fdc.nal.usda.gov/food-details/172376/nutrients", "title": "USDA FoodData Central: Chicken drumstick, meat only, roasted (24.2 g protein / 100 g)" },
+    { "url": "https://fdc.nal.usda.gov/food-details/171287/nutrients", "title": "USDA FoodData Central: Egg, whole, raw (12.6 g protein / 100 g, large egg 50 g = about 6 g)" }
+  ],
+  "music": "music-marimba",
+  "loop": false,
+  "pixelate": 2
+}
