@@ -242,7 +242,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 ### Phase 10 — Hardening and handover
 
 - [x] 097 — Restore and retention — `ig-campaign restore <backup>` tested end to end on a copy; old insight snapshots are thinned (keep the age-schedule points, drop the rest) so the database stays small; retention settings documented.
-- [ ] 098 — Alerts — a notification area in the website for failed publishes, re-planned late slots, a token expiring within 10 days, failed or over-budget agent runs, QC failure spikes, a stale worker heartbeat and ad caps.
+- [x] 098 — Alerts — a notification area in the website for failed publishes, re-planned late slots, a token expiring within 10 days, failed or over-budget agent runs, QC failure spikes, a stale worker heartbeat and ad caps.
 - [ ] 099 — End-to-end smoke test — Playwright: seed, open inbox, like, comment, approve, slot appears in the calendar, worker "publishes" against a mocked Graph API; runs in CI.
 - [ ] 100 — One-command setup and README — installers set up Python, Node dependencies, the website build, the Reel downloader (`git submodule update --init` and `ig-campaign downloader setup`), the ffmpeg check, the Claude Code CLI check and the scheduled tasks on Windows, macOS and Linux; README rewritten: setup, a normal day (including the AI label if it must be set by hand), recovery (expired token, failed publish, stuck render, restore from backup).
 - [ ] 101 — Final review — walk the checklist in GOAL.md §7 on the owner's machine with the owner, fix or file what fails.
@@ -262,6 +262,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 098 — Alerts — https://github.com/enimarix/instagram-campaign-mcp/pull/111 (2026-11-18) — a bell with a count in a new header: failed or stuck publishes, re-planned slots, token expiring, failed agent runs, QC spikes, stale worker, downloader down, skipped DM picks; dismiss until it changes. Ads alerts wait for the ads steps
 - [x] 086 — Experiments — https://github.com/enimarix/instagram-campaign-mcp/pull/110 (2026-11-18) — experiments table (one variable, 2-4 variants, target, end date), at most 2 open, the night report proposes them, explore ideas fill them, a finished one becomes a learning with its numbers; warnings when one gets no approved videos
 - [x] 097 — Restore and retention — https://github.com/enimarix/instagram-campaign-mcp/pull/109 (2026-11-18) — `ig-campaign restore <backup>` (guarded, current DB kept aside, migrations run); old insight snapshots thinned to the age-schedule points; weekly VACUUM; README section
 - [x] 087 — Slots that learn — https://github.com/enimarix/instagram-campaign-mcp/pull/108 (2026-11-18) — posting windows weighted by audience x our own results (median index, n >= 5, clamped), about 15 % of days test the least-tried window; proposals say why
