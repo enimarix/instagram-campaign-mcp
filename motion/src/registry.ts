@@ -14,12 +14,20 @@ import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
 import { QuizChest, timelineOf as quizChestTimeline } from "./templates/QuizChest/QuizChest";
 import { quizChestSchema, REVEAL_S } from "./templates/QuizChest/schema";
 import { TimelineDemo, timelineDemoSchema, timelineOf } from "./templates/TimelineDemo";
+import { VoxelQuest } from "./templates/VoxelQuest/VoxelQuest";
+import { timelineOf as voxelQuestTimeline, voxelQuestSchema } from "./templates/VoxelQuest/schema";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
 
+/** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit" } as const;
+export type Style = keyof typeof STYLES;
+
 export type Template<S extends z.ZodType> = {
+  /** The template's visual style (STYLES). */
+  style: Style;
   component: ComponentType<z.infer<S>>;
   schema: S;
   defaultProps: z.infer<S>;
@@ -39,12 +47,14 @@ const template = <S extends z.ZodType>(t: Template<S>) => t;
 // Template id (= composition id, PascalCase like brand/taxonomy.json templates) -> template.
 export const templates = {
   Hello: template({
+    style: "pixel",
     component: Hello,
     schema: helloSchema,
     defaultProps: { title: "Hello", subtitle: "8-bit pipeline online", seconds: 3, safeZone: false },
     durationInFrames: (p) => Math.round(p.seconds * FPS),
   }),
   Preview8bit: template({
+    style: "pixel",
     component: Preview8bit,
     schema: preview8bitSchema,
     defaultProps: {
@@ -63,6 +73,7 @@ export const templates = {
     durationInFrames: (p) => Math.round(p.seconds * FPS),
   }),
   TimelineDemo: template({
+    style: "pixel",
     component: TimelineDemo,
     schema: timelineDemoSchema,
     defaultProps: {
@@ -74,6 +85,7 @@ export const templates = {
     coverFrame: (p) => timelineOf(p, FPS).hookFrame,
   }),
   FactQuest: template({
+    style: "pixel",
     component: FactQuest,
     schema: factQuestSchema,
     defaultProps: {
@@ -94,6 +106,7 @@ export const templates = {
       scriptEvents(factQuestTimeline(p, FPS), FPS, ["hook card", ...p.facts.map((_, i) => `fact ${i + 1}`), "outro card"], p),
   }),
   BossBattle: template({
+    style: "pixel",
     component: BossBattle,
     schema: bossBattleSchema,
     defaultProps: {
@@ -125,6 +138,7 @@ export const templates = {
       ),
   }),
   QuizChest: template({
+    style: "pixel",
     component: QuizChest,
     schema: quizChestSchema,
     defaultProps: {
@@ -156,6 +170,7 @@ export const templates = {
     },
   }),
   DialogStory: template({
+    style: "pixel",
     component: DialogStory,
     schema: dialogStorySchema,
     defaultProps: {
@@ -186,6 +201,7 @@ export const templates = {
       ),
   }),
   PixelSkit: template({
+    style: "pixel",
     component: PixelSkit,
     schema: pixelSkitSchema,
     defaultProps: {
@@ -214,6 +230,40 @@ export const templates = {
         ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat)], p),
         ...(p.sting !== "none" ? [{ t: land / FPS, d: 0, e: `sting: ${p.sting}` }] : []),
         ...(freezeEnd > freezeStart ? [{ t: freezeStart / FPS, d: (freezeEnd - freezeStart) / FPS, e: "freeze on the punchline" }] : []),
+      ];
+    },
+  }),
+  VoxelQuest: template({
+    style: "voxel",
+    component: VoxelQuest,
+    schema: voxelQuestSchema,
+    defaultProps: {
+      hook: "Vous mangez équilibré mais vous ne perdez rien ?",
+      hookProp: "scale",
+      beats: [
+        { kind: "problem", line: "Avocat, noix, huile d'olive : sains, mais très caloriques.", foods: [{ prop: "avocado", label: "160 kcal", macro: "fat" }] },
+        { kind: "app", line: "macroBody compte pour vous, au gramme près." },
+        { kind: "payoff", line: "Les kilos bougent enfin." },
+      ],
+      address: "vous",
+      fromForm: "etincelle",
+      toForm: "recrue",
+      accent: "brand",
+      citations: [],
+      music: "music-marimba",
+      loop: false,
+      pixelate: 2,
+    },
+    durationInFrames: (p) => voxelQuestTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => voxelQuestTimeline(p, FPS).timeline.hookFrame,
+    events: (p) => {
+      const { timeline, endStart } = voxelQuestTimeline(p, FPS);
+      const beat = (b: (typeof p.beats)[number]) =>
+        `${b.kind}${b.kind === "app" ? " (phone: calorie ring fills)" : b.kind === "payoff" ? ` (golem levels up to ${b.form ?? p.toForm})` : ""}${b.foods ? ` (${b.foods.map((f) => `${f.prop} ${f.label}`).join(", ")})` : ""}`;
+      const total = timeline.totalFrames;
+      return [
+        ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (voxel): mB tile assembles, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? p.toForm}` },
       ];
     },
   }),

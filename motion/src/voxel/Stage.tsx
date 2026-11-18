@@ -3,7 +3,7 @@
 // no clock, so a frame renders the same every time.
 import { ThreeCanvas } from "@remotion/three";
 import { type ThreeElements, useThree } from "@react-three/fiber";
-import { type ReactNode, useEffect, useLayoutEffect, useMemo } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { AbsoluteFill } from "remotion";
 import * as THREE from "three";
 import { cameraPosition, type Pose } from "./anim.ts";
@@ -138,6 +138,50 @@ export const VoxelMesh = ({ voxels, fit, build, ...group }: MeshProps) => {
       <mesh geometry={geometry} scale={scale} castShadow receiveShadow>
         <meshStandardMaterial vertexColors roughness={0.82} metalness={0} />
       </mesh>
+    </group>
+  );
+};
+
+/** Where one cube of a VoxelCubes model is this frame: added offset (voxels) and scale (0 hides it). */
+export type CubePlace = { dx?: number; dy?: number; dz?: number; scale?: number };
+
+type CubesProps = Omit<ThreeElements["group"], "children"> & {
+  /** Build it once (module level or useMemo). Cell coordinates are kept (no centring). */
+  voxels: Voxel[];
+  /** Per cube, per frame: pass a new function each frame (it closes over the frame). */
+  place: (index: number, voxel: Voxel) => CubePlace;
+};
+
+const UNIT_CUBE = new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5);
+
+/**
+ * A model drawn as separate cubes (one instanced mesh) so each cube can move on its own: a
+ * logo assembling, a wall building up. No ambient occlusion: use VoxelMesh once it is still.
+ */
+export const VoxelCubes = ({ voxels, place, ...group }: CubesProps) => {
+  const mesh = useRef<THREE.InstancedMesh>(null);
+  const colors = useMemo(() => voxels.map(([, , , c]) => new THREE.Color(COLORS[c])), [voxels]);
+  // Layout effect: positions are in place before @remotion/three renders the frame.
+  useLayoutEffect(() => {
+    const m = mesh.current;
+    if (!m) return;
+    const matrix = new THREE.Matrix4();
+    voxels.forEach((v, i) => {
+      const { dx = 0, dy = 0, dz = 0, scale = 1 } = place(i, v);
+      // Scale about the cube's centre, so a popping cube grows in place.
+      const s = Math.max(scale, 0);
+      matrix.makeScale(s, s, s).setPosition(v[0] + dx + 0.5 * (1 - s), v[1] + dy + 0.5 * (1 - s), v[2] + dz + 0.5 * (1 - s));
+      m.setMatrixAt(i, matrix);
+      m.setColorAt(i, colors[i]);
+    });
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  });
+  return (
+    <group {...group}>
+      <instancedMesh ref={mesh} args={[UNIT_CUBE, undefined, voxels.length]} castShadow receiveShadow>
+        <meshStandardMaterial roughness={0.82} metalness={0} />
+      </instancedMesh>
     </group>
   );
 };

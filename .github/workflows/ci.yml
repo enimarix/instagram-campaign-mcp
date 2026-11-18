@@ -132,4 +132,6 @@ jobs:
       - run: npm run still:pixelskit
       # WebGL (three.js) stills: render.mjs picks --gl swangle on Linux (no GPU on runners).
       - run: npm run still:voxel
+      - run: npm run still:voxelquest
+      - run: npm run still:endcard
       - run: npm run check:voxel

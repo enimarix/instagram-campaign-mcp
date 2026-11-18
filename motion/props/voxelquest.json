@@ -1,0 +1,31 @@
+{
+  "hook": "Vous mangez équilibré mais vous ne perdez rien ?",
+  "hookProp": "scale",
+  "beats": [
+    {
+      "kind": "problem",
+      "line": "Pour 100 g, avocat, riz, œuf : sains… mais caloriques.",
+      "foods": [
+        { "prop": "avocado", "label": "160 kcal", "macro": "fat" },
+        { "prop": "riceBowl", "label": "130 kcal", "macro": "carbs" },
+        { "prop": "egg", "label": "196 kcal", "macro": "protein" }
+      ]
+    },
+    { "kind": "problem", "line": "Sans compter, quelques extras suffisent à effacer le déficit." },
+    { "kind": "app", "line": "macroBody compte pour vous et ajuste votre objectif chaque semaine." },
+    { "kind": "payoff", "line": "Le déficit est réel. Les kilos bougent." }
+  ],
+  "outro": "Mangez sain, et comptez juste.",
+  "address": "vous",
+  "fromForm": "etincelle",
+  "toForm": "recrue",
+  "accent": "brand",
+  "citations": [
+    { "url": "https://fdc.nal.usda.gov/food-details/171705/nutrients", "title": "USDA FoodData Central: Avocados, raw (160 kcal / 100 g)" },
+    { "url": "https://fdc.nal.usda.gov/food-details/168878/nutrients", "title": "USDA FoodData Central: Rice, white, cooked (130 kcal / 100 g)" },
+    { "url": "https://fdc.nal.usda.gov/food-details/173423/nutrients", "title": "USDA FoodData Central: Egg, whole, cooked, fried (196 kcal / 100 g)" }
+  ],
+  "music": "music-marimba",
+  "loop": false,
+  "pixelate": 2
+}

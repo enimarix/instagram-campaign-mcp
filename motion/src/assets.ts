@@ -34,11 +34,14 @@ export const ASSETS = {
   // Seamless loops: play with <Html5Audio loop>.
   "music-overworld": audio("music-overworld", "music"),
   "music-cave": audio("music-cave", "music"),
+  "music-marimba": audio("music-marimba", "music"),
   "sfx-jump": audio("sfx-jump", "sfx"),
   "sfx-coin": audio("sfx-coin", "sfx"),
   "sfx-hit": audio("sfx-hit", "sfx"),
   "sfx-select": audio("sfx-select", "sfx"),
   "sfx-confirm": audio("sfx-confirm", "sfx"),
+  "sfx-pop": audio("sfx-pop", "sfx"),
+  "sfx-chime": audio("sfx-chime", "sfx"),
 } as const satisfies Record<string, Entry>;
 
 export type AssetId = keyof typeof ASSETS;

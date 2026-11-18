@@ -106,3 +106,20 @@ export const pushIn = (from: Pose, factor: number, target = from.target, orthogr
   lens: orthographic ? from.lens * factor : from.lens,
   distance: orthographic ? from.distance : from.distance / factor,
 });
+
+/**
+ * Where a world point lands on screen under the orthographic ("iso") camera at `pose`, in
+ * output pixels from the top left of a `width` x `height` frame (= CameraRig's projection).
+ * For 2D overlays pinned to a model: labels, pointers.
+ */
+export const projectIso = (p: Pose, point: [number, number, number], width = 1080, height = 1920): [number, number] => {
+  const az = (p.azimuth * Math.PI) / 180;
+  const el = (p.elevation * Math.PI) / 180;
+  const d = [point[0] - p.target[0], point[1] - p.target[1], point[2] - p.target[2]];
+  // Camera axes (three.js lookAt with y up): right, and up = view direction x right.
+  const right = [Math.cos(az), 0, -Math.sin(az)];
+  const up = [-Math.sin(el) * Math.sin(az), Math.cos(el), -Math.sin(el) * Math.cos(az)];
+  const zoom = (p.lens * width) / 1080;
+  const dot = (v: number[]) => v[0] * d[0] + v[1] * d[1] + v[2] * d[2];
+  return [width / 2 + dot(right) * zoom, height / 2 - dot(up) * zoom];
+};

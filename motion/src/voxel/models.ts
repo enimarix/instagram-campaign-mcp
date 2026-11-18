@@ -1,5 +1,6 @@
 // The starter voxel library, all built in code (no third-party art). One voxel = one
 // world unit; x right, y up, z toward the viewer (models face +z).
+import { ISO, type Pose } from "./anim.ts";
 import { cellNoise, VoxelGrid } from "./mesh.ts";
 import { type ColorName, FORMS } from "./palette.ts";
 
@@ -168,50 +169,196 @@ export const pizza = (): VoxelGrid => {
   return g;
 };
 
-/** Rice bowl with chopsticks across the top. */
+/**
+ * Rice bowl: a navy glazed bowl (foot ring, flaring wall, white band under the rim) heaped
+ * with white rice, loose grains on the dome, chopsticks resting across the rim.
+ */
 export const riceBowl = (): VoxelGrid => {
   const g = new VoxelGrid();
-  g.ellipsoid(0, 6.5, 0, 7.2, 5.6, 7.2, "bowl", (_x, y) => y >= 1 && y <= 6);
-  g.cylinder(0, 0, 0, 0, 3.6, "bowlDark");
-  g.repaint((_x, y, _z, c) => (c === "bowl" && y === 6 ? "offWhite" : null)); // glazed rim
-  g.ellipsoid(0, 6, 0, 6, 3.4, 6, speckle("rice", "riceShade", 0.3, 11), (x, y, z) => y >= 6 && x * x + z * z <= 5.8 * 5.8);
-  g.ellipsoid(2, 9, 1, 1.6, 1.1, 1.6, "protein").set(-2, 9, 2, "carbs").set(-1, 9, 3, "carbs").set(-3, 9, 1, "carbs");
-  g.capsule([-9, 11, 4], [9, 9, -2], 0.55, 0.55, "wood").capsule([-9, 11, 5.6], [9, 9.4, 0], 0.55, 0.55, "woodLight");
+  // Wall radius per layer: a foot ring, then the bowl flares out to the rim (y 7).
+  const radius = [3.2, 4.6, 5.8, 6.7, 7.4, 7.9, 8.3, 8.6];
+  radius.forEach((r, y) => {
+    const inner = y === 0 ? 2.2 : y === 1 ? 0 : r - 1.2; // y 1 is the bowl's floor
+    for (let x = -9; x <= 9; x++)
+      for (let z = -9; z <= 9; z++) {
+        const d = Math.hypot(x, z);
+        if (d <= r && (y === 1 || d > inner)) g.set(x, y, z, y === 0 ? "navyLight" : y === 6 ? "white" : "navy");
+      }
+  });
+  // Rice: fills the bowl and heaps 3 layers above the rim.
+  const rice = speckle("rice", "riceShade", 0.28, 11);
+  for (let y = 2; y <= 10; y++) {
+    const r = y <= 7 ? radius[y] - 1.2 : 7.3 - (y - 7) ** 1.6 * 1.4;
+    g.cylinder(0, 0, y, y, r, rice);
+  }
+  // Loose grains standing proud on the dome (2 cells long, the way rice reads at this size).
+  for (const [x, z, along] of [[-4, -2, 1], [3, -4, 0], [-1, 3, 0], [4, 2, 1], [-3, 4, 1], [1, -1, 0]] as const) {
+    let top = 14;
+    while (top > 0 && g.get(x, top, z) === undefined) top--;
+    g.set(x, top + 1, z, "white").set(x + along, top + 1, z + (1 - along), "white");
+  }
+  g.capsule([-11, 9, 5], [10, 11.5, -3], 0.55, 0.55, "wood").capsule([-11, 9, 7], [10, 11.8, -1.2], 0.55, 0.55, "woodLight");
   return g;
 };
 
-/** Phone standing up, showing the app: calorie ring in the macro colours and two bars. */
-export const phone = (): VoxelGrid => {
+/**
+ * Phone standing up, showing the app: calorie ring in the macro colours and two bars, drawn
+ * up to `fill` (0..1) so a scene can show the ring filling in steps.
+ */
+export const phone = (fill = 1): VoxelGrid => {
   const g = new VoxelGrid();
+  const f = Math.min(1, Math.max(0, fill));
   g.box(-6, 0, -1, 6, 24, 0, "ink");
   for (const [x, y] of [[-6, 0], [6, 0], [-6, 24], [6, 24]]) g.remove(x, y, -1).remove(x, y, 0);
   g.box(-5, 2, 0, 5, 22, 0, "screen");
   g.box(-4, 21, 1, 4, 21, 1, "emerald"); // app header
-  // Ring: protein, carbs, fat clockwise from the top, the rest an empty track.
+  // Ring: protein, carbs, fat clockwise from the top over 76 % of it at full fill, the rest an empty track.
   for (let x = -5; x <= 5; x++)
     for (let y = 10; y <= 20; y++) {
       const r = Math.hypot(x, y - 15);
       if (r < 3 || r > 4.6) continue;
       const a = (Math.atan2(x, y - 15) / (2 * Math.PI) + 1) % 1; // 0 at the top, clockwise
-      g.set(x, y, 1, a < 0.3 ? "protein" : a < 0.58 ? "carbs" : a < 0.76 ? "fat" : "slate");
+      g.set(x, y, 1, a >= 0.76 * f ? "slate" : a < 0.3 ? "protein" : a < 0.58 ? "carbs" : "fat");
     }
   g.set(0, 15, 1, "kcal");
-  g.box(-4, 7, 1, 4, 7, 1, "slate").box(-4, 7, 1, 2, 7, 1, "kcal");
-  g.box(-4, 4, 1, 4, 4, 1, "slate").box(-4, 4, 1, -1, 4, 1, "emeraldLight");
+  const bar = (y: number, color: C, share: number) => {
+    g.box(-4, y, 1, 4, y, 1, "slate");
+    const cells = Math.round(9 * share * f);
+    if (cells) g.box(-4, y, 1, -5 + cells, y, 1, color);
+  };
+  bar(7, "kcal", 0.75);
+  bar(4, "emeraldLight", 0.45);
   g.box(-1, 1, 0, 1, 1, 0, "grey500"); // home bar
   return g;
 };
 
-/** Kitchen scale: white base, steel plate, a small green display in front. */
-export const kitchenScale = (): VoxelGrid => {
+/** 3x5 digits for voxel displays, top row first ("#" = lit). */
+const DIGITS: Record<string, string[]> = {
+  "0": ["###", "#.#", "#.#", "#.#", "###"],
+  "1": [".#.", "##.", ".#.", ".#.", "###"],
+  "2": ["###", "..#", "###", "#..", "###"],
+  "3": ["###", "..#", ".##", "..#", "###"],
+  "4": ["#.#", "#.#", "###", "..#", "..#"],
+  "5": ["###", "#..", "###", "..#", "###"],
+  "6": ["###", "#..", "###", "#.#", "###"],
+  "7": ["###", "..#", ".#.", ".#.", ".#."],
+  "8": ["###", "#.#", "###", "#.#", "###"],
+  "9": ["###", "#.#", "###", "..#", "###"],
+  ".": ["#"],
+};
+
+/**
+ * Flat digital scale: a square glass platform on a white base, a dark LCD on the front strip
+ * of the top showing `reading` (digits and "."), upright for a viewer in front. Wide and flat
+ * so it reads as a scale, never as a toaster.
+ */
+export const kitchenScale = (reading = "72.4"): VoxelGrid => {
   const g = new VoxelGrid();
-  g.box(-7, 1, -6, 7, 3, 6, "offWhite");
-  for (const x of [-7, 7]) for (const z of [-6, 6]) for (let y = 1; y <= 3; y++) g.remove(x, y, z);
-  for (const [x, z] of [[-6, -5], [6, -5], [-6, 5], [6, 5]]) g.set(x, 0, z, "ink");
-  g.box(-6, 4, -5, 6, 4, 4, "grey300").box(-5, 4, -4, 5, 4, 3, "grey100");
-  g.box(-3, 1, 7, 3, 2, 7, "ink");
-  for (const x of [-2, -1, 1, 2]) g.set(x, 2, 7, "emeraldLight");
-  g.set(0, 1, 7, "emerald");
+  g.box(-9, 0, -9, 9, 1, 9, "offWhite");
+  for (const x of [-9, 9]) for (const z of [-9, 9]) g.remove(x, 0, z).remove(x, 1, z);
+  g.box(-8, 2, -8, 8, 2, 8, "glassTop");
+  for (const x of [-8, 8]) for (const z of [-8, 8]) g.remove(x, 2, z);
+  const chars = [...reading].filter((c) => DIGITS[c]);
+  const width = chars.reduce((w, c) => w + DIGITS[c][0].length + 1, -1);
+  const x0 = -Math.floor(width / 2);
+  g.box(x0 - 1, 2, 1, x0 + width, 2, 7, "lcd");
+  let x = x0;
+  for (const c of chars) {
+    const rows = DIGITS[c];
+    // Rows run back (top of the digit) to front; "." sits on the bottom row.
+    rows.forEach((row, r) => [...row].forEach((ch, i) => ch === "#" && g.set(x + i, 2, 2 + r + (5 - rows.length), "lcdOn")));
+    x += rows[0].length + 1;
+  }
+  return g;
+};
+
+/**
+ * The kitchen set (step 130): a room corner seen from the front right. Floor x/z -20..19
+ * (surface y = 0), walls along the back (z = -21) and the left (x = -21), white units with a
+ * dark worktop along the back (top surface y = 11, front edge z = -12), a fridge in the
+ * corner, a window above the worktop and two shelves with jars on the left wall.
+ */
+export const kitchen = (): VoxelGrid => {
+  const g = new VoxelGrid();
+  // Floor: 4x4 tiles in two warm tones, on a plinth.
+  g.box(-22, -3, -22, 20, -3, 20, "plinth");
+  g.box(-20, -2, -20, 19, -1, 19, (x, _y, z) => ((Math.floor(x / 4) + Math.floor(z / 4)) % 2 ? "floorA" : "floorB"));
+  // Walls, 2 thick, 30 high: subway tiles up to y 14 (grout every third row, staggered joints), mint paint above.
+  const wall = (along: number, y: number): C => {
+    if (y > 14) return y === 15 ? "wallPaintDark" : "wallPaint";
+    if ((y + 3) % 3 === 2) return "grout";
+    return (((along + (Math.floor((y + 3) / 3) % 2) * 2) % 4) + 4) % 4 === 0 ? "grout" : "wallTile";
+  };
+  g.box(-22, -2, -22, 19, 29, -21, (x, y) => wall(x, y));
+  g.box(-22, -2, -20, -21, 29, 19, (_x, y, z) => wall(z, y));
+  // Window in the back wall above the worktop: white frame, two sky panes.
+  const pane = (_x: number, y: number): C => (y > 22 ? "skyLight" : "sky");
+  g.box(1, 15, -21, 13, 26, -21, "white");
+  g.box(2, 16, -21, 6, 25, -21, pane).box(8, 16, -21, 12, 25, -21, pane);
+  g.box(1, 15, -20, 13, 15, -19, "white"); // sill
+  // Base units along the back wall: doors (a shaded groove between them), kick plate, worktop.
+  g.box(-10, 0, -20, 19, 9, -13, "unit");
+  g.box(-10, 0, -13, 19, 1, -13, "unitShade");
+  for (let x = -3; x <= 19; x += 7) g.box(x, 2, -13, x, 9, -13, "unitShade");
+  for (let x = -6; x <= 19; x += 7) g.box(x, 7, -12, x + 1, 7, -12, "grey300"); // handles
+  g.box(-10, 10, -20, 19, 10, -12, "worktop");
+  // Fridge in the corner: tall white box, freezer split, two handles.
+  g.box(-20, 0, -20, -11, 26, -11, "unit");
+  g.box(-20, 18, -10, -11, 18, -10, "unitShade");
+  g.box(-12, 10, -10, -12, 16, -10, "grey300").box(-12, 20, -10, -12, 24, -10, "grey300");
+  // Shelves on the left wall with jars (lids in the macro colours).
+  for (const y of [15, 22]) g.box(-20, y, -6, -17, y, 10, "wood");
+  for (const [z, y, lid] of [[-4, 16, "protein"], [0, 16, "fat"], [4, 16, "carbs"], [8, 16, "kcal"], [-3, 23, "carbs"], [2, 23, "protein"], [7, 23, "fat"]] as const) {
+    g.box(-19, y, z, -18, y + 2, z + 1, "skyLight").box(-19, y + 3, z, -18, y + 3, z + 1, lid);
+  }
+  return g;
+};
+
+/** The kitchen set's establishing shot (iso): the whole room in the lower middle of a Reel. */
+export const KITCHEN_WIDE: Pose = { ...ISO, azimuth: 45, distance: 160, target: [-5, 18, -5], lens: 18.5 };
+/** Where the golem stands in the kitchen set: left of the floor's middle, the worktop on its right. */
+export const KITCHEN_SPOT: [number, number, number] = [-8, 0, -2];
+
+/** Rows of the bold "mB" on the app tile, top first ("#" = a raised white cube): 2-cube strokes. */
+const MB = [
+  "............#######.",
+  "............########",
+  "#########...##....##",
+  "##########..##...##.",
+  "##..##..##..#######.",
+  "##..##..##..########",
+  "##..##..##..##....##",
+  "##..##..##..##....##",
+  "##..##..##..########",
+  "##..##..##..#######.",
+];
+
+/**
+ * The macroBody app tile as voxels: a black rounded square (corners cut in steps), 26 x 26
+ * cubes and 2 deep, with a bold white "mB" standing one cube proud; faces +z, centred on x,
+ * standing on y = 0.
+ */
+export const mbTile = (): VoxelGrid => {
+  const g = new VoxelGrid();
+  const N = 26;
+  const cut = [5, 3, 2, 1, 1]; // cells cut at each end of the outer rows: a squircle outline
+  for (let y = 0; y < N; y++) {
+    const edge = Math.min(y, N - 1 - y);
+    const c = edge < cut.length ? cut[edge] : 0;
+    for (let x = c; x < N - c; x++) g.box(x - N / 2, y, -1, x - N / 2, y, 0, "ink");
+  }
+  const x0 = -MB[0].length / 2;
+  const y0 = Math.round((N - MB.length) / 2) - 1;
+  MB.forEach((row, r) => [...row].forEach((ch, i) => ch === "#" && g.set(x0 + i, y0 + MB.length - 1 - r, 1, "white")));
+  return g;
+};
+
+/** Empty dinner plate: a white disc with a raised rim and a navy band inside it. */
+export const plate = (): VoxelGrid => {
+  const g = new VoxelGrid();
+  g.cylinder(0, 0, 0, 0, 4.5, "unitShade").cylinder(0, 0, 1, 1, 7.4, "white");
+  g.repaint((x, y, z) => (y === 1 && Math.hypot(x, z) > 4.6 && Math.hypot(x, z) < 5.6 ? "navyLight" : null));
+  for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) if (Math.abs(Math.hypot(x, z) - 6.9) < 0.75) g.set(x, 2, z, "white");
   return g;
 };
 
@@ -235,4 +382,4 @@ export const island = (radius: number, depth = 5): VoxelGrid => {
 };
 
 /** Every prop in the library, for previews and tests. */
-export const PROPS = { drumstick, avocado, pizza, egg, broccoli, riceBowl, phone, kitchenScale } as const;
+export const PROPS = { drumstick, avocado, pizza, egg, broccoli, riceBowl, phone: () => phone(), kitchenScale: () => kitchenScale() } as const;

@@ -37,7 +37,8 @@
       {"id": "BossBattle", "label": "Boss Battle", "description": "A versus B, or myth versus fact, as a boss fight with a verdict."},
       {"id": "QuizChest", "label": "Quiz Chest", "description": "Question, choices, countdown, reveal; invites comments."},
       {"id": "DialogStory", "label": "Dialog Story", "description": "RPG-style dialogue between the mascot and a character."},
-      {"id": "PixelSkit", "label": "Pixel Skit", "description": "Humour: a 10-20 s relatable POV sketch with a punchline."}
+      {"id": "PixelSkit", "label": "Pixel Skit", "description": "Humour: a 10-20 s relatable POV sketch with a punchline."},
+      {"id": "VoxelQuest", "label": "Voxel Quest", "description": "3D 8-bit (voxel) story in the kitchen set: hook, problem, the app solves it, the golem levels up, animated end card."}
     ]
   },
   "feedback_reasons": {

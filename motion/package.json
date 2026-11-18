@@ -17,6 +17,8 @@
     "still:dialogstory": "node render.mjs --template DialogStory --props props/dialogstory.json --out out/dialogstory.png --still --frame 150",
     "still:pixelskit": "node render.mjs --template PixelSkit --props props/pixelskit.json --out out/pixelskit.png --still --frame 240",
     "still:voxel": "node render.mjs --template VoxelPreview --props props/voxel-preview.json --out out/voxel.png --still --frame 150",
+    "still:voxelquest": "node render.mjs --template VoxelQuest --props props/voxelquest.json --out out/voxelquest.png --still --frame 150",
+    "still:endcard": "node render.mjs --template EndCard --props props/voxel-endcard.json --out out/endcard.png --still --frame 100",
     "check:voxel": "node scripts/check-determinism.mjs"
   },
   "dependencies": {
