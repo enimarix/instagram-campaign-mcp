@@ -28,14 +28,16 @@ import { COMMENTARY_CONFIRMATION, localDate, wallClock } from './ui'
 
 const UNDO_MS = 5000 // the Toast's own lifetime
 const VISIBLE = 0.6 // share of a card on screen before it counts as the current one
-/** Still waiting for the owner's decision: these make the feed. */
-const open = (a: Asset) => a.status === 'ready' && a.verdict !== 'disliked'
+type Tab = 'today' | 'bench'
+/** Still waiting for the owner's decision: these make the feed. Today: not judged yet; the
+ * bench ("Saved"): saved for later (liked), waiting for a slot. */
+const open = (a: Asset, tab: Tab) => a.status === 'ready' && a.verdict === (tab === 'bench' ? 'liked' : 'none')
 const NOT_YET = new Set(['rendering', 'failed', 'needs_reaction']) // nothing to decide yet
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-/** "9 liked videos = 3 days at 3 a day" */
+/** "9 saved videos = 3 days at 3 a day" */
 const supply = (b: Bench) =>
-  `${plural(b.assets.length, 'liked video')} = ${plural(b.supply_days, 'day')} at ${b.max_posts_per_day} a day`
+  `${plural(b.assets.length, 'saved video')} = ${plural(b.supply_days, 'day')} at ${b.max_posts_per_day} a day`
 // The banner stays dismissed for the browser session, per suggested video and slot.
 const DISMISSED = 'inbox.benchBannerDismissed'
 const bannerKey = (s: NonNullable<Bench['suggestion']>) => `${s.asset_id}@${s.publish_at}`
@@ -56,13 +58,14 @@ export default function InboxPage() {
   const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null)
   const [current, setCurrent] = useState(0)
   const [muted, setMuted] = useState(true)
-  const [tab, setTab] = useState<'today' | 'bench'>('today')
+  const [tab, setTab] = useState<Tab>('today')
   const [bench, setBench] = useState<Bench | null>(null)
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISSED))
   const [changeFor, setChangeFor] = useState<{ asset: Asset; at: number } | null>(null)
   const [confirmFor, setConfirmFor] = useState<Asset | null>(null)
   const [why, setWhy] = useState<{ id: number; codes: string[] } | null>(null) // decline reasons
   const pending = useRef(new Map<number, Pending>())
+  const inflight = useRef<Promise<unknown>>(Promise.resolve()) // committed decisions still saving
   const declineCodes = useRef(new Map<number, string[]>())
   const scroller = useRef<HTMLDivElement>(null)
   const toast = useToast()
@@ -77,16 +80,19 @@ export default function InboxPage() {
     let live = true
     const failed = (what: string) => (e: unknown) =>
       live && setError(`Could not load the ${what} (${errorMessage(e)})`)
-    getBench().then(
+    // After the decisions still saving (a tab or day switch flushes them): a video saved
+    // for later a moment ago is then on the bench.
+    const settled = inflight.current
+    settled.then(() => getBench()).then(
       (b) => {
         if (!live) return
         setBench(b)
         if (tab === 'bench') setAssets(b.assets)
       },
-      tab === 'bench' ? failed('bench') : () => {}, // Today still works without the banner
+      tab === 'bench' ? failed('saved videos') : () => {}, // Today still works without the banner
     )
     if (tab === 'today')
-      listAssets({ batch_date: date }).then((list) => live && setAssets(list), failed('batch'))
+      settled.then(() => listAssets({ batch_date: date })).then((list) => live && setAssets(list), failed('batch'))
     return () => {
       live = false
     }
@@ -104,7 +110,7 @@ export default function InboxPage() {
     }
   }, [])
 
-  const feed = assets?.filter(open) ?? []
+  const feed = assets?.filter((a) => open(a, tab)) ?? []
   const cur = Math.min(current, Math.max(feed.length - 1, 0))
   const feedKey = feed.map((a) => a.id).join()
 
@@ -143,12 +149,13 @@ export default function InboxPage() {
     patch(a.id, as) // out of the feed
     const run = () => {
       clearTimeout(timer)
-      commit()
+      const saving = commit()
         .catch((e: unknown) => {
           patch(a.id, a) // back in the feed
           setError(`Could not save video ${a.id} (${errorMessage(e)})`)
         })
         .finally(() => getBench().then(setBench, () => {}))
+      inflight.current = Promise.all([inflight.current, saving])
       forget(a.id) // after commit() started: decline reads its reasons synchronously
     }
     const timer = setTimeout(run, UNDO_MS)
@@ -192,6 +199,11 @@ export default function InboxPage() {
       patch(a.id, await archiveAsset(a.id))
     })
     setWhy({ id: a.id, codes: [] })
+  }
+
+  // Not now, but good: onto the bench ("Saved"), for a free slot later.
+  function save(a: Asset) {
+    decide(a, { verdict: 'liked' }, 'Saved for later', async () => patch(a.id, await setVerdict(a.id, 'liked')))
   }
 
   function toggleWhy(code: string) {
@@ -241,6 +253,7 @@ export default function InboxPage() {
         a: () => void approve(a),
         d: () => decline(a),
         c: () => openChange(a),
+        ...(tab === 'today' && { s: () => save(a) }),
         m: () => setMuted((m) => !m),
         j: () => go(cur + 1),
         ArrowDown: () => go(cur + 1),
@@ -268,7 +281,7 @@ export default function InboxPage() {
     if (i >= 0) go(i)
   }
 
-  const decided = assets?.filter((a) => !open(a) && !NOT_YET.has(a.status)).length ?? 0
+  const decided = assets?.filter((a) => !open(a, tab) && !NOT_YET.has(a.status)).length ?? 0
   const suggestion = bench?.suggestion
   const banner = suggestion && bannerKey(suggestion) !== dismissed ? suggestion : null
 
@@ -281,7 +294,7 @@ export default function InboxPage() {
           <div className="flex-1">
             <Tabs label="Inbox view" value={tab} onChange={showTab} tabs={[
               { id: 'today', label: 'Today' },
-              { id: 'bench', label: `Bench${bench ? ` (${bench.assets.length})` : ''}` },
+              { id: 'bench', label: `Saved${bench ? ` (${bench.assets.length})` : ''}` },
             ]} />
           </div>
           {tab === 'today' && (
@@ -297,10 +310,10 @@ export default function InboxPage() {
           {tab === 'bench' ? bench && supply(bench) : assets && `${decided} of ${decided + feed.length} decided`}
         </p>
         {banner && (
-          <div role="region" aria-label="Bench suggestion"
+          <div role="region" aria-label="Saved video suggestion"
             className="mx-auto flex max-w-md flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn/12 p-3 text-sm">
             <p className="flex-1">
-              Free slot at <strong>{wallClock(banner.local)}</strong>: the freshest bench video could take it.
+              Free slot <strong>{wallClock(banner.local)}</strong>: your freshest saved video could take it.
             </p>
             <Button size="sm" variant="primary" onClick={() => review(banner.asset_id)}>Review it</Button>
             <Button size="sm" variant="ghost" onClick={() => {
@@ -322,10 +335,10 @@ export default function InboxPage() {
           {assets.length ? (
             <EmptyState title="All done" action={
               <Link to="/calendar" className={buttonClass('primary')}>Open the Calendar</Link>}>
-              Every video {tab === 'bench' ? 'on the bench' : 'of this batch'} has a decision.
+              Every video {tab === 'bench' ? 'you saved' : 'of this batch'} has a decision.
             </EmptyState>
           ) : (
-            <EmptyState title={tab === 'bench' ? 'The bench is empty: no liked videos waiting.' : 'No videos for this day.'} />
+            <EmptyState title={tab === 'bench' ? 'Nothing saved for later.' : 'No videos for this day.'} />
           )}
         </div>
       )}
@@ -345,12 +358,13 @@ export default function InboxPage() {
               onApprove={() => void approve(a)}
               onDecline={() => decline(a)}
               onChange={() => openChange(a)}
+              onSave={tab === 'today' ? () => save(a) : undefined}
             />
           ))}
         </div>
       )}
       <p className="mt-2 hidden text-center text-xs text-muted lg:block">
-        Keys: a approve, d decline, c change, j / k next / previous, space play / pause, m sound
+        Keys: a approve, d decline, c change{tab === 'today' && ', s save for later'}, j / k next / previous, space play / pause, m sound
       </p>
 
       {why && taxonomy && (

@@ -11,7 +11,7 @@ import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { card, field, link, type Tone } from '../ui/styles'
 import { Body, Line, Section } from './Analytics'
-import { clock, num, pct, useLoad, VERDICT_TONE } from './load'
+import { clock, humanize, num, pct, useLoad, VERDICT_TONE } from './load'
 
 const PAGE = 20
 const SORTS = [
@@ -207,7 +207,7 @@ function Detail({ p }: { p: PostDetail }) {
   return (
     <>
       <p className="text-sm text-muted">
-        {day(p.posted_at)} · {p.group}{p.deleted && ' · deleted on Instagram'}
+        {day(p.posted_at)} · {humanize(p.group)}{p.deleted && ' · deleted on Instagram'}
       </p>
       {p.caption && <p className="mt-1 whitespace-pre-line text-sm">{p.caption}</p>}
 
@@ -216,7 +216,7 @@ function Detail({ p }: { p: PostDetail }) {
           <>
             <video src={p.preview_url} poster={p.thumbnail_url ?? undefined} controls playsInline preload="metadata"
               aria-label="Studio video" className="mt-2 max-h-[70vh] w-full max-w-xs rounded-card bg-black shadow-card" />
-            {p.asset_id !== null && <Link to={`/assets/${p.asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Studio asset</Link>}
+            {p.asset_id !== null && <Link to={`/assets/${p.asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Open in the studio</Link>}
           </>
         ) : href ? (
           <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>Open on Instagram</a>
@@ -247,7 +247,7 @@ function Detail({ p }: { p: PostDetail }) {
       <Section title="Tags and hypothesis">
         {tags.length === 0 ? <p className="mt-1 text-sm text-muted">No tags: made outside the studio.</p> : (
           <ul aria-label="Tags" className="mt-1 flex flex-wrap gap-2">
-            {tags.map(([k, v]) => <li key={k}><Chip>{k}: {v}</Chip></li>)}
+            {tags.map(([k, v]) => <li key={k}><Chip>{humanize(k)}: {k === 'template' ? v : humanize(String(v))}</Chip></li>)}
           </ul>
         )}
         {p.hypothesis && <p className="mt-1 text-sm">Hypothesis: {p.hypothesis}</p>}

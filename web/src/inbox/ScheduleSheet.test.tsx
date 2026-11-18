@@ -7,7 +7,7 @@ const ASSET: Asset = {
   id: 3, status: 'approved', verdict: 'liked', self_score: 8, self_score_reason: 'ok',
   caption: 'c', batch_date: '2026-11-17', preview_url: null, thumbnail_url: null,
 }
-const SLOT = { publish_at: '2026-11-19T10:00:00+00:00', local: '2026-11-19T11:00:00+01:00' }
+const SLOT = { publish_at: '2030-11-19T10:00:00+00:00', local: '2030-11-19T11:00:00+01:00' }
 
 type Call = { method: string; url: string; body: unknown }
 
@@ -52,7 +52,7 @@ describe('ScheduleSheet', () => {
   it('shows the proposed local time and accept posts it', async () => {
     const calls = stubApi()
     const onScheduled = sheet()
-    expect((await screen.findByText('2026-11-19 11:00')).tagName).toBe('STRONG')
+    expect((await screen.findByText('2030-11-19 11:00')).tagName).toBe('STRONG')
     expect(screen.queryByRole('checkbox')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(onScheduled).toHaveBeenCalledWith({ ...ASSET, status: 'scheduled' }))
@@ -63,11 +63,11 @@ describe('ScheduleSheet', () => {
   it('picks another time and sends it as ISO with an offset', async () => {
     const calls = stubApi()
     const onScheduled = sheet()
-    await screen.findByText('2026-11-19 11:00')
+    await screen.findByText('2030-11-19 11:00')
     fireEvent.click(screen.getByRole('button', { name: 'Pick another time' }))
     const input = screen.getByLabelText('Another time') as HTMLInputElement
     expect(input.type).toBe('datetime-local')
-    expect(new Date(input.value).toISOString()).toBe('2026-11-19T10:00:00.000Z') // prefilled
+    expect(new Date(input.value).toISOString()).toBe('2030-11-19T10:00:00.000Z') // prefilled
     fireEvent.change(input, { target: { value: '2026-11-20T18:30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Schedule at this time' }))
     await waitFor(() => expect(onScheduled).toHaveBeenCalled())
@@ -78,7 +78,7 @@ describe('ScheduleSheet', () => {
   it("shows the server's refusal and stays open", async () => {
     stubApi({ 'POST /api/assets/3/schedule': [409, { error: 'qc', message: 'asset 3 has not passed QC' }] })
     const onScheduled = sheet()
-    await screen.findByText('2026-11-19 11:00')
+    await screen.findByText('2030-11-19 11:00')
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     expect((await screen.findByRole('alert')).textContent).toBe('asset 3 has not passed QC')
     expect(onScheduled).not.toHaveBeenCalled()
@@ -108,7 +108,7 @@ describe('ScheduledSlot', () => {
     })
     const onUnscheduled = vi.fn()
     render(<ScheduledSlot assetId={3} onUnscheduled={onUnscheduled} />)
-    expect(await screen.findByText('2026-11-19 11:00')).toBeTruthy()
+    expect(await screen.findByText('2030-11-19 11:00')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Unschedule' }))
     await waitFor(() => expect(onUnscheduled).toHaveBeenCalledWith(ASSET))
     expect(scheduled(calls).map((c) => c.url)).toEqual(['/api/assets/3/unschedule'])

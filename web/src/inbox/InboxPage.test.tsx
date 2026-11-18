@@ -15,7 +15,7 @@ const asset = (id: number, fields: Partial<Asset> = {}): Asset => ({
 const ASSETS = [
   asset(1, { self_score: 9, self_score_reason: 'strong hook', strategy: 'explore',
     description: 'A knight jumps over three facts.' }),
-  asset(2, { self_score: 7, verdict: 'liked' }),
+  asset(2, { self_score: 7 }),
   asset(3, { status: 'scheduled' }), // decided earlier
   asset(4, { status: 'rendering' }), // nothing to decide yet
 ]
@@ -312,6 +312,61 @@ describe('InboxPage feed', () => {
     })
   })
 
+  describe('save for later', () => {
+    it('sends the video to the bench after the undo window; a saved one is not in Today', async () => {
+      const calls = stubApi({
+        'GET /api/assets': [200, [...ASSETS, asset(5, { verdict: 'liked' })]],
+        'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'liked' })],
+      })
+      renderPage()
+      await screen.findByText('2 of 4 decided')
+      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      vi.useFakeTimers()
+      press(1, 'Save for later')
+      expect(cards()).toEqual(['Video 2'])
+      expect(screen.getByText('Saved for later')).toBeTruthy()
+      await closeUndoWindow()
+      await waitFor(() => expect(posts(calls)).toEqual([['/api/assets/1/verdict', { verdict: 'liked' }]]))
+    })
+
+    it('opening the Saved tab right after loads the bench once the save landed', async () => {
+      const calls = stubApi()
+      const stubbed = fetch
+      let release = () => {}
+      const held = new Promise<void>((r) => { release = r })
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          await held // the save is still on its way
+          return new Response(JSON.stringify(asset(1, { verdict: 'liked' })), { status: 200 })
+        }
+        return stubbed(url, init)
+      }))
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      press(1, 'Save for later')
+      const benchGets = () => calls.filter((c) => c.url === '/api/bench').length
+      const before = benchGets()
+      fireEvent.click(screen.getByRole('tab', { name: /Saved/ }))
+      await act(() => new Promise((r) => setTimeout(r, 20)))
+      expect(benchGets()).toBe(before)
+      release()
+      await waitFor(() => expect(benchGets()).toBeGreaterThan(before))
+    })
+
+    it('key s saves; undo sends nothing', async () => {
+      const calls = stubApi()
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      vi.useFakeTimers()
+      fireEvent.keyDown(window, { key: 's' })
+      expect(cards()).toEqual(['Video 2'])
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      await closeUndoWindow()
+      expect(posts(calls)).toEqual([])
+    })
+  })
+
   describe('change', () => {
     const changeApi = () => stubApi({
       'POST /api/assets/1/feedback': [201, { feedback: {}, asset: asset(1, { status: 'revision_requested' }),
@@ -420,24 +475,25 @@ describe('InboxPage feed', () => {
     const benchApi = (routes: Record<string, [number, unknown]> = {}) =>
       stubApi({ 'GET /api/bench': [200, BENCH], ...routes })
 
-    it('the Bench tab is a feed of liked videos with the supply line and best-before', async () => {
+    it('the Saved tab (bench) is a feed of liked videos with the supply line and best-before', async () => {
       benchApi()
       renderPage()
-      fireEvent.click(await screen.findByRole('tab', { name: 'Bench (4)' }))
-      expect(await screen.findByText('4 liked videos = 2 days at 3 a day')).toBeTruthy()
+      fireEvent.click(await screen.findByRole('tab', { name: 'Saved (4)' }))
+      expect(await screen.findByText('4 saved videos = 2 days at 3 a day')).toBeTruthy()
       expect(cards()).toEqual(['Video 7', 'Video 8', 'Video 9', 'Video 10'])
       expect(within(card(7)).getByText('best before 2026-11-20')).toBeTruthy()
       expect(within(card(8)).queryByText(/best before/)).toBeNull()
+      expect(within(card(7)).queryByRole('button', { name: 'Save for later' })).toBeNull()
       expect(screen.queryByLabelText('Batch date')).toBeNull()
       fireEvent.click(screen.getByRole('tab', { name: 'Today' }))
       expect(await screen.findByText('1 of 3 decided')).toBeTruthy()
     })
 
-    it('one liked video reads in the singular', async () => {
+    it('one saved video reads in the singular', async () => {
       stubApi({ 'GET /api/bench': [200, { ...BENCH, assets: [BENCH.assets[0]], supply_days: 1 }] })
       renderPage()
-      fireEvent.click(await screen.findByRole('tab', { name: 'Bench (1)' }))
-      expect(await screen.findByText('1 liked video = 1 day at 3 a day')).toBeTruthy()
+      fireEvent.click(await screen.findByRole('tab', { name: 'Saved (1)' }))
+      expect(await screen.findByText('1 saved video = 1 day at 3 a day')).toBeTruthy()
     })
 
     it('switching tabs commits a waiting decision first', async () => {
@@ -448,7 +504,7 @@ describe('InboxPage feed', () => {
       renderPage()
       await screen.findByText('1 of 3 decided')
       press(1, 'Decline')
-      fireEvent.click(screen.getByRole('tab', { name: 'Bench (4)' }))
+      fireEvent.click(screen.getByRole('tab', { name: 'Saved (4)' }))
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
         ['/api/assets/1/verdict', '/api/assets/1/archive']))
     })
@@ -456,31 +512,31 @@ describe('InboxPage feed', () => {
     it('the banner suggests the freshest video; Review it opens the bench', async () => {
       const calls = benchApi()
       renderPage()
-      const banner = await screen.findByRole('region', { name: 'Bench suggestion' })
-      expect(banner.textContent).toContain('2026-11-18 11:00')
+      const banner = await screen.findByRole('region', { name: 'Saved video suggestion' })
+      expect(banner.textContent).toMatch(/Free slot (today|tomorrow|2026-11-18) 11:00/)
       fireEvent.click(within(banner).getByRole('button', { name: 'Review it' }))
       expect(await screen.findByRole('article', { name: 'Video 7' })).toBeTruthy()
-      expect(screen.getByRole('tab', { name: 'Bench (4)' }).getAttribute('aria-selected')).toBe('true')
+      expect(screen.getByRole('tab', { name: 'Saved (4)' }).getAttribute('aria-selected')).toBe('true')
       expect(posts(calls)).toEqual([]) // nothing approved by itself
     })
 
     it('the banner can be dismissed for the session', async () => {
       benchApi()
       const { unmount } = renderPage()
-      const banner = await screen.findByRole('region', { name: 'Bench suggestion' })
+      const banner = await screen.findByRole('region', { name: 'Saved video suggestion' })
       fireEvent.click(within(banner).getByRole('button', { name: 'Dismiss' }))
-      expect(screen.queryByRole('region', { name: 'Bench suggestion' })).toBeNull()
+      expect(screen.queryByRole('region', { name: 'Saved video suggestion' })).toBeNull()
       unmount()
       renderPage()
-      await screen.findByRole('tab', { name: 'Bench (4)' })
-      expect(screen.queryByRole('region', { name: 'Bench suggestion' })).toBeNull()
+      await screen.findByRole('tab', { name: 'Saved (4)' })
+      expect(screen.queryByRole('region', { name: 'Saved video suggestion' })).toBeNull()
     })
 
     it('no banner without a suggestion', async () => {
       stubApi({ 'GET /api/bench': [200, { ...BENCH, suggestion: null }] })
       renderPage()
-      await screen.findByRole('tab', { name: 'Bench (4)' })
-      expect(screen.queryByRole('region', { name: 'Bench suggestion' })).toBeNull()
+      await screen.findByRole('tab', { name: 'Saved (4)' })
+      expect(screen.queryByRole('region', { name: 'Saved video suggestion' })).toBeNull()
     })
   })
 })

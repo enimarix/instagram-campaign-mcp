@@ -5,7 +5,7 @@ import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { field } from '../ui/styles'
 import { Body, Section } from './Analytics'
-import { num, pct, useLoad } from './load'
+import { humanize, num, pct, useLoad } from './load'
 
 // The definitions of src/learning/breakdowns.py and scoring.compare_variants, behind the ⓘ toggles.
 const HELP = {
@@ -25,7 +25,7 @@ const METRICS: [Metric, string, (n: number | null | undefined) => string][] = [
 ]
 
 const value = (g: BreakdownGroup, m: Metric) => (m === 'engagement_index' ? g.engagement_index?.median : g[m]?.median) ?? null
-const label = (tag: string, v: string | number) => (tag === 'hour' ? `${v}:00` : String(v))
+const label = (tag: string, v: string | number) => (tag === 'hour' ? `${v}:00` : tag === 'template' ? String(v) : humanize(String(v)))
 
 function Bars({ tag, groups, metric }: { tag: string; groups: BreakdownGroup[]; metric: Metric }) {
   const format = METRICS.find(([m]) => m === metric)![2]
@@ -72,7 +72,7 @@ function WhatWorks() {
   const metrics = METRICS.filter(([m]) => m !== 'watch_ratio' || groups.some((g) => g.watch_ratio))
   const metric = metrics.some(([m]) => m === chosen) ? chosen : 'engagement_index'
   return (
-    <Section title="What works" help={HELP.works}>
+    <Section title="By tag" help={HELP.works}>
       <div className="mt-2 flex flex-wrap gap-2">
         <select aria-label="Tag" className={field} value={tag} onChange={(e) => setTag(e.target.value)}>
           {TAGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

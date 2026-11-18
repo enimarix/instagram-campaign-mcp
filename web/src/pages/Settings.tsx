@@ -11,6 +11,7 @@ import { PageHeader } from '../ui/PageHeader'
 import { ThemeToggle } from '../ui/ThemeToggle'
 import ClipsSection from './Clips'
 import DmPicksSection from './DmPicks'
+import { dateTime, playbookName } from './load'
 import ReactionReelSection from './ReactionReel'
 
 // ponytail: fixed threshold (~a week of daily batches); make it a setting if it nags.
@@ -82,7 +83,7 @@ function tokenExpiry(t: TokenStatus) {
 }
 
 function scheduleLine(e: AgentScheduleEntry) {
-  const next = e.exists ? `Next ${new Date(e.next_at).toLocaleString()}` : 'Playbook not written yet'
+  const next = e.exists ? `Next ${dateTime(e.next_at)}` : 'Playbook not written yet'
   const last = e.last_run ? `last ${e.last_run.status} ${relative(e.last_run.started_at)}` : 'never ran'
   return `${next} · ${last}`
 }
@@ -168,7 +169,7 @@ export default function Settings() {
                   {w.alive ? 'Running' : 'Not running'}
                 </Row>
                 <Row label="Heartbeat">{w.heartbeat_at ? relative(w.heartbeat_at) : 'Never'}</Row>
-                <Row label="Next slot">{w.next_slot ? new Date(w.next_slot).toLocaleString() : 'Nothing queued'}</Row>
+                <Row label="Next slot">{w.next_slot ? dateTime(w.next_slot) : 'Nothing queued'}</Row>
                 <Row label="Last run">{runSummary(w.last_result)}</Row>
                 <Row label="Publishing">{w.paused ? 'Paused' : 'On'}</Row>
               </>
@@ -217,13 +218,13 @@ export default function Settings() {
         </Section>
 
         <Section title="Backups" load={storage}>
-          <Row label="Last backup">{s?.last_backup ? new Date(s.last_backup).toLocaleString() : 'No backups yet'}</Row>
+          <Row label="Last backup">{s?.last_backup ? dateTime(s.last_backup) : 'No backups yet'}</Row>
         </Section>
 
         <Section title="Agent schedule" load={schedule}>
           {schedule.data?.length === 0 && <Row label="Runs">None (AGENT_SCHEDULE is empty)</Row>}
           {schedule.data?.map((e) => (
-            <Row key={e.playbook} label={`${e.playbook} at ${e.time}`}>{scheduleLine(e)}</Row>
+            <Row key={e.playbook} label={`${playbookName(e.playbook)} at ${e.time}`}>{scheduleLine(e)}</Row>
           ))}
         </Section>
 

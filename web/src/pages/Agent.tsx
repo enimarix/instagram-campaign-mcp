@@ -7,6 +7,7 @@ import { Card, EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { link, type Tone } from '../ui/styles'
+import { dateTime, playbookName } from './load'
 
 const POLL_MS = 10_000
 // The started process needs a moment to write its `running` row: keep polling meanwhile.
@@ -37,9 +38,9 @@ function RunCard({ run }: { run: AgentRun }) {
   return (
     <Card as="li" className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold">{run.playbook}</span>
+        <span className="font-semibold">{playbookName(run.playbook)}</span>
         <Chip tone={STATUS_TONE[run.status]}>{run.status}</Chip>
-        <span className="text-muted">{new Date(run.started_at).toLocaleString()}</span>
+        <span className="text-muted">{dateTime(run.started_at)}</span>
       </div>
       <p className="mt-1 text-muted">
         {duration(run.duration_s)}
@@ -90,7 +91,7 @@ export default function Agent() {
   }, [runs, startedAt, loadRuns])
 
   async function runNow(playbook: string) {
-    if (!window.confirm(`Run ${playbook} now? Starts a Claude Code run; it uses your plan's usage.`)) return
+    if (!window.confirm(`Run ${playbookName(playbook).toLowerCase()} now? Starts a Claude Code run; it uses your plan's usage.`)) return
     setError(null)
     try {
       await startAgentRun(playbook)
@@ -98,7 +99,7 @@ export default function Agent() {
       loadRuns()
     } catch (e) {
       setError(e instanceof ApiError && e.code === 'already_running'
-        ? `${playbook} is already running` : errorMessage(e))
+        ? `${playbookName(playbook)} is already running` : errorMessage(e))
     }
   }
 
@@ -119,7 +120,7 @@ export default function Agent() {
               <li key={p}>
                 <Button variant="primary" disabled={runs?.some((r) => r.playbook === p && r.status === 'running')}
                   onClick={() => void runNow(p)}>
-                  Run {p} now
+                  Run {playbookName(p).toLowerCase()} now
                 </Button>
               </li>
             ))}

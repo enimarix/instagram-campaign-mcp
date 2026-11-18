@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import type { Asset } from '../api/client'
 import { IconButton } from '../ui/Button'
 import { Chip } from '../ui/Chip'
-import { CheckIcon, CloseIcon, EditIcon, InfoIcon, SoundOffIcon, SoundOnIcon } from '../ui/icons'
+import { BookmarkIcon, CheckIcon, CloseIcon, EditIcon, InfoIcon, SoundOffIcon, SoundOnIcon } from '../ui/icons'
 import { buttonClass } from '../ui/styles'
 
 type Props = {
@@ -17,6 +17,7 @@ type Props = {
   onApprove: () => void
   onDecline: () => void
   onChange: () => void
+  onSave?: () => void // "Save for later" (onto the bench); not on bench cards
 }
 
 const onVideo = 'rounded-full bg-black/55! text-white! backdrop-blur hover:bg-black/70!' // small buttons on the video
@@ -37,7 +38,7 @@ function RailButton({ label, icon, onClick, primary }: { label: string; icon: Re
 
 /** One screen of the review feed: the video, an overlay of what the agent says about it,
  * and the decision rail (Approve, Change, Decline). */
-export default function AssetCard({ asset: a, index, active, preload, muted, showBestBefore, onToggleSound, onApprove, onDecline, onChange }: Props) {
+export default function AssetCard({ asset: a, index, active, preload, muted, showBestBefore, onToggleSound, onApprove, onDecline, onChange, onSave }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const [expanded, setExpanded] = useState(false)
 
@@ -51,7 +52,8 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
   return (
     <article id={`asset-${a.id}`} data-index={index} aria-label={`Video ${a.id}`}
       className="relative flex h-full snap-start snap-always justify-center lg:gap-4">
-      <div className="relative h-full w-full overflow-hidden bg-black lg:aspect-[9/16] lg:w-auto lg:rounded-card">
+      {/* data-theme: on the video, chips and buttons keep the dark theme's colours (light ones fail contrast on black). */}
+      <div data-theme="dark" className="relative h-full w-full overflow-hidden bg-black lg:aspect-[9/16] lg:w-auto lg:rounded-card">
         {/* Tap = sound on / off, like Reels. No native controls: the feed scrolls. */}
         <video ref={video} src={a.preview_url ?? undefined} poster={a.poster_url ?? a.thumbnail_url ?? undefined}
           muted={muted} playsInline loop preload={active || preload ? 'auto' : 'none'}
@@ -59,6 +61,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
         <div className="absolute top-3 right-3 flex gap-2">
           <IconButton label={muted ? 'Sound on' : 'Mute'} icon={muted ? <SoundOffIcon /> : <SoundOnIcon />}
             onClick={onToggleSound} className={onVideo} />
+          {onSave && <IconButton label="Save for later" icon={<BookmarkIcon />} onClick={onSave} className={onVideo} />}
           <Link to={`/assets/${a.id}`} aria-label="Details" title="Details"
             className={`${buttonClass('secondary')} w-11 px-0! ${onVideo}`}>
             <InfoIcon />
@@ -80,14 +83,15 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
           )}
           {a.description && (
             <button type="button" aria-expanded={expanded} onClick={() => setExpanded((x) => !x)}
-              className={`pointer-events-auto block text-left text-sm ${expanded ? '' : 'line-clamp-2'}`}>
+              className={`pointer-events-auto text-left text-sm ${expanded ? '' : 'line-clamp-2'}`}>
               {a.description}
             </button>
           )}
           {a.caption && <p className="line-clamp-1 text-sm text-white/75">{a.caption}</p>}
         </div>
       </div>
-      <div className="absolute right-2 bottom-6 flex flex-col items-center gap-4 lg:static lg:justify-end lg:pb-6">
+      {/* Phone: above the decline reasons and the undo toast, which would cover it for 5 s. */}
+      <div className="absolute right-2 bottom-38 flex flex-col items-center gap-4 lg:static lg:justify-end lg:pb-6">
         <RailButton label="Approve" icon={<CheckIcon />} onClick={onApprove} primary />
         <RailButton label="Change" icon={<EditIcon />} onClick={onChange} />
         <RailButton label="Decline" icon={<CloseIcon />} onClick={onDecline} />

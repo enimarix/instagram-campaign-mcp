@@ -34,8 +34,9 @@ function DownloadButton({ target }: { target: { source_id: number } | { url: str
     }
   }
   return (
-    <Button size="sm" variant="ghost" loading={busy} onClick={() => void download()}>
-      Download for reaction
+    // Phones show "Download" only: the full label pushed the row's other buttons to a second line.
+    <Button size="sm" variant="ghost" loading={busy} aria-label="Download for reaction" onClick={() => void download()}>
+      Download<span className="hidden sm:inline">&nbsp;for reaction</span>
     </Button>
   )
 }
