@@ -226,6 +226,8 @@ async def run_due(
                 store.cancel_claimed(post["id"], msg)
                 failed.append({"id": post["id"], "error": msg})
                 continue
+            # Queued before step 120 stored the flag: unsure, so labelled (GOAL.md §5.6).
+            post["payload"].setdefault("ai_generated", True)
         try:
             result = await _with_heartbeat(
                 store, post["id"], publish(client, post["kind"], post["payload"])

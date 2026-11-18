@@ -171,10 +171,11 @@ def test_owner_cancel_returns_asset_to_approved(store, cfg):  # DoD (7)
 # ------------------------------------------------------------- run_due outcomes (DoD 5)
 class FakeClient:
     def __init__(self, outcome):
-        self.outcome, self.calls = outcome, 0
+        self.outcome, self.calls, self.payload = outcome, 0, None
 
     async def publish_reel(self, **payload):
         self.calls += 1
+        self.payload = payload
         if isinstance(self.outcome, Exception):
             raise self.outcome
         return {"media_id": "M1", "permalink": "https://instagram.com/p/x"}
@@ -249,6 +250,16 @@ def test_queued_post_stores_the_flag(store, cfg):
     a = _asset(store, cfg, track="remix", source={"rights_basis": "own"}, recipe=FFMPEG)
     post = queue_asset(store, cfg, a["id"], utcnow() + LATER)
     assert post["payload"]["ai_generated"] is False
+
+
+async def test_asset_queued_without_the_flag_is_labelled(store, cfg):
+    a, post = _due(store, cfg, track="remix", source={"rights_basis": "own"}, recipe=FFMPEG)
+    with store._tx() as c:  # a row queued before the flag existed
+        c.execute("UPDATE scheduled_posts SET payload=? WHERE id=?",
+                  (json.dumps({"video_path": a["file_path"], "caption": "hi"}), post["id"]))
+    fake = FakeClient(None)
+    await camp.run_due(fake, store)
+    assert fake.payload["ai_generated"] is True
 
 
 @respx.mock
