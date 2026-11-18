@@ -9,8 +9,9 @@ Every method is `@spends` and calls `authorize_spend()` before its request:
 Nothing is ever created ACTIVE: `_paused()` puts `status=PAUSED` last in every campaign, ad
 set and ad body, and no method takes a status. (A creative has no delivery status: its
 enum is ACTIVE/IN_PROCESS/WITH_ISSUES/DELETED and is not a creation parameter.)
-`activate()` is the one write that sets ACTIVE; only `tests.approve` calls it, after the
-owner typed the website password again (094, source-checked in tests/test_ads_tests.py).
+`activate()` is the one write that sets ACTIVE; only `tests.launch` calls it, when a test
+is launched within the caps, by the owner or the agent (094, 126; source-checked in
+tests/test_ads_tests.py).
 `pause()` is `@pauses`, not `@spends`: it works while killed.
 
 Money goes to Meta as int64 in the currency's smallest unit (cents); spend_cap is the

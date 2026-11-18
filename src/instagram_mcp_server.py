@@ -1007,7 +1007,7 @@ async def list_learnings(kind: Optional[str] = None, status: Optional[str] = "ac
 
 
 # ----------------------------------------------------------------------
-# Ads for the agent (step 096): propose and read only; approval is the owner's, in the UI
+# Ads for the agent (096, AI-run since 126): propose, launch and stop within the caps
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=LOCAL_READ)
 async def list_ad_winners() -> Dict[str, Any]:
@@ -1021,16 +1021,36 @@ async def list_ad_winners() -> Dict[str, Any]:
 async def propose_ad_test(hypothesis: str, variable: str, variants: List[Dict[str, str]],
                           min_lift: float = 0.2, primary_metric: str = "ctr"
                           ) -> Dict[str, Any]:
-    """Propose a paid A/B test; it spends nothing and waits for the owner's approval in the
-    website. One variable (creative | audience | placement), 2-4 variants {media_id,
-    preset} (presets fr_reels, fr_feed_reels, francophone_reels): creative = different
-    winner posts with one preset; audience / placement = one post, presets that differ
-    only in that. A specific, falsifiable hypothesis; min_lift = the relative lift worth
-    detecting; primary_metric ctr. Returns the test with the budget it needs; refused
-    beyond a few proposals still waiting for the owner."""
+    """Propose a paid A/B test; it spends nothing until launch_ad_test. One variable
+    (creative | audience | placement), 2-4 variants {media_id, preset} (presets fr_reels,
+    fr_feed_reels, francophone_reels): creative = different winner posts with one preset;
+    audience / placement = one post, presets that differ only in that. A specific,
+    falsifiable hypothesis; min_lift = the relative lift worth detecting; primary_metric
+    ctr. Returns the test with the budget it needs and
+    `underpowered` (the caps cannot fund it); refused beyond a few proposals not launched
+    yet."""
     return await _studio_async(ads_agent.propose(
         store(), get_settings(), hypothesis=hypothesis, variable=variable,
         variants=variants, min_lift=min_lift, primary_metric=primary_metric))
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                      open_world_hint=True))
+async def launch_ad_test(test_id: int) -> Dict[str, Any]:
+    """Launch one of your own proposed tests: it starts spending. The budget is what the test
+    needs, within the money caps the owner set in the website. Refused (nothing sent) when
+    the kill switch is on, a cap is reached, the most tests at once already run, the
+    caps cannot fund it (underpowered), or a post is no longer advertisable."""
+    return await _studio_async(ads_agent.launch(store(), get_settings(), test_id))
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True,
+                                      open_world_hint=True))
+async def stop_ad_test(test_id: int, reason: str) -> Dict[str, Any]:
+    """Pause a test's ads and cancel it (spends nothing). Only for a reason the stop rules
+    miss, e.g. Meta rejected an ad: the worker already stops a test once it has a winner,
+    reaches its budget or its end date. reason: one line, shown to the owner."""
+    return await _studio_async(ads_agent.stop(store(), get_settings(), test_id, reason))
 
 
 @mcp.tool(annotations=LOCAL_READ)
@@ -1155,11 +1175,14 @@ AGENT_TOOLS = frozenset({
     # (the key stays in it); licence, credit and ads_allowed are recorded in code.
     "search_stock",
     "add_stock_clip",
-    # Ads (step 096): propose tests and read results only. No agent tool approves,
-    # activates, cancels, kills or unkills, changes a cap or reaches the writer
-    # (tests/test_ads_agent.py walks the calls); a proposal waits for the owner's approval.
+    # Ads (096, AI-run since 126): propose, launch and stop tests, read results. Money
+    # moves only through the guard: launch -> tests.launch (caps, kill switch, max tests
+    # at once), stop -> tests.cancel (a pause). No agent tool unkills, changes a setting
+    # or reaches the writer (tests/test_ads_agent.py walks the calls).
     "list_ad_winners",
     "propose_ad_test",
+    "launch_ad_test",
+    "stop_ad_test",
     "list_ad_tests",
     "get_ad_test_results",
 })

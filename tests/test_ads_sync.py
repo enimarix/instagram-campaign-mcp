@@ -32,7 +32,7 @@ from .test_ads_tests import (
 from .test_worker_data_jobs import FakeClient
 
 DAY = timedelta(days=1)
-# approve() below: variant A = campaign 900, ad set 901, ad 903; B = 904, 905, 907.
+# launch() below: variant A = campaign 900, ad set 901, ad 903; B = 904, 905, 907.
 ENTITIES = {"900", "901", "903", "904", "905", "907"}
 
 
@@ -61,7 +61,7 @@ def ads(meta):  # noqa: F811
 
 async def _running(store, s):
     t = await _propose(store, s)
-    await tests.approve(store, s, t["id"], "427")
+    await tests.launch(store, s, t["id"], "427", actor="owner")
     return t["id"]
 
 

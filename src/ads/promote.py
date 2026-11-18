@@ -64,7 +64,7 @@ CENT = Decimal("0.01")
 
 
 class PromotionRefused(Exception):
-    """Nothing was sent. code: rights | not_ours | not_configured | invalid."""
+    """Nothing was sent. code: rights | not_ours | not_published | not_configured | invalid."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -86,6 +86,9 @@ def _advertisable_asset(store: CampaignStore, media_id: str) -> Dict[str, Any]:
     if not label or label.get("asset_id") is None:
         raise PromotionRefused("not_ours", f"post {media_id} is not a studio asset")
     asset = store.get_asset(label["asset_id"])
+    if asset["status"] != "published":  # the owner approved it, and it is on Instagram
+        raise PromotionRefused("not_published", f"post {media_id}'s video is "
+                               f"{asset['status']}, not published")
     decision = can_advertise(_source(store, store.get_idea(asset["idea_id"])))
     if not decision:
         raise PromotionRefused("rights", decision.reason)

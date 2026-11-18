@@ -22,7 +22,8 @@ AGENT_ALLOWED = {
     "get_trend_report", "list_inspirations", "mark_inspiration_used", "download_reel",
     "list_dm_picks", "mark_dm_pick", "list_sources", "render_remix",
     "get_clip_frames", "set_clip_timeline", "search_stock", "add_stock_clip",
-    "list_ad_winners", "propose_ad_test", "list_ad_tests", "get_ad_test_results",
+    "list_ad_winners", "propose_ad_test", "launch_ad_test", "stop_ad_test", "list_ad_tests",
+    "get_ad_test_results",
 }
 NEVER_FOR_AGENT = {
     "publish_image", "publish_carousel", "publish_reel", "publish_story",

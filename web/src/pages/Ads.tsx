@@ -13,7 +13,7 @@ import { field, type Tone } from '../ui/styles'
 import { Tabs } from '../ui/Tabs'
 import { dateTime, humanize, num, pct, useLoad } from './load'
 
-// Steps 094 (API), 094b (this page) and 095b (results).
+// Steps 094 (API), 094b (this page), 095b (results) and 126 (the AI runs the ads).
 const VARIABLES: { id: AdVariable; label: string }[] = [
   { id: 'creative', label: 'Video' }, { id: 'audience', label: 'Audience' }, { id: 'placement', label: 'Placement' },
 ]
@@ -111,6 +111,9 @@ function BudgetCard({ b, act }: { b?: AdsBudget; act: Act }) {
   return (
     <Card as="section" aria-label="Budget">
       <h2 className="font-semibold">Budget</h2>
+      <p className="mt-1 text-sm text-muted">
+        The AI runs your ads within these caps. <a href="/settings" className="text-accent underline">Change them in Settings, Ads</a>.
+      </p>
       {b.killed && (
         <div role="status" className="mt-2 rounded-control bg-danger/12 p-3 text-sm text-danger">
           All ads are stopped{b.killed_reason ? `: ${b.killed_reason}` : ''}
@@ -119,7 +122,7 @@ function BudgetCard({ b, act }: { b?: AdsBudget; act: Act }) {
       )}
       {zero && (
         <p className="mt-2 text-sm text-muted">
-          Set ADS_DAILY_CAP / ADS_TEST_CAP / ADS_LIFETIME_CAP in .env to allow spend.
+          A cap at 0 allows no spend: raise it in Settings, Ads.
         </p>
       )}
       <dl className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -257,7 +260,6 @@ function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act
 
 function ApproveSheet({ t, act, onClose }: { t: AdTest; act: Act; onClose: () => void }) {
   const [budget, setBudget] = useState(t.needed.total.toFixed(2))
-  const [password, setPassword] = useState('')
   const [anyway, setAnyway] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -267,7 +269,7 @@ function ApproveSheet({ t, act, onClose }: { t: AdTest; act: Act; onClose: () =>
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
-    const err = await act(() => approveAdTest(t.id, { budget, password, underpowered_ok: Boolean(short) && anyway }))
+    const err = await act(() => approveAdTest(t.id, { budget, underpowered_ok: Boolean(short) && anyway }))
     setBusy(false)
     if (err) setError(err)
     else onClose()
@@ -290,10 +292,6 @@ function ApproveSheet({ t, act, onClose }: { t: AdTest; act: Act; onClose: () =>
             </label>
           </div>
         )}
-        <label>Password
-          <input type="password" value={password} required autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)} className={`${field} mt-1 block w-full`} />
-        </label>
         {error && <p role="alert" className="text-danger">{error}</p>}
         <Button type="submit" variant="primary" loading={busy} disabled={Boolean(short) && !anyway}>
           Approve and spend
@@ -413,6 +411,9 @@ function TestRow({ t, labels, act }: { t: AdTest; labels: Labels; act: Act }) {
     <li className="py-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone={STATUS_TONE[t.status]}>{t.status}</Chip>
+        {t.launched_by && <Chip tone={t.launched_by === 'agent' ? 'accent' : 'neutral'}>
+          {t.launched_by === 'agent' ? 'Launched by the AI' : 'Launched by you'}
+        </Chip>}
         {winner && <Chip tone="success">Winner: {winner}{won && ` (${versionLabel(t, won, labels)})`}</Chip>}
         <span className="font-medium break-words">{t.hypothesis}</span>
       </div>
@@ -515,7 +516,7 @@ export default function Ads() {
   return (
     <>
       <PageHeader title="Ads" actions={<Button variant="primary" onClick={() => setProposing(true)}>Propose a test</Button>}>
-        Paid A/B tests on your proven winners. Nothing spends until you approve it with your password.
+        Paid A/B tests on your proven winners, launched and stopped by the AI within your caps.
       </PageHeader>
       <div className="grid gap-4">
         {unset && <p role="status" className="rounded-card bg-info/12 p-4 text-sm text-info">{H6_NOTE}</p>}

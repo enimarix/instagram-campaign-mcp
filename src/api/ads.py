@@ -1,8 +1,9 @@
 """Ads routes: budget and kill switch (091), A/B tests and the audit log (094), a test's
 results (095). Thin doors onto src/ads/budget.py, src/ads/tests.py and src/ads/sync.py.
 
-No MCP tool reaches these: the agent never touches money. Unkill and test approval ask
-the website password again (auth.reauth_error).
+The agent launches and stops tests through its own MCP tools (126); the owner's Approve
+here launches a proposed test too, without a password (the caps and the kill switch are
+the money safety). Unkill asks the website password again (auth.reauth_error).
 """
 
 from __future__ import annotations
@@ -71,7 +72,6 @@ class ProposeBody(BaseModel):
 
 class ApproveBody(BaseModel):
     budget: Decimal
-    password: str
     underpowered_ok: bool = False
 
 
@@ -124,11 +124,8 @@ async def propose(request: Request, body: ProposeBody):
 @router.post("/tests/{test_id}/approve")
 async def approve(request: Request, test_id: int, body: ApproveBody):
     s = request.app.state
-    refused = reauth_error(s.auth, body.password)
-    if refused:
-        return JSONResponse(status_code=refused[0], content=refused[1])
-    return await _call(tests.approve(s.store, s.settings, test_id, body.budget,
-                                     underpowered_ok=body.underpowered_ok))
+    return await _call(tests.launch(s.store, s.settings, test_id, body.budget, actor="owner",
+                                    underpowered_ok=body.underpowered_ok))
 
 
 @router.post("/tests/{test_id}/cancel")
