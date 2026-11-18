@@ -181,7 +181,8 @@ async def propose(
         if own:
             await client.close()
     try:
-        spec = abtest.TestSpec(variable, variants=len(rows), primary_metric=primary_metric)
+        spec = abtest.TestSpec(variable, variants=len(rows), primary_metric=primary_metric,
+                               min_days=settings.ads_test_days)
         baseline = baseline_rate if baseline_rate is not None else (
             rates["ctr"] if primary_metric == "ctr" else None)
         if baseline is None:

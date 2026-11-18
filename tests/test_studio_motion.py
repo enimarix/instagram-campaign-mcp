@@ -256,6 +256,7 @@ async def test_mcp_tools_call_the_services(monkeypatch):
 
     monkeypatch.setattr(motion, "queue_motion_render", queue)
     monkeypatch.setattr(srv, "store", lambda: None)
+    monkeypatch.setattr(srv, "get_settings", srv.config.get_settings)  # no store to read
     assert await srv.list_motion_templates() == {"templates": [{"id": "Hello"}]}
     assert await srv.render_motion("Hello", {"title": "Hi"}, idea_id=1) == {
         "asset_id": 7, "job_id": 3, "state": "queued"}

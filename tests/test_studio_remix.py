@@ -271,6 +271,7 @@ async def test_mcp_tools_call_the_services(monkeypatch):
     monkeypatch.setattr(remix, "render_remix", queue)
     monkeypatch.setattr(remix, "list_sources", lambda store, role, limit: [{"id": 1}])
     monkeypatch.setattr(srv, "store", lambda: None)
+    monkeypatch.setattr(srv, "get_settings", srv.config.get_settings)  # no store to read
     assert await srv.list_sources() == {"sources": [{"id": 1}]}
     assert await srv.render_remix(1, 2, "hook", SCRIPT, trim_start_s=10) == {
         "asset_id": 7, "job_id": 3, "state": "queued",

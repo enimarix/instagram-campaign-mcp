@@ -8,6 +8,17 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: Settings editable on the website, over .env (124)
+Owner's answer: the ad settings (caps, currency, objective, test length, tests at once,
+EU DSA fields, ad account and Page ids) are edited on the website, Settings > Ads. They
+are stored in the database over the `.env` values and validated by the same rules; every
+process (API, worker, MCP server, agent runs) picks a change up within 30 s, the budget
+guard at its next check. Secrets stay in `.env` only. Raising a money cap asks the
+website password again; so does changing the currency while a cap is above 0 (it changes
+what every cap means). Audience and placement presets stay read-only for now. Every
+change to an ads setting writes an `ads_audit` row.
+Reason: the owner steers from the website; a cap must never rise without the password.
+
 ## 2026-11-18: The agent proposes ad tests weekly, never approves them (096)
 Four agent-profile MCP tools: `list_ad_winners`, `propose_ad_test` (stored with
 `proposed_by = "agent"`; at most `MAX_AGENT_PROPOSALS` = 3 waiting for the owner),

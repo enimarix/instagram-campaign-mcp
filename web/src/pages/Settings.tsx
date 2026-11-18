@@ -14,6 +14,7 @@ import DmPicksSection from './DmPicks'
 import { dateTime, playbookName } from './load'
 import PermissionsSection from './Permissions'
 import ReactionReelSection from './ReactionReel'
+import SettingsSection from './SettingsSection'
 
 // ponytail: fixed threshold (~a week of daily batches); make it a setting if it nags.
 const LOW_FREE_BYTES = 5e9
@@ -228,6 +229,7 @@ export default function Settings() {
           ))}
         </Section>
 
+        <SettingsSection section="ads" title="Ads" />
         <ClipsSection />
         <PermissionsSection />
         <ReactionReelSection />

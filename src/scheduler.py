@@ -41,7 +41,7 @@ import sys
 from contextlib import nullcontext, suppress
 from datetime import date
 
-from . import worker
+from . import settings_overrides, worker
 from .campaign import collect_insights, rank, run_due
 from .config import InstagramMCPSettings, get_settings
 from .instagram_client import InstagramAPIError, InstagramClient
@@ -64,6 +64,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
         renders = asyncio.create_task(worker.render_loop(store, settings))
         agents = asyncio.create_task(catch_up_loop(store, settings))
         downloader = asyncio.create_task(worker.downloader_loop(store, settings))
+        fresh = asyncio.create_task(settings_overrides.refresh_loop(store, settings))
         try:
             if settings.instagram_configured:
                 async with InstagramClient(settings, store=store) as client:
@@ -77,7 +78,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                     await asyncio.wait({renders}, timeout=interval)
                 await renders
         finally:
-            for task in (renders, agents, downloader):
+            for task in (renders, agents, downloader, fresh):
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task
@@ -110,6 +111,7 @@ async def _run(args: argparse.Namespace) -> int:
     configure_logging(settings.log_level)
     store = CampaignStore(settings.database_path)
     try:
+        settings_overrides.refresh(store, settings)
         if args.command == "rank":
             print(json.dumps(rank(store, settings, campaign=args.campaign), indent=2, default=str))
             return 0
@@ -236,6 +238,7 @@ def _agent(args: argparse.Namespace) -> int:
                 return 1
             return 0
         store = CampaignStore(settings.database_path)
+        settings_overrides.refresh(store, settings)  # the work packets use them
         if args.agent_command == "run-due":
             try:
                 runs = schedule.run_due(store, settings)

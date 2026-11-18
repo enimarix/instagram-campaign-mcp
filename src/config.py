@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -402,8 +402,15 @@ class InstagramMCPSettings(BaseSettings):
         None, description="Facebook Page linked to the Instagram account (creative object_id)"
     )
     # EU Digital Services Act: who benefits from and who pays for the ads (≤512 chars each).
-    ads_dsa_beneficiary: Optional[str] = Field(None, max_length=512)
-    ads_dsa_payor: Optional[str] = Field(None, max_length=512)
+    ads_dsa_beneficiary: Optional[str] = Field(None, max_length=512,
+                                               description="Who the ads benefit (EU DSA)")
+    ads_dsa_payor: Optional[str] = Field(None, max_length=512,
+                                         description="Who pays for the ads (EU DSA)")
+    # A/B tests (src/ads/tests.py): Meta advises 7 days or more (docs/DECISIONS.md, 094).
+    ads_test_days: int = Field(7, ge=1, le=30, description="Days an A/B test runs before"
+                                                           " it is judged")
+    ads_max_running_tests: int = Field(2, ge=1, le=10, description="Paid A/B tests running"
+                                                                   " at once")
     # A/B test budgets (src/ads/tests.py, 094) use the account's CPM from its insights;
     # this one until the account has 1000+ impressions. ponytail: a guess for FR Reels.
     ads_default_cpm: Decimal = Field(Decimal(5), gt=0,
@@ -471,6 +478,11 @@ class InstagramMCPSettings(BaseSettings):
                 f"127.0.0.1, ::1 or localhost), got {v!r}"
             )
         return v
+
+    # Website overrides (src/settings_overrides.py): the version applied to this object and
+    # the .env values of the editable fields, taken before the first override.
+    _overrides_version: int = PrivateAttr(0)
+    _env_values: Optional[dict] = PrivateAttr(None)
 
     @property
     def instagram_configured(self) -> bool:
