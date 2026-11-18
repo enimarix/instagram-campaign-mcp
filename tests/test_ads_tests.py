@@ -15,8 +15,8 @@ from fastapi.testclient import TestClient
 
 from src import settings_overrides as ov
 from src.ads import budget, tests, writer
-from src.ads.promote import presets_for
 from src.ads.budget import BudgetRefused
+from src.ads.promote import presets_for
 from src.ads.tests import AdTestFailed, AdTestRefused
 from src.api.app import create_app
 from src.api.auth import Auth

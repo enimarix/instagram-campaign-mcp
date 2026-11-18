@@ -191,7 +191,8 @@ def update(store: CampaignStore, settings: InstagramMCPSettings, values: Dict[st
         state = json.loads(row[0]) if row else {"version": 0, "values": {}}
         kept = {k: v for k, v in state["values"].items() if k in EDITABLE and k not in reset}
         new = _effective(settings, {**kept, **values})
-        _presets_in_use(c, new)
+        if new.ads_presets != old["ads_presets"]:  # not on other edits: never stuck
+            _presets_in_use(c, new)
         if not confirmed and _raises_cap(old, new):
             raise PasswordNeeded()
         keys = {*kept, *values}
