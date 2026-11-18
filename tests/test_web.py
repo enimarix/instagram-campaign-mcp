@@ -131,3 +131,13 @@ async def test_up_worker_failure_is_reported(settings, monkeypatch, capsys):
     monkeypatch.setattr(scheduler, "CampaignStore", broken_store)
     await asyncio.wait_for(scheduler._worker(settings), 1)
     assert "worker stopped" in capsys.readouterr().err
+
+
+def test_csp_allows_instagram_frames_and_cdn_media_only(site):
+    for path, host in (("/trending", None), ("/api/health", None), ("/", "evil.example")):
+        r = site.get(path, headers={"Host": host} if host else {})
+        csp = dict(d.split(" ", 1) for d in r.headers["Content-Security-Policy"].split("; "))
+        assert csp["frame-src"] == "https://www.instagram.com", path
+        assert "https://*.cdninstagram.com https://*.fbcdn.net" in csp["media-src"]
+        assert "https://*.cdninstagram.com https://*.fbcdn.net" in csp["img-src"]
+        assert csp["frame-ancestors"] == "'none'"

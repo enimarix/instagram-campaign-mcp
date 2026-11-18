@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Inspiration, TrendItem, TrendReport, Watch } from '../api/client'
+import type { Inspiration, TrendItem, TrendReport } from '../api/client'
+import { MemoryRouter } from 'react-router'
 import { ToastProvider } from '../ui/Toast'
 import Trends from './Trends'
 
@@ -20,7 +21,6 @@ const REPORT: TrendReport = {
   },
   generated_at: '2026-11-17T12:00:00+00:00',
 }
-const WATCH: Watch[] = [{ id: 3, kind: 'hashtag', value: 'fitness', note: null }]
 const INSP: Inspiration[] = [
   { id: 7, url: 'https://www.instagram.com/reel/C1/', note: 'this format is funny', status: 'new',
     created_at: '2026-11-17T08:00:00+00:00', used_at: null },
@@ -32,9 +32,6 @@ function stubApi(overrides: Record<string, [number, unknown]> = {}) {
   const calls: { key: string; body?: unknown }[] = []
   const routes: Record<string, [number, unknown]> = {
     'GET /api/trends?days=14': [200, REPORT],
-    'GET /api/watchlist': [200, WATCH],
-    'POST /api/watchlist': [200, { id: 4, kind: 'account', value: 'rival', note: null }],
-    'DELETE /api/watchlist/3': [204, null],
     'GET /api/inspirations': [200, INSP],
     'POST /api/inspirations': [200, INSP[0]],
     'PATCH /api/inspirations/7': [200, { ...INSP[0], status: 'dismissed' }],
@@ -58,7 +55,7 @@ afterEach(() => {
 describe('Trends', () => {
   it('shows ranked cards that open Instagram in a new tab', async () => {
     stubApi()
-    render(<Trends />)
+    render(<MemoryRouter><Trends /></MemoryRouter>)
     const report = await screen.findByRole('region', { name: 'Trend report' })
     expect(await within(report).findByText('@rival')).toBeTruthy()
     expect(within(report).getByText('×6 views')).toBeTruthy()
@@ -76,40 +73,15 @@ describe('Trends', () => {
   })
 
   it('shows the empty state', async () => {
-    stubApi({ 'GET /api/trends?days=14': [200, { accounts: [], hashtags: {}, generated_at: '' }],
-      'GET /api/watchlist': [200, []] })
-    render(<Trends />)
+    stubApi({ 'GET /api/trends?days=14': [200, { accounts: [], hashtags: {}, generated_at: '' }] })
+    render(<MemoryRouter><Trends /></MemoryRouter>)
     expect(await screen.findByText(/No trends yet/)).toBeTruthy()
-    expect(await screen.findByText('Nothing watched yet')).toBeTruthy()
-  })
-
-  it('adds and removes watchlist entries', async () => {
-    const calls = stubApi()
-    render(<Trends />)
-    const list = await screen.findByRole('region', { name: 'Watchlist' })
-    fireEvent.click(await within(list).findByRole('button', { name: 'Remove #fitness' }))
-    await vi.waitFor(() => expect(calls.map((c) => c.key)).toContain('DELETE /api/watchlist/3'))
-    fireEvent.change(within(list).getByLabelText('Kind'), { target: { value: 'account' } })
-    fireEvent.change(within(list).getByLabelText('Hashtag or username'), { target: { value: ' @Rival ' } })
-    fireEvent.click(within(list).getByRole('button', { name: 'Add' }))
-    await vi.waitFor(() => expect(calls.find((c) => c.key === 'POST /api/watchlist')?.body)
-      .toEqual({ kind: 'account', value: '@Rival' }))
-    await vi.waitFor(() => expect((within(list).getByLabelText('Hashtag or username') as HTMLInputElement).value).toBe(''))
-    expect(calls.filter((c) => c.key === 'GET /api/watchlist')).toHaveLength(3) // reloaded after each
-  })
-
-  it('shows a refused entry', async () => {
-    stubApi({ 'POST /api/watchlist': [422, { error: 'invalid', message: 'not a valid hashtag' }] })
-    render(<Trends />)
-    const list = await screen.findByRole('region', { name: 'Watchlist' })
-    fireEvent.change(within(list).getByLabelText('Hashtag or username'), { target: { value: 'two words' } })
-    fireEvent.click(within(list).getByRole('button', { name: 'Add' }))
-    expect((await within(list).findByRole('alert')).textContent).toBe('not a valid hashtag')
+    expect(screen.getByRole('link', { name: 'Trending' }).getAttribute('href')).toBe('/trending')
   })
 
   it('lists inspirations with a safe Open link, dismiss and delete', async () => {
     const calls = stubApi()
-    render(<Trends />)
+    render(<MemoryRouter><Trends /></MemoryRouter>)
     const box = await screen.findByRole('region', { name: 'Inspirations' })
     const [first, second] = await within(box).findAllByRole('listitem')
     expect(within(first).getByText('this format is funny')).toBeTruthy()
@@ -129,7 +101,7 @@ describe('Trends', () => {
 
   it('adds an inspiration', async () => {
     const calls = stubApi()
-    render(<Trends />)
+    render(<MemoryRouter><Trends /></MemoryRouter>)
     const box = await screen.findByRole('region', { name: 'Inspirations' })
     fireEvent.change(within(box).getByLabelText('Reel link'), { target: { value: ' https://www.instagram.com/reel/C2/?igsh=x ' } })
     fireEvent.change(within(box).getByLabelText('Note'), { target: { value: 'react to this' } })
@@ -142,7 +114,7 @@ describe('Trends', () => {
 
   it('shows a refused inspiration link', async () => {
     stubApi({ 'POST /api/inspirations': [422, { error: 'invalid', message: 'paste an Instagram Reel or post link' }] })
-    render(<Trends />)
+    render(<MemoryRouter><Trends /></MemoryRouter>)
     const box = await screen.findByRole('region', { name: 'Inspirations' })
     fireEvent.change(within(box).getByLabelText('Reel link'), { target: { value: 'https://x.com/a' } })
     fireEvent.click(within(box).getByRole('button', { name: 'Add' }))
@@ -151,7 +123,7 @@ describe('Trends', () => {
 
   it('downloads a trend reference for a reaction and shows the result', async () => {
     const calls = stubApi({ 'POST /api/sources/download': [200, { status: 'downloaded', source: { id: 1, author: 'rival' } }] })
-    render(<ToastProvider><Trends /></ToastProvider>)
+    render(<ToastProvider><MemoryRouter><Trends /></MemoryRouter></ToastProvider>)
     const report = await screen.findByRole('region', { name: 'Trend report' })
     const buttons = await within(report).findAllByRole('button', { name: 'Download for reaction' })
     expect(buttons).toHaveLength(1) // not on the card whose link is unsafe
@@ -162,7 +134,7 @@ describe('Trends', () => {
 
   it('shows why an inspiration was not downloaded', async () => {
     const calls = stubApi({ 'POST /api/sources/download': [200, { status: 'refused', reason: 'private account', source: null }] })
-    render(<ToastProvider><Trends /></ToastProvider>)
+    render(<ToastProvider><MemoryRouter><Trends /></MemoryRouter></ToastProvider>)
     const box = await screen.findByRole('region', { name: 'Inspirations' })
     const [first, second] = await within(box).findAllByRole('listitem')
     expect(within(second).queryByRole('button', { name: 'Download for reaction' })).toBeNull()
@@ -173,7 +145,7 @@ describe('Trends', () => {
 
   it('shows an error from the download route', async () => {
     stubApi({ 'POST /api/sources/download': [422, { error: 'invalid', message: 'not a Reel link' }] })
-    render(<ToastProvider><Trends /></ToastProvider>)
+    render(<ToastProvider><MemoryRouter><Trends /></MemoryRouter></ToastProvider>)
     const box = await screen.findByRole('region', { name: 'Inspirations' })
     const [first] = await within(box).findAllByRole('listitem')
     fireEvent.click(within(first).getByRole('button', { name: 'Download for reaction' }))

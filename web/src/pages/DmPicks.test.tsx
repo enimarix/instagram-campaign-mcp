@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DmPick, PinnedAccount } from '../api/client'
-import DmPicksSection from './DmPicks'
+import { MemoryRouter } from 'react-router'
+import DmPicksSection, { DmPicksList } from './DmPicks'
 
 const ACCOUNT: PinnedAccount = { id: 3, username: 'friend', ig_user_id: null, note: 'my sister', created_at: '2026-11-17T10:00:00Z' }
 const pick = (over: Partial<DmPick>): DmPick => ({
@@ -31,12 +32,15 @@ afterEach(() => {
 })
 
 describe('DmPicksSection', () => {
-  it('shows empty states and the DM permission line', async () => {
+  it('shows empty states, the DM permission line and the link to Mes envois', async () => {
     stubApi({ 'GET /api/pinned-accounts': [200, []], 'GET /api/dm-picks': [200, []] })
-    render(<DmPicksSection />)
+    render(<MemoryRouter><DmPicksSection /></MemoryRouter>)
     expect(await screen.findByText('No pinned accounts yet: pin one below.')).toBeTruthy()
-    expect(screen.getByText('No picks yet')).toBeTruthy()
     expect(screen.getByText('instagram_manage_messages')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Trending, Mes envois' }).getAttribute('href')).toBe('/trending?tab=envois')
+    cleanup()
+    render(<DmPicksList />)
+    expect(await screen.findByText('No picks yet')).toBeTruthy()
   })
 
   it('pins an account and shows the server error', async () => {
@@ -45,7 +49,7 @@ describe('DmPicksSection', () => {
       'GET /api/dm-picks': [200, []],
       'POST /api/pinned-accounts': [[422, { error: 'invalid', message: "not an Instagram username: 'bad name'" }], [200, ACCOUNT]],
     })
-    render(<DmPicksSection />)
+    render(<MemoryRouter><DmPicksSection /></MemoryRouter>)
     const form = await screen.findByRole('form', { name: 'Pin an account' })
     fireEvent.change(within(form).getByLabelText('Instagram username'), { target: { value: 'bad name' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Pin' }))
@@ -68,7 +72,7 @@ describe('DmPicksSection', () => {
       'DELETE /api/pinned-accounts/3': [204, null],
     })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    render(<DmPicksSection />)
+    render(<MemoryRouter><DmPicksSection /></MemoryRouter>)
     const unpin = await screen.findByRole('button', { name: 'Unpin @friend' })
     fireEvent.click(unpin)
     expect(calls.some((c) => c.key.startsWith('DELETE'))).toBe(false)
@@ -86,7 +90,7 @@ describe('DmPicksSection', () => {
       'GET /api/dm-picks': [[200, [skipped, older]], [200, [skipped, { ...older, status: 'skipped', skip_reason: 'too long' }]]],
       'POST /api/dm-picks/1/skip': [200, { ...older, status: 'skipped' }],
     })
-    render(<DmPicksSection />)
+    render(<DmPicksList />)
     const list = await screen.findByRole('list', { name: 'Picks' })
     const rows = within(list).getAllByRole('listitem')
     expect(within(rows[0]).getByText('Skipped: not a Reel')).toBeTruthy()

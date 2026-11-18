@@ -57,6 +57,18 @@ from .downloader import router as downloader_router
 # Reachable without a session even when UI_PASSWORD is set.
 PUBLIC_PATHS = {"/api/health", "/api/login", "/api/logout", "/api/session"}
 
+# What the website may frame and show from elsewhere (step 135): Instagram's embed pages and
+# CDN media (Trending page), Pexels previews (stock search, 064). Nobody may frame the studio.
+# Scripts and styles are not listed: index.html's theme script is inline.
+CSP = "; ".join((
+    "frame-src https://www.instagram.com",
+    "img-src 'self' data: https://*.cdninstagram.com https://*.fbcdn.net https://images.pexels.com",
+    "media-src 'self' https://*.cdninstagram.com https://*.fbcdn.net",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+))
+
 ClientFactory = Callable[..., InstagramClient]  # (settings, *, store)
 
 try:
@@ -119,6 +131,12 @@ def create_app(
         if path.startswith("/api/") and hasattr(request.app.state, "store"):
             settings_overrides.refresh(request.app.state.store, request.app.state.settings)
         return await call_next(request)
+
+    @app.middleware("http")  # registered after guard: runs outside it, so every answer has it
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = CSP
+        return response
 
     @app.post("/api/login")
     async def login(request: Request):

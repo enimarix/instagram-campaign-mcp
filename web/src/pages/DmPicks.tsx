@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import {
   errorMessage, listDmPicks, listPinnedAccounts, pinAccount, skipDmPick, unpinAccount,
   type DmPick, type DmPickStatus, type PinnedAccount,
 } from '../api/client'
 import { safeUrl } from '../inbox/ui'
 import { Button, IconButton } from '../ui/Button'
-import { Card, EmptyState, Skeleton } from '../ui/Card'
+import { Card, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { CloseIcon } from '../ui/icons'
 import { field, link, type Tone } from '../ui/styles'
@@ -48,18 +49,49 @@ function SkipForm({ pick, onDone }: { pick: DmPick; onDone: () => Promise<void> 
   )
 }
 
-/** Settings section: the pinned accounts whose DM'd Reels become picks, and the picks. */
+/** The picks: Reels the pinned accounts sent by DM (on the Trending page, Mes envois). */
+export function DmPicksList() {
+  const [picks, setPicks] = useState<DmPick[]>()
+  const [error, setError] = useState<string | null>(null)
+
+  const reload = useCallback(() => listDmPicks().then(setPicks, (e: unknown) => setError(errorMessage(e))), [])
+  useEffect(() => { void reload() }, [reload])
+
+  if (error) return <p role="alert" className="mt-2 text-sm text-danger">{error}</p>
+  if (!picks) return <Skeleton className="mt-3 h-12" />
+  if (picks.length === 0) return <p className="mt-2 text-sm text-muted">No picks yet</p>
+  return (
+    <ul aria-label="Picks" className="mt-1 divide-y divide-line/60 text-sm">
+      {picks.map((p) => {
+        const href = safeUrl(p.reel_url)
+        return (
+          <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2">
+            <Chip tone={STATUS_TONE[p.status]}>{p.status.replace('_', ' ')}</Chip>
+            <span className="font-medium">@{p.sender_username}</span>
+            <span className="ml-auto text-muted">{dateTime(p.received_at)}</span>
+            {p.sender_note && <q className="w-full break-words italic">{p.sender_note}</q>}
+            {p.skip_reason && <p className="w-full text-muted">Skipped: {p.skip_reason}</p>}
+            {href && (
+              <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>
+                Open Reel
+              </a>
+            )}
+            {p.status === 'new' && <SkipForm pick={p} onDone={reload} />}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/** Settings section: the pinned accounts whose DM'd Reels become picks (listed on Trending). */
 export default function DmPicksSection() {
   const [pinned, setPinned] = useState<PinnedAccount[]>()
-  const [picks, setPicks] = useState<DmPick[]>()
   const [loadError, setLoadError] = useState<unknown>()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const reload = useCallback(() => Promise.all([listPinnedAccounts(), listDmPicks()]).then(([a, p]) => {
-    setPinned(a)
-    setPicks(p)
-  }, setLoadError), [])
+  const reload = useCallback(() => listPinnedAccounts().then(setPinned, setLoadError), [])
   useEffect(() => { void reload() }, [reload])
 
   async function act(fn: () => Promise<unknown>) {
@@ -87,12 +119,13 @@ export default function DmPicksSection() {
     <Card as="section" aria-label="DM picks">
       <h2 className="font-semibold">DM picks</h2>
       <p className="mt-1 text-sm text-muted">
-        Only Reels these accounts send the brand account by DM become picks. Nothing is ever sent back.
+        Only Reels these accounts send the brand account by DM become picks: they show on{' '}
+        <Link to="/trending?tab=envois" className={link}>Trending, Mes envois</Link>. Nothing is ever sent back.
         Reading DMs needs the <code>instagram_manage_messages</code> permission.
       </p>
       {loadError !== undefined ? (
         <p role="alert" className="mt-2 text-sm text-danger">{errorMessage(loadError)}</p>
-      ) : !pinned || !picks ? (
+      ) : !pinned ? (
         <Skeleton className="mt-3 h-12" />
       ) : (
         <>
@@ -126,34 +159,6 @@ export default function DmPicksSection() {
             <Button type="submit" variant="primary" loading={busy}>Pin</Button>
           </form>
           {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
-
-          <h3 className="mt-4 text-sm font-medium">Picks</h3>
-          {picks.length === 0 ? (
-            <div className="mt-2">
-              <EmptyState title="No picks yet">Reels your pinned accounts send by DM show up here.</EmptyState>
-            </div>
-          ) : (
-            <ul aria-label="Picks" className="mt-1 divide-y divide-line/60 text-sm">
-              {picks.map((p) => {
-                const href = safeUrl(p.reel_url)
-                return (
-                  <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2">
-                    <Chip tone={STATUS_TONE[p.status]}>{p.status.replace('_', ' ')}</Chip>
-                    <span className="font-medium">@{p.sender_username}</span>
-                    <span className="ml-auto text-muted">{dateTime(p.received_at)}</span>
-                    {p.sender_note && <q className="w-full break-words italic">{p.sender_note}</q>}
-                    {p.skip_reason && <p className="w-full text-muted">Skipped: {p.skip_reason}</p>}
-                    {href && (
-                      <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>
-                        Open Reel
-                      </a>
-                    )}
-                    {p.status === 'new' && <SkipForm pick={p} onDone={reload} />}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
         </>
       )}
     </Card>

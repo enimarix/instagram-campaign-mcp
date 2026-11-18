@@ -84,6 +84,8 @@ export type Asset = {
   dm_pick_sender?: string | null
   // list rows of a revised video: the owner's newest change request on the version it replaces (133)
   change_request?: { text: string | null; reason_codes: string[] } | null
+  // list rows: the owner's work order its idea was made for (134; `source` from 136)
+  work_order?: { id: number; mode: WorkMode; instruction: string | null; permalink: string | null; source?: 'dm' | 'trend' } | null
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -883,3 +885,77 @@ export const approveAdTest = (id: number, body: { budget: string; underpowered_o
 export const getAdTest = (id: number) => request<AdTestResults>(`/api/ads/tests/${id}`)
 export const cancelAdTest = (id: number) => post<AdTest>(`/api/ads/tests/${id}/cancel`)
 export const getAdsAudit = (offset = 0, limit = 20) => request<AdsAudit>(`/api/ads/audit?limit=${limit}&offset=${offset}`)
+
+// --- Trending page (step 134 research feed, step 136 work orders; page 135) ---
+export type WorkMode = 'inspired' | 'react'
+/** A Reel of GET /api/research/feed, best outlier first; caption_quote is other people's
+ * words (shown as a quote only). `work_order`: its open order, else null. */
+export type FeedItem = {
+  id: number
+  permalink: string | null
+  embed_url: string | null
+  media_url: string | null
+  thumbnail_url: string | null
+  media_type: string | null // VIDEO | IMAGE | CAROUSEL_ALBUM
+  product_type: string | null // REELS | FEED
+  caption_quote: string | null
+  likes: number | null
+  comments: number | null
+  views: number | null
+  posted_at: string | null
+  topic: string | null
+  topic_kind: 'account' | 'hashtag' | null
+  outlier: number | null
+  outlier_metric: 'views' | 'likes' | null
+  reaction: 'like' | 'dislike' | null
+  work_order: { id: number; mode: WorkMode; instruction: string | null; status: 'new' | 'in_production' } | null
+}
+export type HashtagBudget = { limit: number; used: number; left: number }
+/** POST /api/research/refresh (409 already_running, 503 instagram_not_configured). */
+export type RefreshResult = {
+  hashtags_searched: string[]
+  hashtags_skipped_budget: string[]
+  accounts: string[]
+  stored: number
+  updated: number
+  errors: Record<string, string>
+  stopped: 'request_budget' | 'rate_limited' | null
+  hashtag_budget: HashtagBudget
+}
+export type SuggestedTopics = {
+  topics: { tag: string; lang: string; watched: boolean }[]
+  hashtag_budget: HashtagBudget
+  note: string
+}
+export const refreshResearch = () => post<RefreshResult>('/api/research/refresh')
+export const getResearchFeed = (topic?: string | null, limit = 50) =>
+  request<FeedItem[]>(`/api/research/feed?${new URLSearchParams({ ...(topic && { topic }), limit: String(limit) })}`)
+export const getSuggestedTopics = () => request<SuggestedTopics>('/api/research/suggested-topics')
+export const setFeedReaction = (sourceId: number, reaction: 'like' | 'dislike' | 'none') =>
+  post<{ id: number; reaction: FeedItem['reaction'] }>(`/api/research/feed/${sourceId}/reaction`, { reaction })
+export const createWorkOrders = (items: { source_id: number; mode: WorkMode; instruction?: string }[]) =>
+  post<unknown[]>('/api/research/work-orders', { items })
+export const cancelWorkOrder = (id: number) => request<null>(`/api/research/work-orders/${id}`, { method: 'DELETE' })
+
+export type WorkOrderStatus = 'needs_instruction' | 'scheduled' | 'in_production' | 'in_feed' | 'analysed' | 'skipped'
+/** A row of GET /api/work-orders (step 136), newest first: a Reel the owner sent by DM
+ * (source dm) or from the Trending feed (trend). */
+export type WorkOrder = {
+  id: number
+  source: 'dm' | 'trend'
+  sender: string | null
+  received_at: string
+  reel_url: string | null
+  embed_url: string | null
+  instruction: string | null
+  mode: WorkMode | null
+  status: WorkOrderStatus
+  skip_reason: string | null
+  blocked_reason: string | null
+  asset_id: number | null
+}
+export const listWorkOrders = (source: 'dm' | 'trend' | 'all' = 'all') =>
+  request<WorkOrder[]>(`/api/work-orders?source=${source}`)
+/** Allowed while needs_instruction or scheduled; 409 once the AI started. */
+export const editWorkOrder = (id: number, body: { instruction: string; mode?: WorkMode }) =>
+  send<WorkOrder>('PATCH', `/api/work-orders/${id}`, body)

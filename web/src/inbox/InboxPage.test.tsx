@@ -413,6 +413,19 @@ describe('InboxPage feed', () => {
     expect(within(card(2)).queryByText(/DM pick/)).toBeNull()
   })
 
+  it('badges a video made from a work order with its instruction', async () => {
+    const order = { id: 4, mode: 'inspired' as const, instruction: 'version sans sucre', permalink: null }
+    stubApi({ 'GET /api/assets': [200, [
+      asset(1, { work_order: order }), asset(2, { work_order: { ...order, instruction: null, source: 'dm' } }), asset(3)]] })
+    renderPage()
+    await screen.findByText('0 of 3 decided')
+    expect(within(card(1)).getByText('Tendance')).toBeTruthy()
+    expect(within(card(1)).getByText('Ta consigne : « version sans sucre »')).toBeTruthy()
+    expect(within(card(2)).getByText('Mes envois')).toBeTruthy()
+    expect(within(card(2)).queryByText(/Ta consigne/)).toBeNull()
+    expect(within(card(3)).queryByText(/Tendance|Mes envois/)).toBeNull()
+  })
+
   describe('save for later', () => {
     it('sends the video to the bench after the undo window; a saved one is not in Today', async () => {
       const calls = stubApi({
