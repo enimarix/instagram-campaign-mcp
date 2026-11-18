@@ -5,17 +5,13 @@ import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { field } from '../ui/styles'
 import { Body, Section } from './Analytics'
-import { humanize, num, pct, useLoad } from './load'
+import { humanize, num, pct, TAGS, useLoad } from './load'
 
 // The definitions of src/learning/breakdowns.py and scoring.compare_variants, behind the ⓘ toggles.
 const HELP = {
   works: 'Matured posts only (judged 48 h after posting, Stories 20 h) of one post type at a time, published in the last 90 days. The bar is the median, the thin line the middle half of the posts (p25 to p75). Engagement index: 1.0 = a typical post of that type on this account. "untagged" = posts made outside the studio (length "unknown" too); the hour is your local time. Groups with fewer than 3 posts are greyed: too few to trust.',
   ab: 'Posts labelled with a campaign and variant (label_post, or when scheduling), compared by mean engagement index of their matured posts. A leader is named only with at least 3 matured posts per variant and a lead of at least 20 %.',
 }
-const TAGS = [
-  ['track', 'Track'], ['pillar', 'Pillar'], ['hook_type', 'Hook type'], ['template', 'Template'],
-  ['strategy', 'Explore / exploit'], ['hour', 'Hour posted'], ['duration', 'Length'],
-]
 const TYPES = [['REELS', 'Reels'], ['FEED', 'Feed'], ['STORY', 'Stories']]
 type Metric = 'engagement_index' | 'reach' | 'views' | 'watch_ratio'
 const ratio = (n: number | null | undefined) => (n == null ? '–' : `${num(n)}×`)

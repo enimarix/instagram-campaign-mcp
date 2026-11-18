@@ -123,12 +123,11 @@ def test_invalid_predicate_refused_at_add_time(store, scope, match):
 
 
 def test_update_learning_re_evaluates_after_a_kind_change(seeded, settings):
-    row = _add(seeded, "do", Q, confidence="low")
-    row = L.update_learning(seeded, row["id"], kind="dont", settings=settings, now=NOW,
-                           actor="owner")
+    # the agent's edits: an owner edit would make it the owner's rule (084), left alone
+    row = _add(seeded, "do", Q, confidence="low", evidence=[{"note": "a"}, {"note": "b"}])
+    row = L.update_learning(seeded, row["id"], kind="dont", settings=settings, now=NOW)
     assert row["status"] == "contradicted" and len(_items(row, "audience_index")) == 1
-    row = L.update_learning(seeded, row["id"], scope=B, settings=settings, now=NOW,
-                           actor="owner")
+    row = L.update_learning(seeded, row["id"], scope=B, settings=settings, now=NOW)
     assert row["status"] == "active" and row["confidence"] == "medium"
     with pytest.raises(ValueError):
         L.update_learning(seeded, row["id"], scope={"tag": "nope", "value": "x"})
