@@ -241,3 +241,52 @@ def test_approve_and_queue_route(tc, store, cfg):
     assert store.get_asset(comm["id"])["status"] == "scheduled"
     assert [p["status"] for p in store.list_scheduled()] == ["pending", "pending"]
     assert tc.post(url(999), json={}, headers=H).status_code == 404
+
+
+# --- Step 087: the planner learns from our results ---------------------------------------
+
+def test_slot_inputs_reads_matured_reels_in_owner_local_time(store, cfg):
+    from src.campaign import slot_inputs
+
+    from .test_breakdowns import _post
+
+    now = _day()
+    _post(store, "a", now - timedelta(days=3, hours=-5))  # 14:00 UTC, matured
+    _post(store, "b", now - timedelta(days=4))
+    _post(store, "young", now - timedelta(hours=3), age=2)
+    _post(store, "feed", now - timedelta(days=3), kind="FEED")
+    _post(store, "old", now - timedelta(days=200))
+    paris = cfg.model_copy(update={"timezone": "Europe/Paris"})
+    profile, results = slot_inputs(store, paris, now)
+    assert profile == {}
+    local = sorted(t for t, _ in results)
+    assert len(results) == 2 and all(isinstance(i, float) for _, i in results)
+    assert local[0].hour in (10, 11) and local[1].hour in (15, 16)  # UTC+1 / +2
+
+
+@pytest.fixture
+def learning(monkeypatch, cfg):
+    """Two windows; our evening posts do 2x typical (never explore: the day is today's)."""
+    import src.campaign as campaign
+
+    lc = cfg.model_copy(update={"posting_windows": "10:00-11:00,13:00-15:00",
+                                "slot_explore_share": 0})
+    inputs = ({}, [(time(14), 2.0)] * 5)
+    monkeypatch.setattr(campaign, "slot_inputs", lambda *a: inputs)
+    monkeypatch.setattr(scheduling, "slot_inputs", lambda *a: inputs)
+    return lc
+
+
+def test_propose_slot_uses_results_and_says_why(store, learning):
+    a = _asset(store, learning)
+    now = _day()
+    out = scheduling.propose_slot(store, learning, a["id"], now)
+    assert parse_dt(out["publish_at"]) == now.replace(hour=14)
+    assert out["why"] == "13:00–15:00: your posts there do 2.0× typical (n = 5)"
+
+
+def test_approve_and_queue_uses_results(store, learning):
+    a = _asset(store, learning, status="ready")
+    now = _day()
+    out = scheduling.approve_and_queue(store, learning, a["id"], now)
+    assert parse_dt(out["post"]["publish_at"]) == now.replace(hour=14)

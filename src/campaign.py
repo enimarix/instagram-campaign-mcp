@@ -14,8 +14,8 @@ Campaign layer: ties the Graph API client to the local store.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional
+from datetime import date, datetime, time, timedelta
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -31,7 +31,7 @@ from .instagram_client import (
     caption_problem,
 )
 from .learning.slots import plan_slots_from_settings
-from .scoring import ScoringConfig, compare_variants, score_posts
+from .scoring import ScoringConfig, _is_matured, compare_variants, score_posts
 from .store import CampaignStore, parse_dt, to_iso, utcnow
 from .studio.assets import InvalidTransition, transition
 
@@ -45,6 +45,7 @@ HEARTBEAT_SECONDS = 60    # keeps a long publish from looking "stuck"
 # Meta error subcodes that will never succeed on retry (bad media, bad ratio...).
 PERMANENT_SUBCODES = {2207026, 2207004, 2207005, 2207009, 2207010, 2207052, 2207053}
 REPLAN_LOOKAHEAD_DAYS = 7
+SLOT_RESULT_DAYS = 90  # like the batch mix (mix.INDEX_DAYS)
 # A post is snapshotted once as it crosses each of these ages (GOAL.md §3.4).
 SNAPSHOT_POINTS = tuple(timedelta(hours=h) for h in (1, 3, 6, 12, 24, 48, 24 * 7, 24 * 30))
 SNAPSHOT_GRACE = timedelta(days=1)  # a worker that was off may still take the 30 d point
@@ -121,23 +122,44 @@ def is_paused(store: CampaignStore, settings: InstagramMCPSettings) -> bool:
     return settings.publishing_paused if flag is None else bool(flag)
 
 
+def slot_inputs(store: CampaignStore, settings: InstagramMCPSettings,
+                now: datetime) -> Tuple[Dict[int, float], List[Tuple[time, float]]]:
+    """What the slot planner learns from (step 087): (followers online per UTC hour,
+    [(owner-local time of day posted, engagement index)] of the matured Reels published in
+    the last SLOT_RESULT_DAYS). Every planner caller goes through here."""
+    from .learning.analytics import scored_posts  # analytics imports this module
+
+    tz, cfg = ZoneInfo(settings.timezone), scoring_config(settings)
+    since = now - timedelta(days=SLOT_RESULT_DAYS)
+    results = []
+    # ponytail: scores every post on each call (like the breakdowns); cache if slow.
+    for snap, s in scored_posts(store, settings):
+        if (s["group"] == "REELS" and s["engagement_index"] is not None and snap["posted_at"]
+                and _is_matured(snap, cfg)):
+            at = parse_dt(snap["posted_at"])
+            if at >= since:
+                results.append((at.astimezone(tz).time(), s["engagement_index"]))
+    return store.online_followers_profile(), results
+
+
 def free_slot(store: CampaignStore, settings: InstagramMCPSettings,
-              taken: List[datetime], now: datetime) -> Optional[datetime]:
-    """The planner's next slot within REPLAN_LOOKAHEAD_DAYS, None when every day is full."""
+              taken: List[datetime], now: datetime, inputs=None) -> Optional[datetime]:
+    """The planner's next slot within REPLAN_LOOKAHEAD_DAYS, None when every day is full.
+    `inputs`: slot_inputs() when the caller already has them."""
     day = now.astimezone(ZoneInfo(settings.timezone)).date()
-    profile = store.online_followers_profile()
+    profile, results = inputs or slot_inputs(store, settings, now)
     for d in range(REPLAN_LOOKAHEAD_DAYS):
         slots = plan_slots_from_settings(settings, day + timedelta(days=d), 1, taken, now=now,
-                                         hourly_profile=profile)
+                                         hourly_profile=profile, results=results)
         if slots:
             return slots[0]
     return None
 
 
 def _next_free_slot(store: CampaignStore, settings: InstagramMCPSettings,
-                    taken: List[datetime], now: datetime) -> datetime:
+                    taken: List[datetime], now: datetime, inputs=None) -> datetime:
     # ponytail: a week full of posts is not a real case; then just go after the last one.
-    return free_slot(store, settings, taken, now) or (
+    return free_slot(store, settings, taken, now, inputs) or (
         max(taken + [now]) + timedelta(minutes=settings.min_slot_gap_minutes))
 
 

@@ -7,9 +7,13 @@ from pydantic import ValidationError
 
 from src.config import InstagramMCPSettings
 from src.learning.slots import (
+    explain_slot,
+    explore_window,
     parse_windows,
     plan_slots,
     plan_slots_from_settings,
+    result_factors,
+    window_results,
     window_weights,
 )
 
@@ -205,3 +209,93 @@ def test_from_settings_with_hourly_profile(settings):
 
     assert lunch_posts(None) == 1  # v1: equal weights, the longer evening window gets two
     assert lunch_posts(lunch_heavy) == 3
+
+
+# --- Step 087: our own results per window, exploration -----------------------------------
+
+def results(lunch=(), evening=()):
+    """(local time posted, engagement index) pairs: lunch at 12:00, evening at 19:00."""
+    return [(time(12), i) for i in lunch] + [(time(19), i) for i in evening]
+
+
+def evening_posts(slots):
+    return sum(1 for s in slots if s.astimezone(PARIS).hour >= 17)
+
+
+@pytest.fixture
+def learning(settings):
+    return settings.model_copy(update={"min_slot_gap_minutes": 30, "slot_explore_share": 0})
+
+
+def from_settings(cfg, **kw):
+    slots = plan_slots_from_settings(cfg, DAY, 3, [], rng=random.Random(3), now=local(DAY, 8),
+                                     **kw)
+    check(slots, DAY, gap=timedelta(minutes=30))
+    return slots
+
+
+def test_a_window_with_better_results_gets_more_slots(learning):
+    assert evening_posts(from_settings(learning)) == 2  # v1: the longer window
+    lunch_wins = results(lunch=[2.2] * 5, evening=[0.5] * 5)
+    assert evening_posts(from_settings(learning, results=lunch_wins)) == 0
+    evening_wins = results(lunch=[0.6] * 5, evening=[2.0] * 5)
+    assert evening_posts(from_settings(learning, results=evening_wins)) == 3
+
+
+def test_few_posts_are_neutral_and_factors_clamp(learning):
+    assert result_factors([(4, 1.9), (5, 1.2), (0, None)], 5) == [1.0, 1.2, 1.0]
+    assert result_factors([(9, 3.0), (9, 0.1)], 5) == [2.0, 0.5]
+    assert window_results(WINDOWS, results(lunch=[1, 3, 2], evening=[0.5])) == [(3, 2), (1, 0.5)]
+    four = results(lunch=[2.0] * 4, evening=[0.5] * 4)  # below slot_min_posts = 5
+    assert from_settings(learning, results=four) == from_settings(learning)
+
+
+def test_no_audience_and_no_results_is_v1(learning):
+    v1 = from_settings(learning)
+    assert from_settings(learning, hourly_profile={}, results=[]) == v1
+    assert from_settings(learning, hourly_profile=None, results=None) == v1
+
+
+def test_explore_is_seeded_by_the_day_at_about_the_share():
+    stats = [(10, 1.0), (2, 1.0)]
+    days = [DAY + timedelta(days=d) for d in range(2000)]
+    picks = [explore_window(d, stats, 0.15) for d in days]
+    assert picks == [explore_window(d, stats, 0.15) for d in days]  # same day, same answer
+    assert set(picks) == {None, 1}  # the least-tried window
+    assert 0.12 < picks.count(1) / len(days) < 0.18
+    assert explore_window(DAY, stats, 0) is None and explore_window(DAY, stats, 1) == 1
+    assert explore_window(DAY, [(5, 1.0), (5, 2.0)], 1) is None  # nothing to catch up on
+    assert explore_window(DAY, [(0, None), (0, None)], 1) is None  # no results: v1
+
+
+def test_explore_forces_one_slot_into_the_window_once_a_day():
+    gap = timedelta(minutes=30)
+    heavy = dict(weights=[0.1, 10], min_gap=gap)
+    assert evening_posts(plan(**heavy)) == 3
+    explored = plan(explore=0, **heavy)
+    assert evening_posts(explored) == 2
+    check(explored, DAY, gap=gap)
+    # A post already in that window today: no second test slot.
+    assert evening_posts(plan(count=2, taken=[local(DAY, 12)], explore=0, **heavy)) == 2
+    # The window has already closed: the slot goes by weight.
+    assert evening_posts(plan(count=1, explore=0, now=local(DAY, 14), **heavy)) == 1
+
+
+def test_from_settings_explores_on_some_days(learning):
+    cfg = learning.model_copy(update={"slot_explore_share": 1})
+    evening_only = results(evening=[1.5] * 5)  # lunch never tried
+    slots = from_settings(cfg, results=evening_only)
+    assert evening_posts(slots) == 2
+
+
+def test_explain_slot(learning):
+    good = results(lunch=[1.0] * 2, evening=[1.4] * 7)
+    assert explain_slot(learning, local(DAY, 19), good) == (
+        "17:00–21:00: your posts there do 1.4× typical (n = 7)")
+    assert explain_slot(learning, local(DAY, 12), good) == (
+        "11:00–13:00: too few of your posts there to judge yet (n = 2)")
+    explore = learning.model_copy(update={"slot_explore_share": 1})
+    assert explain_slot(explore, local(DAY, 12), good) == (
+        "11:00–13:00: testing a window with fewer of your posts (n = 2)")
+    assert explain_slot(learning, local(DAY, 19), []) is None
+    assert explain_slot(learning, local(DAY, 15), good) is None  # outside every window
