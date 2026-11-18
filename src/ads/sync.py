@@ -54,7 +54,7 @@ LINK = "/ads"
 
 
 def period(store: CampaignStore) -> timedelta:
-    with store.immediate() as c:
+    with store._tx() as c:
         busy = budget._kill_state(c)["killed"] or c.execute(
             "SELECT 1 FROM ad_tests WHERE status IN ('approved','running') UNION ALL"
             " SELECT 1 FROM ad_spend_ledger a WHERE a.kind='authorized' AND a.test_id IS NOT"
@@ -142,7 +142,7 @@ def _variants(store: CampaignStore, test: Dict[str, Any]) -> List[Dict[str, Any]
     adsets = store._select("SELECT * FROM ad_entities", {"test_id": test["id"],
                                                          "kind": "adset"}, "id", 10)
     out = []
-    with store.immediate() as c:
+    with store._tx() as c:
         for name, a, v in zip("ABCD", adsets, test["variants"]):
             auth = c.execute(
                 "SELECT l.id FROM ad_spend_ledger l JOIN ad_entities e ON e.meta_id ="
