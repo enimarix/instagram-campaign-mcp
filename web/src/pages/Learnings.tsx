@@ -204,7 +204,7 @@ export default function Learnings() {
       <div className="space-y-2">
         {FILTERS.map(([key, title, labels]) => (
           <div key={key} role="group" aria-label={title} className="flex flex-wrap items-center gap-2">
-            <span className="w-24 text-xs font-medium text-muted">{title}</span>
+            <span className="w-full text-xs font-medium text-muted sm:w-24">{title}</span>
             {Object.entries(labels).map(([v, l]) => (
               <Chip key={v} pressed={filters[key] === v} onClick={() => pick(key, v)}>{l}</Chip>
             ))}
