@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import {
-  ApiError, approveAdTest, cancelAdTest, errorMessage, getAdsAudit, getAdsBudget, killAds, listAdTests, listAdWinners,
-  proposeAdTest, unkillAds, type AdsBudget, type AdTest, type AdTestStatus, type AdVariable, type BudgetScope,
+  ApiError, approveAdTest, cancelAdTest, errorMessage, getAdsAudit, getAdsBudget, getAdTest, killAds, listAdTests,
+  listAdWinners, proposeAdTest, unkillAds, type AdMetric, type AdReviewIssue, type AdsBudget, type AdTest,
+  type AdTestStatus, type AdVariable, type BudgetScope,
 } from '../api/client'
 import { Button } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
@@ -10,9 +11,9 @@ import { PageHeader } from '../ui/PageHeader'
 import { Sheet } from '../ui/Sheet'
 import { field, type Tone } from '../ui/styles'
 import { Tabs } from '../ui/Tabs'
-import { dateTime, humanize, pct, useLoad } from './load'
+import { dateTime, humanize, num, pct, useLoad } from './load'
 
-// Steps 094 (API) and 094b (this page). No results view yet: 095b adds it.
+// Steps 094 (API), 094b (this page) and 095b (results).
 // ponytail: mirrors PRESETS in src/ads/promote.py (no route lists them); the server re-checks.
 const PRESETS: Record<string, string> = {
   fr_reels: 'France, Reels',
@@ -38,6 +39,13 @@ const REAUTH: Record<string, string> = {
 const H6_NOTE = 'Ads are not set up yet. Setup step H6: put INSTAGRAM_ACCESS_TOKEN (with ads_read and ' +
   'ads_management) and META_AD_ACCOUNT_ID in .env, and set a spending limit on the ad account in Meta.'
 const PAGE = 20
+// Per metric (src/ads/abtest.py METRICS): its name, what "more" counts, what a version's sample counts.
+const METRIC: Record<AdMetric, [string, string, string]> = {
+  ctr: ['CTR', 'clicks', 'views'], result_rate: ['Result rate', 'results', 'views'],
+  conversion_rate: ['Conversion rate', 'results', 'clicks'],
+}
+// ponytail: mirrors NEAR_CAP in src/ads/sync.py; the budget route carries no near_cap flags.
+const NEAR_CAP = 0.8
 
 const money = (v: string | number, currency: string) => {
   try {
@@ -302,37 +310,141 @@ function ApproveSheet({ t, act, onClose }: { t: AdTest; act: Act; onClose: () =>
   )
 }
 
+/** The latest verdict in plain words: "B gets 24 % more clicks than A (between 10 % and 38 %), 95 % sure". */
+function verdict(t: AdTest) {
+  const e = t.result?.evaluation
+  if (!e) return 'No numbers yet: the first ones come within an hour of the start'
+  const [, more, unit] = METRIC[e.metric]
+  const days = Math.floor(e.days)
+  switch (e.status) {
+    case 'winner': {
+      const l = e.lift
+      return l ? `${e.winner} gets ${pct(l.value)} more ${more} than ${l.vs} (between ${pct(l.ci_low)} and ` +
+        `${pct(l.ci_high)}), ${pct(l.confidence)} sure` : `${e.winner} gets clearly more ${more} than the others`
+    }
+    case 'too_early': {
+      const seen = Math.min(...Object.values(e.variants).map((v) => v.trials))
+      return `Too early: ${days < t.spec.min_days ? `day ${days} of ${t.spec.min_days}, ` : ''}` +
+        `${num(seen)} of ${num(t.spec.min_sample)} ${unit} per version`
+    }
+    case 'running': return 'No clear difference yet'
+    case 'no_difference': return `No clear difference after ${days} days`
+    default: return `The numbers could not be judged: ${e.error}`
+  }
+}
+
+/** What each version shows: the post for a video test, the audience or placement otherwise. */
+const versionLabel = (t: AdTest, v: { media_id: string; preset: string }) =>
+  t.variable === 'creative' ? `Post ${v.media_id}` : PRESETS[v.preset] ?? v.preset
+
+function Issues({ issues }: { issues: AdReviewIssue[] }) {
+  return issues.map((i) => (
+    <p key={i.ad_id} className="mt-1 flex flex-wrap items-center gap-2">
+      <Chip tone={i.effective_status === 'DISAPPROVED' ? 'danger' : 'warn'}>
+        {i.effective_status === 'DISAPPROVED' ? 'Meta rejected' : 'Meta limits'}
+      </Chip>
+      <span className="break-words text-muted">{i.reason}</span>
+    </p>
+  ))
+}
+
+function ResultsSheet({ id, onClose }: { id: number; onClose: () => void }) {
+  const r = useLoad(() => getAdTest(id), id)
+  const d = r.data
+  const res = d?.result
+  const spent = Number(d?.spend.reported ?? 0)
+  const total = Number(d?.spend.budget ?? 0)
+  const pv = Object.entries(res?.evaluation.p_values ?? {})
+  return (
+    <Sheet title={`Test #${id} results`} onClose={onClose}>
+      {r.error && <p role="alert" className="mt-3 text-sm text-danger">{r.error}</p>}
+      {!d ? !r.error && <Skeleton className="mt-3 h-24" /> : (
+        <div className="mt-3 grid gap-3 text-sm">
+          <p className="text-muted break-words">{d.hypothesis}</p>
+          <p className="font-medium">{verdict(d)}.</p>
+          <Issues issues={res?.review ?? []} />
+          <div>
+            <p>{money(spent, d.currency)} spent of {d.spend.budget ? money(d.spend.budget, d.currency) : 'no budget'}</p>
+            <div role="progressbar" aria-label="Spend" aria-valuemin={0} aria-valuemax={100}
+              aria-valuenow={total ? Math.min(100, Math.round((spent / total) * 100)) : 0}
+              className="mt-1 h-2 overflow-hidden rounded-full bg-surface-2">
+              <div className="h-full rounded-full bg-accent" style={{ width: `${total ? Math.min(100, (spent / total) * 100) : 0}%` }} />
+            </div>
+          </div>
+          {res && (
+            <table className="w-full text-left tabular-nums">
+              <thead className="text-xs text-muted">
+                <tr><th>Version</th><th>{METRIC[res.evaluation.metric][0]}</th><th>Views</th><th>Spend</th></tr>
+              </thead>
+              <tbody>
+                {Object.entries(res.variants).map(([name, v]) => {
+                  const rate = res.evaluation.variants?.[name]?.rate
+                  return (
+                    <tr key={name}>
+                      <td>{name} · {versionLabel(d, v)}</td>
+                      <td>{rate == null ? '–' : `${(rate * 100).toFixed(2)} %`}</td>
+                      <td>{num(v.impressions)}</td>
+                      <td>{money(v.spend, d.currency)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+          {res && (
+            <details className="text-muted">
+              <summary className="cursor-pointer">Details</summary>
+              {pv.length ? (
+                <ul className="mt-1">
+                  {pv.map(([name, p]) => <li key={name}>{name} vs the leader: p = {p.toFixed(4)}</li>)}
+                </ul>
+              ) : <p className="mt-1">No p-values before the planned sample is reached.</p>}
+              <p className="mt-1">Last update {dateTime(res.synced_at)}.</p>
+            </details>
+          )}
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
 function TestRow({ t, act }: { t: AdTest; act: Act }) {
+  const [showing, setShowing] = useState(false)
   const [approving, setApproving] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const budget = t.budget_total ? money(t.budget_total, t.currency) : `needs about ${money(t.needed.total, t.currency)}`
+  const winner = t.status === 'finished' ? t.result?.evaluation.winner : null
+  const won = winner && t.result?.variants[winner]
   return (
     <li className="py-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone={STATUS_TONE[t.status]}>{t.status}</Chip>
+        {winner && <Chip tone="success">Winner: {winner}{won && ` (${versionLabel(t, won)})`}</Chip>}
         <span className="font-medium break-words">{t.hypothesis}</span>
       </div>
       <p className="mt-1 text-muted">
         {humanize(t.variable)} · {t.variants.length} versions · {budget}{t.end_date && ` · ends ${t.end_date}`}
       </p>
       {t.reason && <p className="mt-1 text-muted">{t.reason}</p>}
-      {(t.status === 'proposed' || t.status === 'running') && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {t.status === 'proposed' && <Button size="sm" variant="primary" onClick={() => setApproving(true)}>Approve</Button>}
-          {confirm ? (
-            <>
-              <span className="self-center">Cancel this test? Its ads stop.</span>
-              <Button size="sm" variant="danger" onClick={() => void act(() => cancelAdTest(t.id)).then(setError)}>
-                Yes, cancel it
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>Keep it</Button>
-            </>
-          ) : <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>Cancel</Button>}
-        </div>
-      )}
+      <Issues issues={t.result?.review ?? []} />
+      <div className="mt-2 flex flex-wrap gap-2">
+        {t.status === 'proposed'
+          ? <Button size="sm" variant="primary" onClick={() => setApproving(true)}>Approve</Button>
+          : <Button size="sm" onClick={() => setShowing(true)}>Results</Button>}
+        {(t.status === 'proposed' || t.status === 'running') && (confirm ? (
+          <>
+            <span className="self-center">Cancel this test? Its ads stop.</span>
+            <Button size="sm" variant="danger" onClick={() => void act(() => cancelAdTest(t.id)).then(setError)}>
+              Yes, cancel it
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>Keep it</Button>
+          </>
+        ) : <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>Cancel</Button>)}
+      </div>
       {error && <p role="alert" className="mt-1 text-danger">{error}</p>}
       {approving && <ApproveSheet t={t} act={act} onClose={() => setApproving(false)} />}
+      {showing && <ResultsSheet id={t.id} onClose={() => setShowing(false)} />}
     </li>
   )
 }
@@ -374,6 +486,17 @@ function AuditLog({ version }: { version: number }) {
   )
 }
 
+/** src/ads/sync.py near_caps() in words: "Today's ad spend is at 85 % of the daily cap". */
+function nearCaps(b: AdsBudget) {
+  const share = (s: BudgetScope) => Number(s.cap) > 0 && Number(s.used) >= Number(s.cap) * NEAR_CAP
+    ? pct(Number(s.used) / Number(s.cap)) : null
+  const out = []
+  if (share(b.daily)) out.push(`Today's ad spend is at ${share(b.daily)} of the daily cap`)
+  if (share(b.lifetime)) out.push(`Total ad spend is at ${share(b.lifetime)} of the lifetime cap`)
+  for (const t of b.tests) if (share(t)) out.push(`Test #${t.test_id} is at ${share(t)} of its cap`)
+  return out
+}
+
 /** The /ads page: budget and kill switch, propose and approve A/B tests, the audit log. */
 export default function Ads() {
   const [version, setVersion] = useState(0)
@@ -402,6 +525,9 @@ export default function Ads() {
       </PageHeader>
       <div className="grid gap-4">
         {unset && <p role="status" className="rounded-card bg-info/12 p-4 text-sm text-info">{H6_NOTE}</p>}
+        {budget.data && nearCaps(budget.data).map((n) => (
+          <p key={n} role="status" className="rounded-card bg-warn/12 p-4 text-sm text-warn">{n}.</p>
+        ))}
         {budget.error ? <p role="alert" className="text-sm text-danger">{budget.error}</p>
           : <BudgetCard b={budget.data} act={act} />}
         <Card as="section" aria-label="Tests">
