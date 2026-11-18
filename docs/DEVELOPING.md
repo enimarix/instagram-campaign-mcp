@@ -21,6 +21,12 @@ ruff check .              # rules in pyproject.toml [tool.ruff]
 ( cd motion && npm ci && npm run lint && npm run typecheck && npm test )
 bash -n install.sh        # the CI lint job checks the installer's syntax
 ```
+End-to-end smoke test (seed → Inbox → Calendar → publish against a local Graph API stub,
+no network, fake token; needs the `.venv` above or `PYTHON=<path>`):
+```bash
+cd web && npm ci && npx playwright install chromium   # once
+npm run e2e                                           # builds the website, runs web/e2e/
+```
 Optional extras: `.[download]` (yt-dlp fallback, Python 3.11+; the installers add it),
 `.[stt]` (local transcription with faster-whisper; never installed in CI).
 
@@ -30,7 +36,7 @@ you open that seed in the website. `npm --prefix web run dev` serves the website
 proxy to the API on 127.0.0.1:8765.
 
 CI (`.github/workflows/ci.yml`): ruff + `bash -n install.sh`, pytest on Python 3.10 /
-3.12 / 3.13 (with ffmpeg), the website checks, and the motion checks with test renders.
+3.12 / 3.13 (with ffmpeg), the website checks, the e2e smoke test (step 099) and the motion checks with test renders.
 
 ## Layout
 
