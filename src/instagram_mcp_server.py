@@ -26,7 +26,7 @@ from .learning import brief, facts, learnings, report
 from .learning import experiments as experiments_
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
-from .studio import dm_picks, downloader, motion, production, remix, research
+from .studio import dm_picks, downloader, motion, production, remix, research, stock
 from .studio import frames as frames_
 from .studio.publish import cancel_post, refuse_asset_file
 
@@ -749,6 +749,34 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
 
 
 # ----------------------------------------------------------------------
+# Studio: stock clips (src/studio/stock.py)
+# ----------------------------------------------------------------------
+@mcp.tool(annotations=READ)
+async def search_stock(query: str, orientation: Literal["portrait", "landscape", "square"]
+                       = "portrait", min_duration_s: Optional[float] = None,
+                       max_duration_s: Optional[float] = None,
+                       per_page: int = 15) -> Dict[str, Any]:
+    """Search licensed Pexels stock videos (Full HD or more): {results [{id, url, author,
+    duration_s, width, height, image, files}]}. Pexels allows 200 requests an hour: search
+    only for clips you will use. No motion template takes a background clip yet, so a
+    stock clip is used through add_stock_clip, then list_sources and render_remix. Never
+    use one that shows identifiable people in a bad light or as endorsing us. Fails when
+    the owner has not added PEXELS_API_KEY yet."""
+    return {"results": await _studio(stock.search, store(), get_settings(), query,
+                                     orientation=orientation, min_duration=min_duration_s,
+                                     max_duration=max_duration_s, per_page=min(per_page, 80))}
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                      open_world_hint=True))
+async def add_stock_clip(result_id: int) -> Dict[str, Any]:
+    """Download a search_stock result (its id) as a `licensed` clip source with the Pexels
+    License, its credit ("Video by <author> on Pexels") and ads_allowed; a clip already
+    added is returned as is. Its sound is muted in remixes."""
+    return await _studio(stock.add_clip, store(), get_settings(), result_id)
+
+
+# ----------------------------------------------------------------------
 # Studio: production batch (src/studio/production.py)
 # ----------------------------------------------------------------------
 @mcp.tool(annotations=LOCAL_WRITE)
@@ -1062,6 +1090,10 @@ AGENT_TOOLS = frozenset({
     # local, the timeline lives on the source only.
     "get_clip_frames",
     "set_clip_timeline",
+    # Stock clips (step 064): licensed Pexels videos, searched and stored by our server
+    # (the key stays in it); licence, credit and ads_allowed are recorded in code.
+    "search_stock",
+    "add_stock_clip",
 })
 
 

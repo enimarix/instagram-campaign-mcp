@@ -124,6 +124,8 @@ def attribution(source: Optional[Dict[str, Any]], *, licence: Optional[str] = No
     - cc: "<author>, <url>, <licence>" (url left out when missing).
     - permission: "Credit: <author>".
     - commentary: "@<creator>", shown on screen; step 069 also puts it in the caption.
+    - licensed: the licence's own credit line when recorded (stats.attribution, e.g.
+      "Video by <author> on Pexels", step 064), else as below.
     - own / public_domain / licensed: None, unless `rights_note` says "attribution
       required" or "requires attribution", then "Credit: <author or url>".
     - unknown: None (never published).
@@ -139,6 +141,8 @@ def attribution(source: Optional[Dict[str, Any]], *, licence: Optional[str] = No
         return f"Credit: {author}" if author else None
     if b == "commentary":
         return "@" + author.lstrip("@") if author.lstrip("@") else None
+    if b == "licensed" and (src.get("stats") or {}).get("attribution"):
+        return src["stats"]["attribution"]
     if b in ("own", "public_domain", "licensed"):
         if _ATTRIBUTION_NOTE.search(src.get("rights_note") or "") and (author or url):
             return f"Credit: {author or url}"

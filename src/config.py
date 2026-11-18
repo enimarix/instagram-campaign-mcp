@@ -215,6 +215,8 @@ class InstagramMCPSettings(BaseSettings):
     )
     max_clip_mb: float = Field(300.0, gt=0, description="Largest clip accepted (MB, 10^6 B)")
     max_clip_seconds: float = Field(300.0, gt=0, description="Longest clip accepted (seconds)")
+    # src/studio/stock.py: Pexels stock videos (H4). Sent as a header only, never logged.
+    pexels_api_key: Optional[SecretStr] = Field(None, description="Pexels API key; empty = off")
 
     # --- Reel downloader --------------------------------------------------
     # src/studio/downloader_service.py: the vendored downloader (vendor/), run by the worker

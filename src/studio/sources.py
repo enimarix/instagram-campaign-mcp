@@ -135,11 +135,12 @@ class LocalInboxProvider:
 
     def ingest_file(self, path: Path, *, rights_basis: str, rights_note: str,
                     audio_rights: Optional[str] = None, author: Optional[str] = None,
-                    url: Optional[str] = None, licence: Optional[str] = None
-                    ) -> Dict[str, Any]:
+                    url: Optional[str] = None, licence: Optional[str] = None,
+                    external_id: Optional[str] = None,
+                    extra_stats: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Check the rights and the file, then MOVE it into `<media_root>/sources/<id>/`
-        and return the new `clip` source with its probe stats. ValueError when refused
-        (the file stays where it was)."""
+        and return the new `clip` source with its probe stats (plus `extra_stats`, a
+        provider's own facts). ValueError when refused (the file stays where it was)."""
         author, url, licence = (v.strip() if v and v.strip() else None
                                 for v in (author, url, licence))
         check_rights(rights_basis, rights_note, author=author, licence=licence)
@@ -149,8 +150,9 @@ class LocalInboxProvider:
             # ponytail: no sources.licence column yet (store.py is busy); rights.py reads a
             # `licence` key, so list_clips lifts it out of stats. Move to a column later.
             stats["licence"] = rights.cc_licence(licence) or licence
+        stats.update(extra_stats or {})
         row = self.store.add_source(
-            self.name, role="clip", url=url, author=author, stats=stats,
+            self.name, role="clip", url=url, author=author, stats=stats, external_id=external_id,
             rights_basis=rights_basis, rights_note=rights_note.strip(), audio_rights=audio_rights)
         try:
             folder = Path(self.settings.media_root) / "sources" / str(row["id"])
