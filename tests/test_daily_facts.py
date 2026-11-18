@@ -81,7 +81,7 @@ def seeded(store):
     # Published yesterday (young), and today in New York (yesterday in UTC).
     _post(store, "y1", _utc(15, 23), age=3, tags=("motion", "question"))
     _post(store, "today", _utc(16, 6), age=2)
-    # Funnel: batch days in each window; experiments (old batches, not in the funnel).
+    # Funnel: batch days in each window; old free-text experiments (not in the funnel).
     _asset(store, YESTERDAY, verdict="liked")
     _asset(store, "2026-11-12", verdict="disliked")
     for _ in range(5):
@@ -135,11 +135,8 @@ async def test_funnel_equals_077_and_experiments(seeded, settings):
         assert got == funnel(seeded, settings, days=days, now=NOON_Y)["totals"]
     assert f["yesterday"]["funnel"]["produced"] == 1
     assert f["last_7_days"]["funnel"]["produced"] == 2
-    assert f["experiments"] == {"min_sample": 5,
-                                "reached": [{"experiment": "hooks", "published": 5}],
-                                "under": [{"experiment": "length", "published": 2}]}
-    settings.experiment_min_sample = 2
-    assert len((await daily_facts(seeded, settings, now=NOW))["experiments"]["reached"]) == 2
+    # free-text experiments of older ideas are no experiment (086: tests/test_experiments.py)
+    assert f["experiments"] == {"open": [], "warnings": []}
 
 
 def _with_client(per_hour=100):
