@@ -35,8 +35,9 @@ from .studio import media
 
 logger = structlog.get_logger(__name__)
 
-# Graph error codes that mean "slow down".
-RATE_LIMIT_CODES = {4, 17, 32, 613, 80002}
+# Graph error codes that mean "slow down" (80000/80003/80004/80014: Marketing API
+# business use case limits, rate-limiting docs v25.0).
+RATE_LIMIT_CODES = {4, 17, 32, 613, 80000, 80002, 80003, 80004, 80014}
 # Meta's insights day (and online_followers hour keys) is Pacific time.
 META_INSIGHTS_TZ = ZoneInfo("America/Los_Angeles")
 # Media insights: metric set per media_product_type (Graph API v25+).
@@ -183,8 +184,10 @@ class RequestBudget:
             await asyncio.sleep(wait)
 
 
-class InstagramClient:
-    """Async Graph API client with throttling, light caching and clear errors."""
+class GraphClient:
+    """Shared Graph API plumbing: token in the Authorization header, request budget,
+    light GET cache, Meta's error body mapped to InstagramAPIError / RateLimitExceeded.
+    InstagramClient and the ads client (src/ads/client.py) build on it."""
 
     def __init__(
         self,
@@ -204,8 +207,9 @@ class InstagramClient:
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
         )
         self._cache: Dict[str, Dict[str, Any]] = {}
-        self._page_tokens: Dict[str, str] = {}
-        self._linked_page: Optional[str] = None
+
+    def _on_response(self, response: httpx.Response) -> None:
+        """Hook: sees every response before its body is checked (usage headers)."""
 
     async def __aenter__(self):
         return self
@@ -219,16 +223,6 @@ class InstagramClient:
     # ------------------------------------------------------------------
     # Low-level request
     # ------------------------------------------------------------------
-    @property
-    def account_id(self) -> str:
-        account_id = self.settings.instagram_business_account_id
-        if not account_id:
-            raise InstagramAPIError(
-                "INSTAGRAM_BUSINESS_ACCOUNT_ID is not configured. "
-                "Run get_account_pages to find it."
-            )
-        return account_id
-
     async def _make_request(
         self,
         method: str,
@@ -270,6 +264,7 @@ class InstagramClient:
             err.network = True
             raise err from e
 
+        self._on_response(response)
         try:
             payload = response.json()
         except (json.JSONDecodeError, ValueError) as e:
@@ -301,6 +296,30 @@ class InstagramClient:
                 "expires": time.monotonic() + self.settings.cache_ttl_seconds,
             }
         return payload
+
+
+class InstagramClient(GraphClient):
+    """Async Graph API client with throttling, light caching and clear errors."""
+
+    def __init__(
+        self,
+        settings: Optional[InstagramMCPSettings] = None,
+        http_client: Optional[httpx.AsyncClient] = None,
+        store: Optional[CampaignStore] = None,
+    ):
+        super().__init__(settings, http_client, store)
+        self._page_tokens: Dict[str, str] = {}
+        self._linked_page: Optional[str] = None
+
+    @property
+    def account_id(self) -> str:
+        account_id = self.settings.instagram_business_account_id
+        if not account_id:
+            raise InstagramAPIError(
+                "INSTAGRAM_BUSINESS_ACCOUNT_ID is not configured. "
+                "Run get_account_pages to find it."
+            )
+        return account_id
 
     # ------------------------------------------------------------------
     # Account
