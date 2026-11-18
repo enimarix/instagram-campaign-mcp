@@ -245,7 +245,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 - [x] 098 — Alerts — a notification area in the website for failed publishes, re-planned late slots, a token expiring within 10 days, failed or over-budget agent runs, QC failure spikes, a stale worker heartbeat and ad caps.
 - [x] 099 — End-to-end smoke test — Playwright: seed, open inbox, like, comment, approve, slot appears in the calendar, worker "publishes" against a mocked Graph API; runs in CI.
 - [x] 100 — One-command setup and README — installers set up Python, Node dependencies, the website build, the Reel downloader (`git submodule update --init` and `ig-campaign downloader setup`), the ffmpeg check, the Claude Code CLI check and the scheduled tasks on Windows, macOS and Linux; README rewritten: setup, a normal day (including the AI label if it must be set by hand), recovery (expired token, failed publish, stuck render, restore from backup).
-- [ ] 122 — Small follow-ups — audience evidence on `update_learning`, the feed's trial toggle for experiment videos, the old clip file removed when a granted file replaces it. — deps: 065, 083, 088 · touches: `src/learning/learnings.py`, `src/instagram_mcp_server.py#update_learning`, `src/studio/permissions.py`, `web/src/inbox/InboxPage.tsx`, `web/src/api/client.ts#Asset`, `src/api/assets.py`
+- [x] 122 — Small follow-ups — audience evidence on `update_learning`, the feed's trial toggle for experiment videos, the old clip file removed when a granted file replaces it. — deps: 065, 083, 088 · touches: `src/learning/learnings.py`, `src/instagram_mcp_server.py#update_learning`, `src/studio/permissions.py`, `web/src/inbox/InboxPage.tsx`, `web/src/api/client.ts#Asset`, `src/api/assets.py`
 - [ ] 101 — Final review — walk the checklist in GOAL.md §7 on the owner's machine with the owner, fix or file what fails.
 
 ### Milestones (what the owner can do after each phase)
@@ -263,6 +263,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 122 — Small follow-ups — https://github.com/enimarix/instagram-campaign-mcp/pull/120 (2026-11-18) — `update_learning(evidence_to_add)`, the trial toggle for experiment videos, the replaced clip file removed
 - [x] 064 — Stock provider — https://github.com/enimarix/instagram-campaign-mcp/pull/119 (2026-11-18) — Pexels search + add as `licensed` clips (credit line, ads allowed, stock sound muted), MCP tools in the agent profile, Settings → Clips search hidden without PEXELS_API_KEY (H4)
 - [x] 065 — Permission tracker — https://github.com/enimarix/instagram-campaign-mcp/pull/118 (2026-11-18) — ask / answer / attach permission requests with a copyable draft the studio never sends; a granted file makes the source a `permission` clip with the proof and the ads flag
 - [x] 088 — Trial Reels for experiments — https://github.com/enimarix/instagram-campaign-mcp/pull/117 (2026-11-18) — explore/experiment videos can be queued as trial Reels (feed toggle, schedule checkbox); trial posts form their own TRIAL scoring group, experiments compare within one group
@@ -394,9 +395,9 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 ## Follow-ups (parked from reviews)
 - [x] (from 115) The bench no longer fills from the feed (no Like action): decide in 116 whether the feed needs a "save for later" action or the bench a new definition.
 - [x] (from 115) Decline is three calls (verdict, archive, reason); a flush on tab close may land only the first. One thin `decline` route would make it atomic.
-- [ ] (from 083) `update_learning` cannot attach audience evidence to an existing learning (081 evidence engine).
-- [ ] (from 088) The feed's "Approve as trial Reel" toggle shows only for `explore` videos; experiment videos (eligible server-side) get it only in the schedule sheet. Expose `experiment` on the web Asset and show it there too.
-- [ ] (from 065) Attaching a granted file over a source that held a commentary file with another extension leaves the old file on disk.
+- [x] (from 083) `update_learning` cannot attach audience evidence to an existing learning (081 evidence engine).
+- [x] (from 088) The feed's "Approve as trial Reel" toggle shows only for `explore` videos; experiment videos (eligible server-side) get it only in the schedule sheet. Expose `experiment` on the web Asset and show it there too.
+- [x] (from 065) Attaching a granted file over a source that held a commentary file with another extension leaves the old file on disk.
 - [x] (from 081) Expose `scope` (predicate) and `evaluate` on the `update_learning` MCP tool (the service has them).
 - [x] (from 116) `/api/account` returns 503 in setup mode: a console error on every Settings visit (return an empty state instead).
 - [x] (from 116) Settings is ~4000 px on a phone because of the Clips list: collapse it or move Clips to its own page.
