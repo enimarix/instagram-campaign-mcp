@@ -692,6 +692,30 @@ async def list_sources(role: Literal["clip"] = "clip", limit: int = 50) -> Dict[
     return {"sources": await _studio(remix.list_sources, store(), role, min(limit, 100))}
 
 
+@mcp.tool(annotations=LOCAL_READ)
+async def get_clip_frames(source_id: int, times_s: Optional[List[float]] = None,
+                          n: int = 6) -> Images:
+    """Look at a downloaded clip before reacting to it: frames at times_s (seconds of the
+    clip, at most 12) or n spread evenly (540 px JPEGs) plus {duration_s, frame_times_s,
+    transcript (excerpt), timeline and summary (if stored)}. Then write what happens with
+    set_clip_timeline."""
+    return _with_images(await _studio(remix.clip_frames, store(), get_settings(), source_id,
+                                      times_s, n))
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def set_clip_timeline(source_id: int, events: List[Dict[str, Any]],
+                            summary: str) -> Dict[str, Any]:
+    """Store what happens in a downloaded clip, from what you saw in get_clip_frames:
+    events [{t, d, e}] (start and length in seconds of the clip, e: one short line ≤ 80
+    chars, e.g. "the dog slips off the sofa") and a summary (≤ 400 chars: what happens
+    and why it works). Overwrites the previous one. Choose render_remix's trim and the
+    voice-over moments from it; the remix's own timeline then shows these beats as
+    `clip: ...`."""
+    return await _studio(remix.set_clip_timeline, store(), get_settings(), source_id,
+                         events, summary)
+
+
 @mcp.tool(annotations=LOCAL_WRITE)
 async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
                        trim_start_s: Optional[float] = None, trim_end_s: Optional[float] = None,
@@ -1027,6 +1051,10 @@ AGENT_TOOLS = frozenset({
     # rules are enforced in src/studio/remix.py, never left to the prompt.
     "list_sources",
     "render_remix",
+    # Clip frames (step 119): look at a downloaded clip and write down what happens in it;
+    # local, the timeline lives on the source only.
+    "get_clip_frames",
+    "set_clip_timeline",
 })
 
 

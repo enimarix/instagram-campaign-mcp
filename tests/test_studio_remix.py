@@ -1,5 +1,6 @@
 """Reaction remixes (069): src/studio/remix.py, its MCP doors and the @creator caption rule."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ import src.instagram_mcp_server as srv
 from src.studio import ffmpeg, production, recipe, remix
 from src.studio.assets import transition
 from src.studio.recipe import Recipe, Trim, recipe_timeline, render
+from src.studio.render import FfmpegRecipe
 from src.studio.tts import LineTiming, Synthesis
 from tests.test_api_media import _settings
 from tests.test_studio_ffmpeg import needs_ffmpeg
@@ -398,3 +400,128 @@ def test_fix_transcript_validates_and_rebuilds_captions(tc, store, cfg, tts, ree
     caps = next(op for op in ops if op["op"] == "captions")
     assert [c["text"] for c in caps["lines"]] == ["across the START", "inside!"]
     assert [op["op"] for op in ops] == [op["op"] for op in a["recipe"]["recipe"]["ops"]]
+
+
+# --- 119: look at a clip and store what happens in it ---------------------------------------
+
+EVENTS = [{"t": 12.0, "d": 2.0, "e": "the dog jumps on the sofa"},
+          {"t": 2.0, "d": 3.0, "e": "a man   opens the door"},  # unsorted, spaces squeezed
+          {"t": 35.0, "d": 30.0, "e": "the dog falls"}]  # d cut at the clip's end
+
+
+def test_set_clip_timeline_validates_compresses_and_overwrites(store, cfg):
+    s = _source(store)
+    out = remix.set_clip_timeline(store, cfg, s["id"], EVENTS, "  A dog fails a jump.  ")
+    stored = store.get_source(s["id"])["stats"]
+    assert stored["timeline"] == out["timeline"] == [
+        {"t": 2.0, "d": 3.0, "e": "a man opens the door"},
+        {"t": 12.0, "d": 2.0, "e": "the dog jumps on the sofa"},
+        {"t": 35.0, "d": 25.0, "e": "the dog falls"}]
+    assert stored["summary"] == "A dog fails a jump." and stored["transcript"]["lines"] == LINES
+    many = [{"t": i, "d": 1, "e": f"beat {i} " + "x" * 60} for i in range(40)]
+    capped = remix.set_clip_timeline(store, cfg, s["id"], many, "Again.")["timeline"]
+    assert capped[-1]["e"].endswith("more") and len(json.dumps(capped)) <= 2000
+    remix.set_clip_timeline(store, cfg, s["id"], EVENTS[:1], "Short.")  # overwrites
+    assert store.get_source(s["id"])["stats"]["timeline"] == [
+        {"t": 12.0, "d": 2.0, "e": "the dog jumps on the sofa"}]
+    for events, summary, why in (
+            ([{"t": 60, "d": 1, "e": "x"}], "ok", "event 1: t must lie within"),
+            ([{"t": -1, "d": 1, "e": "x"}], "ok", "t must lie within"),
+            ([{"t": 1, "d": -1, "e": "x"}], "ok", "d not negative"),
+            ([{"t": 1, "e": "x"}], "ok", "needs t and d"),
+            (["nope"], "ok", "needs t and d"),
+            ([{"t": 1, "d": 1, "e": "x" * 81}], "ok", "1-80 characters"),
+            ([{"t": 1, "d": 1, "e": "  "}], "ok", "1-80 characters"),
+            ([], "ok", "1-40 events"), (many + many[:1], "ok", "1-40 events"),
+            (EVENTS, " ", "summary"), (EVENTS, "x" * 401, "summary")):
+        with pytest.raises(ValueError, match=why):
+            remix.set_clip_timeline(store, cfg, s["id"], events, summary)
+    assert store.get_source(s["id"])["stats"]["summary"] == "Short."  # refusals change nothing
+
+
+def test_only_downloaded_clips(store, cfg):
+    for kw in (dict(role="reference"), dict(local_path=None)):
+        s = _source(store, **kw)
+        with pytest.raises(ValueError, match="not a downloaded clip"):
+            remix.set_clip_timeline(store, cfg, s["id"], EVENTS, "x")
+        with pytest.raises(ValueError, match="not a downloaded clip"):
+            remix.clip_frames(store, cfg, s["id"])
+
+
+def test_clip_frames_refuses_bad_times(store, cfg):
+    s = _source(store)  # 60 s, no file needed: refused before ffmpeg
+    for kw, why in ((dict(times_s=[30, 61]), "within the clip"),
+                    (dict(times_s=[-1]), "within the clip"),
+                    (dict(times_s=list(range(13))), "at most 12"),
+                    (dict(n=0), "n must be"), (dict(n=13), "n must be")):
+        with pytest.raises(ValueError, match=why):
+            remix.clip_frames(store, cfg, s["id"], **kw)
+
+
+def _clip_file(root):
+    (root / "sources" / "1").mkdir(parents=True)
+    make_clip(root / "sources" / "1" / "clip.mp4", "320x568", duration=3)
+
+
+@needs_ffmpeg
+def test_clip_frames_at_times_and_spread(store, cfg, root, monkeypatch):
+    _clip_file(root)
+    s = _source(store, stats={"duration_s": 3.0, "transcript": {"lines": LINES}})
+    remix.set_clip_timeline(store, cfg, s["id"], [{"t": 1, "d": 1, "e": "a wave"}], "Waves.")
+    jpegs, info = remix.clip_frames(store, cfg, s["id"], n=3)
+    assert info == {"source_id": s["id"], "duration_s": 3.0, "frame_times_s": [0.5, 1.5, 2.5],
+                    "transcript": "before the trim across the start inside across the end",
+                    "timeline": [{"t": 1.0, "d": 1.0, "e": "a wave"}], "summary": "Waves."}
+    assert len(jpegs) == 3 and all(j[:2] == b"\xff\xd8" for j in jpegs)
+    at, info = remix.clip_frames(store, cfg, s["id"], times_s=[0, 1.5, 3])
+    assert info["frame_times_s"] == [0.0, 1.5, 2.9] and at[1] == jpegs[1]  # same cache
+    monkeypatch.setattr(ffmpeg, "run", pytest.fail)  # all cached now
+    assert remix.clip_frames(store, cfg, s["id"], times_s=[0, 1.5, 3])[0] == at
+
+
+def test_list_sources_shows_the_summary(store, cfg):
+    s = _source(store)
+    row = remix.list_sources(store)[0]
+    assert row["summary"] is None and row["has_timeline"] is False
+    remix.set_clip_timeline(store, cfg, s["id"], EVENTS, "A dog fails a jump.")
+    row = remix.list_sources(store)[0]
+    assert row["summary"] == "A dog fails a jump." and row["has_timeline"] is True
+
+
+def test_remix_timeline_has_the_clip_events_shifted_and_capped(store, cfg, tts, reel):
+    s = _source(store)
+    remix.set_clip_timeline(store, cfg, s["id"], EVENTS, "A dog fails a jump.")
+    env = store.get_asset(go(store, cfg, s, trim=(10, 40))["asset"]["id"])["recipe"]
+    assert env["clip_timeline"] == store.get_source(s["id"])["stats"]["timeline"]
+    parsed = FfmpegRecipe.model_validate(env)  # as render_files reads it
+    events = recipe_timeline(parsed.recipe, 30.0, parsed.clip_timeline)
+    clip = [e for e in events if e["e"].startswith("clip:")]
+    # "a man opens the door" ends before the trim; "the dog falls" is cut at its end.
+    assert clip == [{"t": 2.0, "d": 2.0, "e": "clip: 'the dog jumps on the sofa'"},
+                    {"t": 25.0, "d": 5.0, "e": "clip: 'the dog falls'"}]
+    assert any(e["e"].startswith("hook text") for e in events)
+    many = [{"t": i, "d": 1, "e": f"beat {i}"} for i in range(60)] + [{"e": "+3 more"}]
+    capped = recipe_timeline(parsed.recipe, 30.0, many)
+    assert len(capped) <= 41 and capped[-1]["e"].endswith("more")
+    assert len(json.dumps(capped)) <= 2000
+    # A source without a timeline: no envelope key.
+    assert "clip_timeline" not in go(store, cfg, _source(store))["asset"]["recipe"]
+
+
+@needs_ffmpeg
+async def test_clip_tools_in_the_agent_profile(store, cfg, root, monkeypatch):
+    _clip_file(root)
+    s = _source(store, stats={"duration_s": 3.0})
+    monkeypatch.setattr(srv, "store", lambda: store)
+    monkeypatch.setattr(srv, "get_settings", lambda: cfg)
+    agent = srv.build_server("agent")
+    out = await agent.call_tool("set_clip_timeline", {
+        "source_id": s["id"], "events": [{"t": 0.5, "d": 1, "e": "a wave"}], "summary": "W."})
+    assert not out.is_error and "a wave" in out.content[0].text
+    result = await agent.call_tool("get_clip_frames", {"source_id": s["id"], "n": 2})
+    text, *images = result.content
+    assert json.loads(text.text)["timeline"] == [{"t": 0.5, "d": 1.0, "e": "a wave"}]
+    assert [i.mime_type for i in images] == ["image/jpeg"] * 2
+    with pytest.raises(ToolError, match="at most 12"):
+        await agent.call_tool("get_clip_frames", {"source_id": s["id"],
+                                                  "times_s": [0.1] * 13})

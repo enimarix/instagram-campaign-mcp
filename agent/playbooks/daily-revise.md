@@ -66,9 +66,11 @@ viral finds, no watchlist, no trend research.
 2. For each pick: `download_reel(<pick reel_url>)` (downloaded or exists: go on; refused:
    the pick is skipped by itself, and `cap_reached` means no more downloads today;
    failed: leave it `new`; not a Reel permalink: `mark_dm_pick(id, "skipped", "<why>")`).
-   Watch it through `list_sources` (what happens and why it works),
+   Watch it: `list_sources`, then `get_clip_frames(source_id)` and
+   `set_clip_timeline(source_id, events, summary)` (what happens when, why it works),
    `create_idea(track="remix", source_id=…, …)`, `render_remix` with the hook, a
-   **clip-specific voice-over** and the trim of the best part, then
+   **clip-specific voice-over** pointing at moments of that timeline and the trim of the
+   best part, then
    `mark_dm_pick(id, "in_production")`. A clip you cannot react to:
    `mark_dm_pick(id, "skipped", "<one-line reason>")`.
 3. Commentary rules: our reaction is the substance, the voice-over is about this clip,

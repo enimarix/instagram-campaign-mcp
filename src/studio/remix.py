@@ -25,11 +25,13 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
-from . import ffmpeg, media, motion, render, stt
+from . import ffmpeg, frames, media, motion, render, stt
 from .assets import transition
 from .reactions import next_reaction_piece
 from .recipe import (
+    EVENT_CHARS,
     MAX_CAPTION,
+    TIMELINE_EVENTS,
     Captions,
     Credit,
     HookText,
@@ -40,6 +42,7 @@ from .recipe import (
     Recipe,
     Trim,
     VoiceOver,
+    compress_timeline,
 )
 from .rights import CREDIT_REQUIRED, attribution, basis, can_publish
 from .sources import check_rights, list_clips
@@ -49,6 +52,8 @@ MUSIC_DIR = motion.MOTION_DIR / "public" / "audio"  # our own beds (ASSETS_LICEN
 DEFAULT_MUSIC = "music-overworld"
 MIN_CAPTION_S = 0.2  # a transcript line cut shorter than this by the trim is dropped
 EXCERPT_CHARS = 200
+MAX_CLIP_FRAMES = 12
+SUMMARY_CHARS = 400
 
 
 def _lines(source: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -185,11 +190,13 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
         inputs["voice"] = motion.store_voice(settings, synth.audio_path)
     if any(isinstance(op, Music) for op in recipe.ops):
         inputs["music"] = _music_file(settings, music)
+    clip = {"clip_timeline": t} if (t := source["stats"].get("timeline")) else {}
     asset = store.add_asset(idea_id, caption=caption, batch_date=idea["batch_date"])
     try:
         piece = next_reaction_piece(store, settings, length, asset_id=asset["id"])
         env = render.validate_recipe({"kind": "ffmpeg", "recipe": recipe.model_dump(mode="json"),
-                                      "inputs": {**inputs, "reaction": piece["path"]}},
+                                      "inputs": {**inputs, "reaction": piece["path"]},
+                                      **clip},
                                      settings.media_root)
         asset = store.update_asset(asset["id"], recipe=env)
     except Exception as e:
@@ -211,25 +218,91 @@ def _warnings(source: Dict[str, Any], recipe: Recipe, settings: InstagramMCPSett
     return []
 
 
+def _excerpt(source: Dict[str, Any]) -> str:
+    text = " ".join(line["text"] for line in _lines(source))
+    return text[:EXCERPT_CHARS] + ("…" if len(text) > EXCERPT_CHARS else "")
+
+
 def list_sources(store: CampaignStore, role: str = "clip", limit: int = 50
                  ) -> List[Dict[str, Any]]:
     """Downloaded sources that may be published (rights known, credit possible), newest
     first: {id, author, url, rights_basis, audio_rights, duration_s, attribution,
-    transcript (excerpt), used (an idea already uses it)}."""
+    transcript (excerpt), used (an idea already uses it), summary and has_timeline
+    (set_clip_timeline)}."""
     with store._tx() as c:
         used = {r[0] for r in c.execute("SELECT source_id FROM ideas WHERE source_id IS NOT NULL")}
     out = []
     for s in list_clips(store, role, limit):
         if not s["local_path"] or not can_publish(s, confirmed=True, licence=s["licence"]):
             continue
-        text = " ".join(line["text"] for line in _lines(s))
+        stats = s.get("stats") or {}
         out.append({"id": s["id"], "author": s["author"], "url": s["url"],
                     "rights_basis": s["rights_basis"], "audio_rights": s["audio_rights"],
-                    "duration_s": (s.get("stats") or {}).get("duration_s"),
+                    "duration_s": stats.get("duration_s"),
                     "attribution": s["attribution"], "used": s["id"] in used,
-                    "transcript": text[:EXCERPT_CHARS] + ("…" if len(text) > EXCERPT_CHARS
-                                                          else "")})
+                    "transcript": _excerpt(s), "summary": stats.get("summary"),
+                    "has_timeline": bool(stats.get("timeline"))})
     return out
+
+
+# --- Looking at a clip before reacting to it (119) ---------------------------------------
+
+def clip_frames(store: CampaignStore, settings: InstagramMCPSettings, source_id: int,
+                times_s: Optional[Sequence[float]] = None, n: int = 6
+                ) -> Tuple[List[bytes], Dict[str, Any]]:
+    """JPEG frames of a downloaded clip (as frames.asset_frames) at `times_s` (at most
+    MAX_CLIP_FRAMES, within the clip) or `n` spread evenly, and {source_id, duration_s,
+    frame_times_s, transcript (excerpt), timeline, summary}."""
+    source = _source(store, settings, source_id)
+    stats = source["stats"]
+    duration = float(stats["duration_s"])
+    last = max(duration - 0.1, 0.0)  # a frame that exists
+    if times_s:
+        if len(times_s) > MAX_CLIP_FRAMES:
+            raise ValueError(f"at most {MAX_CLIP_FRAMES} times per call")
+        if not all(0 <= t <= duration for t in times_s):
+            raise ValueError(f"times must lie within the clip (0-{duration:g} s)")
+        times = [round(min(float(t), last), 3) for t in times_s]
+    elif 1 <= n <= MAX_CLIP_FRAMES:
+        times = [round(min((k + 0.5) * duration / n, last), 3) for k in range(n)]
+    else:
+        raise ValueError(f"n must be 1..{MAX_CLIP_FRAMES}")
+    video = media.resolve(settings.media_root, source["local_path"])
+    return frames.video_frames(settings.media_root, video, f"clip-{source_id}", times), {
+        "source_id": source_id, "duration_s": round(duration, 3), "frame_times_s": times,
+        "transcript": _excerpt(source), "timeline": stats.get("timeline"),
+        "summary": stats.get("summary")}
+
+
+def set_clip_timeline(store: CampaignStore, settings: InstagramMCPSettings, source_id: int,
+                      events: Sequence[Dict[str, Any]], summary: str) -> Dict[str, Any]:
+    """Store what happens in a downloaded clip, as the agent saw it (clip_frames): events
+    [{t, d, e}] in the clip's seconds, compressed like an asset's timeline (110), and a
+    summary of at most SUMMARY_CHARS, as stats.timeline / stats.summary. A re-run
+    overwrites both. Returns {source_id, timeline, summary}."""
+    source = _source(store, settings, source_id)
+    duration = float(source["stats"]["duration_s"])
+    summary = " ".join((summary or "").split())
+    if not summary or len(summary) > SUMMARY_CHARS:
+        raise ValueError(f"summary must be 1-{SUMMARY_CHARS} characters")
+    if not 1 <= len(events) <= TIMELINE_EVENTS:
+        raise ValueError(f"send 1-{TIMELINE_EVENTS} events")
+    raw = []
+    for i, ev in enumerate(events, 1):
+        try:
+            t, d, e = float(ev["t"]), float(ev["d"]), " ".join(str(ev["e"]).split())
+        except (KeyError, TypeError, ValueError):
+            raise ValueError(f"event {i}: needs t and d (seconds) and e (what happens)"
+                             ) from None
+        if not (0 <= t < duration and d >= 0):
+            raise ValueError(f"event {i}: t must lie within the clip (0-{duration:g} s),"
+                             " d not negative")
+        if not e or len(e) > EVENT_CHARS:
+            raise ValueError(f"event {i}: e must be one line of 1-{EVENT_CHARS} characters")
+        raw.append({"t": t, "d": min(d, duration - t), "e": e})
+    timeline = compress_timeline(raw)
+    store.patch_source_stats(source_id, {"timeline": timeline, "summary": summary})
+    return {"source_id": source_id, "timeline": timeline, "summary": summary}
 
 
 # --- The owner's review (072): the piece used, the next piece, the clip's speech ---------
