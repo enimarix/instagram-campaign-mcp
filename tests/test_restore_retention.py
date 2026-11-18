@@ -133,6 +133,15 @@ def test_restore_keeps_the_current_db_aside_and_puts_the_backup_back(studio, tmp
     assert _sources(aside) == 2 and _sources(s.database_path) == 1
 
 
+def test_restore_over_an_unreadable_database_keeps_its_bytes(studio, tmp_path):
+    s, backup = studio
+    Path(s.database_path + "-wal").unlink(missing_ok=True)
+    Path(s.database_path).write_bytes(b"garbage" * 100)
+    out = restore_database(s, backup, NOW)
+    assert Path(out["set_aside"]).read_bytes() == b"garbage" * 100
+    assert _sources(s.database_path) == 1
+
+
 def test_restore_runs_pending_migrations(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     old = tmp_path / "old.db"

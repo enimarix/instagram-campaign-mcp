@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -142,6 +143,8 @@ def _in_use(db: Path, now: datetime) -> Optional[str]:
             con.rollback()
         except sqlite3.OperationalError:
             return "another process is writing to the database: stop it first"
+        except sqlite3.DatabaseError:  # not a database at all: nobody can be using it
+            pass
     finally:
         con.close()
     return None
@@ -173,8 +176,9 @@ def restore_database(settings: InstagramMCPSettings, backup: Path, now: datetime
                      dry_run: bool = False) -> Dict[str, Any]:
     """Replace the database with `backup` (`ig-campaign restore`). Refuses while it is in
     use or when the backup is corrupt or newer than the code. The current database is first
-    copied aside to <db>.before-restore-<UTC time>; both copies use SQLite's backup API
-    (consistent under WAL), then CampaignStore opens the result so pending migrations run.
+    copied aside to <db>.before-restore-<UTC time> (its raw bytes if it is unreadable). The
+    backup is copied with SQLite's backup API (consistent under WAL) next to the database,
+    then moved over it; CampaignStore opens the result so pending migrations run.
     dry_run: only the checks, returns the plan. RestoreRefused says why not."""
     db = Path(settings.database_path)
     if settings.database_path == ":memory:":
@@ -185,24 +189,32 @@ def restore_database(settings: InstagramMCPSettings, backup: Path, now: datetime
     why = _in_use(db, now)
     if why:
         raise RestoreRefused(why)
-    aside = (db.with_name(f"{db.name}.before-restore-{now.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}")
-             if db.exists() else None)
+    stamp = now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    aside = db.with_name(f"{db.name}.before-restore-{stamp}") if db.exists() else None
     plan = {"backup": str(backup), "backup_schema": version, "database": str(db),
             "set_aside": str(aside) if aside else None}
     if dry_run:
         return plan
+    if aside:
+        current = sqlite3.connect(db)
+        try:
+            _backup(current, aside)
+        except sqlite3.DatabaseError:  # not even readable: keep its bytes as they are
+            for suffix in ("", "-wal"):
+                if Path(f"{db}{suffix}").exists():
+                    shutil.copy2(f"{db}{suffix}", f"{aside}{suffix}")
+        finally:
+            current.close()
+    db.parent.mkdir(parents=True, exist_ok=True)
+    tmp = db.with_name(f"{db.name}.restore-tmp")
     src = sqlite3.connect(f"{backup.resolve().as_uri()}?mode=ro", uri=True)
     try:
-        if aside:
-            current = sqlite3.connect(db)
-            try:
-                _backup(current, aside)
-            finally:
-                current.close()
-        db.parent.mkdir(parents=True, exist_ok=True)
-        _backup(src, db)
+        _backup(src, tmp)
     finally:
         src.close()
+    for suffix in ("-wal", "-shm"):  # the old WAL (copied aside) must not replay onto it
+        Path(f"{db}{suffix}").unlink(missing_ok=True)
+    os.replace(tmp, db)
     store = CampaignStore(str(db))  # runs the migrations newer than the backup
     try:
         with store._tx() as c:
