@@ -93,7 +93,7 @@ def test_ass_text_escapes_override_braces_and_backslashes():
 
 @needs_ffmpeg
 def test_end_card_extends_video_with_brand_background_and_continuous_audio(tmp_path):
-    src, out, info = run(tmp_path, [EndCard(text="Follow for more 8-bit facts")], duration=1)
+    src, out, info = run(tmp_path, [EndCard(text="7 jours gratuits sur macrobody.fr")], duration=1)
     assert_spec(info, 3)
     s = streams(out)
     assert s["video"] == pytest.approx(1 + 2.0, abs=FRAME + 0.005)
@@ -101,7 +101,7 @@ def test_end_card_extends_video_with_brand_background_and_continuous_audio(tmp_p
     clip, card = gray(tmp_path, out, 0.5), gray(tmp_path, out, 2.5)
     assert clip[0] > 100  # the grey clip
     bg = card[0]
-    assert bg < 64  # the dark brand background
+    assert bg > 220  # the light brand surface (#F5F7F8)
     for x, y in ((W - 1, 0), (0, recipe.HEIGHT - 1), (W // 2, recipe.HEIGHT - 300)):
         assert abs(card[y * W + x] - bg) <= 4
 

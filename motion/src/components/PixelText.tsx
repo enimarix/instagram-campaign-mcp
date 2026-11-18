@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
-import { fontFamily } from "../lib/font";
+import { fonts } from "../lib/font";
 import { colors } from "../lib/palette";
 import { fontPx, linePx } from "../lib/pixel";
 import { visibleChars, wrap } from "../lib/typewriter";
@@ -53,7 +53,7 @@ export const PixelText = ({
   return (
     <div
       style={{
-        fontFamily: `"${fontFamily}", monospace`,
+        fontFamily: `"${fonts.pixel}", monospace`,
         fontSize: size,
         lineHeight: `${lineHeight}px`,
         color,

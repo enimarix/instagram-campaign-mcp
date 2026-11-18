@@ -1,8 +1,9 @@
 import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import { z } from "zod";
 import { brand } from "../brand";
+import { fonts } from "../lib/font";
 
-// Proves the pipeline only; real templates arrive in 044+.
+// Proves the pipeline only, in the brand kit (step 050: clean light surface, Inter Tight).
 export const helloSchema = z.strictObject({
   title: z.string().min(1).max(40),
   subtitle: z.string().max(80),
@@ -12,24 +13,18 @@ export const helloSchema = z.strictObject({
 
 type Props = z.infer<typeof helloSchema>;
 
-const { colors, fonts, safe_zone: zone } = brand;
+const { colors, safe_zone: zone } = brand;
 // Where text may go on a Reel: inside the UI-free insets, left of the button rail.
 const area = { top: zone.top, bottom: zone.bottom, left: zone.left, right: zone.right + zone.right_rail };
 
 export const Hello = ({ title, subtitle, safeZone }: Props) => {
   const frame = useCurrentFrame();
-  // Typewriter in whole characters and a hard on/off cursor: no smooth easing in 8-bit.
-  const shown = Math.floor(interpolate(frame, [0, title.length * 3], [0, title.length], { extrapolateRight: "clamp" }));
-  const cursor = Math.floor(frame / 15) % 2 === 0 ? "_" : " ";
+  const rise = (start: number) => ({
+    opacity: interpolate(frame, [start, start + 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+    transform: `translateY(${interpolate(frame, [start, start + 12], [40, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })}px)`,
+  });
   return (
-    <AbsoluteFill
-      style={{
-        backgroundColor: colors.background,
-        color: colors.text,
-        // The font itself is loaded by src/lib/font.ts (step 040). One weight only: no faux bold.
-        fontFamily: `"${fonts.display}", monospace`,
-      }}
-    >
+    <AbsoluteFill style={{ backgroundColor: colors.light.bg, color: colors.light.ink, fontFamily: `"${fonts.body}", sans-serif` }}>
       <div
         style={{
           position: "absolute",
@@ -39,19 +34,24 @@ export const Hello = ({ title, subtitle, safeZone }: Props) => {
           justifyContent: "center",
           alignItems: "center",
           textAlign: "center",
-          gap: 48,
-          outline: safeZone ? `4px dashed ${colors.accent}` : undefined,
+          gap: 40,
+          outline: safeZone ? `4px dashed ${colors.macros.kcal}` : undefined,
         }}
       >
-        <div style={{ fontSize: 120, color: colors.primary, textShadow: `8px 8px 0 ${colors.palette[1]}` }}>
-          {title.slice(0, shown).toUpperCase()}
-          {cursor}
-          {/* The hidden rest of the title keeps the line from re-centring while it types. */}
-          <span style={{ visibility: "hidden" }}>{title.slice(shown).toUpperCase()}</span>
+        <div
+          style={{
+            ...rise(0),
+            fontFamily: `"${fonts.display}", sans-serif`,
+            fontWeight: fonts.displayWeight,
+            fontSize: 150,
+            lineHeight: 1,
+            letterSpacing: "-0.04em",
+            color: colors.brand,
+          }}
+        >
+          {title}
         </div>
-        <div style={{ fontSize: 48, color: colors.secondary, textShadow: `4px 4px 0 ${colors.palette[15]}` }}>
-          {subtitle.toUpperCase()}
-        </div>
+        <div style={{ ...rise(8), fontSize: 48, fontWeight: 500, color: colors.light.muted }}>{subtitle}</div>
       </div>
     </AbsoluteFill>
   );

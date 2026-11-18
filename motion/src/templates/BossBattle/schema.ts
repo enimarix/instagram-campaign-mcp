@@ -47,7 +47,7 @@ export const bossBattleSchema = z
     music: z.enum(["music-overworld", "music-cave", "none"]).default("music-overworld"),
     /** Fade back into frame 0 at the end so the Reel loops seamlessly. */
     loop: z.boolean().default(true),
-    /** Template colours (background, titles, wipes, flash); the kit components keep the brand's. */
+    /** Template colours (background, titles, wipes, flash); the kit components keep the 8-bit defaults (lib/palette.ts). */
     palette: z
       .strictObject({
         primary: hex.optional(),

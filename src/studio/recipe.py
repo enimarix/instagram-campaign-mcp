@@ -305,31 +305,46 @@ def _brand_font(kit: Dict[str, Any], root: Path) -> Path:
     return (root / kit["fonts"]["files"][0]).resolve()
 
 
+# ponytail: average advance of Inter Tight Black, mixed-case text measures ~0.5 em; an
+# ALL-CAPS line of wide letters (M, W) can still run ~15 % past the box. Measure with the
+# font's real advances if that ever matters.
+EM_PER_CHAR = 0.62
+
+
 def _wrap_width(width: int, size: int) -> int:
-    """Characters per line in `width` px less the box padding. Press Start 2P is
-    monospaced with a 1 em advance (`size` px per character)."""
-    return (width - 2 * TEXT_PAD) // size
+    """Characters per line in `width` px less the box padding, at the brand display
+    font's average advance (`EM_PER_CHAR` x `size` px per character)."""
+    return int((width - 2 * TEXT_PAD) // (size * EM_PER_CHAR))
+
+
+def _surface(kit: Dict[str, Any], name: str) -> Tuple[str, str]:
+    """(text, background) colours of a brand surface: dark.text on dark.bg, light.ink on
+    light.bg."""
+    s = kit["colors"][name]
+    return s.get("text") or s["ink"], s["bg"]
 
 
 def _drawtext(text: str, info: MediaInfo, out: Path, *, size: int, x: str, y: str,
-              enable: str = "") -> str:
-    """A drawtext filter: `text` wrapped to the safe width in the brand font and text
-    colour on a semi-transparent background box. `x`/`y` pick from "left", "right",
-    "center" / "top", "center", "bottom" inside the safe area."""
+              enable: str = "", surface: str = "dark") -> str:
+    """A drawtext filter: `text` wrapped to the safe width in the brand font, in the text
+    colour of the brand `surface` ("dark": over video; "light": on a light card) on a
+    semi-transparent box of its background. `x`/`y` pick from "left", "right", "center" /
+    "top", "center", "bottom" inside the safe area."""
     kit, root = _brand_kit(info)
     sx, sy, sw, sh = brand.safe_area(kit)
     lines = textwrap.wrap(text, _wrap_width(sw, size))
     textfile = out.with_suffix(".txt")  # in render()'s work dir; no drawtext text escaping
-    textfile.write_text("\n".join(lines), encoding="utf-8")
+    # newline: drawtext breaks on "\r" too, so a Windows "\r\n" would double each break.
+    textfile.write_text("\n".join(lines), encoding="utf-8", newline="\n")
     xs = {"left": f"{sx + TEXT_PAD}", "right": f"{sx + sw - TEXT_PAD}-text_w",
           "center": f"{sx}+({sw}-text_w)/2"}
     ys = {"top": f"{sy + TEXT_PAD}", "bottom": f"{sy + sh - TEXT_PAD}-text_h",
           "center": f"{sy}+({sh}-text_h)/2"}
-    colors = kit["colors"]
+    fg, bg = _surface(kit, surface)
     graph = (f"drawtext=fontfile={_filter_value(_brand_font(kit, root).as_posix())}"
              f":textfile={_filter_value(textfile.resolve().as_posix())}:expansion=none"
-             f":fontsize={size}:line_spacing={-size // 4}:fontcolor=0x{colors['text'][1:]}"
-             f":box=1:boxcolor=0x{colors['background'][1:]}@0.6:boxborderw={TEXT_PAD}"
+             f":fontsize={size}:line_spacing={-size // 8}:fontcolor=0x{fg[1:]}"
+             f":box=1:boxcolor=0x{bg[1:]}@0.6:boxborderw={TEXT_PAD}"
              f":x={xs[x]}:y={ys[y]}")
     return graph + (f":enable={_filter_value(enable)}" if enable else "")
 
@@ -362,7 +377,7 @@ class Logo(Op):
 @register
 class HookText(Op):
     """The hook as a title card from `start_s` to `end_s`, readable with the sound off.
-    The text keeps its case (the pixel font draws accented capitals small)."""
+    The text keeps its case."""
 
     op: Literal["hook_text"] = "hook_text"
     text: OverlayText
@@ -389,7 +404,7 @@ class HookText(Op):
 @register
 class Credit(Op):
     """A visible source credit for the whole video, e.g. "@creator" or "Clip: Name /
-    Pexels" (GOAL.md §5.1), at the bottom of the safe area. The pixel font has no emoji."""
+    Pexels" (GOAL.md §5.1), at the bottom of the safe area. The brand font has no emoji."""
 
     op: Literal["credit"] = "credit"
     text: OverlayText
@@ -409,7 +424,7 @@ MAX_CAPTION = 80  # characters per caption line
 
 
 def _strip_emoji(text: str) -> str:
-    """Drop emoji and pictographs: the pixel font has none, and a fallback emoji font is
+    """Drop emoji and pictographs: the brand font has none, and a fallback emoji font is
     not on every machine (CI has none), so they would render as boxes or not at all.
     Letters the font lacks (e.g. Romanian Ș) still fall back to a system font."""
     # ponytail: Unicode-category heuristic, not the font's real cmap; read the cmap if a
@@ -488,7 +503,8 @@ class Captions(Op):
             anchor = f"\\an2\\pos({sx + sw // 2},{sy + sh - TEXT_PAD})"
         else:
             anchor = f"\\an5\\pos({sx + sw // 2},{sy + sh // 2})"
-        text, box = _ass_color(kit["colors"]["text"]), _ass_color(kit["colors"]["background"], 0.6)
+        fg, bg = _surface(kit, "dark")
+        text, box = _ass_color(fg), _ass_color(bg, 0.6)
         # WrapStyle 2: no libass wrapping, the lines are wrapped here. BorderStyle 3: an
         # opaque box (OutlineColour) padded by Outline px around each line.
         width = _wrap_width(sw, self.size)
@@ -506,7 +522,7 @@ class Captions(Op):
             "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
             "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
             f"Style: Brand,{kit['fonts']['display']},{self.size},{text},{text},{box},{box},"
-            f"0,0,0,0,100,100,0,0,3,{TEXT_PAD},0,2,0,0,0,1", "",
+            f"{kit['fonts']['display_weight']},0,0,0,100,100,0,0,3,{TEXT_PAD},0,2,0,0,0,1", "",
             "[Events]",
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
             *events, ""]), encoding="utf-8")
@@ -521,7 +537,7 @@ class Captions(Op):
 
 @register
 class EndCard(Op):
-    """A call-to-action card appended after the clip: the brand background, `text` in the
+    """A call-to-action card appended after the clip: the brand light surface, `text` in the
     middle of the safe area and (with_logo) the logo at its top. The video gets
     `duration_s` longer and the audio goes on under the card as silence; to run a music
     bed under the card too, put `music` after `end_card` in the recipe."""
@@ -534,8 +550,9 @@ class EndCard(Op):
     def apply(self, src, info, out, *, inputs, timeout_s, preset):
         kit, root = _brand_kit(info)
         _, sy, _, _ = brand.safe_area(kit)
-        text = _drawtext(self.text, info, out, size=48, x="center", y="center")
-        card = (f"color=c=0x{kit['colors']['background'][1:]}:s={WIDTH}x{HEIGHT}:r={FPS}"
+        text = _drawtext(self.text, info, out, size=48, x="center", y="center",
+                         surface="light")
+        card = (f"color=c=0x{kit['colors']['light']['bg'][1:]}:s={WIDTH}x{HEIGHT}:r={FPS}"
                 f":d={self.duration_s},{text}")
         extra: List[PathLike] = []
         if self.with_logo:

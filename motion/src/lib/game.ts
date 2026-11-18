@@ -2,7 +2,7 @@
 
 /**
  * Pixel art drawn in code: each frame is a list of equal-length rows, one character per
- * pixel; "." is transparent, any other character is a key of `colors` (a brand palette index).
+ * pixel; "." is transparent, any other character is a key of `colors` (an 8-bit palette index, src/lib/palette.ts).
  */
 export type PixelArt = { frames: string[][]; colors: Record<string, number> };
 

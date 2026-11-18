@@ -1,6 +1,6 @@
 // Sprites drawn in code (ours, no licence to track). scripts/make-assets.ts writes them to
 // public/sprites/ as SVG sheets for the asset registry (src/assets.ts).
-// Pure data: colours are brand palette indices (brand/brand.json colors.palette).
+// Pure data: colours are 8-bit palette indices (src/lib/palette.ts).
 import type { PixelArt } from "./game";
 
 /** Green slime, 2-frame idle bounce. */

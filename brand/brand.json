@@ -1,27 +1,55 @@
 {
   "version": 1,
-  "placeholder": true,
-  "name": "Macrobody",
-  "handle": "@macrobody",
-  "logo": "logo-placeholder.svg",
-  "logo_png": "logo-placeholder.png",
+  "placeholder": false,
+  "name": "macroBody",
+  "handle": "@macrobody.fr",
+  "logo": "logo.svg",
+  "logo_png": "logo.png",
   "colors": {
-    "primary": "#FFCD75",
-    "secondary": "#38B764",
-    "accent": "#EF7D57",
-    "background": "#1A1C2C",
-    "text": "#F4F4F4",
-    "palette": [
-      "#1A1C2C", "#5D275D", "#B13E53", "#EF7D57",
-      "#FFCD75", "#A7F070", "#38B764", "#257179",
-      "#29366F", "#3B5DC9", "#41A6F6", "#73EFF7",
-      "#F4F4F4", "#94B0C2", "#566C86", "#333C57"
-    ]
+    "brand": "#10B981",
+    "brand_light": "#34D399",
+    "macros": {
+      "kcal": "#3E8EF7",
+      "protein": "#FF6F61",
+      "fat": "#F5C242",
+      "carbs": "#3FBF7F",
+      "weight": "#A78BFA"
+    },
+    "light": {
+      "bg": "#F5F7F8",
+      "card": "#FFFFFF",
+      "ink": "#111827",
+      "muted": "#6B7280"
+    },
+    "dark": {
+      "bg": "#0E1117",
+      "card": "#1C1C1E",
+      "text": "#FFFFFF",
+      "muted": "#98989F"
+    }
   },
   "fonts": {
-    "display": "Press Start 2P",
-    "body": "Press Start 2P",
-    "files": ["../motion/public/fonts/PressStart2P-Regular.ttf"]
+    "display": "Inter Tight",
+    "display_weight": 900,
+    "body": "Inter",
+    "files": [
+      "../motion/public/fonts/InterTight-Black.ttf",
+      "../motion/public/fonts/inter-tight-latin.woff2",
+      "../motion/public/fonts/inter-tight-latin-ext.woff2",
+      "../motion/public/fonts/inter-latin.woff2",
+      "../motion/public/fonts/inter-latin-ext.woff2"
+    ]
+  },
+  "cta": {
+    "trial": "7 jours gratuits",
+    "url": "macrobody.fr",
+    "stores": "Dispo sur App Store & Google Play",
+    "never_show_price": true
+  },
+  "address": {
+    "default": "vous",
+    "humour": "tu",
+    "live": "tu"
   },
   "safe_zone": {
     "width": 1080,
@@ -33,8 +61,11 @@
     "right_rail": 120
   },
   "_source": {
-    "placeholder": "Name, handle, logo, colours and fonts are placeholders until gate H1 / step 050 (real brand) and H9 (channel basics). Logo is drawn in-repo, no third-party art. palette = the free Sweetie 16 palette (GrafxKid); named colours are picked from it.",
-    "fonts": "Family names only. 'files' are paths relative to this file. Press Start 2P (SIL OFL 1.1, step 040): Latin-1 and Latin Extended-A (all but ŉ Ţ ţ; Romanian Ș ș missing too), Greek, Cyrillic; licence and source in motion/ASSETS_LICENSES.md. motion/ loads files[0] as the display family.",
+    "brand": "The owner's macroBody identity (step 050, 2026-11-18): colours, fonts and logo from the macroBody app (docs/DESIGN.md, theme) and the owner's own Reels. Logo drawn in-repo after the app icon; logo.png is logo.svg at 512 px. Every template picks its own style: the 8-bit templates keep Sweetie 16 and Press Start 2P in motion/src/lib/palette.ts and font.ts.",
+    "colors": "brand = emerald accent (white text on it); macros = the app's per-macro colours; light = main surfaces (bg, white cards, ink text); dark = dark mode. Video overlays (ffmpeg ops) use dark.text on dark.bg.",
+    "fonts": "Family names plus 'files' (paths relative to this file). files[0] is the static Inter Tight Black TTF the ffmpeg ops (drawtext, captions) use: the local ffmpeg cannot read WOFF2. The WOFF2 files are the variable Inter / Inter Tight the motion templates load (motion/src/lib/font.ts). Licences in motion/ASSETS_LICENSES.md.",
+    "cta": "End-card call to action: never a price, never 'lien en bio' unless the owner asks.",
+    "address": "tu or vous per template family: default (brand films, paper) vous; humour and live-action tu.",
     "safe_zone": "Pixel insets on a 1080x1920 Reel. Top 14%, bottom 35%, sides 6% = Meta Ads Guide for Instagram Reels (https://www.facebook.com/business/ads-guide/update/video/instagram-reels), rounded up. right_rail 120 px = width of the like/comment/share/audio button column (https://www.revid.ai/instagram-reels-safe-zone, practical buffer, not a Meta figure). Checked 2026-11-17."
   }
 }
