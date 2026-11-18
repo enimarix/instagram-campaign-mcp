@@ -153,3 +153,16 @@ def test_replan_refuses_unsettled_asset_until_released(tc, store, cfg):
     assert tc.get("/api/calendar", params={"from": "2026-11-19", "to": "2026-11-19"}
                   ).json()["publish_check"] == []
     assert tc.post(f"/api/posts/{post['id']}/replan", headers=H).status_code == 200
+
+
+def test_replan_commentary_needs_the_rights_confirmation(tc, store, cfg):
+    # 072: every queue path asks for it (schedule and approve-and-queue: scheduling tests).
+    a = _asset(store, cfg, status="scheduled", track="remix", caption="ha @creator",
+               source={"rights_basis": "commentary", "author": "@creator"})
+    post = _failed(store, a["id"])
+    transition(store, a["id"], "approved", actor="worker")
+    r = tc.post(f"/api/posts/{post['id']}/replan", headers=H)
+    assert r.status_code == 409 and r.json()["error"] == "rights"
+    assert store.get_scheduled(post["id"])["status"] == "failed"
+    r = tc.post(f"/api/posts/{post['id']}/replan", json={"confirmed": True}, headers=H)
+    assert r.status_code == 200 and store.get_asset(a["id"])["status"] == "scheduled"

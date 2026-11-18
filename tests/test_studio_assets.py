@@ -34,8 +34,11 @@ FORBIDDEN = {
 
 def _asset_in(store, status, **fields):
     idea = store.add_idea("motion", pillar="myths", hook_type="pov")
-    if status == "needs_reaction":
-        return store.add_asset(idea["id"], status="needs_reaction", **fields)
+    if status == "needs_reaction":  # nothing enters it any more (072): an old row
+        asset = store.add_asset(idea["id"], **fields)
+        with store._tx() as c:
+            c.execute("UPDATE assets SET status='needs_reaction' WHERE id=?", (asset["id"],))
+        return store.get_asset(asset["id"])
     asset = store.add_asset(idea["id"], **fields)
     for to, actor in PATH[status]:
         asset = transition(store, asset["id"], to, actor=actor)
@@ -127,11 +130,13 @@ def test_unknown_taxonomy_tag_is_rejected_with_valid_list(store):
         store.add_idea("motion", hook_type="clickbait")
 
 
-def test_new_asset_starts_rendering_or_needs_reaction_only(store):
+def test_new_asset_starts_rendering_and_nothing_enters_needs_reaction(store):
     idea = store.add_idea("remix")
-    assert store.add_asset(idea["id"], status="needs_reaction")["status"] == "needs_reaction"
-    with pytest.raises(ValueError, match="starts as"):
-        store.add_asset(idea["id"], status="approved")
+    assert store.add_asset(idea["id"])["status"] == "rendering"
+    for status in ("needs_reaction", "approved"):
+        with pytest.raises(ValueError, match="starts as"):
+            store.add_asset(idea["id"], status=status)
+    assert not [move for move in MOVES if move[1] == "needs_reaction"]
 
 
 def test_status_cannot_be_written_through_update_asset(store):

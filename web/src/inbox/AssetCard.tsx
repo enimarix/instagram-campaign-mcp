@@ -71,6 +71,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
           <div className="flex flex-wrap gap-1.5">
             {a.dm_pick && <Chip tone="accent">DM pick</Chip>}
             {a.rights_basis === 'commentary' && <Chip tone="warn">commentary</Chip>}
+            {a.recipe?.inputs?.reaction && <Chip tone="accent">reaction</Chip>}
             {a.strategy === 'explore' && <Chip tone="explore">Explore</Chip>}
             {a.track && <Chip>{a.track}</Chip>}
             {a.pillar && <Chip>{a.pillar}</Chip>}

@@ -66,7 +66,7 @@ export type Asset = {
   // the detail page (016)
   best_before?: string | null
   duration?: number | null
-  recipe?: { template?: string; edit?: string; ops?: { op: string }[] }
+  recipe?: { template?: string; edit?: string; ops?: { op: string }[]; inputs?: Record<string, string> }
   qc?: { passed?: boolean; reason?: string; reasons?: string[]; warnings?: string[] } | null
   // what happens in the video (110): 2-3 sentences, and events in seconds (t, d)
   description?: string | null
@@ -106,6 +106,21 @@ export const listAssets = (query: Record<string, string>) =>
 export const setVerdict = (id: number, verdict: Verdict) =>
   post<Asset>(`/api/assets/${id}/verdict`, { verdict })
 export const approveAsset = (id: number) => post<Asset>(`/api/assets/${id}/approve`)
+/** GET /api/assets/{id}/reaction (072): the reel piece a reaction remix uses, its clip,
+ * and the clip's transcript lines in the part used (clip seconds). */
+export type ReactionInfo = {
+  piece: { id: number; start_s: number; end_s: number; url: string | null }
+  reel: { id: number; duration_s: number; created_at: string }
+  source: { id: number; author: string | null; url: string | null; rights_basis: string; attribution: string | null }
+  trim: { start_s: number; end_s: number }
+  transcript: { index: number; start_s: number; end_s: number; text: string }[]
+}
+export const getReaction = (id: number) => request<ReactionInfo>(`/api/assets/${id}/reaction`)
+/** Re-render with the next reel piece (a failed video in place, else a newer version). */
+export const nextReactionPiece = (id: number) => post<{ asset: Asset }>(`/api/assets/${id}/next-piece`)
+/** Save the corrected transcript lines (same order) and re-render the captions from them. */
+export const fixTranscript = (id: number, texts: string[]) =>
+  post<{ asset: Asset }>(`/api/assets/${id}/transcript`, { texts })
 /** The feed's one-tap Approve: approved and queued into the next free slot; `slot` null =
  * the planner's week is full, approved only. `confirmed`: the commentary confirmation. */
 export const approveAndQueue = (id: number, confirmed: boolean) =>

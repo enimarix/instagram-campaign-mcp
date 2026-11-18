@@ -102,6 +102,15 @@ afterEach(() => {
 })
 
 describe('InboxPage feed', () => {
+  it('marks a reaction remix with a reaction badge', async () => {
+    stubApi({ 'GET /api/assets': [200, [asset(1), asset(2, {
+      track: 'remix', recipe: { inputs: { source: 's.mp4', reaction: 'reactions/1/pieces/3.mp4' } } })]] })
+    renderPage()
+    await screen.findByText('0 of 2 decided')
+    expect(within(card(2)).getByText('reaction')).toBeTruthy()
+    expect(within(card(1)).queryByText('reaction')).toBeNull()
+  })
+
   it('shows only the videos to decide, with the counter and the overlay', async () => {
     const calls = stubApi()
     renderPage()

@@ -427,7 +427,9 @@ ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")
 AGENT_RUN_END_STATUSES = ("succeeded", "failed", "cancelled")
 # New assets start here; every later status move goes through studio.assets.transition().
-ASSET_INITIAL_STATUSES = ("rendering", "needs_reaction")
+# `needs_reaction` stays in the lifecycle but nothing enters it any more (072: a remix
+# takes its reaction piece from the reel at render time).
+ASSET_INITIAL_STATUSES = ("rendering",)
 _UNCHANGED = object()
 
 
@@ -1223,6 +1225,13 @@ class CampaignStore:
                             " created_at) VALUES (?,?,?,?,?)",
                             (reel_id, start_s, end_s, asset_id, to_iso(utcnow())))
         return self._get("reaction_pieces", cur.lastrowid)
+
+    def get_reaction_piece(self, piece_id: int) -> Dict[str, Any]:
+        return self._get("reaction_pieces", piece_id)
+
+    def set_reaction_piece_asset(self, piece_id: int, asset_id: int) -> None:
+        with self._tx() as c:
+            c.execute("UPDATE reaction_pieces SET asset_id=? WHERE id=?", (asset_id, piece_id))
 
     def add_idea(self, track: str, **fields: Any) -> Dict[str, Any]:
         """Tags are checked against brand/taxonomy.json (TaxonomyError lists valid values)."""

@@ -304,3 +304,96 @@ def test_a_built_remix_renders(store, tmp_path):
                       "music": remix.MUSIC_DIR / "music-overworld.wav"},
                   tmp_path / "out.mp4", timeout_s=180, preset="ultrafast")
     assert_spec(info, 2.0)
+
+
+# --- 072: the owner's review of a remix -----------------------------------------------------
+
+@pytest.fixture
+def tc(store, cfg):
+    from fastapi.testclient import TestClient
+
+    from src.api.app import create_app
+    from tests.conftest import LOCAL
+    with TestClient(create_app(cfg, store=store), base_url=LOCAL,
+                    headers={"Origin": LOCAL}) as c:
+        yield c
+
+
+def _remix_asset(store, cfg, status="ready"):
+    out = go(store, cfg, _source(store), trim=(10, 30), caption="Wow @creator")
+    a = out["asset"]
+    if status != "rendering":
+        transition(store, a["id"], status if status == "failed" else "ready", actor="worker")
+    return store.get_asset(a["id"]), out["piece"]
+
+
+def test_reaction_endpoint(tc, store, cfg, tts, reel):
+    a, piece = _remix_asset(store, cfg)
+    r = tc.get(f"/api/assets/{a['id']}/reaction")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["piece"] == {"id": piece["piece_id"], "start_s": 0, "end_s": 20,
+                             "url": f"/api/media/{piece['path']}"}
+    assert body["reel"]["id"] == reel["id"] and body["reel"]["duration_s"] == 600
+    assert body["source"]["attribution"] == "@creator"
+    assert body["source"]["rights_basis"] == "commentary"
+    assert body["trim"] == {"start_s": 10, "end_s": 30}
+    assert [(x["index"], x["text"]) for x in body["transcript"]] == [
+        (1, "across the start"), (2, "inside")]
+    motion = store.add_asset(store.add_idea("motion")["id"],
+                             recipe={"kind": "motion", "template": "Hello", "props": {}})
+    assert tc.get(f"/api/assets/{motion['id']}/reaction").status_code == 422
+    assert tc.get("/api/assets/999/reaction").status_code == 404
+
+
+def _pieces(store):
+    with store._tx() as c:
+        return [tuple(r) for r in c.execute("SELECT id, asset_id, start_s FROM reaction_pieces")]
+
+
+def test_next_piece_makes_a_child_of_a_ready_remix(tc, store, cfg, tts, reel):
+    a, first = _remix_asset(store, cfg)
+    r = tc.post(f"/api/assets/{a['id']}/next-piece")
+    assert r.status_code == 200, r.text
+    child = r.json()["asset"]
+    assert child["parent_asset_id"] == a["id"] and child["status"] == "rendering"
+    assert store.get_asset(a["id"])["status"] == "ready"
+    new = r.json()["piece"]
+    assert new["piece_id"] != first["piece_id"] and new["start_s"] == 20  # the next 20 s
+    assert child["recipe"]["inputs"]["reaction"] == new["path"]
+    assert child["recipe"]["recipe"] == a["recipe"]["recipe"]
+    assert _pieces(store) == [(first["piece_id"], a["id"], 0), (new["piece_id"], child["id"], 20)]
+
+
+def test_next_piece_re_renders_a_failed_remix_in_place(tc, store, cfg, tts, reel):
+    a, first = _remix_asset(store, cfg, "failed")
+    r = tc.post(f"/api/assets/{a['id']}/next-piece")
+    assert r.status_code == 200 and r.json()["asset"]["id"] == a["id"]
+    assert store.get_asset(a["id"])["status"] == "rendering"
+    assert store.get_asset(a["id"])["recipe"]["inputs"]["reaction"] == r.json()["piece"]["path"]
+    # A remix still rendering is refused before any piece is used.
+    r = tc.post(f"/api/assets/{a['id']}/next-piece")
+    assert r.status_code == 409 and len(_pieces(store)) == 2
+
+
+def test_fix_transcript_validates_and_rebuilds_captions(tc, store, cfg, tts, reel):
+    a, _ = _remix_asset(store, cfg)
+    url = f"/api/assets/{a['id']}/transcript"
+    for texts, why in ((["one"], "send 2 lines"), (["ok", "  "], "line 2 is empty"),
+                       (["x" * 81, "ok"], "longer than 80")):
+        r = tc.post(url, json={"texts": texts})
+        assert r.status_code == 422 and why in r.json()["message"], r.text
+    source_id = store.get_idea(a["idea_id"])["source_id"]
+    assert store.get_source(source_id)["stats"]["transcript"]["lines"] == LINES
+    r = tc.post(url, json={"texts": ["across  the START", "inside!"]})
+    assert r.status_code == 200, r.text
+    lines = store.get_source(source_id)["stats"]["transcript"]["lines"]
+    assert [x["text"] for x in lines] == ["before the trim", "across the START", "inside!",
+                                          "across the end"]
+    assert [x["start_s"] for x in lines] == [x["start_s"] for x in LINES]  # same timings
+    child = r.json()["asset"]
+    assert child["parent_asset_id"] == a["id"]
+    ops = child["recipe"]["recipe"]["ops"]
+    caps = next(op for op in ops if op["op"] == "captions")
+    assert [c["text"] for c in caps["lines"]] == ["across the START", "inside!"]
+    assert [op["op"] for op in ops] == [op["op"] for op in a["recipe"]["recipe"]["ops"]]
