@@ -8,6 +8,16 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: A/B tests run at least 7 days; budgets from the account's rates (094)
+`abtest.TestSpec.min_days` defaults to 7 (was 4): Meta's A/B testing best practices say
+"we recommend a minimum of 7-day tests" (Business Help Center, article 290009911394576).
+The budget a test needs uses the account's CPM and CTR over its last 90 days of insights,
+else `ADS_DEFAULT_CPM` (5, a guess) and a 1 % CTR. Variants are separate equal-budget
+campaigns, not a Meta `ad_studies` SPLIT_TEST (it needs a Business ID, not set before
+H6). Approval asks the website password again; a failed approval pauses everything and
+cancels the test. Cancelling a running test keeps its reservations until 095 reconciles.
+Reason: shorter tests miss day-of-week swings; an unknown CPM must not block a proposal.
+
 ## 2026-11-18: Paused promotions: one reservation per ad set, spread over its days (092)
 A promoted post (`ads.promote.create_paused_promotion`) reserves its lifetime budget once,
 when its ad set is created. For `ADS_DAILY_CAP` the budget counts as budget / days (owner

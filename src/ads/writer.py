@@ -9,7 +9,9 @@ Every method is `@spends` and calls `authorize_spend()` before its request:
 Nothing is ever created ACTIVE: `_paused()` puts `status=PAUSED` last in every campaign, ad
 set and ad body, and no method takes a status. (A creative has no delivery status: its
 enum is ACTIVE/IN_PROCESS/WITH_ISSUES/DELETED and is not a creation parameter.)
-Activation is 094, behind the owner's approval.
+`activate()` is the one write that sets ACTIVE; only `tests.approve` calls it, after the
+owner typed the website password again (094, source-checked in tests/test_ads_tests.py).
+`pause()` is `@pauses`, not `@spends`: it works while killed.
 
 Money goes to Meta as int64 in the currency's smallest unit (cents); spend_cap is the
 campaign's, lifetime_budget + end_time the ad set's (Marketing API v25.0 reference).
@@ -17,6 +19,7 @@ campaign's, lifetime_budget + end_time the ad set's (Marketing API v25.0 referen
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -25,10 +28,11 @@ import httpx
 
 from ..config import PLACEHOLDERS, InstagramMCPSettings
 from ..store import CampaignStore
-from .budget import authorize_spend, release, spends
+from .budget import BudgetRefused, authorize_spend, open_authorizations, pauses, release, spends
 from .client import AdsClient
 
 PAUSED = "PAUSED"
+ACTIVE = "ACTIVE"
 
 
 def _paused(body: Dict[str, Any]) -> Dict[str, Any]:
@@ -49,6 +53,12 @@ def minor_units(amount: Decimal) -> int:
     if cents != cents.to_integral_value():
         raise ValueError(f"{amount} has more than 2 decimals")
     return int(cents)
+
+
+def _object_id(meta_id: str) -> str:
+    if not isinstance(meta_id, str) or not re.fullmatch(r"\d+", meta_id):
+        raise ValueError(f"not an ad object id: {meta_id!r}")
+    return meta_id
 
 
 def missing_settings(settings: InstagramMCPSettings) -> List[str]:
@@ -141,3 +151,21 @@ class AdsWriter(AdsClient):
         return _id(await self._make_request("POST", f"{self.ad_account}/ads", data=_paused({
             "name": name, "adset_id": adset_id, "creative": {"creative_id": creative_id},
         })))
+
+    @spends
+    async def activate(self, meta_id: str, *, test_id: int, authorization_id: int) -> None:
+        """Set a paused campaign, ad set or ad ACTIVE. Refused (before any request) when
+        the budget reservation it runs under was released: a failed or cancelled
+        promotion stays paused for good."""
+        if authorization_id not in open_authorizations(self.ledger, test_id):
+            raise BudgetRefused("released", f"authorization {authorization_id} of test "
+                                f"{test_id} is released: {meta_id} stays paused")
+        authorize_spend(self.ledger, self.settings, 0, test_id=test_id,
+                        reason=f"activate {meta_id}", check_only=True)
+        self._check_throttle()
+        await self._make_request("POST", _object_id(meta_id), data={"status": ACTIVE})
+
+    @pauses
+    async def pause(self, meta_id: str) -> None:
+        """Pause a campaign, ad set or ad. Never spends: no guard, works while killed."""
+        await self._make_request("POST", _object_id(meta_id), data=_paused({}))

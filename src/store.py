@@ -17,6 +17,7 @@ organic posts, so this store keeps:
 - render_jobs: the render queue (src/studio/render.py, worker render loop)
 - ad_spend_ledger: ad money reserved, released and reported (src/ads/budget.py)
 - ad_entities: campaigns, ad sets, creatives and ads the studio created on Meta (092)
+- ad_tests / ads_audit: paid A/B tests and the append-only log of money actions (094)
 """
 
 from __future__ import annotations
@@ -485,6 +486,48 @@ ALTER TABLE ad_spend_ledger ADD COLUMN daily_amount TEXT;
 ALTER TABLE ad_spend_ledger ADD COLUMN daily_until TEXT;
 """
 
+# Migration 20: paid A/B tests (094, src/ads/tests.py). spec = abtest.TestSpec fields,
+# needed = abtest.budget_needed + the rates it used; money columns are Decimal strings.
+# ads_audit is append-only (triggers): every propose, approve, activate, cancel, kill, unkill.
+AD_TESTS_SCHEMA = """
+CREATE TABLE ad_tests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    hypothesis      TEXT NOT NULL,
+    variable        TEXT NOT NULL CHECK (variable IN ('creative','audience','placement')),
+    variants        TEXT NOT NULL,
+    spec            TEXT NOT NULL,
+    baseline_rate   REAL NOT NULL,
+    min_lift        REAL NOT NULL,
+    needed          TEXT NOT NULL,
+    budget_total    TEXT,
+    currency        TEXT NOT NULL,
+    end_date        TEXT,
+    status          TEXT NOT NULL DEFAULT 'proposed'
+                    CHECK (status IN ('proposed','approved','running','finished','cancelled')),
+    underpowered_ok INTEGER NOT NULL DEFAULT 0,
+    reason          TEXT,
+    proposed_by     TEXT NOT NULL CHECK (proposed_by IN ('owner','agent')),
+    approved_at     TEXT,
+    finished_at     TEXT,
+    result          TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+CREATE INDEX idx_ad_entities_test ON ad_entities(test_id);
+CREATE TABLE ads_audit (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    at      TEXT NOT NULL,
+    actor   TEXT NOT NULL CHECK (actor IN ('owner','agent','system')),
+    action  TEXT NOT NULL,
+    test_id INTEGER REFERENCES ad_tests(id),
+    detail  TEXT NOT NULL
+);
+CREATE TRIGGER ads_audit_no_update BEFORE UPDATE ON ads_audit
+BEGIN SELECT RAISE(ABORT, 'ads_audit is append-only'); END;
+CREATE TRIGGER ads_audit_no_delete BEFORE DELETE ON ads_audit
+BEGIN SELECT RAISE(ABORT, 'ads_audit is append-only'); END;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -492,7 +535,8 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
-                         PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA]
+                         PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
+                         AD_TESTS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -519,7 +563,8 @@ LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "orig
 EXPERIMENT_FIELDS = ("hypothesis", "variable", "variants", "target_per_variant", "ends_on",
                      "status", "result", "learning_id", "report_date", "opened_at")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
-               "facts", "usage", "silences", "timeline", "analysis", "variants", "result")
+               "facts", "usage", "silences", "timeline", "analysis", "variants", "result",
+               "spec", "needed", "detail")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),
@@ -531,6 +576,8 @@ _INSERT_STAMPS = {
     "experiments": ("created_at", "updated_at"),
     "permission_requests": ("created_at", "updated_at"),
     "ad_entities": ("created_at", "updated_at"),
+    "ad_tests": ("created_at", "updated_at"),
+    "ads_audit": ("at",),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")

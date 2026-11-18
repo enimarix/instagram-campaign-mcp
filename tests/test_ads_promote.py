@@ -262,12 +262,14 @@ async def test_every_post_body_is_paused(store, meta):
 
 
 def test_no_code_path_sends_another_status():
-    """No src/ads string is ACTIVE (or another delivery status), no writer method takes a
-    status, and _paused() wins over any status in the body it is given."""
+    """No src/ads string is another delivery status, ACTIVE only once as writer.ACTIVE
+    (activate(), 094: tests/test_ads_tests.py checks who reaches it), no writer method
+    takes a status, and _paused() wins over any status in the body it is given."""
     for f in Path(writer.__file__).parent.rglob("*.py"):
-        consts = {n.value for n in ast.walk(ast.parse(f.read_text(encoding="utf-8")))
-                  if isinstance(n, ast.Constant) and isinstance(n.value, str)}
-        assert not consts & {"ACTIVE", "ARCHIVED", "DELETED", "IN_PROCESS"}, f.name
+        consts = [n.value for n in ast.walk(ast.parse(f.read_text(encoding="utf-8")))
+                  if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        found = [c for c in consts if c in {"ACTIVE", "ARCHIVED", "DELETED", "IN_PROCESS"}]
+        assert found == (["ACTIVE"] if f.name == "writer.py" else []), f.name
     for name, fn in inspect.getmembers(writer.AdsWriter, inspect.iscoroutinefunction):
         if name.startswith("create_"):
             assert getattr(fn, "__spends__", False), name

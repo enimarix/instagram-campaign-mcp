@@ -26,8 +26,8 @@ Design (fixed horizon, no peeking):
 - The lift is relative to the runner-up: (p_best - p_next) / p_next, with a Wald
   interval for the difference at 1 - alpha, divided by p_next.
 
-Defaults: `min_days` 4 (the brief's default; Meta's Marketing API split-test guide gives
-no minimum), `max_days` 30 (Ads Manager's A/B test limit), alpha 0.05, power 0.8.
+Defaults: `min_days` 7 (Meta's A/B test best practices: "a minimum of 7-day tests",
+docs/DECISIONS.md), `max_days` 30 (Ads Manager's A/B test limit), alpha 0.05, power 0.8.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ class TestSpec:
     variable: str
     variants: int = 2
     primary_metric: str = "ctr"
-    min_days: int = 4
+    min_days: int = 7
     max_days: int = 30
     min_sample: int = 0  # trials (impressions or clicks) per variant
     alpha: float = 0.05

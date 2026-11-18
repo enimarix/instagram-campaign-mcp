@@ -404,6 +404,10 @@ class InstagramMCPSettings(BaseSettings):
     # EU Digital Services Act: who benefits from and who pays for the ads (≤512 chars each).
     ads_dsa_beneficiary: Optional[str] = Field(None, max_length=512)
     ads_dsa_payor: Optional[str] = Field(None, max_length=512)
+    # A/B test budgets (src/ads/tests.py, 094) use the account's CPM from its insights;
+    # this one until the account has 1000+ impressions. ponytail: a guess for FR Reels.
+    ads_default_cpm: Decimal = Field(Decimal(5), gt=0,
+                                     description="Cost per 1000 impressions before insights")
 
     @field_validator("ads_currency")
     @classmethod
