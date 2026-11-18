@@ -12,7 +12,7 @@ const SETTINGS: EditableSettings = {
     f({ name: 'ads_daily_cap', description: 'Most spend per owner-local day' }),
     f({ name: 'ads_objective', type: 'choice', value: 'OUTCOME_AWARENESS', choices: ['OUTCOME_AWARENESS', 'OUTCOME_ENGAGEMENT'] }),
     f({ name: 'ads_dsa_payor', type: 'text', value: 'Macrobody', default: null, overridden: true, max_length: 512 }),
-    f({ name: 'batch_size', section: 'studio', type: 'int', value: 10, ge: 1 }),
+    f({ name: 'batch_size', section: 'studio', type: 'int', value: 10, ge: 1, le: 50 }),
     f({ name: 'humour_share', section: 'studio', type: 'float', value: 0.7, default: 0.5, overridden: true, le: 1 }),
   ],
 }
@@ -112,6 +112,7 @@ describe('SettingsSection', () => {
     expect(within(studio).queryByText(/money cap/)).toBeNull()
     expect(screen.queryByLabelText('Ads daily cap')).toBeNull()
     expect(input('Videos made per day').value).toBe('10')
+    expect([input('Videos made per day').min, input('Videos made per day').max]).toEqual(['1', '50'])
     expect(input('Share of funny videos (%)').value).toBe('70')
     fireEvent.change(input('Share of funny videos (%)'), { target: { value: '35' } })
     fireEvent.click(within(studio).getByRole('button', { name: 'Save' }))

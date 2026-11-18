@@ -150,8 +150,9 @@ def test_studio_fields_editable_validated_no_password(store):
         "name": "humour_share", "section": "studio", "value": 0.7, "default": 0.5,
         "overridden": True, "type": "float", "ge": 0, "le": 1, "description": None}
     assert budget.audit_log(store)["rows"] == []
-    for bad in ({"batch_size": 0}, {"max_posts_per_day": 0}, {"explore_share": 1.5},
-                {"humour_share": -0.1}):
+    assert (_field(out, "batch_size")["le"], _field(out, "max_posts_per_day")["le"]) == (50, 25)
+    for bad in ({"batch_size": 0}, {"batch_size": 51}, {"max_posts_per_day": 0},
+                {"max_posts_per_day": 26}, {"explore_share": 1.5}, {"humour_share": -0.1}):
         with pytest.raises(ov.SettingsInvalid, match=next(iter(bad))):
             ov.update(store, s, bad)
     assert s.batch_size == 25
@@ -221,7 +222,9 @@ def test_api_raising_a_cap_asks_the_password(tc):
 def test_api_studio_settings_need_no_password(tc):
     r = tc.patch("/api/settings", json={"values": {"batch_size": 25, "humour_share": 0.6}})
     assert r.status_code == 200 and _field(r.json(), "batch_size")["value"] == 25
-    r = tc.patch("/api/settings", json={"values": {"explore_share": 2}})
-    assert r.status_code == 422 and r.json()["field"] == "explore_share"
+    for name, bad in (("explore_share", 2), ("batch_size", 1000), ("max_posts_per_day", 26)):
+        r = tc.patch("/api/settings", json={"values": {name: bad}})
+        assert r.status_code == 422 and r.json()["field"] == name
+    assert _field(tc.get("/api/settings").json(), "max_posts_per_day")["value"] == 3
     r = tc.patch("/api/settings", json={"reset": ["batch_size"]})
     assert _field(r.json(), "batch_size") | {"value": 10, "overridden": False} ==         _field(r.json(), "batch_size")
