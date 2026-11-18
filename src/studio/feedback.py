@@ -57,6 +57,27 @@ def add_comment(
     return {"feedback": feedback, **_ask_for_changes(store, asset)}
 
 
+def decline(
+    store: CampaignStore,
+    asset_id: int,
+    *,
+    reason_codes: Sequence[str] = (),
+    text: Optional[str] = None,
+) -> Dict[str, Any]:
+    """The feed's Decline: verdict disliked, archived, and the reasons (if any) saved as a
+    comment -> the asset. Ordered so a refusal leaves the asset unchanged: the status and
+    the reasons are checked first, the archive move (a compare-and-set) comes before the
+    verdict. KeyError: no such asset; InvalidTransition: the asset is not ready."""
+    asset = store.get_asset(asset_id)
+    if asset["status"] != "ready":
+        raise InvalidTransition(f"asset {asset_id} is {asset['status']}; only a ready asset"
+                                " can be declined")
+    if text or reason_codes:  # validates before the move; a lost race leaves only the comment
+        store.add_feedback(asset_id, text=text, reason_codes=reason_codes)
+    transition(store, asset_id, "archived", actor="owner")
+    return store.update_asset(asset_id, verdict="disliked")
+
+
 def edit_comment(store: CampaignStore, feedback_id: int, **fields: Any) -> Dict[str, Any]:
     """Edit a comment -> {feedback, asset, moved, reason}.
 

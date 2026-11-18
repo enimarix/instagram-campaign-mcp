@@ -28,7 +28,7 @@ function ExternalLink({ url, children }: { url?: string | null; children: ReactN
   const href = safeUrl(url)
   if (!href) return <>{children}</>
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={link}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className={`${link} inline-flex min-h-11 items-center`}>
       {children}
     </a>
   )

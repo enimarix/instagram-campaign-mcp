@@ -39,11 +39,11 @@ def test_health_both_modes(setup_settings, settings):
         assert r.json()["instagram_configured"] is configured
 
 
-def test_account_setup_mode_is_503(setup_settings):
+def test_account_setup_mode_is_an_empty_state(setup_settings):
     with TestClient(create_app(setup_settings), base_url=LOCAL) as tc:
         r = tc.get("/api/account")
-    assert r.status_code == 503
-    assert r.json() == {"error": "instagram_not_configured"}
+    assert r.status_code == 200  # no console error on every Settings visit (116)
+    assert r.json() == {"configured": False}
 
 
 @respx.mock

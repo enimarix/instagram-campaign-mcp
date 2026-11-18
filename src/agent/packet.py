@@ -73,13 +73,7 @@ def _feedback(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
 
 
 def _revisions(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
-    # A request whose new version is still rendering is being handled: not work again.
-    with store._tx() as c:
-        pending = {r[0] for r in c.execute(
-            "SELECT parent_asset_id FROM assets WHERE status = 'rendering'"
-            " AND parent_asset_id IS NOT NULL")}
-    rows = [r for r in list_revision_requests(store)
-            if r["asset"]["id"] not in pending][:MAX_ITEMS]
+    rows = list_revision_requests(store)[:MAX_ITEMS]  # minus the ones re-rendering
     return rows, len(rows)
 
 

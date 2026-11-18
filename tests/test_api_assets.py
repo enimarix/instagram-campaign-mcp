@@ -51,6 +51,22 @@ def test_list_filters_and_default_order(tc, store):
     assert r.status_code == 422 and r.json()["error"] == "invalid"
 
 
+def test_list_rows_carry_rights_and_dm_pick_sender(tc, store):
+    src = store.add_source("downloader", url="https://example.org/r", author="creator",
+                           rights_basis="commentary")
+    with store._tx() as c:
+        c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url, received_at,"
+                  " source_id, created_at, updated_at) VALUES ('m1', 'pal', 'https://x', 't',"
+                  " ?, 't', 't')", (src["id"],))
+    idea = store.add_idea("remix", source_id=src["id"])
+    picked = transition(store, store.add_asset(idea["id"])["id"], "ready", actor="worker")
+    plain = _asset(store)
+    rows = {a["id"]: a for a in tc.get("/api/assets").json()}
+    assert (rows[picked["id"]]["rights_basis"], rows[picked["id"]]["dm_pick_sender"]) == (
+        "commentary", "pal")
+    assert (rows[plain["id"]]["rights_basis"], rows[plain["id"]]["dm_pick_sender"]) == (None, None)
+
+
 def test_get_and_404(tc, store):
     a = _asset(store, recipe={"template": "FactQuest"})
     r = tc.get(f"/api/assets/{a['id']}")

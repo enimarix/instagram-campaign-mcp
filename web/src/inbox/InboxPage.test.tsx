@@ -245,9 +245,7 @@ describe('InboxPage feed', () => {
 
   describe('decline', () => {
     const declineApi = () => stubApi({
-      'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'disliked' })],
-      'POST /api/assets/1/feedback': [201, { feedback: {}, asset: asset(1), moved: false, reason: null }],
-      'POST /api/assets/1/archive': [200, asset(1, { status: 'archived', verdict: 'disliked' })],
+      'POST /api/assets/1/decline': [200, asset(1, { status: 'archived', verdict: 'disliked' })],
     })
 
     it('commits after 5 s with the reasons picked meanwhile', async () => {
@@ -264,22 +262,21 @@ describe('InboxPage feed', () => {
       expect(posts(calls)).toEqual([])
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([
-        ['/api/assets/1/verdict', { verdict: 'disliked' }],
-        ['/api/assets/1/feedback', { reason_codes: ['too_long'] }],
-        ['/api/assets/1/archive', undefined],
+        ['/api/assets/1/decline', { reason_codes: ['too_long'] }],
       ]))
       expect(screen.queryByRole('group', { name: 'Why decline? (optional)' })).toBeNull()
     })
 
-    it('without a reason it sends no feedback', async () => {
+    it('without a reason it sends none, with keepalive (it may be flushed on tab close)', async () => {
       const calls = declineApi()
       renderPage()
       await screen.findByText('1 of 3 decided')
       vi.useFakeTimers()
       press(1, 'Decline')
       await closeUndoWindow()
-      await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
-        ['/api/assets/1/verdict', '/api/assets/1/archive']))
+      await waitFor(() => expect(posts(calls)).toEqual([['/api/assets/1/decline', { reason_codes: [] }]]))
+      const init = vi.mocked(fetch).mock.calls.find(([u]) => String(u).endsWith('/decline'))![1]
+      expect(init?.keepalive).toBe(true)
     })
 
     it('undo cancels it', async () => {
@@ -307,7 +304,7 @@ describe('InboxPage feed', () => {
         Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
       }
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
-        ['/api/assets/1/verdict', '/api/assets/1/archive']))
+        ['/api/assets/1/decline']))
     })
 
     it('commits at once when the Inbox is left', async () => {
@@ -317,8 +314,17 @@ describe('InboxPage feed', () => {
       press(1, 'Decline')
       unmount()
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
-        ['/api/assets/1/verdict', '/api/assets/1/archive']))
+        ['/api/assets/1/decline']))
     })
+  })
+
+  it('shows the DM pick sender and the commentary chip a row carries', async () => {
+    stubApi({ 'GET /api/assets': [200, [asset(1, { dm_pick_sender: 'pal', rights_basis: 'commentary' }), asset(2)]] })
+    renderPage()
+    await screen.findByText('0 of 2 decided')
+    expect(within(card(1)).getByText('DM pick from @pal')).toBeTruthy()
+    expect(within(card(1)).getByText('commentary')).toBeTruthy()
+    expect(within(card(2)).queryByText(/DM pick/)).toBeNull()
   })
 
   describe('save for later', () => {
@@ -507,15 +513,14 @@ describe('InboxPage feed', () => {
 
     it('switching tabs commits a waiting decision first', async () => {
       const calls = benchApi({
-        'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'disliked' })],
-        'POST /api/assets/1/archive': [200, asset(1, { status: 'archived' })],
+        'POST /api/assets/1/decline': [200, asset(1, { status: 'archived', verdict: 'disliked' })],
       })
       renderPage()
       await screen.findByText('1 of 3 decided')
       press(1, 'Decline')
       fireEvent.click(screen.getByRole('tab', { name: 'Saved (4)' }))
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
-        ['/api/assets/1/verdict', '/api/assets/1/archive']))
+        ['/api/assets/1/decline']))
     })
 
     it('the banner suggests the freshest video; Review it opens the bench', async () => {

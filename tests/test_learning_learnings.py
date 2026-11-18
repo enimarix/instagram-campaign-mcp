@@ -61,6 +61,14 @@ def test_revision_requests_listed_with_comments_newest_first(store):
     assert req["comments"][0]["reasons"][0]["label"] == "Bad audio"
 
 
+def test_revision_request_hidden_while_its_new_version_renders(store, monkeypatch):
+    a, b = _asset(store), _asset(store)
+    for x in (a, b):
+        add_comment(store, x, text="louder", wants_changes=True)
+    store.add_asset(store.get_asset(a)["idea_id"], parent_asset_id=a)  # rendering
+    assert [r["asset"]["id"] for r in L.list_revision_requests(store)] == [b]
+
+
 def test_one_comment_forces_low_hypothesis(store):
     f = _fb(store, _asset(store))
     out = L.add_learning(store, "Slow starts lose the owner", "dont", "taste", [f, f],
@@ -159,3 +167,12 @@ async def test_mcp_doors(mcp_store):
     with pytest.raises(ToolError, match="kind must be one of"):
         await srv.add_learning("x", "maybe", "taste", [f])
     assert [r["confidence"] for r in (await srv.list_learnings())["learnings"]] == ["owner"]
+
+
+async def test_mcp_update_learning_passes_scope_and_evaluate(mcp_store, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(srv.learnings, "update_learning",
+                        lambda store, lid, **kw: seen.update(kw, id=lid) or {"id": lid})
+    scope = {"tag": "hook_type", "value": "question"}
+    assert await srv.update_learning(7, scope=scope, evaluate=True) == {"id": 7}
+    assert (seen["id"], seen["scope"], seen["evaluate"]) == (7, scope, True)

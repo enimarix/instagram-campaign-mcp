@@ -69,7 +69,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
         </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-2 bg-linear-to-t from-black/85 via-black/50 to-transparent px-4 pt-20 pr-24 pb-4 text-white lg:pr-4">
           <div className="flex flex-wrap gap-1.5">
-            {a.dm_pick && <Chip tone="accent">DM pick</Chip>}
+            {a.dm_pick_sender && <Chip tone="accent">DM pick from @{a.dm_pick_sender}</Chip>}
             {a.rights_basis === 'commentary' && <Chip tone="warn">commentary</Chip>}
             {a.recipe?.inputs?.reaction && <Chip tone="accent">reaction</Chip>}
             {a.strategy === 'explore' && <Chip tone="explore">Explore</Chip>}

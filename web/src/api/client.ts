@@ -7,7 +7,9 @@ export type Health = {
   version: string
 }
 
+/** `configured: false` (setup mode, no token yet) carries nothing else. */
 export type Account = {
+  configured?: false
   token_valid: boolean
   // ponytail: Graph payloads left loose until a page actually renders them
   profile: Record<string, unknown> | null
@@ -74,10 +76,11 @@ export type Asset = {
   // from the asset's idea; only the list carries them
   track?: string
   strategy?: 'explore' | 'exploit' | null
-  // shown by the feed when a row carries them (list rows do not join them yet)
+  // shown by the feed when a row carries them (list rows: the source's rights and the
+  // pinned account that sent it by DM; no pillar yet)
   pillar?: string | null
   rights_basis?: string | null
-  dm_pick?: boolean
+  dm_pick_sender?: string | null
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -162,6 +165,15 @@ export const editAsset = (
   send<Asset>('PATCH', `/api/assets/${id}`, fields)
 export const unapproveAsset = (id: number) => post<Asset>(`/api/assets/${id}/unapprove`)
 export const archiveAsset = (id: number) => post<Asset>(`/api/assets/${id}/archive`)
+/** The feed's Decline in one call: disliked + archived + optional reasons. keepalive: it
+ * still lands when the feed flushes it as the tab closes. */
+export const declineAsset = (id: number, reason_codes: string[]) =>
+  request<Asset>(`/api/assets/${id}/decline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason_codes }),
+    keepalive: true,
+  })
 export const listFeedback = (id: number) => request<Comment[]>(`/api/assets/${id}/feedback`)
 export const editFeedback = (id: number, fields: { text: string | null }) =>
   send<CommentResult>('PATCH', `/api/feedback/${id}`, fields)

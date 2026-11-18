@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router'
 import {
   addFeedback,
   approveAndQueue,
-  archiveAsset,
+  declineAsset,
   errorMessage,
   getBench,
   getProposedSlot,
@@ -193,10 +193,7 @@ export default function InboxPage() {
 
   function decline(a: Asset) {
     decide(a, { status: 'archived', verdict: 'disliked' }, 'Declined', async () => {
-      const codes = declineCodes.current.get(a.id) ?? []
-      await setVerdict(a.id, 'disliked')
-      if (codes.length) await addFeedback(a.id, { reason_codes: codes })
-      patch(a.id, await archiveAsset(a.id))
+      patch(a.id, await declineAsset(a.id, declineCodes.current.get(a.id) ?? []))
     })
     setWhy({ id: a.id, codes: [] })
   }

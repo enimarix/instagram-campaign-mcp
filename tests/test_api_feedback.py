@@ -96,3 +96,30 @@ def test_taxonomy(tc):
     assert r.status_code == 200
     reasons = r.json()["feedback_reasons"]["values"]
     assert {"id": "weak_hook", "label": "Weak hook"} in reasons
+
+
+def test_decline_is_one_call(tc, store):
+    a = _asset(store)
+    r = tc.post(f"/api/assets/{a['id']}/decline", json={"reason_codes": ["too_long"]})
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["status"], body["verdict"]) == ("archived", "disliked") and "file_url" in body
+    [fb] = store.list_feedback(asset_id=a["id"])
+    assert fb["reason_codes"] == ["too_long"] and not fb["wants_changes"]
+    b = _asset(store)
+    assert tc.post(f"/api/assets/{b['id']}/decline", json={}).status_code == 200
+    assert store.list_feedback(asset_id=b["id"]) == []  # no reasons: no comment
+
+
+def test_decline_refused_leaves_the_asset_unchanged(tc, store):
+    a = _asset(store)
+    r = tc.post(f"/api/assets/{a['id']}/decline", json={"reason_codes": ["meh"]})
+    assert r.status_code == 422
+    approved = _asset(store, status="approved")
+    r = tc.post(f"/api/assets/{approved['id']}/decline", json={"reason_codes": ["too_long"]})
+    assert r.status_code == 409 and r.json()["error"] == "invalid_transition"
+    for x in (a, approved):
+        row = store.get_asset(x["id"])
+        assert (row["status"], row["verdict"]) == (x["status"], "none")
+        assert store.list_feedback(asset_id=x["id"]) == []
+    assert tc.post("/api/assets/999/decline", json={}).status_code == 404
