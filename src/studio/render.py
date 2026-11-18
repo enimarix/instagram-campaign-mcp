@@ -101,19 +101,24 @@ def rerender(store: CampaignStore, media_root: PathLike, asset_id: int, recipe: 
     to `rendering`; from `ready` or `revision_requested` a new child asset (parent_asset_id) is
     rendered, so the one under review is never overwritten. Returns {asset, job}."""
     env = validate_recipe(recipe, media_root)
-    asset = store.get_asset(asset_id)
+    asset = check_rerender(store.get_asset(asset_id))
     if asset["status"] == "failed":
         transition(store, asset_id, "rendering", actor=actor)
         asset = store.update_asset(asset_id, recipe=env)
-    elif asset["status"] in ("ready", "revision_requested"):
+    else:
         asset = store.add_asset(
             asset["idea_id"], parent_asset_id=asset_id, recipe=env,
             batch_date=asset["batch_date"], caption=asset["caption"],
             audio_name=asset["audio_name"], best_before=asset["best_before"])
-    else:
-        raise InvalidTransition(f"asset {asset_id} is {asset['status']}: only failed, ready or"
-                                " revision_requested assets can be re-rendered")
     return {"asset": asset, "job": enqueue_render(store, asset["id"])}
+
+
+def check_rerender(asset: Dict[str, Any]) -> Dict[str, Any]:
+    """The asset, or InvalidTransition when rerender() would refuse it."""
+    if asset["status"] not in ("failed", "ready", "revision_requested"):
+        raise InvalidTransition(f"asset {asset['id']} is {asset['status']}: only failed, ready"
+                                " or revision_requested assets can be re-rendered")
+    return asset
 
 
 def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress, *,

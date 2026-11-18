@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Asset, AssetContext } from '../api/client'
+import type { Asset, AssetContext, ReactionInfo } from '../api/client'
 import AssetPage from './AssetPage'
 
 const ASSET: Asset = {
@@ -118,5 +118,93 @@ describe('AssetPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Not saved: caption has 31 hashtags')).toBeTruthy()
     expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ caption: '#a #b' })
+  })
+
+  describe('a reaction remix', () => {
+    const REMIX: Asset = { ...ASSET, recipe: { ops: [{ op: 'trim' }], inputs: { source: 's.mp4', reaction: 'reactions/1/pieces/4.mp4' } } }
+    const REACTION: ReactionInfo = {
+      piece: { id: 4, start_s: 60, end_s: 80, url: '/api/media/reactions/1/pieces/4.mp4' },
+      reel: { id: 1, duration_s: 600, created_at: '' },
+      source: { id: 2, author: 'creator', url: 'https://www.instagram.com/reel/x/', rights_basis: 'commentary', attribution: '@creator' },
+      trim: { start_s: 10, end_s: 30 },
+      transcript: [
+        { index: 1, start_s: 9, end_s: 11, text: 'across the start' },
+        { index: 2, start_s: 12, end_s: 14, text: 'insdie' },
+      ],
+    }
+    const routes = (extra: Record<string, [number, unknown]> = {}) => stubApi({
+      'GET /api/assets/7': [200, REMIX],
+      'GET /api/assets/7/context': [200, { ...CONTEXT, source: REACTION.source }],
+      'GET /api/assets/7/reaction': [200, REACTION],
+      ...extra,
+    })
+    const child = { ...REMIX, id: 9, status: 'rendering', parent_asset_id: 7 }
+
+    it('shows the reaction card: the piece, the credit and the rights', async () => {
+      routes()
+      await show()
+      const card = await screen.findByRole('region', { name: 'Reaction' })
+      for (const text of ['Piece #4 of reel #1, 1:00–1:20', 'Clip used0:10–0:30', '@creator · commentary'])
+        expect(card.textContent).toContain(text)
+      expect(screen.getByRole('link', { name: '@creator' }).getAttribute('href')).toBe(REACTION.source.url)
+      expect(screen.getByLabelText('Reaction piece').getAttribute('src')).toBe(REACTION.piece.url)
+    })
+
+    it('uses the next piece after a confirm and links the new version', async () => {
+      const calls = routes({ 'POST /api/assets/7/next-piece': [200, { asset: child }] })
+      vi.stubGlobal('confirm', vi.fn(() => true))
+      await show()
+      fireEvent.click(await screen.findByRole('button', { name: 'Use the next reaction piece' }))
+      expect(await screen.findByRole('link', { name: 'Newer version #9 (rendering)' })).toBeTruthy()
+      expect(calls.filter((c) => c.url === '/api/assets/7/next-piece')).toHaveLength(1)
+      expect(screen.getByText(/New version: #9/)).toBeTruthy()
+    })
+
+    it('does nothing when the confirm is cancelled', async () => {
+      const calls = routes()
+      vi.stubGlobal('confirm', vi.fn(() => false))
+      await show()
+      fireEvent.click(await screen.findByRole('button', { name: 'Use the next reaction piece' }))
+      expect(calls.some((c) => c.method === 'POST')).toBe(false)
+    })
+
+    it('saves the corrected clip speech and re-renders the captions', async () => {
+      const calls = routes({ 'POST /api/assets/7/transcript': [200, { asset: child }] })
+      await show()
+      const speech = await screen.findByRole('region', { name: 'Clip speech' })
+      fireEvent.change(screen.getByDisplayValue('insdie'), { target: { value: 'inside' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save and re-render captions' }))
+      await waitFor(() => expect(calls.find((c) => c.url === '/api/assets/7/transcript')?.body)
+        .toEqual({ texts: ['across the start', 'inside'] }))
+      expect(await screen.findByRole('link', { name: 'Newer version #9 (rendering)' })).toBeTruthy()
+      expect(speech.textContent).toContain('0:12–0:14')
+    })
+
+    it('shows the server refusal of a transcript', async () => {
+      routes({ 'POST /api/assets/7/transcript': [422, { error: 'invalid', message: 'line 2 is empty' }] })
+      await show()
+      await screen.findByRole('region', { name: 'Clip speech' })
+      fireEvent.click(screen.getByRole('button', { name: 'Save and re-render captions' }))
+      expect(await screen.findByText('Not done: line 2 is empty')).toBeTruthy()
+    })
+
+    it('approving a commentary video asks for the rights confirmation', async () => {
+      HTMLDialogElement.prototype.showModal = function () { this.open = true }
+      const slot = { publish_at: '2026-11-20T10:00:00Z', local: '2026-11-20T11:00:00+01:00' }
+      const calls = routes({
+        'POST /api/assets/7/approve': [200, { ...REMIX, status: 'approved' }],
+        'GET /api/assets/7/proposed-slot': [200, { ...slot, needs_confirmation: true }],
+        'POST /api/assets/7/schedule': [200, { asset: { ...REMIX, status: 'scheduled' } }],
+      })
+      await show()
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+      const box = await screen.findByRole('checkbox', { name: /my own take is a substantial part/ })
+      const accept = screen.getByRole('button', { name: 'Accept' })
+      expect(accept).toHaveProperty('disabled', true)
+      fireEvent.click(box)
+      fireEvent.click(accept)
+      await waitFor(() => expect(calls.find((c) => c.url === '/api/assets/7/schedule')?.body)
+        .toEqual({ publish_at: slot.publish_at, confirmed: true }))
+    })
   })
 })

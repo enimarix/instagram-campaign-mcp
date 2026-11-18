@@ -15,6 +15,7 @@ import {
   type Taxonomy,
 } from '../api/client'
 import CommentThread from './CommentThread'
+import ReactionCards from './ReactionCards'
 import ScheduleSheet, { ScheduledSlot } from './ScheduleSheet'
 import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
@@ -258,6 +259,12 @@ function AssetPage({ id }: { id: number }) {
               </nav>
             )}
           </Card>
+          {asset.recipe?.inputs?.reaction && (
+            <ReactionCards assetId={id} onRendered={(a) => {
+              if (a.id === id) setAsset(a) // failed: re-rendered in place
+              else setCtx((c) => c && { ...c, children: [...c.children, a] })
+            }} />
+          )}
           <CommentThread assetId={id} onSeek={seek} currentTime={() => video.current?.currentTime ?? 0}
             reasons={taxonomy?.feedback_reasons.values ?? []} onAsset={setAsset} />
         </div>

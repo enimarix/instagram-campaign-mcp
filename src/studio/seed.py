@@ -34,8 +34,7 @@ SAMPLE = Path(__file__).parent / "samples" / "sample.mp4"
 # One entry per asset in every batch: (status, verdict). Extras are added at random.
 PLAN = [
     ("ready", "liked"), ("ready", "none"), ("ready", "disliked"), ("approved", "liked"),
-    ("archived", "disliked"), ("revision_requested", "none"), ("needs_reaction", "none"),
-    ("failed", "none"),
+    ("archived", "disliked"), ("revision_requested", "none"), ("failed", "none"),
 ]
 EXTRAS = [("ready", "liked"), ("ready", "none"), ("approved", "liked"), ("archived", "none")]
 QC_FAILURES = ["[demo] audio clipped at 0:01", "[demo] black frames in the first second",
@@ -104,13 +103,12 @@ def _new_asset(store, rng, batch_date, track, status, media_root, *, n, parent=N
               {"kind": "ffmpeg", "recipe": {"version": 1, "ops": [{"op": "fit_vertical"}]},
                "inputs": {"source": "demo/source.mp4"}})
     asset = store.add_asset(
-        idea["id"], status="needs_reaction" if status == "needs_reaction" else "rendering",
-        batch_date=batch_date, recipe=recipe, parent_asset_id=parent and parent["id"],
+        idea["id"], batch_date=batch_date, recipe=recipe, parent_asset_id=parent and parent["id"],
         caption=f"[demo] caption {batch_date} #{n + 1} #demo", duration=2.0,
         self_score=rng.randint(1, 10), self_score_reason=f"[demo] reason {n + 1}",
         # the first (liked) asset of older batches is already past its best-before
         best_before=batch_date + timedelta(days=1 if n == 0 else rng.randint(1, 4)))
-    if status in ("needs_reaction", "failed") or (parent and status == "rendering"):
+    if status == "failed" or (parent and status == "rendering"):
         return asset
     return store.update_asset(asset["id"], **_place_media(media_root, batch_date, asset["id"]))
 
@@ -127,12 +125,10 @@ def seed(store: CampaignStore, media_root: Path, days: int = 3,
         plan = PLAN + [rng.choice(EXTRAS) for _ in range(rng.randint(0, 4))]
         ids: List[int] = []
         for n, (status, verdict) in enumerate(plan):
-            track = "remix" if status == "needs_reaction" else rng.choice(["remix", "motion"])
+            track = rng.choice(["remix", "motion"])
             asset = _new_asset(store, rng, batch_date, track, status, media_root, n=n)
             aid = asset["id"]
             ids.append(aid)
-            if status == "needs_reaction":
-                continue
             if status == "failed":
                 _walk(store, aid, ("failed", "worker"))
                 store.update_asset(aid, qc={"passed": False, "reason": rng.choice(QC_FAILURES)})

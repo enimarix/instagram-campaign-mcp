@@ -29,6 +29,7 @@ from . import ffmpeg, media, motion, render, stt
 from .assets import transition
 from .reactions import next_reaction_piece
 from .recipe import (
+    MAX_CAPTION,
     Captions,
     Credit,
     HookText,
@@ -50,18 +51,24 @@ MIN_CAPTION_S = 0.2  # a transcript line cut shorter than this by the trim is dr
 EXCERPT_CHARS = 200
 
 
+def _lines(source: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return ((source.get("stats") or {}).get("transcript") or {}).get("lines") or []
+
+
+def span_lines(source: Dict[str, Any], start_s: float, end_s: float) -> List[int]:
+    """Indices of the transcript lines shown as captions in the start_s..end_s part."""
+    return [i for i, line in enumerate(_lines(source))
+            if min(line["end_s"], end_s) - max(line["start_s"], start_s) >= MIN_CAPTION_S]
+
+
 def transcript_captions(source: Dict[str, Any], start_s: float, end_s: float
                         ) -> List[Dict[str, Any]]:
     """The source's transcript lines (stats.transcript, step 068) inside start_s..end_s,
     in the trimmed clip's seconds."""
-    lines = ((source.get("stats") or {}).get("transcript") or {}).get("lines") or []
-    out = []
-    for line in lines:
-        a, b = max(line["start_s"], start_s), min(line["end_s"], end_s)
-        if b - a >= MIN_CAPTION_S:
-            out.append({"start_s": round(a - start_s, 3), "end_s": round(b - start_s, 3),
-                        "text": line["text"]})
-    return out
+    lines = _lines(source)
+    return [{"start_s": round(max(line["start_s"], start_s) - start_s, 3),
+             "end_s": round(min(line["end_s"], end_s) - start_s, 3), "text": line["text"]}
+            for line in (lines[i] for i in span_lines(source, start_s, end_s))]
 
 
 def _trim(trim: Optional[Sequence[Optional[float]]], duration_s: float, max_clip_s: float
@@ -215,8 +222,7 @@ def list_sources(store: CampaignStore, role: str = "clip", limit: int = 50
     for s in list_clips(store, role, limit):
         if not s["local_path"] or not can_publish(s, confirmed=True, licence=s["licence"]):
             continue
-        lines = ((s.get("stats") or {}).get("transcript") or {}).get("lines") or []
-        text = " ".join(line["text"] for line in lines)
+        text = " ".join(line["text"] for line in _lines(s))
         out.append({"id": s["id"], "author": s["author"], "url": s["url"],
                     "rights_basis": s["rights_basis"], "audio_rights": s["audio_rights"],
                     "duration_s": (s.get("stats") or {}).get("duration_s"),
@@ -224,3 +230,85 @@ def list_sources(store: CampaignStore, role: str = "clip", limit: int = 50
                     "transcript": text[:EXCERPT_CHARS] + ("…" if len(text) > EXCERPT_CHARS
                                                           else "")})
     return out
+
+
+# --- The owner's review (072): the piece used, the next piece, the clip's speech ---------
+
+def _remix(store: CampaignStore, asset_id: int
+           ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Tuple[float, float]]:
+    """(asset, recipe envelope, source, (trim start, end)); ValueError if not a reaction remix."""
+    asset = store.get_asset(asset_id)
+    env = asset.get("recipe") or {}
+    if env.get("kind") != "ffmpeg" or "reaction" not in env.get("inputs", {}):
+        raise ValueError(f"video {asset_id} is not a reaction remix")
+    trim = next(op for op in env["recipe"]["ops"] if op["op"] == "trim")  # build_remix's first
+    source = store.get_source(store.get_idea(asset["idea_id"])["source_id"])
+    return asset, env, source, (trim["start_s"], trim["end_s"])
+
+
+def reaction_info(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
+    """What the asset page shows: {piece {id, start_s, end_s, url}, reel {id, duration_s,
+    created_at}, source {id, author, url, rights_basis, attribution}, trim {start_s, end_s},
+    transcript [{index, start_s, end_s, text}] (the lines of the trimmed part, clip seconds)}."""
+    _, env, source, (start, end) = _remix(store, asset_id)
+    path = env["inputs"]["reaction"]
+    piece = store.get_reaction_piece(int(Path(path).stem))  # pieces/<piece id>.mp4
+    reel = store.get_reaction_reel(piece["reel_id"])
+    lines = _lines(source)
+    return {
+        "piece": {"id": piece["id"], "start_s": piece["start_s"], "end_s": piece["end_s"],
+                  "url": media.media_url(path)},
+        "reel": {k: reel[k] for k in ("id", "duration_s", "created_at")},
+        "source": {"id": source["id"], "author": source["author"], "url": source["url"],
+                   "rights_basis": source["rights_basis"], "attribution": attribution(source)},
+        "trim": {"start_s": start, "end_s": end},
+        "transcript": [{"index": i, **lines[i]} for i in span_lines(source, start, end)],
+    }
+
+
+def use_next_piece(store: CampaignStore, settings: InstagramMCPSettings, asset_id: int
+                   ) -> Dict[str, Any]:
+    """Re-render the remix with the next piece of the active reel: {asset, job, piece}. A
+    `failed` remix is re-rendered in place, a `ready` one gets a child (render.rerender)."""
+    asset, env, _, (start, end) = _remix(store, asset_id)
+    render.check_rerender(asset)  # before claiming: a refused re-render must not use a piece
+    piece = next_reaction_piece(store, settings, end - start)
+    out = render.rerender(store, settings.media_root, asset_id,
+                          {**env, "inputs": {**env["inputs"], "reaction": piece["path"]}})
+    store.set_reaction_piece_asset(piece["piece_id"], out["asset"]["id"])
+    return {**out, "piece": piece}
+
+
+def fix_transcript(store: CampaignStore, settings: InstagramMCPSettings, asset_id: int,
+                   texts: List[str]) -> Dict[str, Any]:
+    """The owner's corrected text for the lines reaction_info() lists (same order, same
+    timings), saved on the source, then a re-render with captions rebuilt from it:
+    {asset, job}."""
+    asset, env, source, (start, end) = _remix(store, asset_id)
+    render.check_rerender(asset)
+    span = span_lines(source, start, end)
+    if not span:
+        raise ValueError("this part of the clip has no transcript lines to correct")
+    if len(texts) != len(span):
+        raise ValueError(f"send {len(span)} lines, one per transcript line (got {len(texts)})")
+    lines = [dict(line) for line in _lines(source)]
+    for n, (i, text) in enumerate(zip(span, texts), 1):
+        text = " ".join(text.split())
+        if not text:
+            raise ValueError(f"line {n} is empty")
+        if len(text) > MAX_CAPTION:
+            raise ValueError(f"line {n} is longer than {MAX_CAPTION} characters")
+        lines[i]["text"] = text
+    fixed = {**source, "stats": {**source["stats"],
+                                 "transcript": {**source["stats"]["transcript"], "lines": lines}}}
+    ops = list(env["recipe"]["ops"])
+    # Replace the captions op, or put one where build_remix does (before credit and logo).
+    i = next((i for i, op in enumerate(ops) if op["op"] in ("captions", "credit", "logo")),
+             len(ops))
+    had = i < len(ops) and ops[i]["op"] == "captions"
+    ops[i:i + had] = [{**(ops[i] if had else {"op": "captions"}),
+                       "lines": transcript_captions(fixed, start, end)}]
+    new = render.validate_recipe({**env, "recipe": {**env["recipe"], "ops": ops}},
+                                 settings.media_root)  # nothing is saved if a line is refused
+    store.patch_source_stats(source["id"], {"transcript": {"lines": lines}})
+    return render.rerender(store, settings.media_root, asset_id, new)

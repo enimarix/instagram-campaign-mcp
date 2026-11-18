@@ -38,11 +38,11 @@ def test_seed_batches_statuses_files_and_legal_moves(tmp_path, monkeypatch):
         assert list(summary) == ["2026-11-15", "2026-11-16", "2026-11-17"]
         for day, counts in summary.items():
             n = sum(counts["status"].values())
-            assert 9 <= n <= 13  # 8 planned + new version + 0-4 extras
+            assert 8 <= n <= 12  # 7 planned + new version + 0-4 extras
             assert n == sum(counts["verdict"].values())
             assert n == len([r for r in rows if r["batch_date"] == day])
         statuses = Counter(r["status"] for r in rows)
-        for s in ("ready", "approved", "archived", "revision_requested", "needs_reaction",
+        for s in ("ready", "approved", "archived", "revision_requested",
                   "failed", "rendering"):
             assert statuses[s] >= 1, s
         assert {"liked", "disliked", "none"} <= {r["verdict"] for r in rows}

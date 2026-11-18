@@ -7,14 +7,14 @@ it); the agent never uses REST.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from ..store import CampaignStore, utcnow
-from ..studio import assets, scheduling
+from ..studio import assets, remix, scheduling
 from ..studio.assets import InvalidTransition
 from ..studio.media import media_url
 from ..studio.publish import QueueRefused, release_publish_check
@@ -64,6 +64,10 @@ class ScheduleIn(BaseModel):
 
 class ApproveIn(BaseModel):
     confirmed: bool = False  # the owner's per-video confirmation a commentary clip needs
+
+
+class TranscriptIn(BaseModel):
+    texts: List[str]  # the corrected text of each line GET /reaction lists, in order
 
 
 class AssetEdit(BaseModel):
@@ -154,3 +158,27 @@ def archive(asset_id: int, store: CampaignStore = Depends(get_store)):
 def release(asset_id: int, store: CampaignStore = Depends(get_store)):
     # The owner checked Instagram: the post is not there (publish_check -> approved).
     return _call(release_publish_check, store, asset_id)
+
+
+# Reaction remixes (072): the reel piece used, the next piece, the clip's speech.
+@router.get("/{asset_id}/reaction")
+def reaction(asset_id: int, store: CampaignStore = Depends(get_store)):
+    return call(remix.reaction_info, store, asset_id)
+
+
+def _rendered(out: dict) -> dict:
+    return {**out, "asset": with_urls(out["asset"])}
+
+
+@router.post("/{asset_id}/next-piece")
+def next_piece(asset_id: int, request: Request, store: CampaignStore = Depends(get_store)):
+    return call(lambda: _rendered(remix.use_next_piece(store, request.app.state.settings,
+                                                       asset_id)))
+
+
+@router.post("/{asset_id}/transcript")
+def fix_transcript(asset_id: int, body: TranscriptIn, request: Request,
+                   store: CampaignStore = Depends(get_store)):
+    # Saves the corrected lines on the clip, then re-renders with captions rebuilt from them.
+    return call(lambda: _rendered(remix.fix_transcript(store, request.app.state.settings,
+                                                       asset_id, body.texts)))
