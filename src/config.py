@@ -364,6 +364,20 @@ class InstagramMCPSettings(BaseSettings):
         parse_schedule(v)
         return v
 
+    # The owner's sends (136): a scheduled work order starts the light run (daily-revise)
+    # at once, src/agent/schedule.py order_run.
+    dm_poll_minutes: float = Field(
+        5.0, gt=0, description="How often the worker reads the DMs pinned accounts sent"
+    )
+    order_run_debounce_minutes: float = Field(
+        3.0, ge=0, description="Wait after the last scheduled work order before its run starts"
+        " (several sends batch into one run)"
+    )
+    max_order_runs_per_day: int = Field(
+        6, ge=0, description="Runs started by work orders per owner-local day; past it they"
+        " wait for the next scheduled run"
+    )
+
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(
         48.0, description="Posts younger than this are not judged yet"

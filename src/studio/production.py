@@ -61,7 +61,7 @@ def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str
     _check_duplicates(store, settings, fields)
     idea = store.add_idea(track, **fields)
     if work_order_id is not None:
-        work_orders.start(store, work_order_id, idea["id"])
+        work_orders.start(store, work_order_id, idea)
     return idea
 
 

@@ -430,3 +430,24 @@ each scenario, and never show the price."
   Inter Tight, and its url uses Caveat falling back to Inter italic, until step 131 adds
   Fredoka and Caveat.
 Reason: owner's art direction, 2026-11-18.
+
+## 2026-11-18: Work-order videos may pass a full batch, like DM picks (134, 136)
+A video the owner ordered (a Trending work order, or a Reel a pinned account sent by DM,
+which is now a work order too) is made even when today's batch is full:
+`create_idea(work_order_id=...)` skips the batch cap; the explore and reaction quotas
+still apply. A DM order with no note waits (`needs_instruction`) until the owner writes
+one in the app.
+Reason: an order is the owner's clearest instruction; the batch cap exists to stop the
+agent over-producing on its own, not to delay what the owner asked for (134's review).
+
+## 2026-11-18: The owner's sends start a run at once, within a daily cap (136)
+Owner's words (translated): "when I send a Reel in the Instagram chat with a description
+under it, that description does exactly what I would have done in the app: you start the
+work directly". A work order that becomes `scheduled` (a DM with a note, an instruction
+written in the app, a Trending order) starts the light run (`daily-revise`) after
+ORDER_RUN_DEBOUNCE_MINUTES (default 3, so several sends batch into one run), one run at a
+time, at most MAX_ORDER_RUNS_PER_DAY (default 6) such runs per owner-local day, and only
+when the agent preflight passes; otherwise the order waits for the next scheduled run and
+its `blocked_reason` says why. DMs are read every DM_POLL_MINUTES (default 5, was 15).
+GOAL.md's 1-2 scheduled runs a day stay the default; these runs come on top.
+Reason: the owner's instruction of 2026-11-18; the cap bounds the agent's usage.

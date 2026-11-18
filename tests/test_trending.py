@@ -170,17 +170,17 @@ def test_work_order_validation_api(store):
         assert r.status_code == 200, r.text
         made = r.json()
         assert [(o["mode"], o["instruction"], o["status"]) for o in made] == [
-            ("react", "React to the end", "new"), ("inspired", None, "new")]
+            ("react", "React to the end", "scheduled"), ("inspired", None, "scheduled")]
         assert made[0]["permalink"] == "https://www.instagram.com/reel/A/"
         # all or none: one open order already -> nothing stored
         r = post([{"source_id": b, "mode": "react"}])
         assert "already has an open work order" in r.json()["message"]
         assert len(tc.get("/api/research/work-orders").json()) == 2
-        assert tc.get("/api/research/feed").json()[0]["work_order"]["status"] == "new"
+        assert tc.get("/api/research/feed").json()[0]["work_order"]["status"] == "scheduled"
         assert tc.get("/api/research/work-orders?status=bad").status_code == 422
         assert tc.delete(f"/api/research/work-orders/{made[1]['id']}").status_code == 204
         assert tc.delete(f"/api/research/work-orders/{made[1]['id']}").status_code == 404
-        assert [o["id"] for o in tc.get("/api/research/work-orders?status=new").json()] == \
+        assert [o["id"] for o in tc.get("/api/research/work-orders?status=scheduled").json()] == \
             [made[0]["id"]]
 
 
@@ -202,9 +202,9 @@ def test_inspired_order_lifecycle_to_the_feed(store, settings):
                                   pillar="everyday_humor", work_order_id=order["id"])
     got = work_orders.get_order(store, order["id"])
     assert (got["status"], got["idea_id"]) == ("in_production", idea["id"])
-    with pytest.raises(ValueError, match="only a new one gets an idea"):
+    with pytest.raises(ValueError, match="only a scheduled one gets an idea"):
         production.create_idea(store, settings, "motion", hook="Other", work_order_id=order["id"])
-    with pytest.raises(ValueError, match="only a new one can be cancelled"):
+    with pytest.raises(ValueError, match="only one not started can be cancelled"):
         work_orders.delete_order(store, order["id"])
     asset = store.add_asset(idea["id"], batch_date=idea["batch_date"])["id"]
     _finish(store, asset)

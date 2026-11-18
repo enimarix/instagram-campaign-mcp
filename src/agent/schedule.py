@@ -7,7 +7,8 @@ one), it has no run started today, it isn't running and its file exists. Three c
 
 - `ig-campaign agent run-due` (the OS tasks' action): runs each due playbook in turn;
 - the `up` / `worker` process: catch_up() at start and every CATCH_UP_EVERY, starting due
-  runs detached (a run missed while the PC was off starts at the next logon, same day);
+  runs detached (a run missed while the PC was off starts at the next logon, same day),
+  and the light run the owner's scheduled work orders ask for (order_run, 136);
 - the website's Settings page: overview() (next and last run per playbook).
 
 install_schedule() registers the OS side: on Windows a logon task for `up` and one daily
@@ -31,7 +32,9 @@ from zoneinfo import ZoneInfo
 import structlog
 
 from ..config import InstagramMCPSettings
-from ..store import CampaignStore, parse_iso, utcnow
+from ..store import CampaignStore, parse_iso, to_iso, utcnow
+from ..studio import work_orders
+from .packet import RUNS
 from .runner import (
     AGENT_DIR,
     PLAYBOOK_NAME,
@@ -40,12 +43,16 @@ from .runner import (
     AgentRunRefused,
     _playbook_file,
     check_lock,
+    preflight,
     run_agent,
 )
 
 logger = structlog.get_logger(__name__)
 
-CATCH_UP_EVERY = 600.0  # s
+CATCH_UP_EVERY = 60.0  # s: a work order's run starts within a minute of its debounce
+ORDER_PLAYBOOK = "daily-revise"  # the light run (packet.RUNS)
+ORDER_READERS = tuple(p for p, (_, s) in RUNS.items() if s and "work_orders" in s)
+ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
 AGENT_TASK = "IGCampaignAgent-"  # + playbook
 CRON_BEGIN, CRON_END = "# ig-campaign begin", "# ig-campaign end"
@@ -143,10 +150,68 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
     return rows
 
 
+def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
+              start: Callable[..., Any], check: Optional[Callable[..., Any]] = None
+              ) -> Optional[str]:
+    """136: the owner's scheduled work orders start the light run (ORDER_PLAYBOOK) at once.
+    Returns it when started, else None. It starts when the newest scheduled order is
+    ORDER_RUN_DEBOUNCE_MINUTES old (sends batch into one run), no run that reads work
+    orders started since (it has them) or still runs (one run at a time), fewer than
+    MAX_ORDER_RUNS_PER_DAY order runs started today (owner-local), and the agent preflight
+    passes (asked again ORDER_RETRY after a failure). Otherwise the orders keep waiting and
+    their blocked_reason says why when it is the cap, the preflight or the playbook."""
+    with store._tx() as c:
+        newest = c.execute("SELECT MAX(scheduled_at) FROM work_orders"
+                           " WHERE status='scheduled'").fetchone()[0]
+    if newest is None:
+        return None
+    newest = parse_iso(newest)
+    if now - newest < timedelta(minutes=settings.order_run_debounce_minutes):
+        return None
+    started = store.get_state("order_run_started_at")  # before its own row exists
+    if started and parse_iso(started) >= newest:
+        return None
+    for playbook in ORDER_READERS:
+        last = store.list_agent_runs(playbook, limit=1)
+        if last and parse_iso(last[0]["started_at"]) >= newest:
+            return None
+        try:
+            check_lock(store, playbook, settings.agent_timeout_minutes * 60)
+        except AgentRunRefused:
+            return None
+    day = _local(settings, now).date().isoformat()
+    used = store.get_state("order_runs") or {}
+    count = used.get("count", 0) if used.get("day") == day else 0
+    if count >= settings.max_order_runs_per_day:
+        work_orders.set_blocked(store, f"today's {settings.max_order_runs_per_day} at-once"
+                                " runs are used: it waits for the next scheduled run")
+        return None
+    failed = store.get_state("order_preflight_failed_at")
+    if failed and now - parse_iso(failed) < ORDER_RETRY:
+        return None
+    # ponytail: the preflight (`claude auth status`, ~1 s) blocks the worker's loop once
+    # per order run; move it to a thread if it ever gets slow.
+    try:
+        (check or preflight)(settings)  # looked up per call: tests patch it
+        start(store, settings, ORDER_PLAYBOOK)
+    except AgentRunRefused:
+        return None
+    except AgentError as e:  # the CLI is missing or signed out, or no such playbook
+        store.set_state("order_preflight_failed_at", to_iso(now))
+        work_orders.set_blocked(store, f"the agent cannot start: {e}")
+        return None
+    store.set_state("order_preflight_failed_at", None)
+    store.set_state("order_run_started_at", to_iso(now))
+    store.set_state("order_runs", {"day": day, "count": count + 1})
+    work_orders.set_blocked(store, None)
+    return ORDER_PLAYBOOK
+
+
 def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              start: Optional[Callable[..., Any]] = None,
              now: Optional[Callable[[], datetime]] = None) -> List[str]:
-    """Start each due playbook detached (runs.start_run). Never raises: the worker lives."""
+    """Start each due playbook detached (runs.start_run), then the work orders' run if they
+    need one (order_run). Never raises: the worker lives."""
     from .runs import start_run
 
     now = now or utcnow  # looked up per call (a default argument would freeze it)
@@ -159,6 +224,8 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
                 started.append(playbook)
             except AgentError as e:
                 print(f"agent catch-up: {e}", file=sys.stderr, flush=True)
+        if order_run(store, settings, now(), start=start or start_run):
+            started.append(ORDER_PLAYBOOK)
     except Exception as e:  # noqa: BLE001 - e.g. database locked: next tick
         print(f"agent catch-up failed: {e!r}", file=sys.stderr, flush=True)
     if started:
