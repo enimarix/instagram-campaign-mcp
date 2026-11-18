@@ -17,7 +17,7 @@ AGENT_ALLOWED = {
     "submit_asset", "list_assets",
     "get_feedback", "mark_feedback_digested", "list_revision_requests", "add_learning",
     "update_learning", "list_learnings", "get_creative_brief", "get_daily_facts",
-    "save_daily_report",
+    "save_daily_report", "open_experiment", "list_experiments",
     "add_to_watchlist", "list_watchlist", "remove_from_watchlist", "research_trends",
     "get_trend_report", "list_inspirations", "mark_inspiration_used", "download_reel",
     "list_dm_picks", "mark_dm_pick", "list_sources", "render_remix",

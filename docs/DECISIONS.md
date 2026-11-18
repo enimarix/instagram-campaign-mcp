@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: Experiments link to posts through the idea, not post labels (086)
+Changes the roadmap's "linked to posts through the existing campaign / variant labels".
+An idea joins an experiment variant with `ideas.experiment = 'exp:<id>:<variant>'` (no new
+column; older free-text values are kept and count as no experiment); a post reaches it
+through post_labels.asset_id → asset → idea. `create_idea` refuses any other experiment
+value. The variable must be a tag dimension of the evidence engine, so a finished
+experiment becomes a learning with a checkable predicate. `EXPERIMENT_MIN_SAMPLE` is gone:
+each experiment has its own `target_per_variant` (default 5 matured Reels).
+Reason: the idea already carries the tags being tested and exists before the post, so the
+explore ideas can be planned and counted while they are made; campaign / variant labels
+are set only at publish time and are free text.
+
 ## 2026-11-18: DM picks may exceed the batch cap, up to 3 a day (073)
 A remix idea whose source is a DM pick being made (`downloaded` or `in_production`) may be
 created when today's batch is already full, up to `MAX_DM_PICK_EXTRAS_PER_DAY` (default 3,

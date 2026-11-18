@@ -12,6 +12,7 @@ from ..config import APP_HOME, InstagramMCPSettings
 from ..store import CampaignStore
 from ..studio.scheduling import bench
 from ..studio.seed import local_today
+from .experiments import explore_plan
 from .learnings import get_feedback, list_learnings, list_revision_requests
 from .mix import batch_mix, with_counts
 from .quotas import todays_quotas
@@ -20,18 +21,10 @@ BIBLE_PATH = APP_HOME / "brand" / "BIBLE.md"
 BIBLE_CHARS = 8000
 REPORT_CHARS = 2000
 NO_BIBLE = "no channel bible yet: follow brand/taxonomy.json and the learnings"
-EXPERIMENT_DAYS = 14
 INSPIRATIONS = 20
 IDEA_KEYS = ("id", "track", "pillar", "hook_type", "strategy", "hook")
-_EXPERIMENTS = (
-    "SELECT i.experiment, COUNT(DISTINCT i.id) AS ideas,"
-    " COALESCE(SUM(a.verdict = 'liked'), 0) AS liked,"
-    " COALESCE(SUM(a.verdict = 'disliked'), 0) AS disliked,"
-    " COALESCE(SUM(a.verdict = 'none' AND a.status NOT IN ('failed', 'archived')), 0)"
-    " AS unjudged"
-    " FROM ideas i LEFT JOIN assets a ON a.idea_id = i.id"
-    " WHERE i.experiment IS NOT NULL AND i.experiment != '' AND i.batch_date >= ?"
-    " GROUP BY i.experiment ORDER BY MAX(i.id) DESC LIMIT 20")
+EXPERIMENT_KEYS = ("id", "status", "hypothesis", "variable", "variants",
+                   "target_per_variant", "ends_on")
 
 
 def _cut(text: Optional[str], n: int) -> Optional[str]:
@@ -69,11 +62,16 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
         "change_requests": list_revision_requests(store)[:30],
         "last_daily_report": report and {"report_date": report["report_date"],
                                          "summary": _cut(report["summary"], REPORT_CHARS),
-                                         # 083: ideas to try; 086 makes real experiments
+                                         # 083: ideas to try (also proposed rows below)
                                          "proposed_experiments":
                                              report["analysis"].get("experiments", [])},
-        "experiments": _rows(store, _EXPERIMENTS,
-                             (today - timedelta(days=EXPERIMENT_DAYS)).isoformat()),
+        # 086: open experiments, then the newest proposals (open_experiment(proposed_id=))
+        "experiments": [{k: e[k] for k in EXPERIMENT_KEYS}
+                        for status in ("open", "proposed")
+                        for e in store.list_experiments(status, limit=10)],
+        # which open experiment variant each explore idea still to make today fills
+        "explore_plan": explore_plan(
+            store, quotas["limits"]["explore"] - quotas["counts"]["explore"]),
         "quotas": quotas,
         # Exploit ideas follow the mix; explore ideas (limits.explore) are free picks.
         "mix": with_counts(mix, quotas["limits"]["ideas"] - quotas["limits"]["explore"]),

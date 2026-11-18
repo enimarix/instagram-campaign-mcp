@@ -309,9 +309,8 @@ class InstagramMCPSettings(BaseSettings):
     baseline_window: int = Field(
         30, description="How many recent matured posts form the account baseline"
     )
-    experiment_min_sample: int = Field(
-        5, ge=1, description="Published assets an experiment needs before the daily facts"
-                             " list it as reached"
+    max_open_experiments: int = Field(
+        2, ge=1, le=10, description="Experiments open at once (src/learning/experiments.py)"
     )
 
     # --- Evidence engine (learnings checked against the numbers) -----------

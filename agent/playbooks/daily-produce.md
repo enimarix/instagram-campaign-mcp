@@ -225,7 +225,14 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
      templates apply to motion ideas. Explore ideas are free picks outside the mix;
    - explore vs exploit: about 70 % exploit (formats with liked videos or `do` learnings),
      at most `limits.explore - counts.explore` explore ideas. Each explore idea tests one
-     thing; give it the `experiment` name of an open experiment when it belongs to one;
+     thing;
+   - experiments: fill the explore ideas from the brief's `explore_plan` first, one idea
+     per entry, with `experiment=<entry.experiment>` (`exp:<id>:<variant>`) and the idea's
+     tag named by the experiment's `variable` equal to the entry's `variant` (`create_idea`
+     fills a missing pillar / hook_type in, refuses a mismatch). Make only that tag differ;
+     the rest of the explore ideas are free picks.
+     When fewer than `MAX_OPEN_EXPERIMENTS` (2) are open and a `proposed` experiment in the
+     brief fits the learnings, open it first with `open_experiment(proposed_id=<id>)`;
 3. For each idea call `create_idea` with:
    - `track="motion"`, a `pillar` and a `hook_type` from the taxonomy;
    - `hook`: the on-screen first second (≤ ~8 words, readable with the sound off);

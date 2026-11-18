@@ -85,7 +85,7 @@ def test_every_key_on_an_empty_db(store, settings):
     assert b == {
         "bible": None, "bible_note": B.NO_BIBLE, "learnings": [], "feedback": [],
         "change_requests": [], "last_daily_report": None, "experiments": [],
-        "quotas": todays_quotas(store, settings, DAY, NOW), "today": [], "recent_hooks": [],
+        "explore_plan": [], "quotas": todays_quotas(store, settings, DAY, NOW), "today": [], "recent_hooks": [],
         "inspirations": [], "bench": {"count": 0, "supply_days": 0, "hooks": []},
     }
     assert b["quotas"]["effective_batch_size"] == 10
@@ -122,17 +122,6 @@ def test_caps_and_newest_hooks_first(store, settings):
     assert len(b["learnings"]) == 40 and len(b["feedback"]) == 30
     assert set(b["learnings"][0]) == {"id", "statement", "kind", "confidence", "origin",
                                       "scope", "evidence_count"}
-
-
-def test_experiments_counted(store, settings):
-    for verdict in ("liked", "liked", "disliked", "none"):
-        _asset(store, verdict, batch_date=DAY, experiment="short hooks")
-    _asset(store, "none", batch_date=DAY, status="failed", experiment="short hooks")
-    store.add_idea("motion", experiment="short hooks", batch_date=DAY)  # not rendered yet
-    _asset(store, "liked", batch_date="2026-11-01", experiment="old one")  # > 14 days
-    _asset(store, batch_date=DAY)  # no experiment
-    assert B.creative_brief(store, settings, NOW)["experiments"] == [
-        {"experiment": "short hooks", "ideas": 6, "liked": 2, "disliked": 1, "unjudged": 1}]
 
 
 async def test_no_recipe_props_and_mcp_door(store, settings, monkeypatch):
