@@ -249,7 +249,7 @@ def spend_violations(source: str) -> list:
 
 def test_no_src_ads_write_path_skips_the_guard():
     files = sorted(ADS_DIR.rglob("*.py"))
-    assert {"client.py", "budget.py"} <= {f.name for f in files}
+    assert {"client.py", "budget.py", "writer.py", "promote.py"} <= {f.name for f in files}
     for f in files:
         assert spend_violations(f.read_text(encoding="utf-8")) == [], f.name
 

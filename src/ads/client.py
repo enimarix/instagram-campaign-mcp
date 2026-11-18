@@ -1,7 +1,7 @@
 """Meta Marketing API client, read only (step 090).
 
 Lists ad accounts, campaigns, ad sets, ads and insights. It has no method that writes:
-creating ads is step 092, behind the budget guard (091). Requests go through
+creating ads is src/ads/writer.py (092), behind the budget guard (091). Requests go through
 GraphClient (src/instagram_client.py): the same token (it needs `ads_read`), sent in the
 Authorization header, the same request budget and the same error mapping.
 
@@ -100,12 +100,15 @@ class AdsClient(GraphClient):
             self._blocked_until = max(self._blocked_until, time.monotonic() + wait)
             logger.warning("ads_throttled", wait_s=wait)
 
-    async def _get(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _check_throttle(self) -> None:
         left = self._blocked_until - time.monotonic()
         if left > 0:
             raise RateLimitExceeded(
                 f"Marketing API usage limit reached; retry in {math.ceil(left / 60)} min"
             )
+
+    async def _get(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        self._check_throttle()
         return await self._make_request("GET", endpoint, params=params)
 
     async def _list(self, endpoint: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:

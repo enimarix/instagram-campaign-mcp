@@ -394,6 +394,16 @@ class InstagramMCPSettings(BaseSettings):
     ads_lifetime_cap: Decimal = Field(Decimal(0), ge=0, description="Most spend ever")
     # ponytail: EUR until H9 names the account's currency; it must match the ad account's.
     ads_currency: str = Field("EUR", description="ISO 4217 code of the ad account currency")
+    # Creating paused promotions (src/ads/promote.py, 092). H6/H9 confirm these.
+    ads_objective: Literal["OUTCOME_AWARENESS", "OUTCOME_ENGAGEMENT"] = Field(
+        "OUTCOME_AWARENESS", description="Campaign objective of promoted posts"
+    )
+    meta_page_id: Optional[str] = Field(
+        None, description="Facebook Page linked to the Instagram account (creative object_id)"
+    )
+    # EU Digital Services Act: who benefits from and who pays for the ads (≤512 chars each).
+    ads_dsa_beneficiary: Optional[str] = Field(None, max_length=512)
+    ads_dsa_payor: Optional[str] = Field(None, max_length=512)
 
     @field_validator("ads_currency")
     @classmethod
@@ -409,12 +419,13 @@ class InstagramMCPSettings(BaseSettings):
             raise ValueError("ADS_DAILY_CAP must not be above ADS_LIFETIME_CAP")
         return self
 
-    @field_validator("meta_ad_account_id")
+    @field_validator("meta_ad_account_id", "meta_page_id")
     @classmethod
-    def validate_ad_account_id(cls, v):
+    def validate_ad_account_id(cls, v, info):
         v = (v or "").strip().removeprefix("act_")
         if v and not (v.isascii() and v.isdigit()):
-            raise ValueError(f"META_AD_ACCOUNT_ID must be digits (e.g. 1234567890), got {v!r}")
+            raise ValueError(f"{info.field_name.upper()} must be digits (e.g. 1234567890), "
+                             f"got {v!r}")
         return v or None
 
     @field_validator("log_level")

@@ -16,6 +16,7 @@ organic posts, so this store keeps:
 - graph_requests: Graph API request times, the hourly budget shared by all processes
 - render_jobs: the render queue (src/studio/render.py, worker render loop)
 - ad_spend_ledger: ad money reserved, released and reported (src/ads/budget.py)
+- ad_entities: campaigns, ad sets, creatives and ads the studio created on Meta (092)
 """
 
 from __future__ import annotations
@@ -460,6 +461,30 @@ CREATE UNIQUE INDEX idx_spend_released ON ad_spend_ledger(authorization_id)
     WHERE kind = 'released';
 """
 
+# Migration 19: what the studio created on Meta (092, src/ads/promote.py). Money columns are
+# Decimal strings in the account currency; meta_id is Meta's id. A ledger row can spread an
+# ad set's lifetime budget over its days for the daily cap (daily_amount per owner-local
+# day, through daily_until, YYYY-MM-DD).
+AD_ENTITIES_SCHEMA = """
+CREATE TABLE ad_entities (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind            TEXT NOT NULL CHECK (kind IN ('campaign','adset','ad','creative')),
+    meta_id         TEXT NOT NULL UNIQUE,
+    parent_id       INTEGER REFERENCES ad_entities(id),
+    test_id         INTEGER,
+    asset_id        INTEGER REFERENCES assets(id),
+    media_id        TEXT,
+    status          TEXT NOT NULL,
+    lifetime_budget TEXT,
+    spend_cap       TEXT,
+    end_time        TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+ALTER TABLE ad_spend_ledger ADD COLUMN daily_amount TEXT;
+ALTER TABLE ad_spend_ledger ADD COLUMN daily_until TEXT;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -467,7 +492,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
-                         PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA]
+                         PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -505,6 +530,7 @@ _INSERT_STAMPS = {
     "dm_picks": ("created_at", "updated_at"),
     "experiments": ("created_at", "updated_at"),
     "permission_requests": ("created_at", "updated_at"),
+    "ad_entities": ("created_at", "updated_at"),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")

@@ -5,7 +5,9 @@ Ad budget guard (step 091): nothing spends ad money without passing `authorize_s
   0, the default, allows no spend at all.
 - The ledger (`ad_spend_ledger`) counts what is used: every `authorized` row not yet
   `released`, plus every `reported` row (Meta's spend, step 095). The daily cap counts rows
-  created on the owner-local day (`settings.timezone`); the test cap, rows of that test.
+  created on the owner-local day (`settings.timezone`), or a row's `daily_amount` on every
+  day from its creation to its `daily_until` (an ad set's lifetime budget spread over its
+  days, 092); the test cap, rows of that test.
   ponytail: while a test runs, its authorization and its reported spend both count, so the
   guard over-counts (the safe side) until 095 reconciles.
 - One `BEGIN IMMEDIATE` transaction reads the kill switch and the ledger and writes the
@@ -22,7 +24,7 @@ end date and every campaign with a spend cap, so Meta stops spending too (GOAL.m
 from __future__ import annotations
 
 import json
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 from zoneinfo import ZoneInfo
@@ -68,12 +70,14 @@ def _amount(value: Any) -> Decimal:
     return amount
 
 
-def _day_bounds(tz: str, now: datetime) -> Tuple[str, str]:
-    """[start, end) of the owner-local day of `now`, as stored ISO UTC strings."""
+def _day_bounds(tz: str, now: datetime) -> Tuple[str, str, str]:
+    """[start, end) of the owner-local day of `now`, as stored ISO UTC strings, and the
+    day itself (YYYY-MM-DD)."""
     zone = ZoneInfo(tz)
     day = now.astimezone(zone).date()
     return (to_iso(datetime.combine(day, time(), tzinfo=zone)),
-            to_iso(datetime.combine(day + timedelta(days=1), time(), tzinfo=zone)))
+            to_iso(datetime.combine(day + timedelta(days=1), time(), tzinfo=zone)),
+            day.isoformat())
 
 
 def _kill_state(c) -> Dict[str, Any]:
@@ -86,7 +90,7 @@ def _usage(c, settings: InstagramMCPSettings, now: datetime) -> Dict[str, Any]:
     # ponytail: sums the whole ledger in Python (exact Decimal); fine for thousands of rows.
     rows = c.execute("SELECT * FROM ad_spend_ledger").fetchall()
     released = {r["authorization_id"] for r in rows if r["kind"] == "released"}
-    start, end = _day_bounds(settings.timezone, now)
+    start, end, today = _day_bounds(settings.timezone, now)
     usage: Dict[str, Any] = {"daily": ZERO, "lifetime": ZERO, "tests": {}, "currencies": set()}
     for r in rows:
         if r["kind"] == "released" or r["id"] in released:
@@ -94,7 +98,13 @@ def _usage(c, settings: InstagramMCPSettings, now: datetime) -> Dict[str, Any]:
         amount = Decimal(r["amount"])
         usage["currencies"].add(r["currency"])
         usage["lifetime"] += amount
-        if start <= r["created_at"] < end:
+        if r["daily_amount"] is not None:
+            # Spread rows count on every day of their span. A later day is never fuller
+            # than today (every span covering it covers today too), so checking today is
+            # enough.
+            if r["created_at"] < end and r["daily_until"] >= today:
+                usage["daily"] += Decimal(r["daily_amount"])
+        elif start <= r["created_at"] < end:
             usage["daily"] += amount
         if r["test_id"] is not None:
             usage["tests"][r["test_id"]] = usage["tests"].get(r["test_id"], ZERO) + amount
@@ -109,13 +119,31 @@ def authorize_spend(
     test_id: Optional[int] = None,
     ad_entity_id: Optional[str] = None,
     reason: str,
+    daily_amount: Any = None,
+    daily_until: Optional[date] = None,
+    check_only: bool = False,
     now: Optional[datetime] = None,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """Reserve `amount` (account currency) or raise BudgetRefused. Returns the ledger row.
 
     Without a test_id the amount alone must still fit under the test cap.
+    `daily_amount` + `daily_until` (owner-local last day): the daily cap counts
+    `daily_amount` on each day until then instead of `amount` today (a lifetime budget).
+    `check_only`: run every check (kill switch, caps) but reserve nothing and return None;
+    `amount` may then be 0 (a write that cannot spend by itself, like a paused ad).
     """
-    amount = _amount(amount)
+    if check_only and not isinstance(amount, bool) and amount in (0, "0"):
+        amount = ZERO
+    else:
+        amount = _amount(amount)
+    if (daily_amount is None) != (daily_until is None):
+        raise BudgetRefused("invalid", "give daily_amount and daily_until together")
+    if daily_amount is not None:
+        daily_amount = _amount(daily_amount)
+        if (daily_amount > amount or isinstance(daily_until, datetime)
+                or not isinstance(daily_until, date)):
+            raise BudgetRefused("invalid", "daily_amount must be at most amount, daily_until"
+                                " a date")
     if not isinstance(reason, str) or not reason.strip():
         raise BudgetRefused("invalid", "a reason is required")
     if test_id is not None and (isinstance(test_id, bool) or not isinstance(test_id, int)):
@@ -132,16 +160,23 @@ def authorize_spend(
             raise BudgetRefused("invalid", f"the ledger holds spend in "
                                 f"{sorted(usage['currencies'])}, not only {currency}")
         test_used = usage["tests"].get(test_id, ZERO) if test_id is not None else ZERO
-        for code, used, cap in (("daily_cap", usage["daily"], settings.ads_daily_cap),
-                                ("test_cap", test_used, settings.ads_test_cap),
-                                ("lifetime_cap", usage["lifetime"], settings.ads_lifetime_cap)):
-            if used + amount > cap:
-                raise BudgetRefused(code, f"{amount} {currency} would bring {code[:-4]} spend "
-                                    f"to {used + amount}, above the cap of {cap}")
+        daily = amount if daily_amount is None else daily_amount
+        for code, used, ask, cap in (
+                ("daily_cap", usage["daily"], daily, settings.ads_daily_cap),
+                ("test_cap", test_used, amount, settings.ads_test_cap),
+                ("lifetime_cap", usage["lifetime"], amount, settings.ads_lifetime_cap)):
+            if used + ask > cap:
+                raise BudgetRefused(code, f"{ask} {currency} would bring {code[:-4]} spend "
+                                    f"to {used + ask}, above the cap of {cap}")
+        if check_only:
+            return None
         cur = c.execute(
             "INSERT INTO ad_spend_ledger (kind, amount, currency, test_id, ad_entity_id,"
-            " reason, created_at) VALUES ('authorized',?,?,?,?,?,?)",
-            (str(amount), currency, test_id, ad_entity_id, reason.strip(), to_iso(now)))
+            " reason, daily_amount, daily_until, created_at)"
+            " VALUES ('authorized',?,?,?,?,?,?,?,?)",
+            (str(amount), currency, test_id, ad_entity_id, reason.strip(),
+             None if daily_amount is None else str(daily_amount),
+             None if daily_until is None else daily_until.isoformat(), to_iso(now)))
         row = dict(c.execute("SELECT * FROM ad_spend_ledger WHERE id=?",
                              (cur.lastrowid,)).fetchone())
     logger.info("ad_spend_authorized", id=row["id"], amount=row["amount"], currency=currency,

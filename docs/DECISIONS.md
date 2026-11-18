@@ -8,6 +8,22 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: Paused promotions: one reservation per ad set, spread over its days (092)
+A promoted post (`ads.promote.create_paused_promotion`) reserves its lifetime budget once,
+when its ad set is created. For `ADS_DAILY_CAP` the budget counts as budget / days (owner
+-local days from today to the end date, rounded up to the cent) on each of those days;
+the test and lifetime caps count it in full. The campaign, creative and ad only run the
+guard's checks (kill switch, caps), so they never double-count. The campaign's spend cap
+is the budget, raised to Meta's minimum (100 in the account currency, about 100 USD)
+when the budget is smaller: the ad set's lifetime budget is then the binding Meta-side
+limit. Default objective `ADS_OBJECTIVE=OUTCOME_AWARENESS` (reach, billed on
+impressions); `OUTCOME_ENGAGEMENT` optimises ThruPlay. Every ad set carries the EU
+Digital Services Act fields (`ADS_DSA_BENEFICIARY`, `ADS_DSA_PAYOR`, required), and the
+creative needs `META_PAGE_ID`. A failure halfway leaves the created objects paused and
+recorded and releases the reservation; activation (094) authorizes again.
+Reason: GOAL §5.4 asks for a daily cap, and a whole lifetime budget counted on day one
+would force the daily cap up to the largest promotion.
+
 ## 2026-11-18: Ad spend caps default to 0 and re-enabling spend needs UI_PASSWORD (091)
 `ADS_DAILY_CAP`, `ADS_TEST_CAP` and `ADS_LIFETIME_CAP` default to 0, so nothing can be
 authorized until the owner sets them (in `ADS_CURRENCY`, default EUR until H9 names the
