@@ -3,26 +3,26 @@
 // cream #FFF8EC sheet, then cut-out pieces slide in with a small overshoot and settle a little
 // crooked, as paper does: the mB tile drops, the wordmark slides in, the tagline on a white
 // strip, the « 7 jours gratuits » label stamps down, macrobody.fr is handwritten and
-// underlined in the accent; the cameo (a cut-out character waving, or a food) slides up into
-// the corner. Every move steps at 12 fps like the owner's paper videos. Settles by
-// SETTLE_S.paper, then holds.
+// underlined in the accent; the cameo (the story's cut-out character waving, src/paper/, or a
+// food) slides up into the corner. Every move steps at 12 fps like the owner's paper videos.
+// Fredoka and Caveat since step 131. Settles by SETTLE_S.paper, then holds.
 import type { CSSProperties, ReactNode } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { assetById } from "../assets";
 import { brand } from "../brand";
 import { fonts } from "../lib/font";
 import { seeded } from "../lib/game";
+import { CharacterSvg } from "../paper/Character";
+import { Kraft } from "../paper/kit";
+import { type CharacterId, CHARACTERS, stepped } from "../paper/palette.ts";
 import { backOut, easeInOut, easeOut, span } from "../voxel/anim.ts";
 import { MbTile, taglineOf, TRIAL, URL, Wordmark } from "./base";
 import { ACCENTS, type CardProps, cameoOf } from "./schema.ts";
 
 /** The owner's paper palette (brand-sources.md). */
 export const PAPER = { kraft: "#C9A67A", kraftDark: "#B48F62", cream: "#FFF8EC", navy: "#2C3A63", mint: "#BFE8D6" } as const;
-/** Fredoka (step 131) once its files are in; until then the fallback in the stack draws. */
-export const PAPER_FONT = "Fredoka";
-/** The handwriting face for the url (step 131 adds Caveat). */
-const HAND = "Caveat";
-const STEP_FPS = 12;
+/** The paper display font (Fredoka, step 131); the `font` prop may name another. */
+export const PAPER_FONT = fonts.paper;
 
 /** Frames (from the card's start, before stepping) at which each piece comes in. */
 const AT = { tear: 3, tile: 12, word: 20, strip: 28, cameo: 30, pill: 38, url: 46, line: 52 };
@@ -47,18 +47,6 @@ const tornEdge = (y: number, width: number, seed: number, amp = 26) => {
 };
 const EDGE = tornEdge(980, 1080, 7);
 const poly = (pts: [number, number][]) => pts.map(([x, y]) => `${x},${y}`).join(" ");
-
-/** Kraft paper: flat colour plus fibres (fractal noise), the same in every frame. */
-const Kraft = ({ id, color, seed }: { id: string; color: string; seed: number }) => (
-  <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
-    <filter id={id}>
-      <feTurbulence type="fractalNoise" baseFrequency="0.9 0.35" numOctaves={3} seed={seed} />
-      <feColorMatrix values="0 0 0 0 0.35  0 0 0 0 0.25  0 0 0 0 0.12  0 0 0 0.22 0" />
-    </filter>
-    <rect width="100%" height="100%" fill={color} />
-    <rect width="100%" height="100%" filter={`url(#${id})`} />
-  </svg>
-);
 
 /** The cover's two halves split along EDGE, each with the white core along its torn side. */
 const TearHalf = ({ top, t }: { top: boolean; t: number }) => {
@@ -92,57 +80,6 @@ const TearHalf = ({ top, t }: { top: boolean; t: number }) => {
   );
 };
 
-const Ines = ({ wave }: { wave: number }) => (
-  <svg width={150} height={330} viewBox="0 0 150 330" style={{ overflow: "visible" }}>
-    {/* waving arm (behind the body), pivot at the shoulder */}
-    <g transform={`rotate(${wave * 34} 112 134)`}>
-      <rect x={102} y={44} width={22} height={92} rx={11} fill="#B9A3E3" />
-      <circle cx={113} cy={42} r={14} fill="#C68B59" />
-    </g>
-    <rect x={44} y={232} width={24} height={86} rx={8} fill={PAPER.navy} />
-    <rect x={82} y={232} width={24} height={86} rx={8} fill={PAPER.navy} />
-    <rect x={36} y={312} width={36} height={14} rx={7} fill="#3B2A22" />
-    <rect x={78} y={312} width={36} height={14} rx={7} fill="#3B2A22" />
-    <rect x={30} y={120} width={90} height={124} rx={26} fill="#B9A3E3" />
-    {[146, 172, 198, 224].map((y) => (
-      <rect key={y} x={30} y={y} width={90} height={9} fill="#FFFFFF" opacity={0.85} />
-    ))}
-    <rect x={22} y={130} width={22} height={88} rx={11} fill="#B9A3E3" />
-    <circle cx={33} cy={222} r={13} fill="#C68B59" />
-    <rect x={64} y={100} width={22} height={24} fill="#C68B59" />
-    <ellipse cx={75} cy={70} rx={42} ry={46} fill="#4A2C20" />
-    <ellipse cx={75} cy={78} rx={33} ry={36} fill="#C68B59" />
-    <path d="M40 66 Q75 20 112 64 Q96 44 75 46 Q54 44 40 66Z" fill="#4A2C20" />
-    <circle cx={63} cy={80} r={4.5} fill="#2B1B14" />
-    <circle cx={89} cy={80} r={4.5} fill="#2B1B14" />
-    <path d="M64 96 Q76 106 88 96" fill="none" stroke="#2B1B14" strokeWidth={4} strokeLinecap="round" />
-    <circle cx={56} cy={93} r={6} fill="#F08A7E" opacity={0.6} />
-    <circle cx={96} cy={93} r={6} fill="#F08A7E" opacity={0.6} />
-  </svg>
-);
-
-const Paul = ({ wave }: { wave: number }) => (
-  <svg width={150} height={330} viewBox="0 0 150 330" style={{ overflow: "visible" }}>
-    <g transform={`rotate(${wave * 34} 112 134)`}>
-      <rect x={102} y={44} width={24} height={92} rx={12} fill="#3FBF7F" />
-      <circle cx={114} cy={42} r={14} fill="#E8B48A" />
-    </g>
-    <rect x={42} y={232} width={28} height={86} rx={8} fill="#3E5C8A" />
-    <rect x={80} y={232} width={28} height={86} rx={8} fill="#3E5C8A" />
-    <rect x={34} y={312} width={40} height={14} rx={7} fill="#FFFFFF" stroke="#2C3A63" strokeWidth={3} />
-    <rect x={76} y={312} width={40} height={14} rx={7} fill="#FFFFFF" stroke="#2C3A63" strokeWidth={3} />
-    <rect x={28} y={118} width={94} height={126} rx={24} fill="#3FBF7F" />
-    <rect x={20} y={128} width={24} height={88} rx={12} fill="#3FBF7F" />
-    <circle cx={32} cy={220} r={13} fill="#E8B48A" />
-    <rect x={64} y={100} width={22} height={24} fill="#E8B48A" />
-    <ellipse cx={75} cy={76} rx={34} ry={38} fill="#E8B48A" />
-    <path d="M40 70 Q42 32 76 34 Q110 34 110 68 Q100 52 78 54 Q58 50 40 70Z" fill="#2B1B14" />
-    <circle cx={63} cy={80} r={4.5} fill="#2B1B14" />
-    <circle cx={89} cy={80} r={4.5} fill="#2B1B14" />
-    <path d="M62 95 Q76 108 90 95" fill="none" stroke="#2B1B14" strokeWidth={4} strokeLinecap="round" />
-  </svg>
-);
-
 const Avocado = ({ wave }: { wave: number }) => (
   <svg width={190} height={240} viewBox="0 0 190 240" style={{ overflow: "visible", transform: `rotate(${wave * 6 - 3}deg)` }}>
     <path d="M95 10 C140 10 168 96 176 150 C186 210 146 234 95 234 C44 234 4 210 14 150 C22 96 50 10 95 10Z" fill="#2F6B3A" />
@@ -155,16 +92,23 @@ const Avocado = ({ wave }: { wave: number }) => (
   </svg>
 );
 
-const CAMEO: Record<string, (p: { wave: number }) => ReactNode> = { ines: Ines, paul: Paul, avocado: Avocado };
+/** A cut-out character of the paper stories, waving (frame `f`, already stepped). */
+const waving = (id: CharacterId) => ({ f, fps }: { f: number; fps: number }) => (
+  <CharacterSvg id={id} width={170} height={330} scale={0.36} f={f} fps={fps} mood="happy" gesture={f > AT.cameo + 10 ? "wave" : "none"} />
+);
+const CAMEO: Record<string, (p: { wave: number; f: number; fps: number }) => ReactNode> = {
+  ...Object.fromEntries(Object.keys(CHARACTERS).map((id) => [id, waving(id as CharacterId)])),
+  avocado: Avocado,
+};
 
 export const PaperEndCard = ({ tagline, accent, address, cameo, font }: Omit<CardProps, "pixelate">) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   // Stepped motion: every piece moves on 12 fps steps.
-  const f = Math.floor((frame * STEP_FPS) / fps) * (fps / STEP_FPS);
+  const f = stepped(frame, fps);
   const color = ACCENTS[accent];
   const label = `"${font ?? PAPER_FONT}", "${fonts.display}", sans-serif`;
-  const hand = `"${HAND}", "${fonts.body}", sans-serif`;
+  const hand = `"${fonts.hand}", "${fonts.body}", sans-serif`;
   const tear = span(f, AT.tear, 12);
   const Cameo = CAMEO[cameoOf("paper", cameo)];
   const wave = f > AT.cameo + 10 ? (Math.sin((f - AT.cameo) / 3.2) + 1) / 2 : 0;
@@ -226,7 +170,7 @@ export const PaperEndCard = ({ tagline, accent, address, cameo, font }: Omit<Car
         >
           {TRIAL}
         </div>
-        <div style={{ marginTop: 30, position: "relative", fontFamily: hand, fontWeight: 600, fontStyle: "italic", fontSize: 58, color: PAPER.navy, opacity: f < AT.url ? 0 : 1, clipPath: `inset(-20px ${(1 - easeOut(span(f, AT.url, 8))) * 100}% -20px -20px)` }}>
+        <div style={{ marginTop: 30, position: "relative", fontFamily: hand, fontWeight: 700, fontSize: 76, color: PAPER.navy, opacity: f < AT.url ? 0 : 1, clipPath: `inset(-20px ${(1 - easeOut(span(f, AT.url, 8))) * 100}% -20px -20px)` }}>
           {URL}
           <svg width="110%" height={24} viewBox="0 0 300 24" preserveAspectRatio="none" style={{ position: "absolute", left: "-5%", bottom: -18, overflow: "visible" }}>
             <path d="M4 14 C60 6 120 18 170 11 S260 6 296 12" fill="none" stroke={color} strokeWidth={7} strokeLinecap="round" pathLength={1} strokeDasharray={1} strokeDashoffset={1 - line} />
@@ -235,7 +179,7 @@ export const PaperEndCard = ({ tagline, accent, address, cameo, font }: Omit<Car
       </div>
       {Cameo && (
         <div style={{ position: "absolute", right: 130, top: 1000, transformOrigin: "50% 100%", scale: "1.25", filter: CUT, ...slide(f, AT.cameo, 0, 600, 3, 10) }}>
-          <Cameo wave={wave} />
+          <Cameo wave={wave} f={f} fps={fps} />
         </div>
       )}
       {tear < 1 && (

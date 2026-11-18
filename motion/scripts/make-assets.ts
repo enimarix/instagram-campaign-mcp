@@ -1,6 +1,7 @@
 // Builds our own (code-generated) assets into public/: sprite sheets from src/lib/sprites.ts as
 // SVG, chiptune loops and sound effects from a tiny square/triangle/noise synth as WAV, and a
-// warmer marimba bed (step 130) from the same synth's sine-based voices.
+// warmer marimba bed (step 130) and the paper style's kalimba / glockenspiel bed (step 131)
+// from the same synth's sine-based voices.
 // Run: `node scripts/make-assets.ts` (from motion/), then commit the files it writes.
 // Deterministic (no Math.random, no Math.sin: `sine` below is plain arithmetic): test/assets-licenses.test.ts checks the
 // committed files still match this script, so re-run it after editing art, songs or the palette.
@@ -13,8 +14,13 @@ import * as art from "../src/lib/sprites.ts";
 
 const RATE = 22050; // Hz, mono 16-bit: plenty for square waves, half the size of 44.1 kHz
 
-/** marimba: sine + a fast-fading 4th partial, struck; bass: soft sine; kick: falling sine thump. */
-type Wave = "square" | "triangle" | "noise" | "marimba" | "bass" | "kick";
+/**
+ * marimba: sine + a fast-fading 4th partial, struck; kalimba: sine + a short metallic 5.4x
+ * partial and a soft octave (the owner's paper_audio.js); glock: sine + a bright 2.76x bell
+ * partial, long ring; bass: soft sine; kick: falling sine thump.
+ */
+type Wave = "square" | "triangle" | "noise" | "marimba" | "kalimba" | "glock" | "bass" | "kick";
+const SINE_WAVES: Wave[] = ["marimba", "kalimba", "glock", "bass", "kick"];
 type Tone = {
   wave: Wave;
   /** Start and end frequency in Hz (linear sweep); noise: the rate it picks new values. */
@@ -53,13 +59,17 @@ const addTone = (buf: Float64Array, start: number, t: Tone, seed = 1) => {
     const x = phase % 1;
     const s = i / RATE;
     const ends = Math.min(1, s / ATTACK, (n - i) / RATE / RELEASE);
-    if (t.wave === "marimba" || t.wave === "bass" || t.wave === "kick") {
+    if (SINE_WAVES.includes(t.wave)) {
       const v =
         t.wave === "marimba"
           ? sine(phase) * strike(s, 0.22) + 0.22 * sine(phase * 4) * strike(s, 0.03)
-          : t.wave === "bass"
-            ? sine(phase) * strike(s, 0.6)
-            : sine(phase) * (1 - p) ** 2;
+          : t.wave === "kalimba"
+            ? sine(phase) * strike(s, 0.2) + 0.35 * sine(phase * 5.4) * strike(s, 0.012) + 0.15 * sine(phase * 2) * strike(s, 0.08)
+            : t.wave === "glock"
+              ? sine(phase) * strike(s, 0.5) + 0.3 * sine(phase * 2.76) * strike(s, 0.04)
+              : t.wave === "bass"
+                ? sine(phase) * strike(s, 0.6)
+                : sine(phase) * (1 - p) ** 2;
       buf[start + i] += v * ends * t.volume;
       continue;
     }
@@ -145,7 +155,7 @@ const sq = (from: number, seconds: number, extra: Partial<Tone> = {}): Tone => (
 
 const mallet = (from: number, seconds: number, volume = 0.3): Tone => ({ wave: "marimba", from, seconds, volume });
 
-// Two 2-bar chiptune loops (the bar count keeps each file small, ~140 KB) and a 4-bar marimba bed.
+// Two 2-bar chiptune loops (the bar count keeps each file small, ~140 KB) and 4-bar marimba and kalimba beds.
 const songs: Record<string, Song> = {
   // Bright C major, 150 bpm.
   "music-overworld": {
@@ -225,6 +235,53 @@ const songs: Record<string, Song> = {
       },
     ],
   },
+  // The paper style's bed (step 131), after the owner's paper_audio.js: kalimba arpeggios in
+  // 8ths (root, third, fifth, third, octave…), a glockenspiel answer, sine bass, soft kick,
+  // a snap on 2 and 4 and light off-beat hats. F major, 100 bpm, 4 bars: F Dm Bb C.
+  "music-kalimba": {
+    bpm: 100,
+    tracks: [
+      {
+        wave: "kalimba", volume: 0.2,
+        steps: [
+          "F5 - A5 - C6 - A5 - F6 - C6 - A5 - C6 -",
+          "D5 - F5 - A5 - F5 - D6 - A5 - F5 - A5 -",
+          "A#4 - D5 - F5 - D5 - A#5 - F5 - D5 - F5 -",
+          "C5 - E5 - G5 - E5 - C6 - G5 - E5 - G5 -",
+        ].join(" "),
+      },
+      {
+        wave: "glock", volume: 0.09,
+        steps: [
+          ". . . . . . . . A6 - - - G6 - F6 -",
+          ". . . . . . . . F6 - - - - - - -",
+          ". . . . . . . . D6 - - - F6 - A6 -",
+          ". . . . . . . . G6 - - - E6 - - -",
+        ].join(" "),
+      },
+      {
+        wave: "bass", volume: 0.26,
+        steps: [
+          "F2 - - - - - F2 - C3 - - - F2 - - -",
+          "D2 - - - - - D2 - A2 - - - D2 - - -",
+          "A#1 - - - - - A#1 - F2 - - - A#1 - - -",
+          "C2 - - - - - C2 - G2 - - - C2 - - -",
+        ].join(" "),
+      },
+      {
+        wave: "kick", volume: 0.3,
+        steps: "C2 - - - C2 - - - C2 - - - C2 - - - ".repeat(4).trim(),
+      },
+      {
+        wave: "noise", volume: 0.07,
+        steps: ". . . . x . . . . . . . x . . . ".repeat(4).trim(),
+      },
+      {
+        wave: "noise", volume: 0.025,
+        steps: ". . x . . . x . . . x . . . x . ".repeat(4).trim(),
+      },
+    ],
+  },
 };
 
 const effects: Record<string, Float64Array> = {
@@ -238,6 +295,12 @@ const effects: Record<string, Float64Array> = {
   "sfx-confirm": sfx([0, sq(660, 0.06, { duty: 0.25, decay: false })], [0.06, sq(990, 0.14, { duty: 0.25 })]),
   // Soft brand sounds (step 130): a wooden pop, and a rising marimba chime for a level-up.
   "sfx-pop": sfx([0, { wave: "kick", from: 900, to: 300, seconds: 0.09, volume: 0.45 }], [0, mallet(1397, 0.25, 0.2)]),
+  // Paper sounds (step 131): a sheet torn (crackly noise, falling rate) and a sheet swished past.
+  "sfx-rip": sfx(
+    [0, { wave: "noise", from: 2600, to: 500, seconds: 0.5, volume: 0.32, decay: true }],
+    [0.05, { wave: "noise", from: 300, to: 120, seconds: 0.4, volume: 0.18, decay: true }],
+  ),
+  "sfx-swish": sfx([0, { wave: "noise", from: 1200, to: 5000, seconds: 0.18, volume: 0.1 }], [0.18, { wave: "noise", from: 5000, to: 1500, seconds: 0.22, volume: 0.12, decay: true }]),
   "sfx-chime": sfx([0, mallet(698.46, 0.9)], [0.08, mallet(880, 0.9)], [0.16, mallet(1046.5, 0.9)], [0.24, mallet(1396.91, 1.1)]),
 };
 

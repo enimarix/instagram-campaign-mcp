@@ -1,0 +1,60 @@
+{
+  "character": "ines",
+  "hook": {
+    "labels": ["21 h. Il vous reste", { "text": "308 kcal", "tone": "brand", "size": "l" }, { "text": "Vous mangez quoi ?", "tone": "yellow" }],
+    "aside": "(spoiler : pas une pizza)",
+    "prop": "clock",
+    "time": "21:00"
+  },
+  "beats": [
+    {
+      "kind": "problem",
+      "labels": ["Trois parts de pizza ?", { "text": "Trop.", "tone": "red" }],
+      "prop": "fridge",
+      "options": [{ "food": "pizza", "label": "≈ 940 kcal", "verdict": "too_much" }]
+    },
+    {
+      "kind": "problem",
+      "labels": ["Une pomme ?", { "text": "Pas assez.", "tone": "red" }],
+      "prop": "fridge",
+      "options": [{ "food": "apple", "label": "≈ 95 kcal", "verdict": "too_little" }],
+      "aside": "(fringale à minuit)"
+    },
+    {
+      "kind": "app",
+      "labels": ["Inès a fait autrement."],
+      "value": "308",
+      "unit": "kcal restantes",
+      "button": "Compléter ma journée"
+    },
+    {
+      "kind": "app",
+      "labels": ["Elle choisit ce qu'elle a…", "…bloque ses grammes…", { "text": "…et l'app calcule le reste.", "tone": "brand" }],
+      "rows": [
+        { "food": "drumstick", "name": "Poulet", "from": 30, "to": 60 },
+        { "food": "pasta", "name": "Farfalle", "from": 10, "to": 20 },
+        { "food": "avocado", "name": "Huile d'olive", "to": 5, "locked": true },
+        { "food": "cheese", "name": "Cheddar", "to": 15, "locked": true }
+      ],
+      "total": "+306 kcal"
+    },
+    {
+      "kind": "payoff",
+      "labels": ["Fin de journée :"],
+      "value": "2 236",
+      "of": "/ 2 238 kcal",
+      "stamp": "PILE.",
+      "foods": ["pasta", "drumstick"],
+      "aside": "(et pas de pizza.)"
+    }
+  ],
+  "outro": "Terminez la journée pile sur vos objectifs.",
+  "address": "vous",
+  "accent": "brand",
+  "citations": [
+    { "url": "https://fdc.nal.usda.gov/food-details/173295/nutrients", "title": "USDA FoodData Central: 14\" pizza, pepperoni, regular crust: 282 kcal / 100 g, slice 111 g = about 313 kcal, three slices about 940 kcal" },
+    { "url": "https://fdc.nal.usda.gov/food-details/171688/nutrients", "title": "USDA FoodData Central: Apples, raw, with skin: 52 kcal / 100 g, a medium apple 182 g = about 95 kcal" }
+  ],
+  "music": "music-kalimba",
+  "loop": false
+}

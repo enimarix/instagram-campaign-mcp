@@ -18,6 +18,7 @@
     "still:pixelskit": "node render.mjs --template PixelSkit --props props/pixelskit.json --out out/pixelskit.png --still --frame 240",
     "still:voxel": "node render.mjs --template VoxelPreview --props props/voxel-preview.json --out out/voxel.png --still --frame 150",
     "still:voxelquest": "node render.mjs --template VoxelQuest --props props/voxelquest.json --out out/voxelquest.png --still --frame 150",
+    "still:paperstory": "node render.mjs --template PaperStory --props props/paperstory.json --out out/paperstory.png --still --frame 580",
     "still:endcard": "node render.mjs --template EndCard --props props/voxel-endcard.json --out out/endcard.png --still --frame 100",
     "still:endcards": "node render.mjs --template EndCard --props props/paper-endcard.json --out out/paper-endcard.png --still --frame 90 && node render.mjs --template EndCard --props props/clean-endcard.json --out out/clean-endcard.png --still --frame 90 && node render.mjs --template EndCard --props props/pixel-endcard.json --out out/pixel-endcard.png --still --frame 100",
     "check:voxel": "node scripts/check-determinism.mjs"

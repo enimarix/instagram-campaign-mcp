@@ -54,7 +54,7 @@ export type EndCardStyle = (typeof END_CARD_STYLES)[number];
  */
 export const CAMEOS = {
   voxel: [...FORM_IDS, ...FOOD_IDS],
-  paper: ["ines", "paul", "avocado"],
+  paper: ["ines", "paul", "sam", "lea", "avocado"],
   clean: ["ring"],
   pixel: ["mascot", "slime", "coin", "heart"],
   live: [],

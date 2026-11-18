@@ -133,6 +133,7 @@ jobs:
       # WebGL (three.js) stills: render.mjs picks --gl swangle on Linux (no GPU on runners).
       - run: npm run still:voxel
       - run: npm run still:voxelquest
+      - run: npm run still:paperstory
       - run: npm run still:endcard
       - run: npm run still:endcards
       - run: npm run check:voxel
