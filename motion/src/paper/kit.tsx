@@ -2,7 +2,7 @@
 // paper.js: kraft paper, cut-out pieces (a soft brown drop shadow under every piece), sheets
 // with jittered corners, Fredoka labels on cream strips, Caveat handwriting, stars and moon,
 // and the two transitions (a sheet torn in two, a coloured sheet wiped across).
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { fonts } from "../lib/font";
 import { frenchSpaces } from "../lib/french";
 import { backOut, easeInOut, span } from "../voxel/anim.ts";
@@ -122,7 +122,7 @@ export const pop = (f: number, start: number, length = 7) => (f < start ? 0 : ba
  * A text strip (paper.js label): Fredoka on a cut strip of paper, a little crooked, popping
  * in at `start` (frames). Centred on (x, y); shrinks to fit `maxWidth`.
  */
-export const Label = ({ text, x, y, size, tone = "cream", rot = 0, f, start, maxWidth = 820, bg }: { text: string; x: number; y: number; size: number; tone?: Tone; rot?: number; f: number; start: number; maxWidth?: number; bg?: string }) => {
+export const Label = ({ text, x, y, size, tone = "cream", rot = 0, f, start, maxWidth = 820 }: { text: string; x: number; y: number; size: number; tone?: Tone; rot?: number; f: number; start: number; maxWidth?: number }) => {
   const s = pop(f, start);
   if (s <= 0) return null;
   const t = TONES[tone];
@@ -137,7 +137,7 @@ export const Label = ({ text, x, y, size, tone = "cream", rot = 0, f, start, max
           lineHeight: 1,
           whiteSpace: "nowrap",
           color: t.fg,
-          background: bg ?? t.bg,
+          background: t.bg,
           padding: `${fs * 0.24}px ${fs * 0.45}px ${fs * 0.28}px`,
           clipPath: `polygon(${[0, 1, 2, 3].map((i) => `${[0, 100, 100, 0][i] + (hash(i, text.length) - 0.5) * 0.8}% ${[0, 0, 100, 100][i] + (hash(i + 9, text.length) - 0.5) * 6}%`).join(", ")})`,
         }}
@@ -149,8 +149,8 @@ export const Label = ({ text, x, y, size, tone = "cream", rot = 0, f, start, max
 };
 
 /** Handwriting (Caveat) for asides, e.g. « (spoiler : pas une pizza) ». */
-export const Hand = ({ text, x, y, size = 62, color = INK, rot = -3, style }: { text: string; x: number; y: number; size?: number; color?: string; rot?: number; style?: CSSProperties }) => (
-  <div style={{ position: "absolute", left: x, top: y, transform: `translate(-50%, -50%) rotate(${rot}deg)`, fontFamily: HAND_FONT, fontWeight: 700, fontSize: size, lineHeight: 1, whiteSpace: "nowrap", color, ...style }}>
+export const Hand = ({ text, x, y, size = 62, color = INK, rot = -3 }: { text: string; x: number; y: number; size?: number; color?: string; rot?: number }) => (
+  <div style={{ position: "absolute", left: x, top: y, transform: `translate(-50%, -50%) rotate(${rot}deg)`, fontFamily: HAND_FONT, fontWeight: 700, fontSize: size, lineHeight: 1, whiteSpace: "nowrap", color }}>
     {frenchSpaces(text)}
   </div>
 );

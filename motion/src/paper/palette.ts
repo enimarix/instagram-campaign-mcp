@@ -4,8 +4,6 @@
 
 export const INK = "#2B2118";
 export const CREAM = "#FFF8EC";
-/** Brand navy (wordmark, dark text on light paper). */
-export const NAVY = "#2C3A63";
 export const KRAFT = "#E9D9BC";
 export const YELLOW = "#FFD24D";
 export const RED = "#E5484D";
@@ -14,7 +12,7 @@ export const BRAND_LIGHT = "#34D399";
 /** The app's macro colours. */
 export const MACRO = { protein: "#FF6F61", carbs: "#3FBF7F", fat: "#F5C242", kcal: "#3E8EF7" } as const;
 
-/** Sheet colours a scene is cut from: navy is the owner's night sheet (lighter than NAVY). */
+/** Sheet colours a scene is cut from: navy is the owner's night sheet as rendered in p1-p3 (lighter than the brand navy #2C3A63). */
 export const SHEETS = {
   navy: "#3B4C7E",
   sky: "#DCEBF5",
