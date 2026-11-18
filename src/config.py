@@ -142,6 +142,10 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "data" / "backups"), description="Nightly database backups"
     )
     backup_keep: int = Field(14, ge=1, description="Database backups kept (newest)")
+    snapshot_thin_after_days: int = Field(
+        45, ge=31, description="Insight snapshots of posts older than this keep only the "
+                               "age-schedule points and the latest"
+    )
     min_free_disk_gb: float = Field(
         5.0, ge=0, description="No render starts while the media disk has less free space"
     )

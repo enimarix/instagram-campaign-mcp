@@ -203,6 +203,22 @@ to a public Reel permalink for the daily health check (`up` / `down` / `broken`,
 must be a separate personal account, never the brand account. When both fail, the source
 says why; save the video yourself and drop it into `data/inbox/`.
 
+### 7. Backups and restore
+Every night the worker copies the database to `data/backups/studio-<date>.db`
+(`BACKUP_DIR`) with SQLite's online backup and keeps the newest 14 (`BACKUP_KEEP`). Media
+files are not backed up. To get the studio back from one, stop `up` / `worker` first:
+```bash
+ig-campaign restore data/backups/studio-2026-11-17.db   # asks first; --yes when scripted
+```
+It refuses while the worker runs, when the file fails `PRAGMA integrity_check`, or when it
+was written by newer code. The current database is kept as
+`<db>.before-restore-<UTC time>`, then pending migrations run on the restored one.
+
+To keep the database small, insight snapshots of posts older than 45 days
+(`SNAPSHOT_THIN_AFTER_DAYS`) keep only the age-schedule points (1 h, 3 h, 6 h, 12 h, 24 h,
+48 h, 7 d, 30 d: the snapshot nearest each) and the latest; the rest are dropped daily and
+the file is compacted (`VACUUM`) once a week. Scores and post pages read only those.
+
 ## Tools (30)
 
 **Account** `validate_access_token`, `get_account_pages`, `get_profile_info`,

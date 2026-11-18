@@ -199,7 +199,8 @@ def test_daily_housekeeping_once_a_day_retried_hourly(store, tmp_path, monkeypat
         worker.daily_housekeeping(store, s, now=lambda: T)
     assert worker.daily_housekeeping(store, s, now=lambda: T + timedelta(minutes=30)) is None
     out = worker.daily_housekeeping(store, s, now=lambda: T + timedelta(minutes=61))
-    assert out == {"archived": [], "purged": [], "backup": "b.db"}
+    assert out == {"archived": [], "purged": [], "backup": "b.db", "thinned": 0,
+                   "vacuumed": True}
     assert worker.daily_housekeeping(store, s, now=lambda: T + timedelta(hours=5)) is None
     assert worker.daily_housekeeping(store, s, now=lambda: T + timedelta(days=1)) is not None
     assert len(calls) == 3
