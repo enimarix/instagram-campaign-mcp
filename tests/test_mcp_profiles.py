@@ -45,6 +45,11 @@ async def test_agent_never_sees_writes_dms_or_relabels():
     assert not (await _names("agent")) & NEVER_FOR_AGENT
 
 
+async def test_agent_has_no_permission_tools():
+    # 065: asking creators for permission is the owner's job; the agent contacts nobody.
+    assert not {n for n in await _names("agent") if "permission" in n}
+
+
 async def test_full_sees_every_tool():
     full = await _names("full")
     assert full == {t.name for t in await srv.mcp.list_tools()}

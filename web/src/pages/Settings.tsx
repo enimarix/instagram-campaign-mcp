@@ -12,6 +12,7 @@ import { ThemeToggle } from '../ui/ThemeToggle'
 import ClipsSection from './Clips'
 import DmPicksSection from './DmPicks'
 import { dateTime, playbookName } from './load'
+import PermissionsSection from './Permissions'
 import ReactionReelSection from './ReactionReel'
 
 // ponytail: fixed threshold (~a week of daily batches); make it a setting if it nags.
@@ -228,6 +229,7 @@ export default function Settings() {
         </Section>
 
         <ClipsSection />
+        <PermissionsSection />
         <ReactionReelSection />
         <DmPicksSection />
         <Section title="Reel downloader" load={downloader}>

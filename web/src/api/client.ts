@@ -381,22 +381,24 @@ export const activateReactionReel = (id: number) => post<ReactionReel>(`/api/rea
 export const resetReactionReel = (id: number) => post<ReactionReel>(`/api/reactions/${id}/reset`)
 /** Sends the file itself as the body (the server streams it to disk). XHR, not fetch:
  * fetch reports no upload progress. `onProgress` gets 0..1. */
-export const uploadReactionReel = (file: File, onProgress?: (fraction: number) => void) =>
-  new Promise<ReactionReel>((resolve, reject) => {
+const uploadFile = <T>(path: string, file: File, onProgress?: (fraction: number) => void) =>
+  new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `/api/reactions/upload?name=${encodeURIComponent(file.name)}`)
+    xhr.open('POST', path)
     xhr.setRequestHeader('Accept', 'application/json')
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total) }
     xhr.onload = () => {
       let body: unknown = null
       try { body = JSON.parse(xhr.responseText) } catch { /* not JSON */ }
-      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as ReactionReel)
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as T)
       const code = (body as { error?: unknown } | null)?.error
       reject(new ApiError(xhr.status, typeof code === 'string' ? code : 'http_error', body))
     }
     xhr.onerror = () => reject(new Error('Upload failed: check the connection and try again'))
     xhr.send(file)
   })
+export const uploadReactionReel = (file: File, onProgress?: (fraction: number) => void) =>
+  uploadFile<ReactionReel>(`/api/reactions/upload?name=${encodeURIComponent(file.name)}`, file, onProgress)
 
 // --- Analytics (steps 074, 077; page 078) ---
 type AccountValues = { followers: number | null; reach: number | null; views: number | null }
@@ -499,6 +501,41 @@ export const listClips = () => request<Clip[]>('/api/sources?role=clip')
 export const listInbox = () => request<InboxFile[]>('/api/sources/inbox')
 export const addInboxClip = (name: string, body: ClipIntake) =>
   post<Clip>(`/api/sources/inbox/${encodeURIComponent(name)}`, body)
+// --- Permission tracker (step 065; src/api/permissions.py). The studio never sends the message. ---
+export type PermissionStatus = 'requested' | 'granted' | 'denied'
+export type PermissionChannel = 'dm' | 'email' | 'other'
+/** A clip by source id, or a Reel link not stored yet (an inspiration). */
+export type PermissionTarget = { source_id: number } | { url: string }
+export type PermissionRequest = {
+  id: number
+  source_id: number
+  creator: string
+  channel: PermissionChannel
+  status: PermissionStatus
+  requested_at: string
+  answered_at: string | null
+  proof_note: string | null
+  ads_allowed: boolean
+  url: string | null
+  rights_basis: RightsBasis | 'unknown'
+  has_file: boolean
+}
+export type PermissionDraft = { creator: string | null; url: string | null; message: string }
+export const listPermissions = () => request<PermissionRequest[]>('/api/permissions')
+export const getPermissionDraft = (target: PermissionTarget, creator?: string) =>
+  request<PermissionDraft>(`/api/permissions/draft?${new URLSearchParams({
+    ...('source_id' in target ? { source_id: String(target.source_id) } : { url: target.url }),
+    ...(creator && { creator }),
+  })}`)
+export const askPermission = (
+  body: PermissionTarget & { channel: PermissionChannel; note?: string; creator?: string },
+) => post<{ request: PermissionRequest; draft: PermissionDraft }>('/api/permissions', body)
+export const answerPermission = (
+  id: number, body: { status: 'granted' | 'denied'; proof_note?: string; ads_allowed?: boolean },
+) => post<PermissionRequest>(`/api/permissions/${id}/answer`, body)
+/** The creator's file, as the request body (like the reaction reel upload). */
+export const attachPermissionFile = (id: number, file: File, audio: AudioRights) =>
+  uploadFile<Clip>(`/api/permissions/${id}/attach?${new URLSearchParams({ name: file.name, audio_rights: audio })}`, file)
 /** POST /api/sources/download (step 063b): a public Reel saved for a reaction; `reason` says why not. */
 export type ReelDownload = {
   status: 'downloaded' | 'exists' | 'refused' | 'failed'

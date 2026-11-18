@@ -36,6 +36,7 @@ from . import (
     feedback,
     learnings,
     media,
+    permissions,
     reactions,
     render,
     reports,
@@ -181,6 +182,7 @@ def create_app(
     app.include_router(experiments.router)
     app.include_router(sources.router)
     app.include_router(reactions.router)
+    app.include_router(permissions.router)
     app.include_router(dm_picks.router)
     app.include_router(downloader_router)
     app.include_router(alerts_router)

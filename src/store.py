@@ -415,13 +415,37 @@ TRIAL_SCHEMA = """
 ALTER TABLE post_labels ADD COLUMN trial INTEGER NOT NULL DEFAULT 0;
 """
 
+# Migration 17: permission requests (065). The owner asks a creator to reuse a clip as is;
+# the agent never contacts anyone. At most one open (`requested`) request per source.
+# sources.ads_allowed: the licence or the creator in writing allows paid ads (rights.py).
+PERMISSIONS_SCHEMA = """
+CREATE TABLE permission_requests (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id    INTEGER NOT NULL REFERENCES sources(id),
+    creator      TEXT NOT NULL,
+    channel      TEXT NOT NULL CHECK (channel IN ('dm','email','other')),
+    status       TEXT NOT NULL DEFAULT 'requested' CHECK (status IN
+        ('requested','granted','denied')),
+    requested_at TEXT NOT NULL,
+    answered_at  TEXT,
+    proof_note   TEXT,
+    ads_allowed  INTEGER NOT NULL DEFAULT 0 CHECK (ads_allowed IN (0, 1)),
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_permission_open ON permission_requests(source_id)
+    WHERE status = 'requested';
+ALTER TABLE sources ADD COLUMN ads_allowed INTEGER;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
                          ASSET_LINK_SCHEMA, WORKER_STATE_SCHEMA, DATA_JOBS_SCHEMA,
                          RENDER_SCHEMA, RESEARCH_SCHEMA, INSPIRATIONS_SCHEMA,
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
-                         DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA]
+                         DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
+                         PERMISSIONS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -458,6 +482,7 @@ _INSERT_STAMPS = {
     "render_jobs": ("created_at", "updated_at"),
     "dm_picks": ("created_at", "updated_at"),
     "experiments": ("created_at", "updated_at"),
+    "permission_requests": ("created_at", "updated_at"),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")
