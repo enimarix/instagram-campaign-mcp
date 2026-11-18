@@ -239,7 +239,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 - [x] 094b — Ads page (web) — `/ads` on the design system: budget card with kill / unkill (password), propose a test from eligible winners with the needed budget in plain words, approve with budget + password + underpowered warning, tests list with status chips, audit log; on the 094 API. — deps: 094 · touches: `web/src/pages/Ads.tsx`, `web/src/App.tsx`, `web/src/api/client.ts`
 - [x] 095 — Ad results — worker job collects ad insights, spend and Meta's review status (an ad that Meta rejects or limits is shown with the reason); the ledger is reconciled with the spend Meta reports; results page with spend, primary metric, significance and the declared winner; warning when spend nears a cap.
 - [x] 095b — Ad results on the Ads page — per test: spend vs budget, metric per variant, p-value, winner and lift in plain words ("B gets 24 % more clicks than A, 95 % sure") or "too early: day 3 of 7"; review-issue chip with the reason; near-cap banner. — deps: 094b, 095 · touches: `web/src/pages/Ads.tsx`, `web/src/api/client.ts`
-- [ ] 096 — Ads for the agent — MCP tools to propose tests and read results, in the `agent` profile (no tool there can activate, approve or raise a budget); playbook `weekly-ads.md` proposes tests from organic winners with a hypothesis each and turns finished tests into learnings.
+- [x] 096 — Ads for the agent — MCP tools to propose tests and read results, in the `agent` profile (no tool there can activate, approve or raise a budget); playbook `weekly-ads.md` proposes tests from organic winners with a hypothesis each and turns finished tests into learnings.
 
 ### Phase 10 — Hardening and handover
 
@@ -248,6 +248,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 - [x] 099 — End-to-end smoke test — Playwright: seed, open inbox, like, comment, approve, slot appears in the calendar, worker "publishes" against a mocked Graph API; runs in CI.
 - [x] 100 — One-command setup and README — installers set up Python, Node dependencies, the website build, the Reel downloader (`git submodule update --init` and `ig-campaign downloader setup`), the ffmpeg check, the Claude Code CLI check and the scheduled tasks on Windows, macOS and Linux; README rewritten: setup, a normal day (including the AI label if it must be set by hand), recovery (expired token, failed publish, stuck render, restore from backup).
 - [x] 122 — Small follow-ups — audience evidence on `update_learning`, the feed's trial toggle for experiment videos, the old clip file removed when a granted file replaces it. — deps: 065, 083, 088 · touches: `src/learning/learnings.py`, `src/instagram_mcp_server.py#update_learning`, `src/studio/permissions.py`, `web/src/inbox/InboxPage.tsx`, `web/src/api/client.ts#Asset`, `src/api/assets.py`
+- [ ] 123 — Ads API gaps — winner thumbnails, `GET /api/ads/presets`, `near_cap` on the budget route; the Ads page drops its copies. — deps: 095b, 096 · touches: `src/ads/tests.py`, `src/api/ads.py`, `web/src/pages/Ads.tsx`
 - [ ] 101 — Final review — walk the checklist in GOAL.md §7 on the owner's machine with the owner, fix or file what fails.
 
 ### Milestones (what the owner can do after each phase)
@@ -265,6 +266,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 096 — Ads for the agent — https://github.com/enimarix/instagram-campaign-mcp/pull/129 (2026-11-18) — agent tools list_ad_winners / propose_ad_test (max 3 waiting) / list_ad_tests / get_ad_test_results, proven to have no money power; weekly schedule entries (`weekly-ads@mon 04:00`); weekly-ads playbook, opt-in after H6. PHASE 9 BUILT (live at H6).
 - [x] 095b — Ad results on the Ads page — https://github.com/enimarix/instagram-campaign-mcp/pull/128 (2026-11-18) — per test: verdict in plain words with the lift interval, spend bar, versions table, p-values under Details, Meta review chips, near-cap banners
 - [x] 095 — Ad results (backend) — https://github.com/enimarix/instagram-campaign-mcp/pull/127 (2026-11-18) — `ads_sync` worker job: kill enforced on Meta, insights snapshots, ledger reconciled (never under-counts), over-spend alert + kill, review issues, stop rules, near-cap alerts; results API (web in 095b)
 - [x] 094b — Ads page (web) — https://github.com/enimarix/instagram-campaign-mcp/pull/126 (2026-11-18) — `/ads`: budget card with Stop all ads / Allow again (password), propose with the needed budget in plain words, approve with budget + password, tests list, audit log
