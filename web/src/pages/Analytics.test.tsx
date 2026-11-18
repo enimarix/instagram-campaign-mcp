@@ -115,6 +115,7 @@ describe('Analytics', () => {
     expect(screen.getByText(/Not enough scored reviews yet/)).toBeTruthy()
     expect(screen.getByText('No feedback reasons yet.')).toBeTruthy()
     expect(screen.getByText('0 d')).toBeTruthy()
+    expect(await screen.findByText(/No report yet: the nightly analysis runs at 02:00/)).toBeTruthy()
   })
 
   it('shows an error line instead of crashing', async () => {

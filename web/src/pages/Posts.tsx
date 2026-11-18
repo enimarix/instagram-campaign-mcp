@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import {
   ApiError, errorMessage, getAnalyticsPost, listAnalyticsPosts, type AnalyticsPost, type PostDetail,
-  type RetentionFinding,
 } from '../api/client'
 import { localDate, safeUrl } from '../inbox/ui'
 import { Button } from '../ui/Button'
@@ -11,7 +10,7 @@ import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { card, field, link, type Tone } from '../ui/styles'
 import { Body, Line, Section } from './Analytics'
-import { clock, humanize, num, pct, useLoad, VERDICT_TONE } from './load'
+import { clock, FINDING, humanize, num, pct, useLoad, VERDICT_TONE } from './load'
 
 const PAGE = 20
 const SORTS = [
@@ -42,9 +41,6 @@ const COLUMNS: [string, (p: AnalyticsPost) => string][] = [
   ['View rate', (p) => ratio(p.view_rate)],
 ]
 
-const FINDING: Record<RetentionFinding['kind'], [Tone, string]> = {
-  hook: ['warn', 'Hook'], exit: ['neutral', 'Exit'], payoff: ['warn', 'Payoff'], strong: ['success', 'Strong'],
-}
 // marker colours, written out so Tailwind sees them
 const MARKER: Record<Tone, string> = {
   neutral: 'bg-fg', accent: 'bg-accent', success: 'bg-success', warn: 'bg-warn', danger: 'bg-danger', info: 'bg-info', explore: 'bg-explore',

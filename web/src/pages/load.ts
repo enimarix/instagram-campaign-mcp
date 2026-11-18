@@ -1,10 +1,15 @@
 // Shared by the analytics pages (078, 079): fetch state and number formats.
 import { useEffect, useState } from 'react'
-import { errorMessage } from '../api/client'
+import { errorMessage, type RetentionFinding } from '../api/client'
 import type { Tone } from '../ui/styles'
 
 // Chip tone per post verdict; the others are neutral.
 export const VERDICT_TONE: Record<string, Tone | undefined> = { winner: 'success', promising: 'warn', weak: 'danger' }
+
+// Chip tone and label per retention finding (111).
+export const FINDING: Record<RetentionFinding['kind'], [Tone, string]> = {
+  hook: ['warn', 'Hook'], exit: ['neutral', 'Exit'], payoff: ['warn', 'Payoff'], strong: ['success', 'Strong'],
+}
 
 export const num = (n: number | null | undefined) => (n == null ? '–' : n.toLocaleString('en'))
 export const pct = (r: number | null | undefined) => (r == null ? '–' : `${Math.round(r * 100)} %`)
