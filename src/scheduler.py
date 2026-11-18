@@ -23,6 +23,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler agent run-due       # run playbooks due per AGENT_SCHEDULE (061)
   python -m src.scheduler agent install-schedule [--remove]  # OS autostart + daily runs
   python -m src.scheduler downloader setup|update|status  # Reel downloader service (063a)
+  python -m src.scheduler restore <backup> [--yes]  # put a nightly backup back (097)
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -33,6 +34,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sqlite3
 import subprocess
 import sys
 from contextlib import nullcontext, suppress
@@ -43,7 +45,7 @@ from .campaign import collect_insights, rank, run_due
 from .config import InstagramMCPSettings, get_settings
 from .instagram_client import InstagramAPIError, InstagramClient
 from .logging_setup import configure_logging
-from .store import CampaignStore, utcnow
+from .store import CampaignStore, to_iso, utcnow
 
 NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
                   "and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env)")
@@ -68,6 +70,10 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
             else:
                 print(f"worker: {NOT_CONFIGURED}; publishing is idle, renders run.",
                       file=sys.stderr, flush=True)
+                while not renders.done():  # no publish cycle beats here; `restore` checks it
+                    with suppress(sqlite3.Error):
+                        store.set_state("heartbeat_at", to_iso(utcnow()))
+                    await asyncio.wait({renders}, timeout=interval)
                 await renders
         finally:
             for task in (renders, agents, downloader):
@@ -272,6 +278,33 @@ def _downloader(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- restore (097) --------------------------------------------------------
+def _restore(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from .studio.housekeeping import RestoreRefused, restore_database
+
+    settings = get_settings()
+    backup = Path(args.backup)
+    try:
+        plan = restore_database(settings, backup, utcnow(), dry_run=True)
+        print(f"Restore {plan['backup']} (schema {plan['backup_schema']}) over"
+              f" {plan['database']}; the current database is kept as {plan['set_aside']}.")
+        if not args.yes:
+            if not sys.stdin.isatty():
+                print("restore: not interactive, add --yes to go ahead.", file=sys.stderr)
+                return 1
+            if input("Go ahead? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("restore: cancelled.", file=sys.stderr)
+                return 1
+        result = restore_database(settings, backup, utcnow())
+    except RestoreRefused as e:
+        print(f"restore: refused, {e}.", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ig-campaign")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -333,6 +366,10 @@ def main(argv: list[str] | None = None) -> None:
     dl.add_parser("update", help="Move to upstream's latest commit; roll back if the health "
                                  "check fails (stop the worker first)")
     dl.add_parser("status", help="Built?, port, commit and the last health check")
+    rs = sub.add_parser("restore", help="Replace the database with a backup (stop the studio"
+                                         " first; the current one is kept aside)")
+    rs.add_argument("backup", help="A backup file, e.g. data/backups/studio-2026-11-17.db")
+    rs.add_argument("--yes", action="store_true", help="Don't ask (needed when not interactive)")
     args = parser.parse_args(argv)
     if args.command == "agent" and args.agent_command == "run" and (
             (args.max_turns is not None and args.max_turns < 1)
@@ -351,6 +388,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_agent(args))
     if args.command == "downloader":
         sys.exit(_downloader(args))
+    if args.command == "restore":
+        sys.exit(_restore(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 

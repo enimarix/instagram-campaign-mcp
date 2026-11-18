@@ -1,7 +1,8 @@
 """
 Housekeeping the worker runs once a day (GOAL.md §3.2, §4.3, §7): archive stale `ready`
-assets, delete the files of long-archived ones, back up the database. Plus the disk floor
-the render loop checks before it starts a render.
+assets, delete the files of long-archived ones, back up the database, thin old insight
+snapshots (VACUUM weekly). Plus the disk floor the render loop checks before it starts a
+render, and the restore from a backup (`ig-campaign restore`, step 097).
 
 The bench (`ready` + `liked`) is never emptied by age alone: a liked asset is archived only
 once past its best_before. An asset's archive time is its `updated_at` (archived is final,
@@ -10,17 +11,19 @@ so only rare edits such as a verdict change move it, which only delays the purge
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 import structlog
 
 from ..config import InstagramMCPSettings
-from ..store import CampaignStore, parse_dt, to_iso
+from ..store import MIGRATIONS, CampaignStore, parse_dt, to_iso
 from . import media
 from .assets import InvalidTransition, transition
 from .storage import free_bytes
@@ -90,17 +93,145 @@ def backup_database(store: CampaignStore, settings: InstagramMCPSettings, now: d
     dest = folder / f"{BACKUP_PREFIX}{day.isoformat()}.db"
     tmp = dest.with_suffix(".tmp")  # never leave a half-written backup under the real name
     tmp.unlink(missing_ok=True)
-    target = sqlite3.connect(tmp)
-    try:
-        with store._tx() as c:
-            c.backup(target)
-    finally:
-        target.close()
+    with store._tx() as c:
+        _backup(c, tmp)
     os.replace(tmp, dest)
     for old in sorted(folder.glob(f"{BACKUP_PREFIX}*.db"))[:-settings.backup_keep]:
         old.unlink()
     store.set_state("last_backup", to_iso(now))
     return str(dest)
+
+
+def thin_snapshots(store: CampaignStore, settings: InstagramMCPSettings, now: datetime) -> int:
+    """Posts older than snapshot_thin_after_days keep only their age-schedule snapshots
+    (campaign.SNAPSHOT_POINTS) and the latest: what scoring, the post series and retention
+    read. Returns the number of snapshots dropped."""
+    from ..campaign import SNAPSHOT_POINTS  # campaign imports studio modules
+
+    return store.thin_snapshots(now - timedelta(days=settings.snapshot_thin_after_days),
+                                [p.total_seconds() / 3600 for p in SNAPSHOT_POINTS])
+
+
+def vacuum(store: CampaignStore) -> None:
+    """Give the space of deleted rows back to the disk (rewrites the file; run rarely)."""
+    with store._tx() as c:
+        c.execute("VACUUM")
+
+
+class RestoreRefused(Exception):
+    """The backup can't (or must not) replace the database now."""
+
+
+def _in_use(db: Path, now: datetime) -> Optional[str]:
+    """Why the database looks in use (a fresh worker heartbeat, a write lock), else None.
+    Raw SQLite: the current file may be the broken one being replaced."""
+    from ..worker import ALIVE_WITHIN  # the worker imports this module
+
+    if not db.exists():
+        return None
+    con = sqlite3.connect(db, timeout=1)
+    try:
+        try:
+            row = con.execute(
+                "SELECT value FROM worker_state WHERE key='heartbeat_at'").fetchone()
+        except sqlite3.DatabaseError:  # no worker_state yet, or unreadable: nothing to check
+            row = None
+        if row and now - parse_dt(json.loads(row[0])) < ALIVE_WITHIN:
+            return "the worker (or `up`) is running: stop it first"
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            con.rollback()
+        except sqlite3.OperationalError:
+            return "another process is writing to the database: stop it first"
+        except sqlite3.DatabaseError:  # not a database at all: nobody can be using it
+            pass
+    finally:
+        con.close()
+    return None
+
+
+def _backup_version(path: Path) -> int:
+    """The backup's schema version, once it passed PRAGMA integrity_check and this code can
+    open it (not newer than MIGRATIONS)."""
+    if not path.is_file():
+        raise RestoreRefused(f"{path} is not a file")
+    try:
+        con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            check = con.execute("PRAGMA integrity_check").fetchone()[0]
+            version = con.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            con.close()
+    except sqlite3.DatabaseError as e:
+        raise RestoreRefused(f"{path} is not a readable SQLite database ({e})") from e
+    if check != "ok":
+        raise RestoreRefused(f"{path} failed the integrity check: {check}")
+    if version > len(MIGRATIONS):
+        raise RestoreRefused(f"{path} has schema version {version}, newer than this code"
+                             f" ({len(MIGRATIONS)}): update the code first")
+    return version
+
+
+def restore_database(settings: InstagramMCPSettings, backup: Path, now: datetime, *,
+                     dry_run: bool = False) -> Dict[str, Any]:
+    """Replace the database with `backup` (`ig-campaign restore`). Refuses while it is in
+    use or when the backup is corrupt or newer than the code. The current database is first
+    copied aside to <db>.before-restore-<UTC time> (its raw bytes if it is unreadable). The
+    backup is copied with SQLite's backup API (consistent under WAL) next to the database,
+    then moved over it; CampaignStore opens the result so pending migrations run.
+    dry_run: only the checks, returns the plan. RestoreRefused says why not."""
+    db = Path(settings.database_path)
+    if settings.database_path == ":memory:":
+        raise RestoreRefused("the database is in memory")
+    if db.exists() and db.resolve() == backup.resolve():
+        raise RestoreRefused("the backup is the database itself")
+    version = _backup_version(backup)
+    why = _in_use(db, now)
+    if why:
+        raise RestoreRefused(why)
+    stamp = now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    aside = db.with_name(f"{db.name}.before-restore-{stamp}") if db.exists() else None
+    plan = {"backup": str(backup), "backup_schema": version, "database": str(db),
+            "set_aside": str(aside) if aside else None}
+    if dry_run:
+        return plan
+    if aside:
+        current = sqlite3.connect(db)
+        try:
+            _backup(current, aside)
+        except sqlite3.DatabaseError:  # not even readable: keep its bytes as they are
+            for suffix in ("", "-wal"):
+                if Path(f"{db}{suffix}").exists():
+                    shutil.copy2(f"{db}{suffix}", f"{aside}{suffix}")
+        finally:
+            current.close()
+    db.parent.mkdir(parents=True, exist_ok=True)
+    tmp = db.with_name(f"{db.name}.restore-tmp")
+    tmp.unlink(missing_ok=True)  # a crashed earlier restore's leftover
+    src = sqlite3.connect(f"{backup.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        _backup(src, tmp)
+    finally:
+        src.close()
+    for suffix in ("-wal", "-shm"):  # the old WAL (copied aside) must not replay onto it
+        Path(f"{db}{suffix}").unlink(missing_ok=True)
+    os.replace(tmp, db)
+    store = CampaignStore(str(db))  # runs the migrations newer than the backup
+    try:
+        with store._tx() as c:
+            schema = c.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        store.close()
+    return {**plan, "schema": schema, "migrations_run": schema - version}
+
+
+def _backup(source: sqlite3.Connection, dest: Path) -> None:
+    """source's database into the file `dest` with SQLite's online backup API."""
+    target = sqlite3.connect(dest)
+    try:
+        source.backup(target)
+    finally:
+        target.close()
 
 
 def disk_ok(settings: InstagramMCPSettings) -> bool:

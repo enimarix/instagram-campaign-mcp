@@ -25,6 +25,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta, timezone
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
@@ -991,6 +992,33 @@ class CampaignStore:
             d["metrics"] = json.loads(d["metrics"])
             out.append(d)
         return out
+
+    # ------------------------------------------------------------------
+    # Snapshot thinning (step 097)
+    # ------------------------------------------------------------------
+    def thin_snapshots(self, posted_before: datetime, keep_ages: Sequence[float]) -> int:
+        """Per post posted before `posted_before`, keep the latest snapshot (MAX id, as
+        latest_snapshots) and, for each age in keep_ages, the one nearest to it plus the
+        nearest at or past it (what snapshots_near_age picks under a min age; same
+        tie-break); delete the rest. Returns the number deleted."""
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT id, media_id, age_hours, captured_at FROM insight_snapshots"
+                " WHERE posted_at < ? AND age_hours IS NOT NULL ORDER BY media_id",
+                (to_iso(posted_before),),
+            ).fetchall()
+            drop: List[int] = []
+            for _, group in groupby(rows, key=lambda r: r["media_id"]):
+                snaps = list(group)
+                keep = {max(r["id"] for r in snaps)}
+                for age in keep_ages:
+                    ranked = sorted(snaps, key=lambda r: (abs(r["age_hours"] - age),
+                                                          r["captured_at"], r["id"]))
+                    past = next((r for r in ranked if r["age_hours"] >= age), ranked[0])
+                    keep.update((ranked[0]["id"], past["id"]))
+                drop += [r["id"] for r in snaps if r["id"] not in keep]
+            c.executemany("DELETE FROM insight_snapshots WHERE id=?", [(i,) for i in drop])
+        return len(drop)
 
     # ------------------------------------------------------------------
     # Studio: sources, ideas, assets

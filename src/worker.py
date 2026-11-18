@@ -66,6 +66,7 @@ DAILY_RETRY = timedelta(hours=1)  # a failing daily job (e.g. no insights permis
 RENDER_TICK = 5.0  # s between queue polls and job heartbeats
 RENDER_STALE = timedelta(minutes=10)  # a running job without heartbeat this long is re-queued
 DISK_WARN_EVERY = 3600.0  # s between "disk too full" messages
+VACUUM_EVERY = timedelta(days=7)  # after the daily snapshot thinning
 
 
 def next_slot(store: CampaignStore) -> Optional[str]:
@@ -230,8 +231,9 @@ async def run(client: InstagramClient, store: CampaignStore, settings: Instagram
 
 def daily_housekeeping(store: CampaignStore, settings: InstagramMCPSettings,
                        now: Callable[[], datetime] = utcnow) -> Optional[Dict[str, Any]]:
-    """Archive, purge and back up once per owner-local day; a failure raises and is retried
-    at most hourly. Returns what was done, or None when nothing was due."""
+    """Archive, purge, back up and thin snapshots once per owner-local day (VACUUM at most
+    weekly); a failure raises and is retried at most hourly. Returns what was done, or None
+    when nothing was due."""
     t = now()
     today = t.astimezone(ZoneInfo(settings.timezone)).date()
     if (store.get_state("housekeeping_day") == today.isoformat()
@@ -239,7 +241,11 @@ def daily_housekeeping(store: CampaignStore, settings: InstagramMCPSettings,
         return None
     out = {"archived": housekeeping.archive_stale(store, settings, today),
            "purged": housekeeping.purge_archived_files(store, settings, today),
-           "backup": housekeeping.backup_database(store, settings, t)}
+           "backup": housekeeping.backup_database(store, settings, t),
+           "thinned": housekeeping.thin_snapshots(store, settings, t)}
+    out["vacuumed"] = _every(store, "vacuum_at", VACUUM_EVERY, t)
+    if out["vacuumed"]:
+        housekeeping.vacuum(store)
     store.set_state("housekeeping_day", today.isoformat())
     return out
 
