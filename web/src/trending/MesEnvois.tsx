@@ -81,7 +81,7 @@ function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () =>
       {embed && (
         // closed: the iframe loads only when opened (the owner sent the Reel, he knows it)
         <details>
-          <summary className="flex min-h-11 cursor-pointer items-center font-medium">Voir le Reel</summary>
+          <summary className="cursor-pointer py-3 font-medium">Voir le Reel</summary>
           <Embed src={embed} title={`Reel envoyé par @${o.sender ?? '?'}`} />
         </details>
       )}
