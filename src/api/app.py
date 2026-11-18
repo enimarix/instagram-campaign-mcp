@@ -45,6 +45,7 @@ from . import (
 )
 from . import settings as settings_routes
 from . import token as token_routes
+from .alerts import router as alerts_router
 from .analytics import router as analytics_router
 from .auth import COOKIE, Auth, Locked, host_ok, origin_ok
 from .calendar import router as calendar_router
@@ -182,6 +183,7 @@ def create_app(
     app.include_router(reactions.router)
     app.include_router(dm_picks.router)
     app.include_router(downloader_router)
+    app.include_router(alerts_router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 
