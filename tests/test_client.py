@@ -5,6 +5,7 @@ import pytest
 import respx
 
 from src.instagram_client import (
+    AILabelRefused,
     InstagramAPIError,
     InstagramClient,
     InvalidMedia,
@@ -345,3 +346,26 @@ async def test_local_reel_bad_path_rejected_before_network(client, video, tmp_pa
     with pytest.raises(InvalidMedia):
         await client.publish_reel(video_path=rel)
     assert not respx.calls
+
+
+# ---------------------------------------------------------------- 120: the AI label
+@respx.mock
+@pytest.mark.parametrize("ai", [True, False])
+async def test_reel_sends_the_ai_label_only_when_ai_made(client, ai):
+    create = respx.post(f"{API}/1789/media").respond(json={"id": "C1"})
+    respx.get(f"{API}/C1").respond(json={"status_code": "FINISHED"})
+    respx.post(f"{API}/1789/media_publish").respond(json={"id": "M1"})
+    respx.get(f"{API}/M1").respond(json={"id": "M1"})
+    await client.publish_reel("https://cdn/x.mp4", "hello", ai_generated=ai)
+    body = _body(create.calls.last)
+    assert body.get("is_ai_generated") is (True if ai else None)
+
+
+@respx.mock
+async def test_refused_ai_label_is_never_published_unlabelled(client):
+    respx.post(f"{API}/1789/media").respond(json={"error": {
+        "code": 100, "message": "(#100) Param is_ai_generated is not supported"}})
+    publish = respx.post(f"{API}/1789/media_publish")
+    with pytest.raises(AILabelRefused, match="refused the AI label.*is_ai_generated"):
+        await client.publish_reel("https://cdn/x.mp4", ai_generated=True)
+    assert not publish.called

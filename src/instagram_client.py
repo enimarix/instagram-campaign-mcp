@@ -125,6 +125,15 @@ class InvalidMedia(InstagramAPIError):
     Retrying the same post can never succeed."""
 
 
+class AILabelRefused(InvalidMedia):
+    """Meta refused `is_ai_generated` on an AI-made Reel. Never retried: an AI-made video
+    is not published without Instagram's AI label (GOAL.md §5.6)."""
+
+
+# What Meta's refusal of the label names (exact wording undocumented).
+AI_LABEL_ERROR_RE = re.compile(r"ai_generated|\bAI (label|info)\b", re.IGNORECASE)
+
+
 class RequestBudget:
     """Sliding-window cap on requests per hour.
 
@@ -716,10 +725,13 @@ class InstagramClient:
         location_id: Optional[str] = None,
         trial_graduation: Optional[str] = None,
         video_path: Optional[str] = None,
+        ai_generated: bool = False,
     ) -> Dict[str, Any]:
         """Publish a Reel from a public `video_url` or a local `video_path` (relative to
         the media root, sent with the resumable upload). trial_graduation=MANUAL|
-        SS_PERFORMANCE makes it a trial Reel shown to non-followers first."""
+        SS_PERFORMANCE makes it a trial Reel shown to non-followers first.
+        `ai_generated` sets `is_ai_generated=true` on the container (Instagram's AI info
+        label); AILabelRefused when Meta refuses it."""
         if bool(video_url) == bool(video_path):
             raise InvalidMedia("Give exactly one of video_url or video_path for a Reel.")
         _check_caption(caption, self.settings.max_hashtags)
@@ -735,16 +747,23 @@ class InstagramClient:
             "audio_name": audio_name,
             "collaborators": collaborators,
             "location_id": location_id,
+            "is_ai_generated": True if ai_generated else None,
         }
         if trial_graduation:
             if trial_graduation not in ("MANUAL", "SS_PERFORMANCE"):
                 raise InvalidMedia("trial_graduation must be MANUAL or SS_PERFORMANCE")
             payload["trial_params"] = {"graduation_strategy": trial_graduation}
-        if not path:
-            return await self._publish_container(await self._create_container(payload))
-        data = await self._create_container_data(payload)
+        try:
+            data = await self._create_container_data(payload)
+        except InstagramAPIError as e:
+            if ai_generated and not e.network and AI_LABEL_ERROR_RE.search(e.message):
+                raise AILabelRefused(
+                    f"Not published: Instagram refused the AI label (is_ai_generated):"
+                    f" {e.message}", e.error_code, e.error_subcode) from e
+            raise
         container = _require_id(data, "media container")
-        await self._upload_video(container, data.get("uri"), path)
+        if path:
+            await self._upload_video(container, data.get("uri"), path)
         return await self._publish_container(container)
 
     async def publish_story(

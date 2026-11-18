@@ -29,7 +29,7 @@ def test_remix_with_source_and_versions(tc, store):
     assert body["idea"]["hook"] == "Wait for it"
     assert body["idea"]["citations"] == [{"title": "Paper", "url": "https://example.org/p"}]
     assert body["source"]["rights_basis"] == "licensed" and body["source"]["author"] == "someone"
-    assert body["parent"] is None
+    assert body["parent"] is None and body["ai_label"] is True  # no recipe yet: unsure
     assert [c["id"] for c in body["children"]] == [v2["id"], v3["id"]]
 
     body = tc.get(f"/api/assets/{v2['id']}/context").json()

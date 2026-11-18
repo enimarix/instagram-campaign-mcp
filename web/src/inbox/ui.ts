@@ -17,6 +17,8 @@ export const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1
 export const inputValue = (d: Date) => `${localDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 /** Seconds as "0:07", a moment of the video. */
 export const clock = (s: number) => `${Math.floor(s / 60)}:${pad(Math.floor(s % 60))}`
+/** Shown for AI-made videos (GOAL §5.6): the publish sends Instagram's AI label. */
+export const AI_LABEL_LINE = "Published with Instagram's AI label"
 /** What the owner confirms before a `commentary` video is queued (GOAL.md §5.1). */
 export const COMMENTARY_CONFIRMATION =
   'I checked this reaction video: my own take is a substantial part and the creator is credited.'

@@ -1,9 +1,12 @@
 """Step 019a: the publish guard (queue_asset) and the worker's asset outcomes."""
 
+import json
 from datetime import timedelta
 from pathlib import Path
 
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import SecretStr
@@ -12,18 +15,20 @@ import src.instagram_mcp_server as srv
 from src import campaign as camp
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
-from src.instagram_client import InstagramAPIError, InvalidMedia
+from src.instagram_client import InstagramAPIError, InstagramClient, InvalidMedia
 from src.store import utcnow
+from src.studio.alerts import alerts
 from src.studio.assets import InvalidTransition, edit_asset, transition
 from src.studio.publish import (
     QueueRefused,
+    ai_generated,
     cancel_post,
     queue_asset,
     reconcile_publish_checks,
     release_publish_check,
 )
 
-from .conftest import LOCAL
+from .conftest import API, LOCAL
 
 LATER = timedelta(hours=2)
 
@@ -71,7 +76,8 @@ def test_queue_approved_asset(store, cfg):
     post = queue_asset(store, cfg, a["id"], utcnow() + LATER)
     assert post["kind"] == "reel" and post["asset_id"] == a["id"]
     assert post["payload"] == {"video_path": a["file_path"], "caption": "hi #demo",
-                               "audio_name": "Original", "thumb_offset_ms": 1500}
+                               "audio_name": "Original", "thumb_offset_ms": 1500,
+                               "ai_generated": True}
     assert store.get_asset(a["id"])["status"] == "scheduled"
     with pytest.raises(QueueRefused, match="scheduled"):  # queued twice
         queue_asset(store, cfg, a["id"], utcnow() + LATER)
@@ -165,10 +171,11 @@ def test_owner_cancel_returns_asset_to_approved(store, cfg):  # DoD (7)
 # ------------------------------------------------------------- run_due outcomes (DoD 5)
 class FakeClient:
     def __init__(self, outcome):
-        self.outcome, self.calls = outcome, 0
+        self.outcome, self.calls, self.payload = outcome, 0, None
 
     async def publish_reel(self, **payload):
         self.calls += 1
+        self.payload = payload
         if isinstance(self.outcome, Exception):
             raise self.outcome
         return {"media_id": "M1", "permalink": "https://instagram.com/p/x"}
@@ -221,6 +228,55 @@ async def test_interrupted_publish_needs_a_check(store, cfg):
     assert store.get_asset(a["id"])["status"] == "publish_check"
     assert cancel_post(store, post["id"])["status"] == "cancelled"
     assert store.get_asset(a["id"])["status"] == "publish_check"  # never back to approved
+
+
+# ------------------------------------------------------------- 120: the AI label
+FFMPEG = {"kind": "ffmpeg", "recipe": {"version": 1, "ops": [{"op": "fit_vertical"}]}}
+VOICED = {"kind": "ffmpeg", "recipe": {"version": 1, "ops": [{"op": "voice_over"}]}}
+
+
+@pytest.mark.parametrize("recipe, script, expected", [
+    ({"kind": "motion", "template": "FactQuest", "props": {}}, None, True),  # script + TTS
+    (VOICED, None, True),  # remix with a voice-over
+    (FFMPEG, "An agent-written script", True),  # the idea says the script is AI-made
+    (None, None, True),  # unsure: label it
+    (FFMPEG, "  ", False),  # nothing AI-made in the video
+])
+def test_ai_generated(recipe, script, expected):
+    assert ai_generated({"recipe": recipe}, {"script": script}) is expected
+
+
+def test_queued_post_stores_the_flag(store, cfg):
+    a = _asset(store, cfg, track="remix", source={"rights_basis": "own"}, recipe=FFMPEG)
+    post = queue_asset(store, cfg, a["id"], utcnow() + LATER)
+    assert post["payload"]["ai_generated"] is False
+
+
+async def test_asset_queued_without_the_flag_is_labelled(store, cfg):
+    a, post = _due(store, cfg, track="remix", source={"rights_basis": "own"}, recipe=FFMPEG)
+    with store._tx() as c:  # a row queued before the flag existed
+        c.execute("UPDATE scheduled_posts SET payload=? WHERE id=?",
+                  (json.dumps({"video_path": a["file_path"], "caption": "hi"}), post["id"]))
+    fake = FakeClient(None)
+    await camp.run_due(fake, store)
+    assert fake.payload["ai_generated"] is True
+
+
+@respx.mock
+async def test_refused_ai_label_fails_the_publish_with_an_alert(store, cfg, settings):
+    a, post = _due(store, cfg)  # motion: AI-made
+    settings.media_root = cfg.media_root
+    create = respx.post(f"{API}/1789/media").respond(json={"error": {
+        "code": 100, "message": "(#100) Param is_ai_generated is not supported"}})
+    async with InstagramClient(settings, http_client=httpx.AsyncClient()) as client:
+        await camp.run_due(client, store, settings=cfg)
+    assert json.loads(create.calls.last.request.content)["is_ai_generated"] is True
+    row = store.get_scheduled(post["id"])
+    assert row["status"] == "failed"  # for good: never retried unlabelled
+    assert "refused the AI label" in row["error"]
+    assert store.get_asset(a["id"])["status"] == "approved"  # not on Instagram
+    found = [x for x in await alerts(store, cfg, utcnow()) if x["kind"] == "publish_failed"]
+    assert "refused the AI label" in found[0]["detail"]
 
 
 # ------------------------------------------------------------- 019b: reconcile, release

@@ -262,6 +262,7 @@ The owner asked for these mid-loop (see `docs/DECISIONS.md`, 2026-11-17 "Owner p
 
 ## Done
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 120 — AI label on publish — https://github.com/enimarix/instagram-campaign-mcp/pull/115 (2026-11-18) — AI-made videos are published with Instagram's AI label (is_ai_generated at container creation); a refusal fails the publish with an alert, never an unlabelled post; CI: ffmpeg download cached, pytest-timeout
 - [x] 119 — Look at a clip before reacting — https://github.com/enimarix/instagram-campaign-mcp/pull/114 (2026-11-18) — agent tools get_clip_frames / set_clip_timeline; the clip's own moments go into the remix timeline (marked clip:) so the night analysis can name them
 - [x] 100 — One-command setup and README — https://github.com/enimarix/instagram-campaign-mcp/pull/113 (2026-11-18) — re-runnable install.ps1 / install.sh (schedule only with a flag), `ig-campaign doctor`, README rewritten as an owner guide (setup, a normal day, the AI label, when something goes wrong), developer notes in docs/DEVELOPING.md
 - [x] 099 — End-to-end smoke test — https://github.com/enimarix/instagram-campaign-mcp/pull/112 (2026-11-18) — Playwright in CI: seed, decide in the feed, slot in the calendar, publish against a local Graph stub (no network), published in the calendar
@@ -395,6 +396,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - [x] (from 116) Learnings and Ads placeholders say only "Coming soon": say what will be there and when.
 - [x] (from 116) AssetPage source links are under 44 px.
 - [x] (from 072) `list_assets` rows lack the source `rights_basis`, so the feed's "commentary" chip never shows: join it in.
+- [ ] (from 120) The MCP `publish_reel` / `schedule_post` tools (owner profile) must send the AI label too (`ai_generated`), so a direct publish is never unlabelled.
 - [ ] (from 100) `instagram_configured` (config.py) treats the env.example placeholder token as real: treat placeholders as not set (doctor already does).
 - [ ] (from 099) Validate `INSTAGRAM_API_BASE_URL`: https except for loopback.
 - [x] (from 073, in 119) A tool for the agent to look at a downloaded clip's frames and store its timeline (110 format) on the source before rendering (113b analysis step).

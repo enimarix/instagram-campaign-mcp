@@ -116,10 +116,11 @@ those videos. Meta's publishing API can now set this label: the `is_ai_generated
 parameter, added on 22 June 2026
 ([Instagram Platform changelog](https://developers.facebook.com/docs/instagram-platform/changelog),
 [media reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media)).
-**The studio does not send it yet.** Until it does, open each AI-voiced Reel in the
-Instagram app after it is published and add the label if the app offers it
-(**⋯ → Edit**). If the app doesn't offer it, report this so the label is added to the
-publish step.
+The studio sends it for every video with anything AI-made in it (a written script, a
+synthetic voice), so there is nothing to do by hand. The video's page and the scheduling
+sheet say "Published with Instagram's AI label". If Instagram refuses the label, the post
+is **not** published: it shows under the bell with the reason, and the video goes back to
+approved.
 
 ## 3. When something goes wrong
 

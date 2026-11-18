@@ -22,7 +22,7 @@ import { Card, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { field, link, verdictButton } from '../ui/styles'
-import { safeUrl } from './ui'
+import { AI_LABEL_LINE, safeUrl } from './ui'
 
 function ExternalLink({ url, children }: { url?: string | null; children: ReactNode }) {
   const href = safeUrl(url)
@@ -246,6 +246,7 @@ function AssetPage({ id }: { id: number }) {
                 </Row>
               )}
             </dl>
+            {ctx.ai_label && <p className="mt-3 text-sm text-muted">{AI_LABEL_LINE}</p>}
             {(ctx.parent || ctx.children.length > 0) && (
               <nav aria-label="Versions" className="mt-3 flex flex-wrap gap-3 text-sm">
                 {ctx.parent && (

@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-18: AI-made videos are published with Instagram's AI label, or not at all (120)
+Replaces GOAL §5.6's fallback ("set the label by hand in the app"): the Graph API can set
+it (`is_ai_generated`, changelog 2026-06-22). `studio.publish.ai_generated(asset, idea)`
+says yes for a motion render, a remix with a voice-over, an idea with a script, and
+anything unsure; no only for an ffmpeg edit without a voice-over of an idea without a
+script. The flag is stored in the queued post's payload. When Meta refuses the parameter
+(an error naming it at container creation), the post fails for good with the reason and
+the publish-failed alert, and the asset goes back to `approved`. No setting for "publish
+without the label" yet: add one only if the owner asks.
+Reason: posting AI content unlabelled is the worse outcome; the label can't be added
+later through the API (IG Media updates take only `comment_enabled`).
+
 ## 2026-11-18: Experiments link to posts through the idea, not post labels (086)
 Changes the roadmap's "linked to posts through the existing campaign / variant labels".
 An idea joins an experiment variant with `ideas.experiment = 'exp:<id>:<variant>'` (no new
