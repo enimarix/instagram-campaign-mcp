@@ -32,6 +32,8 @@ const beat = z.strictObject({
   line: screenText(90),
   /** Problem beats only: 1-3 foods with their numbers. */
   foods: z.array(food).min(1).max(3).optional(),
+  /** App beats only: the big number on the phone's ring, counting up ("308 kcal"); default the ring's %. */
+  value: screenText(12).optional(),
   /** Golem form in this beat (default: fromForm, toForm once levelled up). */
   form: formSchema.optional(),
 });
@@ -78,6 +80,9 @@ export const voxelQuestSchema = z
     p.beats.forEach((b, i) => {
       if (b.foods && b.kind !== "problem") {
         ctx.addIssue({ code: "custom", path: ["beats", i, "foods"], message: "only problem beats show foods" });
+      }
+      if (b.value && b.kind !== "app") {
+        ctx.addIssue({ code: "custom", path: ["beats", i, "value"], message: "only app beats show a value on the phone" });
       }
     });
     if (FORM_IDS.indexOf(p.toForm) <= FORM_IDS.indexOf(p.fromForm)) {

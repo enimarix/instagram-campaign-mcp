@@ -10,7 +10,7 @@ import { assetById } from "../assets";
 import { brand, safeArea } from "../brand";
 import { fonts } from "../lib/font";
 import { frenchSpaces } from "../lib/french";
-import { backOut, bob, easeOut, hop, type Move, poseAt, type Pose, popIn, span } from "../voxel/anim.ts";
+import { backOut, bob, easeInOut, easeOut, hop, type Move, poseAt, type Pose, popIn, span } from "../voxel/anim.ts";
 import { cellNoise, VoxelGrid } from "../voxel/mesh.ts";
 import { golem, KITCHEN_SPOT, KITCHEN_WIDE, kitchen, mbTile, PROPS } from "../voxel/models.ts";
 import { FORMS } from "../voxel/palette.ts";
@@ -28,8 +28,8 @@ const FOODS = Object.fromEntries(Object.entries(PROPS).map(([id, make]) => [id, 
 const podium = (accent: Accent) => {
   const ring = accent === "brand" ? "emerald" : accent;
   return new VoxelGrid()
-    .cylinder(0, 0, -3, -3, 20.5, "plinth")
-    .cylinder(0, 0, -2, -1, 20, (x, _y, z) => (Math.hypot(x, z) > 18.2 ? ring : (Math.floor(x / 4) + Math.floor(z / 4)) % 2 ? "floorA" : "floorB"))
+    .cylinder(0, 0, -3, -3, 23.5, "plinth")
+    .cylinder(0, 0, -2, -1, 23, (x, _y, z) => (Math.hypot(x, z) > 21.2 ? ring : (Math.floor(x / 4) + Math.floor(z / 4)) % 2 ? "floorA" : "floorB"))
     .repaint((x, y, z, c) => (y === -1 && c !== ring && cellNoise(x, z, 3) < 0.04 ? "plinth" : null))
     .voxels();
 };
@@ -38,14 +38,14 @@ const PODIUMS = Object.fromEntries(Object.keys(ACCENTS).map((a) => [a, podium(a 
 /** Faces the iso camera (azimuth 45°) and leans back a little: reads face-on, still 3D. */
 const TILE_TURN: [number, number, number, "YXZ"] = [-0.18, Math.PI / 4, 0, "YXZ"];
 /** Cameo spot on the podium: to the tile's right on screen, a step toward the camera. */
-const CAMEO_AT: [number, number, number] = [14, 0, -10];
+const CAMEO_AT: [number, number, number] = [16, 0, -12];
 
 const START_POSE: Pose = { ...KITCHEN_WIDE, target: [KITCHEN_WIDE.target[0], KITCHEN_WIDE.target[1] + KITCHEN_Y, KITCHEN_WIDE.target[2]] };
 const END_POSE: Pose = { ...KITCHEN_WIDE, target: [0, -29, 0], lens: 13.5 };
 const MOVE: Move = { from: START_POSE, to: END_POSE, start: 0, duration: 34 };
 
 /** Frames (from the card's start) at which each piece comes in. */
-const AT = { podium: 6, cubes: 12, letters: 32, cameo: 30, word: 34, tagline: 48, pill: 54, url: 62 };
+const AT = { leave: 4, podium: 6, cubes: 12, letters: 32, cameo: 30, word: 34, tagline: 48, pill: 54, url: 62 };
 const DROP = 13; // frames a cube takes to fall and bounce
 const FALL = 18; // voxels it falls
 
@@ -89,14 +89,16 @@ export const VoxelEndCard = ({ tagline, accent, cameo, address, pixelate }: Omit
         <CameraRig kind="iso" pose={poseAt(frame, MOVE)} />
         <group position={[0, KITCHEN_Y, 0]}>
           <VoxelMesh voxels={KITCHEN} build={{ center: false }} />
-          {/* The story's golem where the story left it (the wide shot the card starts on). */}
-          {isGolem && <VoxelMesh voxels={GOLEMS[cameo]} position={KITCHEN_SPOT} rotation={[0, Math.PI / 4, 0]} />}
+          {/* The story's golem where the story left it (the wide shot the card starts on); it
+              vanishes as the camera rises and the cameo hops onto the podium: one golem at a time. */}
+          {isGolem && frame < AT.leave + 8 && (
+            <group position={KITCHEN_SPOT} scale={1 - easeInOut(span(frame, AT.leave, 8))}>
+              <VoxelMesh voxels={GOLEMS[cameo]} rotation={[0, Math.PI / 4, 0]} />
+            </group>
+          )}
         </group>
         <group scale={popIn(frame, AT.podium, 14, 0.12)}>
           <VoxelMesh voxels={PODIUMS[accent]} build={{ center: false }} />
-        </group>
-        <group rotation={TILE_TURN}>
-          <VoxelCubes voxels={TILE} place={(i) => drop(frame, START[i])} />
         </group>
         <group
           position={[CAMEO_AT[0], arrive.y + bob(frame, 50, 0.2), CAMEO_AT[2]]}
@@ -104,6 +106,18 @@ export const VoxelEndCard = ({ tagline, accent, cameo, address, pixelate }: Omit
           scale={arrive.scale.map((v) => v * (frame < AT.cameo ? 0 : isGolem ? 0.58 : 0.85)) as [number, number, number]}
         >
           <VoxelMesh voxels={isGolem ? GOLEMS[cameo] : FOODS[cameo]} fit={isGolem ? undefined : 11} />
+        </group>
+      </VoxelCanvas>
+      {/* The logo on its own layer, never pixelated: a crisp rounded square and "mB". An
+          invisible floor catches its shadow on the podium below. */}
+      <VoxelCanvas width={width} height={height} pixelate={1} background="transparent" shadowExtent={44}>
+        <CameraRig kind="iso" pose={poseAt(frame, MOVE)} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+          <circleGeometry args={[19, 64]} />
+          <shadowMaterial opacity={0.28 * popIn(frame, AT.podium, 14, 0)} />
+        </mesh>
+        <group rotation={TILE_TURN}>
+          <VoxelCubes voxels={TILE} place={(i) => drop(frame, START[i])} />
         </group>
       </VoxelCanvas>
       <Sequence from={AT.pill} durationInFrames={30} layout="none">

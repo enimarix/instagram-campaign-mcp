@@ -201,34 +201,34 @@ export const riceBowl = (): VoxelGrid => {
   return g;
 };
 
+/** Phone: 17 x 36 cubes. Where the big number goes on its screen (under the ring), in cells. */
+export const PHONE_NUMBER: [number, number, number] = [0, 11, 1];
+
 /**
- * Phone standing up, showing the app: calorie ring in the macro colours and two bars, drawn
- * up to `fill` (0..1) so a scene can show the ring filling in steps.
+ * Phone standing up, showing the app on its light screen: an emerald header, a big calorie
+ * ring in the macro colours (protein, carbs, fat clockwise from the top) drawn up to `fill`
+ * (0..1) over a light grey track, so a scene can show it filling in steps; under it a clear
+ * band for a big number laid over the model (PHONE_NUMBER), then a kcal bar.
  */
 export const phone = (fill = 1): VoxelGrid => {
   const g = new VoxelGrid();
   const f = Math.min(1, Math.max(0, fill));
-  g.box(-6, 0, -1, 6, 24, 0, "ink");
-  for (const [x, y] of [[-6, 0], [6, 0], [-6, 24], [6, 24]]) g.remove(x, y, -1).remove(x, y, 0);
-  g.box(-5, 2, 0, 5, 22, 0, "screen");
-  g.box(-4, 21, 1, 4, 21, 1, "emerald"); // app header
-  // Ring: protein, carbs, fat clockwise from the top over 76 % of it at full fill, the rest an empty track.
-  for (let x = -5; x <= 5; x++)
-    for (let y = 10; y <= 20; y++) {
-      const r = Math.hypot(x, y - 15);
-      if (r < 3 || r > 4.6) continue;
-      const a = (Math.atan2(x, y - 15) / (2 * Math.PI) + 1) % 1; // 0 at the top, clockwise
-      g.set(x, y, 1, a >= 0.76 * f ? "slate" : a < 0.3 ? "protein" : a < 0.58 ? "carbs" : "fat");
+  g.box(-8, 0, -1, 8, 35, 0, "ink");
+  for (const [x, y] of [[-8, 0], [8, 0], [-8, 35], [8, 35]]) g.remove(x, y, -1).remove(x, y, 0);
+  g.box(-7, 3, 0, 7, 33, 0, "offWhite");
+  g.box(-6, 31, 1, 6, 32, 1, "emerald"); // app header
+  const cy = 23;
+  for (let x = -7; x <= 7; x++)
+    for (let y = cy - 7; y <= cy + 7; y++) {
+      const r = Math.hypot(x, y - cy);
+      if (r < 4.6 || r > 6.7) continue;
+      const a = (Math.atan2(x, y - cy) / (2 * Math.PI) + 1) % 1; // 0 at the top, clockwise
+      g.set(x, y, 1, a >= f ? "grey100" : a < 0.4 ? "protein" : a < 0.75 ? "carbs" : "fat");
     }
-  g.set(0, 15, 1, "kcal");
-  const bar = (y: number, color: C, share: number) => {
-    g.box(-4, y, 1, 4, y, 1, "slate");
-    const cells = Math.round(9 * share * f);
-    if (cells) g.box(-4, y, 1, -5 + cells, y, 1, color);
-  };
-  bar(7, "kcal", 0.75);
-  bar(4, "emeraldLight", 0.45);
-  g.box(-1, 1, 0, 1, 1, 0, "grey500"); // home bar
+  g.box(-6, 6, 1, 6, 6, 1, "grey100");
+  const cells = Math.round(13 * f);
+  if (cells) g.box(-6, 6, 1, -7 + cells, 6, 1, "kcal");
+  g.box(-2, 1, 0, 2, 1, 0, "grey500"); // home bar
   return g;
 };
 

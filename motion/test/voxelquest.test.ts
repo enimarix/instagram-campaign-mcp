@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { DEFAULT_ADDRESS, END_CARD_MIN_S, endCardSchema, FOOD_IDS } from "../src/endcards/schema.ts";
+import { beatOf, beatShots, before, cameraAt, countUp, flashFrame, golemPoints, LONG_BEAT_S, reached, SCALE_LIFT, SETTLE } from "../src/templates/VoxelQuest/layout.ts";
 import { timelineOf, voxelQuestSchema, voxelQuestScript } from "../src/templates/VoxelQuest/schema.ts";
+import { projectIso } from "../src/voxel/anim.ts";
 import { PROPS } from "../src/voxel/models.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
@@ -46,6 +48,7 @@ test("bad props fail with clear messages", () => {
   assert.match(message({ ...base, hook: "Dès 5 euros" }), /no price on screen/);
   assert.match(message({ ...base, beats: [{ ...base.beats[0], foods: [{ prop: "cake", label: "1" }] }, base.beats[1], base.beats[2]] }), /Invalid option|expected one of/);
   assert.match(message({ ...base, voice: { lines: [{ text: "Hook ?", start_s: 0, end_s: 1 }] } }), /one timing per script line/);
+  assert.match(message({ ...base, beats: [{ ...base.beats[0], value: "12" }, base.beats[1], base.beats[2]] }), /only app beats show a value/);
   message({ ...base, extra: 1 });
 });
 
@@ -77,4 +80,48 @@ test("end card props: defaults, a food or form cameo, no price", () => {
   assert.equal(endCardSchema.safeParse({ tagline: "29 $ / an" }).success, false);
   assert.equal(endCardSchema.safeParse({ style: "paper" }).success, false);
   for (const id of FOOD_IDS) assert.ok(id in PROPS, id);
+});
+
+test("framing: the golem is whole in the picture every frame, and inside the safe area in every held shot", () => {
+  for (const raw of EXAMPLES) {
+    const p = voxelQuestSchema.parse(raw);
+    const { timeline, endStart } = timelineOf(p, 30);
+    const scenes = timeline.scenes;
+    const flash = flashFrame(scenes[p.beats.length], 30);
+    const held = new Set(scenes.slice(1, p.beats.length + 1).flatMap((s) => beatShots(p, s, 30).map((shot) => Math.min(shot.end, endStart - SETTLE) - 1)));
+    for (let f = 0; f < endStart; f++) {
+      const pose = cameraAt(f, p, scenes, endStart, 30);
+      const scene = scenes.find((s) => f >= s.startFrame && f < s.endFrame)!;
+      const beat = beatOf(p, scene);
+      const onScale = p.hookProp === "scale" && (!beat || (beat.kind === "problem" && !beat.foods));
+      const form = f >= flash ? reached(p) : before(p, beat);
+      for (const point of golemPoints(form, onScale ? SCALE_LIFT : 0, 0)) {
+        const [x, y] = projectIso(pose, point);
+        assert.ok(x >= 0 && x <= 1080 && y >= 0 && y <= 1920, `${p.hook} frame ${f}: golem at ${x.toFixed(0)},${y.toFixed(0)}`);
+        // Held shots: left of the Reels button rail, above the bottom UI (beats, not the hook's wide shot).
+        if (held.has(f) && beat) assert.ok(x >= 65 && x <= 895 && y >= 640 && y <= 1248, `${p.hook} frame ${f}: golem at ${x.toFixed(0)},${y.toFixed(0)}`);
+      }
+    }
+  }
+});
+
+test("pacing: a beat longer than LONG_BEAT_S changes shot halfway; no shot holds longer", () => {
+  for (const raw of EXAMPLES) {
+    const p = voxelQuestSchema.parse(raw);
+    const { timeline } = timelineOf(p, 30);
+    for (const scene of timeline.scenes.slice(1, p.beats.length + 1)) {
+      const shots = beatShots(p, scene, 30);
+      for (const shot of shots) assert.ok(shot.end - shot.start <= LONG_BEAT_S * 30, `${p.hook}: a ${(shot.end - shot.start) / 30} s shot`);
+      if (shots.length === 2) assert.ok(Math.abs(shots[0].pose.azimuth - shots[1].pose.azimuth) >= 10);
+    }
+  }
+});
+
+test("countUp: the first number counts up with its own decimals and grouping", () => {
+  assert.equal(countUp("1,6 g par kg", 0.5), "0,8 g par kg");
+  assert.equal(countUp("308 kcal", 0), "0 kcal");
+  assert.equal(countUp("2 236 kcal", 1), "2 236 kcal");
+  assert.equal(countUp("2 236 kcal", 0.5), "1 118 kcal");
+  assert.equal(countUp("21 h. Il reste 308 kcal", 1), "21 h. Il reste 308 kcal");
+  assert.equal(countUp("Sans chiffre", 0.3), "Sans chiffre");
 });

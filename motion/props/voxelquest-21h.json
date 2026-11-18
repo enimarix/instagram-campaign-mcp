@@ -8,7 +8,7 @@
       "foods": [{ "prop": "pizza", "label": "≈ 300 kcal", "macro": "kcal" }]
     },
     { "kind": "problem", "line": "Rien du tout ? La faim gagne à minuit." },
-    { "kind": "app", "line": "macroBody compose votre fin de journée avec ce qu'il vous reste." },
+    { "kind": "app", "line": "macroBody compose votre fin de journée avec ce qu'il vous reste.", "value": "308 kcal" },
     { "kind": "payoff", "line": "Journée bouclée, pile sur l'objectif." }
   ],
   "outro": "Terminez la journée pile sur vos objectifs.",

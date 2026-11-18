@@ -11,7 +11,7 @@
       ]
     },
     { "kind": "problem", "line": "Repère des études : environ 1,6 g par kg de poids et par jour." },
-    { "kind": "app", "line": "macroBody calcule votre cible et suit chaque repas." },
+    { "kind": "app", "line": "macroBody calcule votre cible (112 g à 70 kg) et suit chaque repas.", "value": "112 g" },
     { "kind": "payoff", "line": "Cible atteinte, jour après jour." }
   ],
   "outro": "Vos protéines, enfin au bon niveau.",
