@@ -129,6 +129,12 @@ def _check_scope(scope: Any) -> None:
     predicate(scope)  # ValueError: an unknown tag or value
 
 
+def _check_evidence(origin: str, evidence: Optional[Sequence[Any]]) -> None:
+    if evidence and (origin == "taste" or not all(isinstance(e, dict) and e for e in evidence)):
+        raise ValueError("evidence dicts are for audience/ads learnings;"
+                         " taste cites evidence_feedback_ids")
+
+
 def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
                  evidence_feedback_ids: Sequence[int] = (), *,
                  evidence: Optional[List[Dict[str, Any]]] = None,
@@ -143,9 +149,7 @@ def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
     _one_of("kind", kind, KINDS)
     _one_of("origin", origin, ORIGINS)
     _check_scope(scope)
-    if evidence and (origin == "taste" or not all(isinstance(e, dict) and e for e in evidence)):
-        raise ValueError("evidence dicts are for audience/ads learnings;"
-                         " taste cites evidence_feedback_ids")
+    _check_evidence(origin, evidence)
     items = _feedback_evidence(store, evidence_feedback_ids) + list(evidence or [])
     note = None
     if owner_instruction:
@@ -175,6 +179,7 @@ def update_learning(store: CampaignStore, learning_id: int, *,
                     statement: Optional[str] = None, kind: Optional[str] = None,
                     confidence: Optional[str] = None, status: Optional[str] = None,
                     evidence_feedback_ids_to_add: Sequence[int] = (),
+                    evidence_to_add: Optional[List[Dict[str, Any]]] = None,
                     scope: Optional[Dict[str, Any]] = None, evaluate: bool = False,
                     settings: Optional[InstagramMCPSettings] = None,
                     now: Optional[datetime] = None,
@@ -205,6 +210,9 @@ def update_learning(store: CampaignStore, learning_id: int, *,
         fields["evidence"] = current["evidence"] + [
             e for e in _feedback_evidence(store, evidence_feedback_ids_to_add)
             if e["feedback_id"] not in known]
+    if evidence_to_add:
+        _check_evidence(current["origin"], evidence_to_add)
+        fields["evidence"] = fields.get("evidence", current["evidence"]) + list(evidence_to_add)
     if actor != "owner" and (kind is not None or confidence is not None):
         _check_caps(fields.get("kind", current["kind"]),
                     fields.get("confidence", current["confidence"]),

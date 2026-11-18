@@ -14,6 +14,7 @@ only, under the remix rules (069).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sqlite3
 import uuid
 from pathlib import Path
@@ -165,6 +166,7 @@ def attach_granted_file(store: CampaignStore, settings: InstagramMCPSettings, re
     if original_name:  # an upload's temporary name means nothing to the owner
         stats["original_name"] = Path(original_name).name
     source_id = req["source_id"]
+    old = store.get_source(source_id)["local_path"]
     dest = sources.move_into(path, Path(settings.media_root) / "sources" / str(source_id),
                              "clip" + path.suffix.lower())
     store.patch_source_stats(source_id, stats)
@@ -173,6 +175,10 @@ def attach_granted_file(store: CampaignStore, settings: InstagramMCPSettings, re
                   " rights_note=?, audio_rights=?, ads_allowed=?, local_path=? WHERE id=?",
                   (req["creator"], note, audio_rights, int(req["ads_allowed"]),
                    media.relative(settings.media_root, dest), source_id))
+    if old and old != media.relative(settings.media_root, dest):
+        # the clip it replaces (e.g. a downloaded .webm), once the row points at the new one
+        with contextlib.suppress(ValueError, OSError):
+            media.resolve(settings.media_root, old).unlink(missing_ok=True)
     return sources.with_attribution(store.get_source(source_id))
 
 

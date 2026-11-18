@@ -1367,11 +1367,11 @@ class CampaignStore:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Best first: agent self_score high to low (unscored last), then id.
-        Rows carry their idea's track and strategy (explore/exploit), its source's
+        Rows carry their idea's track, strategy (explore/exploit) and experiment, its source's
         rights_basis (None: no source) and dm_pick_sender (the pinned account that sent the
         source by DM, else None) for the inbox."""
         return self._select(
-            "SELECT a.*, i.track, i.strategy, s.rights_basis,"
+            "SELECT a.*, i.track, i.strategy, i.experiment, s.rights_basis,"
             " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
             "  ORDER BY d.id LIMIT 1) AS dm_pick_sender"
             " FROM assets a JOIN ideas i ON i.id = a.idea_id"

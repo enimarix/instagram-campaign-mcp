@@ -75,8 +75,9 @@ days') by `engagement_index` and `verdict`. For each:
 ## Step 3: learnings
 
 Skip this step in a dry run. `list_learnings` (or the brief's) and compare with step 2:
-- **confirmed** by the numbers: `update_learning(confidence="medium")` when at least 2
-  Reels on 2 different days back it; otherwise leave it and note the support.
+- **confirmed** by the numbers: add the new Reel's evidence with
+  `update_learning(evidence_to_add=[{…same shape as below}])`, and set
+  `confidence="medium"` when at least 2 Reels on 2 different days back it.
 - **contradicted**: `update_learning(status="contradicted")`, never on an owner rule.
 - **new**: `add_learning(origin="audience", kind="hypothesis", evidence=[{"media_id": …,
   "metric": …, "value": …, "baseline_median": …, "at_s": …, "event": …}], scope={…tags})`.
