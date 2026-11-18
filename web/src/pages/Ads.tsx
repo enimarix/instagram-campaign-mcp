@@ -161,7 +161,7 @@ function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act
   const [variable, setVariable] = useState<AdVariable>('creative')
   const [medias, setMedias] = useState<string[]>([])
   const [compared, setCompared] = useState<string[]>([])
-  const [picked, setPreset] = useState<string>()
+  const [picked, setPicked] = useState<string>()
   const preset = picked ?? presets[0]?.id ?? ''
   const [hypothesis, setHypothesis] = useState('')
   const [lift, setLift] = useState('20')
@@ -224,7 +224,7 @@ function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act
         </fieldset>
         {creative ? (
           <label>Who sees it
-            <select value={preset} onChange={(e) => setPreset(e.target.value)} className={`${field} mt-1 block w-full`}>
+            <select value={preset} onChange={(e) => setPicked(e.target.value)} className={`${field} mt-1 block w-full`}>
               {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </label>
