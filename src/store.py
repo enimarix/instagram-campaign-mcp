@@ -441,7 +441,8 @@ ALTER TABLE sources ADD COLUMN ads_allowed INTEGER;
 
 # Migration 18: the ad spend ledger (091, src/ads/budget.py). Amounts are Decimal strings
 # in `currency`. `authorized` reserves money before a spend, `released` (one per
-# authorization) frees it, `reported` is spend Meta reports (095). Rows are never updated.
+# authorization) frees it, `reported` is spend Meta reports (095). Rows are never updated;
+# created_at is always store.to_iso() (budget.py compares it as text for the daily cap).
 AD_SPEND_SCHEMA = """
 CREATE TABLE ad_spend_ledger (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
