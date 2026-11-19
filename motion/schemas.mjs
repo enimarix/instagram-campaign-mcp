@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Template schemas for Python (src/studio/motion.py), one JSON line on stdout:
-//   node schemas.mjs                       {"templates": [{id, style, jsonSchema, defaultProps, description}],
+//   node schemas.mjs                       {"templates": [{id, style, styleLabel, jsonSchema, defaultProps, description}],
 //                                           "styles": [{id, label}]}  (styles: the launch buttons, step 138)
 //   node schemas.mjs --validate <id>       props JSON on stdin ->
 //     {"ok": true, props, fps, durationInFrames, coverFrame, events[, plates]} | {"ok": false, "error": <Zod's message>}
@@ -60,7 +60,7 @@ try {
     print({
       templates: Object.entries(templates).map(([id, t]) => {
         const jsonSchema = z.toJSONSchema(t.schema, { io: "input", unrepresentable: "any" });
-        return { id, style: t.style, jsonSchema, defaultProps: t.defaultProps, description: jsonSchema.description ?? null };
+        return { id, style: t.style, styleLabel: STYLES[t.style], jsonSchema, defaultProps: t.defaultProps, description: jsonSchema.description ?? null };
       }),
       styles: Object.entries(STYLES).map(([id, label]) => ({ id, label })),
     });

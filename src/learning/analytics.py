@@ -27,7 +27,7 @@ METRIC_SORTS = ("views", "reach", "likes", "comments", "saved", "shares",
 POST_TYPES = ("FEED", "REELS", "TRIAL", "STORY")  # scoring.group_of
 VERDICTS = ("winner", "promising", "average", "weak", "inconclusive", "no_signal", "too_early",
             "incomplete", "no_baseline")  # src/scoring.py
-IDEA_TAGS = ("track", "pillar", "hook_type", "strategy")
+IDEA_TAGS = ("track", "pillar", "hook_type", "strategy", "style")  # style: 138
 CAPTION_CHARS = 120
 
 

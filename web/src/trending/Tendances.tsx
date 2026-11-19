@@ -5,6 +5,7 @@ import {
   type FeedItem, type RefreshResult, type SuggestedTopics, type TrendMode, type Watch,
 } from '../api/client'
 import { safeUrl } from '../inbox/ui'
+import { StylePicker } from '../launch/StylePicker'
 import { Button, IconButton } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
@@ -143,9 +144,10 @@ function FeedCard({ item, selecting, selected, onSelect, onReact, onInstruct, on
   )
 }
 
-/** One Reel, the owner's exact words: one work order. */
+/** One Reel, the owner's exact words and a style: one work order. */
 function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: () => void; onSent: () => void }) {
   const [mode, setMode] = useState<TrendMode>('inspired')
+  const [style, setStyle] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -155,7 +157,7 @@ function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: 
     setBusy(true)
     setError(null)
     try {
-      await createWorkOrders([{ source_id: item.id, mode, instruction: text.trim() }])
+      await createWorkOrders([{ source_id: item.id, mode, instruction: text.trim(), style }])
       onSent()
     } catch (err) {
       setError(errorMessage(err))
@@ -167,6 +169,7 @@ function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: 
     <Sheet title="Dire à l'IA quoi faire" onClose={onClose}>
       <form lang="fr" onSubmit={(e) => void submit(e)} className="mt-3 space-y-3">
         <ModePicker modes={TREND_MODES} value={mode} onChange={setMode} />
+        <StylePicker value={style} onChange={setStyle} />
         <label className="block text-sm font-medium">Ta consigne
           <textarea required value={text} maxLength={500} rows={6} onChange={(e) => setText(e.target.value)}
             placeholder="Ex. : garde le format, fais-en une version sans sucre (tu peux dicter)"
@@ -283,6 +286,7 @@ export default function Tendances() {
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkMode, setBulkMode] = useState<TrendMode>('inspired')
+  const [bulkStyle, setBulkStyle] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [instructFor, setInstructFor] = useState<FeedItem | null>(null)
   const [reelsOnly, setReelsOnly] = useState(true)
@@ -350,7 +354,7 @@ export default function Tendances() {
   async function sendSelected() {
     setSending(true)
     try {
-      await createWorkOrders([...selected].map((id) => ({ source_id: id, mode: bulkMode })))
+      await createWorkOrders([...selected].map((id) => ({ source_id: id, mode: bulkMode, style: bulkStyle })))
       toast({ message: `${selected.size} Reel${selected.size > 1 ? 's' : ''} envoyé${selected.size > 1 ? 's' : ''} au travail.` })
       setSelected(new Set())
       setSelecting(false)
@@ -381,7 +385,7 @@ export default function Tendances() {
 
   const budget = suggested?.hashtag_budget
   return (
-    <div className={selecting ? 'pb-36 lg:pb-24' : ''}>
+    <div className={selecting ? 'pb-72 lg:pb-52' : ''}>
       <div className="flex items-start gap-3">
         <div>
           <Button variant="primary" size="lg" loading={refreshing} onClick={() => void refresh()}>Actualiser</Button>
@@ -454,7 +458,10 @@ export default function Tendances() {
         <div role="region" aria-label="Envoyer la sélection"
           className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface/95 px-4 py-3 shadow-overlay backdrop-blur-md lg:bottom-0 lg:left-60">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
-            <div className="sm:flex-1"><ModePicker modes={TREND_MODES} value={bulkMode} onChange={setBulkMode} /></div>
+            <div className="min-w-0 space-y-2 sm:flex-1">
+              <ModePicker modes={TREND_MODES} value={bulkMode} onChange={setBulkMode} />
+              <StylePicker value={bulkStyle} onChange={setBulkStyle} compact />
+            </div>
             <Button variant="primary" size="lg" disabled={selected.size === 0} loading={sending} onClick={() => void sendSelected()}
               className="w-full sm:w-auto">
               Envoyer au travail ({selected.size})

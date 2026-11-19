@@ -9,6 +9,7 @@ import {
   getProposedSlot,
   getTaxonomy,
   listAssets,
+  restyleAsset,
   setVerdict,
   type Asset,
   type Bench,
@@ -226,6 +227,17 @@ export default function InboxPage() {
     })
   }
 
+  // « Même vidéo, autre style » (138): a new work order; this video stays where it is.
+  async function restyle(a: Asset, style: string | null) {
+    setChangeFor(null)
+    try {
+      await restyleAsset(a.id, { style })
+      toast({ message: "Envoyé à l'IA : la même vidéo dans un autre style (Trending, Mes envois)." })
+    } catch (e) {
+      toast({ message: `Non envoyé : ${errorMessage(e)}` })
+    }
+  }
+
   const openChange = (a: Asset) => setChangeFor({ asset: a, at: videoOf(a)?.currentTime ?? 0 })
 
   function go(i: number) {
@@ -389,6 +401,8 @@ export default function InboxPage() {
           at={changeFor.at}
           onClose={() => setChangeFor(null)}
           onSave={(fb) => change(changeFor.asset, fb)}
+          onRestyle={(style) => void restyle(changeFor.asset, style)}
+          style={changeFor.asset.style}
         />
       )}
       {declineFor && (

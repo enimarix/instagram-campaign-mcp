@@ -573,9 +573,13 @@ WorkOrderStatus = Literal["needs_instruction", "scheduled", "in_production", "in
 
 @mcp.tool(annotations=LOCAL_READ)
 async def list_work_orders(status: Optional[WorkOrderStatus] = "scheduled") -> Dict[str, Any]:
-    """The owner's work orders: Reels they sent you to make, from the Trending page
-    (source trend) or by DM from a pinned account (source dm: permalink, sender_username),
-    oldest first (status None: all). Make them before anything else. mode `inspired`: an
+    """The owner's work orders: videos they sent you to make, from the Trending page
+    (source trend), by DM from a pinned account (source dm: permalink, sender_username),
+    « Créer une vidéo » (source create: just the instruction) or « même vidéo, autre style »
+    (source change: remake from_video, same topic and script, in the new style), oldest
+    first (status None: all). Make them before anything else. `style`: the style button
+    the owner pressed (the brief's styles): make it in that style, create_idea(style=…)
+    and a template of that style; null = Auto, you pick the style. mode `inspired`: an
     original video on the same idea or format, nothing of the Reel reused; `react`: a
     commentary remix with credit (download_reel first); `owner`: do what the instruction
     says (react, inspired, a recut of our own Reel only when own_reel, or analyse only:
@@ -705,8 +709,9 @@ async def _studio_async(work) -> Any:
 
 @mcp.tool(annotations=LOCAL_READ)
 async def list_motion_templates() -> Dict[str, Any]:
-    """Motion video templates with their props JSON Schema and default props. Pass props
-    that match a template's schema to preview_motion and render_motion."""
+    """Motion video templates with their style, props JSON Schema and default props. Pass
+    props that match a template's schema to preview_motion and render_motion (a template
+    of the idea's style)."""
     return {"templates": await _studio(motion.list_templates)}
 
 
@@ -737,6 +742,7 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
     """Queue a motion render and return at once with the job id: a new asset for idea_id,
     or a re-render of asset_id (failed asset: same asset; ready: a new child asset).
     Templates with a script get their voice-over (TTS) first unless props carry `voice`.
+    The template must be in the idea's style (an idea without one takes the template's).
     The worker renders; the asset becomes `ready`, or `failed` with QC reasons."""
     out = await _studio(motion.queue_motion_render, store(), get_settings(), template=template,
                         props=props, idea_id=idea_id, asset_id=asset_id, caption=caption,
@@ -844,18 +850,22 @@ async def create_idea(track: str, hook: str, pillar: Optional[str] = None,
                       strategy: Optional[Literal["explore", "exploit"]] = None,
                       experiment: Optional[str] = None, citations: Optional[List[Any]] = None,
                       source_id: Optional[int] = None,
-                      work_order_id: Optional[int] = None) -> Dict[str, Any]:
+                      work_order_id: Optional[int] = None,
+                      style: Optional[str] = None) -> Dict[str, Any]:
     """Add an idea to today's batch and return it; render it with render_motion(idea_id).
     track, pillar and hook_type must be taxonomy ids (an error lists the valid ones).
     experiment: 'exp:<id>:<variant>' of an open experiment (the brief's explore_plan).
     work_order_id: the owner's scheduled work order this idea makes (list_work_orders): a
     react needs track 'remix' and the order's Reel as source_id (a DM order's: the source
-    download_reel made of its permalink), an inspired one never uses its Reel."""
+    download_reel made of its permalink), an inspired one never uses its Reel.
+    style: the visual style (the brief's styles, each with its templates); a work order's
+    style is filled in. Pick an enabled one within its share; render_motion then refuses
+    a template of another style."""
     return await _studio(production.create_idea, store(), get_settings(), track, hook=hook,
                          pillar=pillar, hook_type=hook_type, script=script,
                          hypothesis=hypothesis, strategy=strategy, experiment=experiment,
                          citations=citations, source_id=source_id,
-                         work_order_id=work_order_id)
+                         work_order_id=work_order_id, style=style)
 
 
 @mcp.tool(annotations=LOCAL_READ)

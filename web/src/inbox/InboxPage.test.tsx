@@ -527,6 +527,30 @@ describe('InboxPage feed', () => {
       await closeUndoWindow()
       expect(posts(calls)).toEqual([])
     })
+
+    it('« même vidéo, autre style » sends a restyle order; the video stays (138)', async () => {
+      const style = (id: string, label: string) => ({ id, label, description: null, templates: [], end_card: null,
+        address: null, enabled: true, share: null, preview: { still: null, clip: null } })
+      const calls = stubApi({
+        'GET /api/assets': [200, [asset(1, { style: 'paper' }), asset(2)]],
+        'GET /api/styles': [200, [style('paper', 'Papier'), style('voxel', '3D 8-bit')]],
+        'POST /api/assets/1/restyle': [200, { id: 5 }],
+      })
+      renderPage()
+      await screen.findByText('0 of 2 decided')
+      press(1, 'Change')
+      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      expect(calls.some((c) => c.url === '/api/styles')).toBe(false) // loads when opened
+      const details = within(sheet).getByText('Même vidéo, autre style').closest('details')!
+      details.open = true
+      fireEvent(details, new Event('toggle'))
+      fireEvent.click(await within(sheet).findByRole('button', { name: '3D 8-bit' }))
+      expect(within(sheet).queryByRole('button', { name: 'Papier' })).toBeNull() // its own style
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Refaire dans ce style' }))
+      expect(await screen.findByText(/la même vidéo dans un autre style/)).toBeTruthy()
+      expect(posts(calls)).toEqual([['/api/assets/1/restyle', { style: 'voxel' }]])
+      expect(cards()).toEqual(['Video 1', 'Video 2'])
+    })
   })
 
   it('keys: d declines, j / k move, c opens the change sheet, m mutes; ignored while typing', async () => {

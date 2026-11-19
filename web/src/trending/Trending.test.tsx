@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router'
-import type { FeedItem, RefreshResult, SuggestedTopics, Watch, WorkOrder } from '../api/client'
+import type { FeedItem, RefreshResult, Style, SuggestedTopics, Watch, WorkOrder } from '../api/client'
 import { ToastProvider } from '../ui/Toast'
 import { ago, orderStatus } from './format'
 import TrendingPage from './TrendingPage'
@@ -27,14 +27,26 @@ const REFRESH: RefreshResult = {
   errors: {}, stopped: null, hashtag_budget: { limit: 30, used: 3, left: 27 },
 }
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
-// a real GET /api/work-orders?source=dm row (136, read from the owner's DB copy)
+// a real GET /api/work-orders?source=mine row (136, read from the owner's DB copy)
 const order = (id: number, over: Partial<WorkOrder> = {}): WorkOrder => ({
   id, source_id: null, pick_id: id, mode: 'owner', instruction: null, own_reel: false, status: 'needs_instruction',
   skip_reason: null, blocked_reason: null, analysis: null, scheduled_at: null, idea_id: null, asset_id: null,
   created_at: hoursAgo(1), permalink: `https://www.instagram.com/reel/D${id}/`, sender_username: 'amine_xenima',
   received_at: hoursAgo(2), source: 'dm', embed_url: `https://www.instagram.com/reel/D${id}/embed`, topic: null,
-  caption_quote: null, likes: null, comments: null, views: null, thumbnail_url: null, ...over,
+  caption_quote: null, likes: null, comments: null, views: null, thumbnail_url: null, style: null,
+  from_asset_id: null, ...over,
 })
+
+// GET /api/styles (138): one button per enabled style; a turned-off one shows no button
+const style = (id: string, label: string, over: Partial<Style> = {}): Style => ({
+  id, label, description: `Le style ${label}.`, templates: [], end_card: id, address: 'vous', enabled: true, share: null,
+  preview: { still: null, clip: null }, ...over,
+})
+const STYLES: Style[] = [
+  style('voxel', '3D 8-bit', { preview: { still: '/api/styles/voxel/preview/still', clip: '/api/styles/voxel/preview/clip' } }),
+  style('paper', 'Papier'),
+  style('blender', 'Blender', { enabled: false }),
+]
 
 type Route = [number, unknown]
 function stubApi(overrides: Record<string, Route | Route[]> = {}) {
@@ -44,6 +56,7 @@ function stubApi(overrides: Record<string, Route | Route[]> = {}) {
     'GET /api/watchlist': [200, WATCH],
     'GET /api/research/suggested-topics': [200, SUGGESTED],
     'GET /api/dm-picks': [200, []],
+    'GET /api/styles': [200, STYLES],
     ...overrides,
   }
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -185,10 +198,12 @@ describe('Tendances', () => {
     fireEvent.click(within(card(1)).getByLabelText('Choisir ce Reel'))
     fireEvent.click(within(card(2)).getByLabelText('Choisir ce Reel'))
     fireEvent.click(within(bar).getByRole('button', { name: 'Réaction' }))
+    fireEvent.click(await within(bar).findByRole('button', { name: 'Papier' }))
+    expect(within(bar).queryByRole('button', { name: 'Blender' })).toBeNull() // turned off in Settings
     fireEvent.click(within(bar).getByRole('button', { name: 'Envoyer au travail (2)' }))
     expect((await screen.findByRole('status')).textContent).toContain('2 Reels envoyés au travail.')
     expect(calls.find((c) => c.key === 'POST /api/research/work-orders')?.body).toEqual({
-      items: [{ source_id: 1, mode: 'react' }, { source_id: 2, mode: 'react' }] })
+      items: [{ source_id: 1, mode: 'react', style: 'paper' }, { source_id: 2, mode: 'react', style: 'paper' }] })
     expect(screen.queryByRole('region', { name: 'Envoyer la sélection' })).toBeNull()
   })
 
@@ -204,12 +219,21 @@ describe('Tendances', () => {
     fireEvent.click(within(card(1)).getByRole('button', { name: "Dire à l'IA quoi faire" }))
     const sheet = screen.getByRole('dialog', { name: "Dire à l'IA quoi faire" })
     fireEvent.change(within(sheet).getByLabelText('Ta consigne'), { target: { value: ' version sans sucre ' } })
+    const voxel = await within(sheet).findByRole('button', { name: '3D 8-bit' })
+    expect(within(sheet).getByRole('button', { name: "Auto (l'IA choisit)" }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.mouseEnter(voxel.parentElement!) // hover: the preview, nothing chosen yet
+    expect(within(sheet).getByLabelText('Aperçu 3D 8-bit').querySelector('video')?.getAttribute('src')).toBe('/api/styles/voxel/preview/clip')
+    fireEvent.mouseLeave(voxel.parentElement!)
+    expect(within(sheet).queryByLabelText('Aperçu 3D 8-bit')).toBeNull()
+    fireEvent.click(voxel) // a tap (phone): chosen, and its preview stays
+    expect(voxel.getAttribute('aria-pressed')).toBe('true')
+    expect(within(sheet).getByLabelText('Aperçu 3D 8-bit').textContent).toContain('Le style 3D 8-bit.')
     fireEvent.click(within(sheet).getByRole('button', { name: "Envoyer à l'IA" }))
     expect(await within(card(1)).findByText('version sans sucre')).toBeTruthy()
     expect(within(card(1)).getByText('Programmé')).toBeTruthy()
     expect(within(card(1)).queryByRole('button', { name: "Dire à l'IA quoi faire" })).toBeNull()
     expect(calls.find((c) => c.key === 'POST /api/research/work-orders')?.body).toEqual({
-      items: [{ source_id: 1, mode: 'inspired', instruction: 'version sans sucre' }] })
+      items: [{ source_id: 1, mode: 'inspired', instruction: 'version sans sucre', style: 'voxel' }] })
 
     fireEvent.click(within(card(1)).getByRole('button', { name: 'Annuler' }))
     expect(await within(card(1)).findByRole('button', { name: "Dire à l'IA quoi faire" })).toBeTruthy()
@@ -288,14 +312,14 @@ describe('Tendances', () => {
 
 describe('Mes envois', () => {
   it('shows the empty state, and the tab sits in the URL', async () => {
-    stubApi({ 'GET /api/work-orders?source=dm': [200, []] })
+    stubApi({ 'GET /api/work-orders?source=mine': [200, []] })
     renderPage('/trending?tab=envois')
     expect(screen.getByRole('tab', { name: 'Mes envois' }).getAttribute('aria-selected')).toBe('true')
     expect(await screen.findByText(/Envoie un Reel en DM à @macrobody\.fr depuis ton compte, avec ou sans description\./)).toBeTruthy()
   })
 
   it('lists DM orders with sender, age, status, instruction and the feed link', async () => {
-    stubApi({ 'GET /api/work-orders?source=dm': [200, [
+    stubApi({ 'GET /api/work-orders?source=mine': [200, [
       order(4, { status: 'analysed', own_reel: true, instruction: 'ça a bien marché, analyse-la', analysis: 'Le hook tient 3 s.' }),
       order(3, { status: 'in_feed', asset_id: 42, instruction: 'analyse-la', mode: 'inspired' }),
       order(2, { status: 'skipped', skip_reason: 'pas un Reel' }),
@@ -323,9 +347,9 @@ describe('Mes envois', () => {
 
   it('writes the missing instruction, edits a scheduled one, and says when it is too late (409)', async () => {
     const calls = stubApi({
-      'GET /api/work-orders?source=dm': [
-        [200, [order(2, { status: 'scheduled', instruction: 'garde ça', mode: 'react' }), order(1)]],
-        [200, [order(2, { status: 'scheduled', instruction: 'garde ça', mode: 'react' }), order(1, { status: 'scheduled', instruction: 'refais-la', mode: 'inspired' })]],
+      'GET /api/work-orders?source=mine': [
+        [200, [order(2, { status: 'scheduled', instruction: 'garde ça', mode: 'react', style: 'paper' }), order(1)]],
+        [200, [order(2, { status: 'scheduled', instruction: 'garde ça', mode: 'react', style: 'paper' }), order(1, { status: 'scheduled', instruction: 'refais-la', mode: 'inspired' })]],
         [200, [order(2, { status: 'in_production', instruction: 'garde ça', mode: 'react' }), order(1, { status: 'scheduled', instruction: 'refais-la', mode: 'inspired' })]],
       ],
       'PATCH /api/work-orders/1': [200, order(1, { status: 'scheduled', instruction: 'refais-la' })],
@@ -340,17 +364,71 @@ describe('Mes envois', () => {
     fireEvent.click(within(waiting).getByRole('button', { name: 'Envoyer' }))
     expect(await within(waiting).findByText('Programmé')).toBeTruthy()
     expect(within(waiting).getByText('refais-la')).toBeTruthy()
-    expect(calls.find((c) => c.key === 'PATCH /api/work-orders/1')?.body).toEqual({ instruction: 'refais-la', mode: 'owner' })
+    expect(calls.find((c) => c.key === 'PATCH /api/work-orders/1')?.body).toEqual({ instruction: 'refais-la', mode: 'owner', style: null })
 
     const scheduled = within(list).getByRole('listitem', { name: 'Envoi 2' })
     fireEvent.click(within(scheduled).getByRole('button', { name: 'Modifier la consigne' }))
     expect(within(scheduled).getByRole('button', { name: 'Réaction' }).getAttribute('aria-pressed')).toBe('true')
     fireEvent.change(within(scheduled).getByLabelText("Que doit faire l'IA ?"), { target: { value: 'change ça' } })
+    expect((await within(scheduled).findByRole('button', { name: 'Papier' })).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(within(scheduled).getByRole('button', { name: '3D 8-bit' }))
     fireEvent.click(within(scheduled).getByRole('button', { name: 'Envoyer' }))
     expect((await screen.findByRole('status')).textContent).toContain("Trop tard : l'IA a déjà commencé ce Reel")
     expect(await within(scheduled).findByText('En production')).toBeTruthy()
     expect(within(scheduled).queryByRole('button', { name: 'Modifier la consigne' })).toBeNull()
-    expect(calls.find((c) => c.key === 'PATCH /api/work-orders/2')?.body).toEqual({ instruction: 'change ça', mode: 'react' })
+    expect(calls.find((c) => c.key === 'PATCH /api/work-orders/2')?.body).toEqual({ instruction: 'change ça', mode: 'react', style: 'voxel' })
+  })
+
+  it('shows what the owner created and the restyles, with their style (138)', async () => {
+    stubApi({
+      'GET /api/work-orders?source=mine': [200, [
+        order(7, { source: 'change', pick_id: null, permalink: null, embed_url: null, sender_username: null, received_at: null,
+          from_asset_id: 42, style: 'voxel', status: 'scheduled', instruction: 'Même vidéo, autre style : refais la vidéo 42' }),
+        order(6, { source: 'create', pick_id: null, permalink: null, embed_url: null, sender_username: null, received_at: null,
+          status: 'scheduled', instruction: 'Les protéines du soir' }),
+      ]],
+    })
+    renderPage('/trending?tab=envois')
+    const list = await screen.findByRole('list', { name: 'Mes envois' })
+    const change = within(list).getByRole('listitem', { name: 'Envoi 7' })
+    expect(await within(change).findByText('3D 8-bit')).toBeTruthy()
+    expect(within(change).getByText(/autre style de la vidéo 42/)).toBeTruthy()
+    expect(within(change).getByRole('link', { name: "Vidéo d'origine" }).getAttribute('href')).toBe('/assets/42')
+    const created = within(list).getByRole('listitem', { name: 'Envoi 6' })
+    expect(within(created).getByText("Auto (l'IA choisit)")).toBeTruthy()
+    expect(within(created).getByText(/créé dans l'app/)).toBeTruthy()
+    expect(within(created).queryByText('Voir le Reel')).toBeNull()
+    fireEvent.click(within(created).getByRole('button', { name: 'Modifier la consigne' }))
+    expect(within(created).queryByRole('group', { name: 'Mode' })).toBeNull() // a DM order's choice only
+  })
+
+  it('Créer une vidéo: sends a topic with a style, then shows Mes envois', async () => {
+    const calls = stubApi({
+      'POST /api/work-orders': [200, order(8, { source: 'create', style: 'paper', status: 'scheduled' })],
+      'GET /api/work-orders?source=mine': [200, []],
+    })
+    renderPage()
+    await screen.findByRole('list', { name: 'Tendances' })
+    fireEvent.click(screen.getByRole('button', { name: 'Créer une vidéo' }))
+    const sheet = screen.getByRole('dialog', { name: 'Créer une vidéo' })
+    const send = within(sheet).getByRole('button', { name: "Envoyer à l'IA" }) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    fireEvent.change(within(sheet).getByLabelText('Le sujet ou ta consigne'), { target: { value: ' Pourquoi on a faim le soir ' } })
+    fireEvent.click(await within(sheet).findByRole('button', { name: 'Papier' }))
+    fireEvent.click(send)
+    expect((await screen.findByRole('status')).textContent).toContain('dans Mes envois')
+    expect(calls.find((c) => c.key === 'POST /api/work-orders')?.body).toEqual({ instruction: 'Pourquoi on a faim le soir', style: 'paper' })
+    expect(await screen.findByRole('tabpanel', { name: 'Mes envois' })).toBeTruthy()
+  })
+
+  it('Créer une vidéo still offers Auto when the styles cannot load', async () => {
+    stubApi({ 'GET /api/styles': [503, { error: 'styles_unavailable', message: 'Node.js not found' }] })
+    renderPage()
+    await screen.findByRole('list', { name: 'Tendances' })
+    fireEvent.click(screen.getByRole('button', { name: 'Créer une vidéo' }))
+    const sheet = screen.getByRole('dialog', { name: 'Créer une vidéo' })
+    expect((await within(sheet).findByRole('alert')).textContent).toContain('Styles indisponibles')
+    expect(within(sheet).getByRole('button', { name: "Auto (l'IA choisit)" })).toBeTruthy()
   })
 
   it('names every status in French', () => {

@@ -13,7 +13,7 @@ export const FINDING: Record<RetentionFinding['kind'], [Tone, string]> = {
 
 // The tag dimensions of src/learning/breakdowns.py, in plain words (080, 084).
 export const TAGS = [
-  ['track', 'Track'], ['pillar', 'Pillar'], ['hook_type', 'Hook type'], ['template', 'Template'],
+  ['track', 'Track'], ['pillar', 'Pillar'], ['hook_type', 'Hook type'], ['template', 'Template'], ['style', 'Style'],
   ['strategy', 'Explore / exploit'], ['hour', 'Hour posted'], ['duration', 'Length'],
 ]
 

@@ -22,7 +22,7 @@ from ..learning.experiments import check_idea
 from ..learning.quotas import flagged_pillars, todays_quotas
 from ..store import CampaignStore
 from ..taxonomy import load_taxonomy, validate
-from . import work_orders
+from . import styles, work_orders
 from .assets import edit_asset
 from .render import auto_description
 from .rights import caption_credit_problem
@@ -45,20 +45,32 @@ def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str
     idea, a fact pillar without citations, an experiment that is not an open one's variant
     (src/learning/experiments.py check_idea, which may fill in the idea's tag).
     work_order_id: the owner's work order this idea makes (work_orders.check_idea); it may
-    pass a full batch like a DM pick, and the order moves to in_production."""
+    pass a full batch like a DM pick, and the order moves to in_production.
+    style (138, src/studio/styles.py): the visual style it is made in; an order's style is
+    the idea's (filled in when left out). Any other must be on in Settings and within its
+    daily share. render_motion then refuses a template of another style."""
     fields = {k: v for k, v in fields.items() if v is not None}
+    order = None
     if work_order_id is not None:
-        work_orders.check_idea(store, work_order_id, track, fields.get("source_id"))
+        order = work_orders.check_idea(store, work_order_id, track, fields.get("source_id"),
+                                       fields.get("style"))
+        if order["style"]:
+            fields.setdefault("style", order["style"])
+    if fields.get("style") and not (order and order["style"]):  # the owner's pick stands
+        styles.check_style(store, fields["style"])
     check_idea(store, track, fields)
     fields.setdefault("batch_date", local_today(settings.timezone))
     validate("tracks", track)
     pillar = fields.get("pillar") and validate("pillars", fields["pillar"])
     _check_citations(pillar, fields.get("citations"))
     q = todays_quotas(store, settings, fields["batch_date"])
-    _check_quotas(q, track, pillar, fields.get("strategy"),
-                  extra=work_order_id is not None
-                  or _dm_pick_extra(store, settings, q, track, fields.get("source_id")))
-    _check_duplicates(store, settings, fields)
+    extra = work_order_id is not None or _dm_pick_extra(store, settings, q, track,
+                                                        fields.get("source_id"))
+    _check_quotas(q, track, pillar, fields.get("strategy"), extra=extra)
+    _check_style_share(q, fields.get("style"), extra=extra)
+    # « même vidéo, autre style »: the same hook as the video it remakes is the point
+    _check_duplicates(store, settings, fields,
+                      allow=work_orders.remade_idea(store, order) if order else None)
     idea = store.add_idea(track, **fields)
     if work_order_id is not None:
         work_orders.start(store, work_order_id, idea)
@@ -119,6 +131,14 @@ def _check_quotas(q: Dict[str, Any], track: str, pillar: Optional[str],
                          f" ({q['clips_available']} downloaded clips left); make it motion")
 
 
+def _check_style_share(q: Dict[str, Any], style: Optional[str], *, extra: bool) -> None:
+    """The owner's daily share of a style (quotas styles.limit); the owner's own orders pass."""
+    row = q["styles"].get(style) if style else None
+    if row and row["limit"] is not None and row["count"] >= row["limit"] and not extra:
+        raise ValueError(f"style {style!r} share used: {row['count']}/{row['limit']} ideas"
+                         " today (the owner's daily share); pick another style")
+
+
 def _normalise(text: Optional[str]) -> str:
     return " ".join(re.sub(r"[^\w\s]|_", " ", (text or "").lower()).split())
 
@@ -130,8 +150,9 @@ def _texts(idea: Dict[str, Any]) -> Set[str]:
 
 
 def _check_duplicates(store: CampaignStore, settings: InstagramMCPSettings,
-                      fields: Dict[str, Any]) -> None:
-    """Refuse an idea whose hook or opening line is close to one of the last dedupe_days.
+                      fields: Dict[str, Any], allow: Optional[int] = None) -> None:
+    """Refuse an idea whose hook or opening line is close to one of the last dedupe_days
+    (but idea `allow`, the one a restyle remakes).
     ponytail: O(n) scan with difflib, fine at ~25 ideas a day."""
     new = _texts(fields)
     if not new:
@@ -142,6 +163,8 @@ def _check_duplicates(store: CampaignStore, settings: InstagramMCPSettings,
         recent = c.execute("SELECT id, hook, script, batch_date FROM ideas"
                            " WHERE batch_date >= ? ORDER BY id DESC", (since,)).fetchall()
     for old in recent:
+        if old["id"] == allow:
+            continue
         for a in new:
             for b in _texts(dict(old)):
                 if SequenceMatcher(None, a, b).ratio() >= settings.dedupe_threshold:

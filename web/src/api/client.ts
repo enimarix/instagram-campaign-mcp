@@ -84,8 +84,10 @@ export type Asset = {
   dm_pick_sender?: string | null
   // list rows of a revised video: the owner's newest change request on the version it replaces (133)
   change_request?: { text: string | null; reason_codes: string[] } | null
-  // list rows: the owner's work order its idea was made for (134), from a DM pick or the Trending feed (140)
-  work_order?: { id: number; mode: WorkMode; instruction: string | null; permalink: string | null; source: 'dm' | 'trend' } | null
+  // list rows: the owner's work order its idea was made for (134), from a DM pick or the Trending feed (140),
+  // « Créer une vidéo » or « même vidéo, autre style » (138)
+  work_order?: { id: number; mode: WorkMode; instruction: string | null; permalink: string | null; source: OrderSource; style?: string | null } | null
+  style?: string | null // list rows: the idea's style (138)
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -910,7 +912,7 @@ export type FeedItem = {
   outlier: number | null
   outlier_metric: 'views' | 'likes' | null
   reaction: 'like' | 'dislike' | null
-  work_order: { id: number; mode: WorkMode; instruction: string | null; status: OpenOrderStatus } | null
+  work_order: { id: number; mode: WorkMode; instruction: string | null; status: OpenOrderStatus; style?: string | null } | null
 }
 /** GET /api/research/feed: Reels posted within `window_days`; `hidden_old` older or undated
  * ones are left out unless include_old (then listed too, still counted). */
@@ -941,17 +943,22 @@ export const getResearchFeed = (topic?: string | null, limit = 50, includeOld = 
 export const getSuggestedTopics = () => request<SuggestedTopics>('/api/research/suggested-topics')
 export const setFeedReaction = (sourceId: number, reaction: 'like' | 'dislike' | 'none') =>
   post<{ id: number; reaction: FeedItem['reaction'] }>(`/api/research/feed/${sourceId}/reaction`, { reaction })
-export const createWorkOrders = (items: { source_id: number; mode: TrendMode; instruction?: string }[]) =>
+export const createWorkOrders = (items: { source_id: number; mode: TrendMode; instruction?: string; style?: string | null }[]) =>
   post<unknown[]>('/api/research/work-orders', { items })
 export const cancelWorkOrder = (id: number) => request<null>(`/api/research/work-orders/${id}`, { method: 'DELETE' })
 
 export type OpenOrderStatus = 'needs_instruction' | 'scheduled' | 'in_production'
 export type WorkOrderStatus = OpenOrderStatus | 'in_feed' | 'analysed' | 'skipped'
+/** Where an order comes from: the Trending feed, a DM, « Créer une vidéo », « même vidéo, autre style » (138). */
+export type OrderSource = 'dm' | 'trend' | 'create' | 'change'
 /** A row of GET /api/work-orders (step 136), newest first: a Reel the owner sent by DM
- * (source dm) or from the Trending feed (trend). */
+ * (source dm) or from the Trending feed (trend), a video he asked for (create), or one of
+ * ours to remake in another style (change, from_asset_id). */
 export type WorkOrder = {
   id: number
-  source: 'dm' | 'trend'
+  source: OrderSource
+  style: string | null // the style button pressed (138); null: Auto
+  from_asset_id: number | null // change: the video to remake
   source_id: number | null
   pick_id: number | null
   sender_username: string | null // dm only
@@ -977,8 +984,32 @@ export type WorkOrder = {
   comments: number | null
   views: number | null
 }
-export const listWorkOrders = (source: 'dm' | 'trend' | 'all' = 'all') =>
+/** mine: what the owner sent himself (every source but trend). */
+export const listWorkOrders = (source: OrderSource | 'all' | 'mine' = 'all') =>
   request<WorkOrder[]>(`/api/work-orders?source=${source}`)
-/** Allowed while needs_instruction or scheduled; 409 once the AI started. */
-export const editWorkOrder = (id: number, body: { instruction: string; mode?: WorkMode }) =>
+/** Allowed while needs_instruction or scheduled; 409 once the AI started. style null: Auto. */
+export const editWorkOrder = (id: number, body: { instruction: string; mode?: WorkMode; style?: string | null }) =>
   send<WorkOrder>('PATCH', `/api/work-orders/${id}`, body)
+
+// --- Styles as buttons (step 138) ---
+/** A row of GET /api/styles: one button per enabled style. preview: URLs, null when no sample file. */
+export type Style = {
+  id: string
+  label: string
+  description: string | null
+  templates: string[]
+  end_card: string | null
+  address: 'tu' | 'vous' | null
+  enabled: boolean
+  share: number | null // at most this part of a day's batch; null: no limit
+  preview: { still: string | null; clip: string | null }
+}
+export const listStyles = () => request<Style[]>('/api/styles')
+/** Settings: turn a style on / off, or set its daily share (null: no limit). */
+export const setStyle = (id: string, body: { enabled?: boolean; share?: number | null }) =>
+  send<Style>('PATCH', `/api/styles/${encodeURIComponent(id)}`, body)
+/** « Créer une vidéo »: a topic or instruction and a style (null: Auto) -> a work order. */
+export const createVideo = (body: { instruction: string; style: string | null }) => post<WorkOrder>('/api/work-orders', body)
+/** « Même vidéo, autre style »: a work order to remake this video (style null: the AI picks another). */
+export const restyleAsset = (assetId: number, body: { style: string | null; note?: string }) =>
+  post<WorkOrder>(`/api/assets/${assetId}/restyle`, body)

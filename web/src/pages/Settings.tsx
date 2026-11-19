@@ -4,6 +4,7 @@ import {
   getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type DownloaderStatus, type RunResult,
   type TokenStatus,
 } from '../api/client'
+import StylesSection from '../launch/StylesSection'
 import { Button } from '../ui/Button'
 import { Card, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
@@ -230,6 +231,7 @@ export default function Settings() {
         </Section>
 
         <SettingsSection section="studio" title="Studio" />
+        <StylesSection />
         <SettingsSection section="ads" title="Ads" />
         <ClipsSection />
         <PermissionsSection />

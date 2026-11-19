@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { ApiError, editWorkOrder, errorMessage, listWorkOrders, type WorkMode, type WorkOrder } from '../api/client'
+import { ApiError, editWorkOrder, errorMessage, listWorkOrders, type Style, type WorkMode, type WorkOrder } from '../api/client'
 import { safeUrl } from '../inbox/ui'
+import { StylePicker } from '../launch/StylePicker'
+import { styleLabel, useStyles } from '../launch/useStyles'
 import { DmPicksList } from '../pages/DmPicks'
 import { Button } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
@@ -12,9 +14,10 @@ import { ago, embedSrc, modeLabel, MODES, orderStatus } from './format'
 import { Embed, ModePicker } from './shared'
 
 /** The owner's instruction for a DM'd Reel: written here when the DM had none, or changed
- * while the order is still scheduled (136: 409 once the AI started). */
+ * while the order is still scheduled (136: 409 once the AI started), with its style (138). */
 function InstructionForm({ order, onSaved, onCancel }: { order: WorkOrder; onSaved: () => void; onCancel?: () => void }) {
   const [mode, setMode] = useState<WorkMode>(order.mode)
+  const [style, setStyle] = useState<string | null>(order.style)
   const [text, setText] = useState(order.instruction ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,7 +28,7 @@ function InstructionForm({ order, onSaved, onCancel }: { order: WorkOrder; onSav
     setBusy(true)
     setError(null)
     try {
-      await editWorkOrder(order.id, { instruction: text.trim(), mode })
+      await editWorkOrder(order.id, { instruction: text.trim(), mode, style })
       onSaved()
     } catch (err) {
       setBusy(false)
@@ -43,7 +46,8 @@ function InstructionForm({ order, onSaved, onCancel }: { order: WorkOrder; onSav
           placeholder="Ex. : ça a bien marché, analyse-la. Change ça, garde ça… (tu peux dicter)"
           className={`${field} mt-1 block w-full py-2 text-base`} />
       </label>
-      <ModePicker modes={MODES} value={mode} onChange={setMode} />
+      {order.source === 'dm' && <ModePicker modes={MODES} value={mode} onChange={setMode} />}
+      <StylePicker value={style} onChange={setStyle} />
       {error && <p role="alert" className="text-danger">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" variant="primary" loading={busy}>Envoyer</Button>
@@ -53,7 +57,14 @@ function InstructionForm({ order, onSaved, onCancel }: { order: WorkOrder; onSav
   )
 }
 
-function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () => void }) {
+/** Where the order came from, in one line. */
+function origin(o: WorkOrder) {
+  if (o.source === 'create') return `créé dans l'app, ${ago(o.created_at)}`
+  if (o.source === 'change') return `autre style de la vidéo ${o.from_asset_id}, ${ago(o.created_at)}`
+  return `envoyé par @${o.sender_username ?? '?'}, ${ago(o.received_at ?? o.created_at)}`
+}
+
+function OrderCard({ order: o, styles, onChanged }: { order: WorkOrder; styles?: Style[]; onChanged: () => void }) {
   const [editing, setEditing] = useState(false)
   const [label, tone] = orderStatus(o)
   const href = safeUrl(o.permalink)
@@ -65,7 +76,8 @@ function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () =>
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone={tone}>{label}</Chip>
         {o.own_reel && <Chip tone="accent">Ton Reel</Chip>}
-        <span className="text-muted">envoyé par {sender}, {ago(o.received_at ?? o.created_at)}</span>
+        <Chip>{styleLabel(styles, o.style)}</Chip>
+        <span className="text-muted">{origin(o)}</span>
       </div>
       {o.blocked_reason && label === 'Bloqué' && <p className="text-danger">Bloqué : {o.blocked_reason}</p>}
       {o.status === 'skipped' && o.skip_reason && <p className="text-muted">Ignoré : {o.skip_reason}</p>}
@@ -76,7 +88,7 @@ function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () =>
       ) : (
         o.instruction && (
           <div className="rounded-control bg-surface-2 p-3">
-            <p className="text-xs text-muted">Ta consigne{o.mode && ` · ${modeLabel(o.mode)}`}</p>
+            <p className="text-xs text-muted">Ta consigne{o.source === 'dm' && o.mode && ` · ${modeLabel(o.mode)}`}</p>
             <q className="block break-words">{o.instruction}</q>
           </div>
         )
@@ -90,6 +102,9 @@ function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () =>
       )}
       <div className="flex flex-wrap items-center gap-2">
         {o.status === 'scheduled' && !editing && <Button size="sm" onClick={() => setEditing(true)}>Modifier la consigne</Button>}
+        {o.source === 'change' && o.from_asset_id != null && (
+          <Link to={`/assets/${o.from_asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Vidéo d'origine</Link>
+        )}
         {o.status === 'in_feed' && o.asset_id != null && (
           <Link to={`/assets/${o.asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Voir dans ton feed</Link>
         )}
@@ -103,13 +118,15 @@ function OrderCard({ order: o, onChanged }: { order: WorkOrder; onChanged: () =>
   )
 }
 
-/** Mes envois: the Reels the owner DMs to the brand account, newest first, with their
- * instruction and where the work stands. */
+/** Mes envois: what the owner sent the AI himself, newest first: the Reels he DMs to the
+ * brand account, the videos he asked for (« Créer une vidéo ») and the restyles (« même
+ * vidéo, autre style »), with their instruction, style and where the work stands. */
 export default function MesEnvois() {
   const [orders, setOrders] = useState<WorkOrder[]>()
   const [error, setError] = useState<string | null>(null)
+  const { styles } = useStyles()
 
-  const reload = useCallback(() => listWorkOrders('dm').then((o) => {
+  const reload = useCallback(() => listWorkOrders('mine').then((o) => {
     setOrders(o)
     setError(null)
   }, (e: unknown) => setError(errorMessage(e))), [])
@@ -124,10 +141,11 @@ export default function MesEnvois() {
         <EmptyState title="Aucun envoi pour l'instant">
           Envoie un Reel en DM à @macrobody.fr depuis ton compte, avec ou sans description.
           Une description dans le DM vaut consigne : le travail commence tout de suite.
+          Ou touche « Créer une vidéo » pour un sujet à toi.
         </EmptyState>
       ) : (
         <ul aria-label="Mes envois" className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {orders.map((o) => <OrderCard key={o.id} order={o} onChanged={() => void reload()} />)}
+          {orders.map((o) => <OrderCard key={o.id} order={o} styles={styles} onChanged={() => void reload()} />)}
         </ul>
       )}
       <details className="mt-8 rounded-card border border-line/60 bg-surface p-4 shadow-card">

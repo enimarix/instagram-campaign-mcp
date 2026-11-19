@@ -40,14 +40,14 @@ from ..store import CampaignStore, parse_dt
 from ..studio.seed import local_today
 from .learnings import _labels
 
-GROUPS = ("day", "track", "template", "hook_type")
+GROUPS = ("day", "track", "template", "style", "hook_type")
 STAGES = ("produced", "reviewed", "liked", "approved", "published", "winner")
 ROLLING_DAYS = 7
 TOP_N = 5
 APPROVAL_NOTE = "capped by the posts-per-day limit"
 
 _ASSETS_SQL = """
-SELECT a.id, a.batch_date AS day, i.track, i.hook_type, a.status, a.verdict, a.self_score,
+SELECT a.id, a.batch_date AS day, i.track, i.hook_type, i.style, a.status, a.verdict, a.self_score,
        a.best_before, a.updated_at, a.approved_at IS NOT NULL AS approved,
        a.file_path IS NULL AS purged,
        CASE WHEN json_extract(a.recipe, '$.kind') = 'motion'

@@ -79,6 +79,7 @@ def test_create_idea_refuses_at_the_effective_size(store, settings):
 def test_every_key_on_an_empty_db(store, settings):
     b = B.creative_brief(store, settings, NOW)
     mix = b.pop("mix")
+    b.pop("styles")  # 138: None without Node (tests/test_styles.py covers it)
     assert set(mix) == {"template", "hook_type", "pillar", "humour", "moved"}
     # 10 ideas, 3 explore: 7 exploit ideas split in every dimension
     assert all(sum(r["count"] for r in mix[d]) == 7 for d in mix if d != "moved")
@@ -108,7 +109,8 @@ def test_bible_report_today_and_bench(store, settings):
     assert b["last_daily_report"]["report_date"] == "2026-11-16"
     assert len(b["last_daily_report"]["summary"]) == B.REPORT_CHARS + 1
     assert b["today"] == [{"id": idea["id"], "track": "motion", "pillar": "stories",
-                           "hook_type": "question", "strategy": "explore", "hook": "Why?"}]
+                           "hook_type": "question", "strategy": "explore", "style": None,
+                           "hook": "Why?"}]
     assert b["bench"] == {"count": 2, "supply_days": 1,
                           "hooks": ["bench hook 0", "bench hook 1"]}
 

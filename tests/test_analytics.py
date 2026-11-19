@@ -95,7 +95,7 @@ def test_posts_table_sort_paging_and_tags(tc, store):
     assert ext["tags"] is None and ext["asset_id"] is None and ext["owner_verdict"] is None
     assert ours["asset_id"] == asset["id"] and ours["owner_verdict"] == "none"
     assert ours["tags"] == {"track": "motion", "pillar": "myths", "hook_type": "question",
-                            "strategy": None, "template": "FactQuest"}
+                            "strategy": None, "style": None, "template": "FactQuest"}
     assert ours["metrics"]["reach"] > 0 and ours["caption"] == "post ours"
 
     page2 = tc.get("/api/analytics/posts?sort=-views&limit=2&offset=2").json()["posts"]

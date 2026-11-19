@@ -110,11 +110,23 @@ Then call `list_assets(batch_date=<quotas.date>)` and sort today's assets into:
 
 ## Phase 1a: the owner's work orders, before anything else
 
-Work orders are Reels the owner sent you to make: picked on the Trending page
-(`source: "trend"`) or sent by DM from one of their pinned accounts (`source: "dm"`, with
-`sender_username`; every new DM pick is a work order, so `dm_picks.json` only holds older
-picks). They are the clearest instruction you get. Make every one before any other
-video; a work-order video may go past a full batch.
+Work orders are videos the owner sent you to make: a Reel picked on the Trending page
+(`source: "trend"`), a Reel sent by DM from one of their pinned accounts (`source: "dm"`,
+with `sender_username`; every new DM pick is a work order, so `dm_picks.json` only holds
+older picks), « Créer une vidéo » (`source: "create"`: only the instruction, a topic or
+what to make, mode `owner`, no Reel) or « même vidéo, autre style » (`source: "change"`:
+`from_video` is our video to remake, its hook, script and template; make the same topic,
+script and message again in the order's `style`, a template of that style, and say which
+video it remakes in the `self_score_reason`). They are the clearest instruction you get.
+Make every one before any other video; a work-order video may go past a full batch.
+
+**The style (`style`).** Every order carries the style button the owner pressed: the
+id of one of the brief's `styles` (each with its label, description, `templates`, address
+and end card), or null for « Auto (l'IA choisit) ». A style is an order like the rest:
+`create_idea(…, work_order_id=<id>)` stores it on the idea (pass `style=` only to repeat
+it) and `render_motion` refuses a template outside it (the refusal names the templates to
+use). Null: you pick the style that fits the idea best, among the brief's `styles`, and
+pass it as `create_idea(style=…)`.
 1. The orders: `work_orders.json` (scheduled ones, oldest first; also the brief's
    `work_orders` and `list_work_orders`). Each has a `mode`, an `instruction` (the owner's
    own words, or null), the Reel's `permalink`, `own_reel` (true: the Reel is from our
@@ -158,6 +170,9 @@ video; a work-order video may go past a full batch.
      thing it teaches (the hook, the timing, the format), then
      `analyse_work_order(id, source_id, why)`: why it worked, pointing at moments of the
      timeline. The order is `analysed`;
+   - a topic or a video to make with no Reel (`source: "create"` or `"change"`) → an
+     original motion video: `create_idea(track="motion", work_order_id=<id>, …)` in the
+     order's style, as `inspired` above;
    - an instruction you cannot make (impossible with your tools, unclear, unsafe, or
      against the rights rules: a Reel whose rights stay unknown, a recut of someone
      else's Reel) → `skip_work_order(id, "<one-line reason>")`: the owner reads it and
@@ -308,13 +323,18 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
      brief fits the learnings, open it first with `open_experiment(proposed_id=<id>)`;
 3. For each idea call `create_idea` with:
    - `track="motion"`, a `pillar` and a `hook_type` from the taxonomy;
+   - `style`: one of the brief's `styles` (the owner turned the others off), the one
+     that fits the idea; vary them across the batch, within each style's
+     `quotas.styles.<id>.limit` (the owner's daily share; null: no limit), and note it
+     in the `hypothesis` when you test a style;
    - `hook`: the on-screen first second (≤ ~8 words, readable with the sound off);
    - `script`: the lines of the video, short and spoken-sounding;
    - `hypothesis`: one sentence, what this idea tests or why it should work;
    - `strategy`: `explore` or `exploit`;
    - `citations`: `[{url, title}]` for every fact (fact pillars are refused without).
    Send several `create_idea` calls in one turn.
-4. Refusals tell you what to change: "batch full" → stop; "explore quota used" → make it
+4. Refusals tell you what to change: "batch full" → stop; "style … share used" → pick
+   another style; "explore quota used" → make it
    exploit; "humour …/informative …" → switch to the other kind of pillar; a duplicate →
    a genuinely different topic or angle, not a reworded hook; "needs citations" → source
    it or pick another pillar. Adapt; never retry the same call.
@@ -323,7 +343,8 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 
 ## Phase 8: preview and render
 
-1. `list_motion_templates` (once per run): each template's props schema and defaults.
+1. `list_motion_templates` (once per run): each template's `style`, props schema and
+   defaults. Use a template of the idea's `style` (render_motion refuses another one).
 2. For each new idea, build the props from the idea: the hook, the script split into the
    template's parts, the citations in the template's `citations` prop when it has one.
    Voice-over is added by the studio: never put a `voice` prop in the props.

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from ..config import APP_HOME, InstagramMCPSettings
 from ..store import CampaignStore
-from ..studio import work_orders
+from ..studio import styles, work_orders
 from ..studio.research import trend_taste
 from ..studio.scheduling import bench
 from ..studio.seed import local_today
@@ -25,7 +25,8 @@ REPORT_CHARS = 2000
 NO_BIBLE = "no channel bible yet: follow brand/taxonomy.json and the learnings"
 INSPIRATIONS = 20
 WORK_ORDERS = 30
-IDEA_KEYS = ("id", "track", "pillar", "hook_type", "strategy", "hook")
+IDEA_KEYS = ("id", "track", "pillar", "hook_type", "strategy", "style", "hook")
+STYLE_KEYS = ("id", "label", "description", "templates", "address", "end_card", "share")
 EXPERIMENT_KEYS = ("id", "status", "hypothesis", "variable", "variants",
                    "target_per_variant", "ends_on")
 
@@ -43,6 +44,17 @@ def _bible() -> Optional[str]:
 def _rows(store: CampaignStore, sql: str, *args: Any) -> List[Dict[str, Any]]:
     with store._tx() as c:
         return [dict(r) for r in c.execute(sql, args).fetchall()]
+
+
+def _styles(store: CampaignStore) -> Optional[List[Dict[str, Any]]]:
+    """The styles the owner has on (138): pick one per idea (Auto orders, own ideas)."""
+    from ..studio.motion import MotionError  # here: motion pulls in most of the studio
+
+    try:
+        return [{k: s[k] for k in STYLE_KEYS} for s in styles.list_styles(store)
+                if s["enabled"]]
+    except MotionError:  # no Node here: list_motion_templates says the same
+        return None
 
 
 def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
@@ -80,6 +92,8 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
         "explore_plan": explore_plan(
             store, quotas["limits"]["explore"] - quotas["counts"]["explore"]),
         "quotas": quotas,
+        # 138: the styles to make ideas in (quotas.styles: today's count and share limit)
+        "styles": _styles(store),
         # Exploit ideas follow the mix; explore ideas (limits.explore) are free picks.
         "mix": with_counts(mix, quotas["limits"]["ideas"] - quotas["limits"]["explore"]),
         "today": [{k: i[k] for k in IDEA_KEYS}

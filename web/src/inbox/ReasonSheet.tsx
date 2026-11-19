@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CommentIn, Vocabulary } from '../api/client'
+import { StylePicker } from '../launch/StylePicker'
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { Sheet } from '../ui/Sheet'
@@ -13,14 +14,20 @@ type Props = {
   at?: number
   onSave: (fb: CommentIn) => void
   onClose: () => void
+  /** Change only: « même vidéo, autre style » (138), a new work order, this video stays.
+   * style null: another one the AI picks; `style` here: the video's own (not offered). */
+  onRestyle?: (style: string | null) => void
+  style?: string | null
 }
 
 // Change or Decline: what is wrong (chips and/or text, at least one), for Change
 // optionally pinned to a moment. Change asks for a new version (wants_changes); the agent
 // reworks it. Decline's text is a big field that phone dictation fills.
-export default function ReasonSheet({ reasons, at, onSave, onClose }: Props) {
+export default function ReasonSheet({ reasons, at, onSave, onClose, onRestyle, style }: Props) {
   const decline = at === undefined
   const [picked, setPicked] = useState<string[]>([])
+  const [restyling, setRestyling] = useState(false) // the style buttons load when opened
+  const [newStyle, setNewStyle] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [pin, setPin] = useState(false)
   const input = useRef<HTMLTextAreaElement>(null)
@@ -62,6 +69,18 @@ export default function ReasonSheet({ reasons, at, onSave, onClose }: Props) {
           {decline ? 'Decline' : 'Send for changes'}
         </Button>
       </div>
+      {!decline && onRestyle && (
+        <details lang="fr" onToggle={(e) => setRestyling(e.currentTarget.open)}
+          className="mt-5 rounded-control border border-line p-3">
+          <summary className="min-h-6 cursor-pointer font-medium">Même vidéo, autre style</summary>
+          {restyling && (
+            <div className="mt-2 space-y-3">
+              <StylePicker value={newStyle} onChange={setNewStyle} autoLabel="Au choix de l'IA" exclude={style} />
+              <Button variant="primary" className="w-full" onClick={() => onRestyle(newStyle)}>Refaire dans ce style</Button>
+            </div>
+          )}
+        </details>
+      )}
     </Sheet>
   )
 }
