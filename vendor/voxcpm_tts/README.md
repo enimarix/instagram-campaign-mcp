@@ -52,12 +52,16 @@ models gave the VRAM back but torch's CPU allocator kept ~17 GB of committed RAM
 - On Windows the GPU memory a process allocates also counts in its committed memory (WDDM
   can page it out): ~6 GB of the worker's committed memory is the model on the GPU.
 
-Committed memory (private bytes), one 7.7 s take, RTX 3070 Laptop:
+Committed memory (private bytes), one take of a 3-line script, RTX 3070 Laptop, 2026-11-19:
 
-| | service | worker loaded | worker peak (take) | after unload |
-|---|---|---|---|---|
-| before (one process) | 19.6 GB | (same process) | ~23 GB | 19.6 GB |
-| step 146 | 41 MB | WORKER_LOADED | WORKER_PEAK | 41 MB, no worker |
+| | loaded | peak during a take | after the idle unload |
+|---|---|---|---|
+| before (one process) | 22.7 GB | 23.3 GB | 17.4–19.6 GB held until a restart |
+| now: service | 41 MB | 41 MB | 41 MB |
+| now: worker | 13.4 GB | 13.6 GB | gone (VRAM back to ~400 MiB) |
+
+The load itself peaks at ~16 GB for a few seconds (VoxCPM2 builds its model in float32 on the
+CPU before casting it to bfloat16).
 
 ## Voices
 
