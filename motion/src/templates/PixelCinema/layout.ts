@@ -26,10 +26,11 @@ export const coverOf = (p: PixelCinemaProps, t: Timeline, fps: number) => {
 };
 
 /**
- * Sound effects under the voice (owner, round 3c): full in the gaps, down by the bed's duck depth
- * (DUCK_DB - GAP_DB) while a line is spoken, with the bed's ramps. `spans` from speechSpans().
+ * Sound effects under the voice (owner, round 3c: voice >= 12 LU above the rest): full in the
+ * gaps, twice the bed's duck depth (2 x (DUCK_DB - GAP_DB) = -20 dB) while a line is spoken, with
+ * the bed's ramps. The pops and chimes land on spoken words, so they need more than the bed.
  */
-export const sfxGain = (spans: readonly Span[], t: number) => Math.min(1, duckGain(spans, t) / 10 ** (GAP_DB / 20));
+export const sfxGain = (spans: readonly Span[], t: number) => Math.min(1, duckGain(spans, t) / 10 ** (GAP_DB / 20)) ** 2;
 
 /** The thunder rolls in after its lightning at `t` (s): moved to the first gap if a line is spoken then. */
 export const thunderAt = (spans: readonly Span[], t: number) => {

@@ -156,7 +156,7 @@ test("sound: the sfx duck under a spoken line, the thunder waits for the next ga
   const spans = speechSpans([{ start_s: 1, end_s: 3 }, { start_s: 5, end_s: 6 }]);
   assert.equal(sfxGain([], 2), 1);
   assert.equal(sfxGain(spans, 4), 1);
-  assert.ok(Math.abs(20 * Math.log10(sfxGain(spans, 2)) + 10) < 0.01, "10 dB down under the voice");
+  assert.ok(Math.abs(20 * Math.log10(sfxGain(spans, 2)) + 20) < 0.01, "20 dB down under the voice");
   assert.equal(thunderAt(spans, 0.5), 0.5);
   assert.equal(thunderAt(spans, 2), 3.25);
   assert.equal(thunderAt(spans, 4.9), 6.25);
