@@ -15,7 +15,7 @@ from src.config import InstagramMCPSettings
 from src.store import CampaignStore
 from src.studio import work_orders
 
-from .test_dm_work_orders import Clock, Starts
+from .test_dm_work_orders import Clock, Starts, cfg
 from .test_revision_wakes import _ask, _run
 
 LOCK_S = 3600
@@ -101,3 +101,27 @@ def test_real_probe():
     child.wait()
     assert proc.started(child.pid) is None and proc.is_gone(child.pid, None)
     assert proc.is_gone(0, None) is False and proc.started(-1) is None
+
+
+def test_a_run_killed_after_the_request_does_not_have_it(store, clock, probe):
+    s, f = cfg(max_order_runs_per_day=2), Starts()
+    _ask(store)
+    assert _run(store, 3, s, f) == "daily-revise"  # the at-once run starts...
+    clock.set(3)
+    probe[4242] = 111
+    store.start_agent_run("daily-revise", 4242, 111)  # ...its row, after the request
+    assert _run(store, 5, s, f) is None  # it runs: one at a time
+    del probe[4242]  # the studio restarted
+    assert _run(store, 6, s, f) == "daily-revise" and len(f.runs) == 2  # next tick
+    clock.set(6)
+    store.start_agent_run("daily-revise", 4243, 1)  # dies too
+    assert _run(store, 9, s, f) is None and len(f.runs) == 2  # today's 2 at-once runs used
+
+
+def test_a_run_that_failed_otherwise_still_had_the_request(store, clock, probe):
+    _ask(store)
+    clock.set(3)
+    probe[4242] = 111
+    run = store.start_agent_run("daily-revise", 4242, 111)
+    store.finish_agent_run(run["id"], "failed", summary="error_max_turns")
+    assert _run(store, 10) is None
