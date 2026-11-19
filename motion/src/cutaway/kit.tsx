@@ -13,7 +13,7 @@ export const H = 1920;
 /** The art's pixel, in output px (the mosaic filter's block). */
 export const P = 5;
 /** Where a view's (0, 0) sits on screen, and its scale at zoom 1 (views are drawn about ±420 across). */
-export const STAGE = [540, 1060] as const;
+export const STAGE = [540, 1100] as const;
 export const BASE = 1.2;
 
 /** Snap to the pixel grid. */

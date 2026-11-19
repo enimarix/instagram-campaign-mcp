@@ -188,15 +188,12 @@ const Steps = ({ items, current, view, st, y }: { items: string[]; current?: num
   // No `current`: the lit step follows the mechanism; too fast to follow = all lit.
   const fast = current === undefined && st.rate > 3;
   const lit = current ?? Math.floor(cycleOf(view, st.phase) * items.length);
-  let x = 540 - width / 2;
+  const xs = items.map((_, k) => 540 - width / 2 + items.slice(0, k).reduce((sum, t) => sum + item(t) + 12, 0));
   return (
     <g>
       {items.map((t, k) => {
-        const w = item(t);
         const on = fast ? (k + Math.floor(st.f / 3)) % 2 === 0 : k === lit;
-        const el = <Tag key={k} text={t} x={px(x, 1)} y={y} unit={unit} color={on ? C.ink : C.mauve} border={on ? C.yellow : C.violet} fill={on ? C.yellow : C.ink} />;
-        x += w + 12;
-        return el;
+        return <Tag key={k} text={t} x={px(xs[k], 1)} y={y} unit={unit} color={on ? C.ink : C.mauve} border={on ? C.yellow : C.violet} fill={on ? C.yellow : C.ink} />;
       })}
     </g>
   );

@@ -5,8 +5,8 @@
 import { C } from "../palette";
 import { type View, type ViewState, frac, ghosts, LINE, rad, Spark } from "./common";
 
-const MYO_Y = [-230, 0, 230];
-const ACTIN_Y = [-288, -172, -58, 58, 172, 288];
+const MYO_Y = [-220, 0, 220];
+const ACTIN_Y = [-278, -162, -58, 58, 162, 278];
 const ACTIN_LEN = 290;
 const HEADS = [0, 1, 2, 3, 4].map((k) => 50 + k * 40);
 
@@ -40,21 +40,21 @@ const tipOf = (h: Head, q: number) => {
   return { bx, by, tx: bx + Math.sin(a) * s.len, ty: by + h.dir * Math.cos(a) * s.len, ...s };
 };
 
-const Actin = ({ x0, x1, y, f }: { x0: number; x1: number; y: number; f: number }) => {
+const Actin = ({ x0, x1, y }: { x0: number; x1: number; y: number }) => {
   const beads = [];
   const step = 19;
   const n = Math.floor(Math.abs(x1 - x0) / step);
   const dir = Math.sign(x1 - x0);
   for (let i = 0; i <= n; i++) {
     const x = x0 + dir * i * step;
-    const w = Math.sin(i * 0.55 + f * 0) * 7;
+    const w = Math.sin(i * 0.55) * 7;
     beads.push(<circle key={`a${i}`} cx={x} cy={y + w} r={10} fill={C.teal} />, <circle key={`b${i}`} cx={x + step / 2} cy={y - w} r={10} fill={i % 2 ? C.tealLight : C.teal} />);
   }
   return <g>{beads}</g>;
 };
 
 const ZLine = ({ x }: { x: number }) => {
-  const pts = Array.from({ length: 17 }, (_, i) => `${x + (i % 2 ? 14 : -14)},${-320 + i * 40}`).join(" ");
+  const pts = Array.from({ length: 17 }, (_, i) => `${x + (i % 2 ? 14 : -14)},${-310 + i * 38.75}`).join(" ");
   return (
     <g>
       <polyline points={pts} fill="none" stroke={C.ink} strokeWidth={30} strokeLinejoin="miter" />
@@ -63,24 +63,24 @@ const ZLine = ({ x }: { x: number }) => {
   );
 };
 
-const Draw = ({ phase, stage, rate, f }: ViewState) => {
+const Draw = ({ phase, stage, rate }: ViewState) => {
   const z = zOf(stage);
   const g = ghosts(rate);
   return (
     <g>
       {/* The myofibril, cut open: a dark slice with copper cut edges. */}
-      <rect x={-z - 70} y={-340} width={2 * z + 140} height={680} fill={C.ink} opacity={0.6} />
-      {[-352, 328].map((y) => (
+      <rect x={-z - 70} y={-330} width={2 * z + 140} height={660} fill={C.ink} opacity={0.6} />
+      {[-342, 318].map((y) => (
         <g key={y}>
           <rect x={-z - 70} y={y} width={2 * z + 140} height={24} fill={C.copper} stroke={C.ink} {...LINE} />
           <rect x={-z - 60} y={y + 4} width={2 * z + 120} height={6} fill={C.copperLight} />
         </g>
       ))}
-      <line x1={0} y1={-322} x2={0} y2={322} stroke={C.violet} strokeWidth={10} strokeDasharray="20 14" />
+      <line x1={0} y1={-312} x2={0} y2={312} stroke={C.violet} strokeWidth={10} strokeDasharray="20 14" />
       {ACTIN_Y.map((y) => (
         <g key={y}>
-          <Actin x0={-z} x1={-z + ACTIN_LEN} y={y} f={f} />
-          <Actin x0={z} x1={z - ACTIN_LEN} y={y} f={f} />
+          <Actin x0={-z} x1={-z + ACTIN_LEN} y={y} />
+          <Actin x0={z} x1={z - ACTIN_LEN} y={y} />
         </g>
       ))}
       {MYO_Y.map((y) => (
@@ -115,7 +115,7 @@ export const sarcomere: View<"sarcomere"> = {
     const z = zOf(stage);
     const lead = ALL[LEAD];
     const t = tipOf(lead, frac(phase + lead.offset));
-    return { zline: [z, -320], actine: [z - 120, -172], myosine: [-150, 230], tete: [t.tx, t.ty], mline: [0, -320] };
+    return { zline: [z, -300], actine: [z - 120, -162], myosine: [-150, 220], tete: [t.tx, t.ty], mline: [0, -300] };
   },
 };
 

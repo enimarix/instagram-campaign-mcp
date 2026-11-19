@@ -4,8 +4,8 @@
 import { C } from "../palette";
 import { type View, type ViewState, LINE, pulse, rad, Sparkles } from "./common";
 
-const S = [-60, -200] as const; // shoulder
-const E = [-20, 160] as const; // elbow
+const S = [-60, -170] as const; // shoulder
+const E = [-20, 190] as const; // elbow
 const FORE = 270;
 
 type V2 = readonly [number, number];
@@ -17,13 +17,13 @@ const geometry = (phase: number) => {
   const dir: V2 = [Math.sin(a), Math.cos(a)];
   const front: V2 = [Math.cos(a), -Math.sin(a)]; // the forearm's front side
   const wrist = add(E, dir, FORE);
-  const O: V2 = [-30, -160];
+  const O: V2 = [-30, -130];
   const I = add(add(E, dir, 55), front, 16);
   const mid: V2 = [(O[0] + I[0]) / 2, (O[1] + I[1]) / 2];
   const len = Math.hypot(I[0] - O[0], I[1] - O[1]);
   const n: V2 = [-(I[1] - O[1]) / len, (I[0] - O[0]) / len]; // to the front (+x)
   const bulge = 44 + 44 * c;
-  const tO: V2 = [-92, -150];
+  const tO: V2 = [-92, -120];
   const tI: V2 = add(E, [-30, 22]);
   const tMid: V2 = [(tO[0] + tI[0]) / 2, (tO[1] + tI[1]) / 2];
   return { c, dir, front, wrist, O, I, mid, n, bulge, tO, tI, tMid };

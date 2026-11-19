@@ -51,7 +51,7 @@ export const CutawayEndCard = ({ tagline, accent, address, cameo }: Omit<CardPro
             </g>
           )}
           {Draw && frame >= AT.cameo && (
-            <g transform={`translate(780 ${760 - (frame < AT.cameo + 6 ? 40 - (frame - AT.cameo) * 7 : 0)}) scale(0.3)`}>
+            <g transform={`translate(785 ${720 - (frame < AT.cameo + 6 ? 40 - (frame - AT.cameo) * 7 : 0)}) scale(0.42)`}>
               <Draw phase={(frame / fps) * VIEWS[view!].hz} stage={0.6} rate={VIEWS[view!].hz} f={frame} />
             </g>
           )}
