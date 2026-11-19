@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from math import ceil
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, utcnow
@@ -109,7 +109,8 @@ def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
             "styles": style_quotas(store, ideas, batch)}
 
 
-def style_quotas(store: CampaignStore, ideas: Any, batch: int) -> Dict[str, Dict[str, Any]]:
+def style_quotas(store: CampaignStore, ideas: List[Dict[str, Any]],
+                 batch: int) -> Dict[str, Dict[str, Any]]:
     """{style: {count, limit}} for the styles used today or given a share by the owner."""
     shares = {s: c["share"] for s, c in styles.owner_choices(store).items() if c.get("share")}
     counts: Dict[str, int] = {}

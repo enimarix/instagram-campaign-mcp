@@ -55,20 +55,23 @@ def owner_choices(store: CampaignStore) -> Dict[str, Dict[str, Any]]:
     return store.get_state(STATE_KEY) or {}
 
 
-def preview_file(style: str, kind: str, samples_dir: Optional[Path] = None) -> Optional[Path]:
-    """The style's preview `kind` (still | clip) when the file exists, else None."""
-    rel = (_entries().get(style, {}).get("preview") or {}).get(kind)
+def _preview(entry: Dict[str, Any], kind: str) -> Optional[Path]:
+    rel = (entry.get("preview") or {}).get(kind)
     if kind not in PREVIEWS or not rel:
         return None
     try:
-        path = media.resolve(samples_dir or SAMPLES_DIR, rel)
+        path = media.resolve(SAMPLES_DIR, rel)
     except ValueError:  # a bad path in the JSON: no preview
         return None
     return path if path.is_file() else None
 
 
-def list_styles(store: CampaignStore, *, samples_dir: Optional[Path] = None
-                ) -> List[Dict[str, Any]]:
+def preview_file(style: str, kind: str) -> Optional[Path]:
+    """The style's preview `kind` (still | clip) when the file exists, else None."""
+    return _preview(_entries().get(style, {}), kind)
+
+
+def list_styles(store: CampaignStore) -> List[Dict[str, Any]]:
     """Every style (enabled or not), registry order: {id, label, description, templates,
     end_card, address, enabled, share, preview: {still, clip} (URLs or None)}."""
     entries, own = _entries(), owner_choices(store)
@@ -81,8 +84,8 @@ def list_styles(store: CampaignStore, *, samples_dir: Optional[Path] = None
             "end_card": e.get("end_card"), "address": e.get("address"),
             "enabled": bool(mine.get("enabled", e.get("enabled", True))),
             "share": mine.get("share"),
-            "preview": {k: f"/api/styles/{sid}/preview/{k}"
-                        if preview_file(sid, k, samples_dir) else None for k in PREVIEWS},
+            "preview": {k: f"/api/styles/{sid}/preview/{k}" if _preview(e, k) else None
+                        for k in PREVIEWS},
         })
     return out
 
