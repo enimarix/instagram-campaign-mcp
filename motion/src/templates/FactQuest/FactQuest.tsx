@@ -6,6 +6,7 @@ import { CRTOverlay } from "../../components/CRTOverlay";
 import { HookCard } from "../../components/HookCard";
 import { HUD } from "../../components/HUD";
 import { MusicBed } from "../../components/MusicBed";
+import { spokenLines } from "../../lib/duck";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
@@ -108,7 +109,7 @@ export const FactQuest = (props: FactQuestProps) => {
           color={s.index % 2 ? c.accent : c.secondary}
         />
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}

@@ -6,6 +6,7 @@ import { CRTOverlay } from "../../components/CRTOverlay";
 import { DialogBox } from "../../components/DialogBox";
 import { HookCard } from "../../components/HookCard";
 import { MusicBed } from "../../components/MusicBed";
+import { pausedLines, spokenLines } from "../../lib/duck";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
@@ -198,7 +199,7 @@ export const PixelSkit = (props: PixelSkitProps) => {
         return sfx && <Sfx key={s.index} id={sfxId(sfx)} from={s.startFrame + BEAT} />;
       })}
       {props.sting !== "none" && <Sfx id={sfxId(props.sting)} from={land} />}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={pausedLines(spokenLines(props.voice) ?? [], pauses, fps)} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {/* The voice pauses through the hold and the freeze: plain audio in parts around them. */}

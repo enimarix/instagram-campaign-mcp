@@ -61,7 +61,8 @@ export const cutawaySchema = z
     /** Voice track (048b rule): one timing per script line: hook, each beat, payoff, then the outro when there is one. */
     voice: z.strictObject({ audioSrc: z.string().min(1).optional(), lines: z.array(voiceLine).optional() }).optional(),
     /** The dusk synth bed, or "none". */
-    music: z.enum(["music-dusk", "none"]).default("music-dusk"),
+    // a/b/c: the step-148 candidates; the default stays music-dusk until the owner picks.
+    music: z.enum(["music-dusk", "music-cutaway-a", "music-cutaway-b", "music-cutaway-c", "none"]).default("music-dusk"),
     /** Off by default: the end card closes the video. */
     loop: z.boolean().default(false),
     safeZone: z.boolean().optional(),

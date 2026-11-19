@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { type AssetId, assetById } from "../../assets";
 import { MusicBed } from "../../components/MusicBed";
+import { spokenLines } from "../../lib/duck";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { BASE, Box, Defs, DitherRect, H, P, px, SkyLayer, STAGE, steps, Tag, tagHeight, Type, typeSize, W } from "../../cutaway/kit";
 import { C } from "../../cutaway/palette";
@@ -348,7 +349,7 @@ export const Cutaway = (props: CutawayProps) => {
           <Html5Audio src={assetById(id).src} volume={volume} />
         </Sequence>
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

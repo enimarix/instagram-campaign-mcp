@@ -9,6 +9,7 @@ import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } f
 import { assetById } from "../../assets";
 import { brand, safeArea } from "../../brand";
 import { MusicBed } from "../../components/MusicBed";
+import { spokenLines } from "../../lib/duck";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { EndCard } from "../../endcards/EndCard";
 import { BACKGROUND } from "../../endcards/VoxelEndCard";
@@ -349,7 +350,7 @@ export const VoxelQuest = (props: VoxelQuestProps) => {
       {cues.map((c, i) => (
         <Sfx key={i} at={c.at} id={c.id} />
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>
