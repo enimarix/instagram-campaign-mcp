@@ -22,10 +22,12 @@ const seedOf = (...parts: (string | number)[]) => {
   return (h >>> 0) % 1000;
 };
 
-/** The number a counter shows at `k` (0..1 of the way), with its decimals. */
+/** The number a counter shows at `k` (0..1 of the way), French style: its decimals after a comma, thousands apart (« 2 029 »). */
 export const counterText = (c: { from: number; to: number; decimals: number }, k: number) => {
   const v = c.from + (c.to - c.from) * Math.min(1, Math.max(0, k));
-  return v.toFixed(c.decimals).replace(".", ",");
+  const [whole, dec] = v.toFixed(c.decimals).split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+$)/g, "\u202f");
+  return dec ? `${grouped},${dec}` : grouped;
 };
 
 /** Every shot from frame 0 to the end card (`endStart`), scene by scene. */

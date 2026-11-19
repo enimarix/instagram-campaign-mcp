@@ -11,7 +11,8 @@
       "counter": {
         "from": 0,
         "to": 9,
-        "unit": "kcal / g"
+        "unit": "kcal / g",
+        "big": true
       },
       "pose": "point"
     },

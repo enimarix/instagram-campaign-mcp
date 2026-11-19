@@ -139,7 +139,9 @@ test("labels and counters", () => {
   assert.equal(autoLabel("egg", "section"), "coupe");
   assert.equal(autoLabel("apple", "section"), "none");
   assert.equal(counterText({ from: 0, to: 1.6, decimals: 1 }, 0.5), "0,8");
-  assert.equal(counterText({ from: 2400, to: 1900, decimals: 0 }, 1), "1900");
+  assert.equal(counterText({ from: 2400, to: 1900, decimals: 0 }, 1), "1\u202f900");
+  assert.equal(counterText({ from: 0, to: 7700, decimals: 1 }, 1), "7\u202f700,0");
+  assert.equal(counterText({ from: 0, to: 900, decimals: 0 }, 1), "900");
   assert.equal(macro3dSchema.parse(base).scenes[0].counter, undefined);
   const counter = macro3dSchema.parse({ ...base, scenes: [scene("Un.", { counter: { from: 0, to: 9, unit: "kcal" } }), ...base.scenes.slice(1)] }).scenes[0].counter;
   assert.deepEqual([counter?.big, counter?.decimals], [false, 0]);

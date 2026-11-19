@@ -18,7 +18,8 @@
       "counter": {
         "from": 2400,
         "to": 1900,
-        "unit": "kcal/jour"
+        "unit": "kcal/jour",
+        "big": true
       }
     },
     {
