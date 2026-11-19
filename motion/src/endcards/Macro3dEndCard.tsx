@@ -48,7 +48,7 @@ export const Macro3dEndCard = ({ tagline, accent, address, cameo }: Omit<CardPro
         </div>
       </div>
       {who === "marco" && (
-        <div style={{ position: "absolute", left: 600, top: 530, width: 300, height: 390, opacity: cameoIn, transform: `translateX(${(1 - cameoIn) * 50}px)` }}>
+        <div style={{ position: "absolute", left: 600, top: 530, width: 300, height: 390, overflow: "hidden", maskImage: "linear-gradient(to bottom, #000 75%, transparent 100%)", opacity: cameoIn, transform: `translateX(${(1 - cameoIn) * 50}px)` }}>
           <Marco pose="thumbs" mouth="closed" blink={frame % 90 > 86} />
         </div>
       )}

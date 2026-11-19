@@ -137,7 +137,7 @@ def cube(name, size, loc, m, rot=(0, 0, 0), bevel=0.12):
     o.rotation_euler = rot
     bv = o.modifiers.new("bevel", "BEVEL")
     bv.width, bv.segments = bevel * min(size), 3
-    o.modifiers.new("ws", "WEIGHTED_NORMAL") if hasattr(bpy.types, "WeightedNormalModifier") else None
+    o.modifiers.new("ws", "WEIGHTED_NORMAL")  # crisp flats beside the bevels
     for poly in o.data.polygons:
         poly.use_smooth = True
     return o
@@ -572,7 +572,7 @@ MOVES = {
 }
 
 
-def camera(c, r, move, seed, frames, rng):
+def camera(c, r, move, frames, rng):
     s = bpy.context.scene
     cam = bpy.data.cameras.new("cam")
     cam.lens, cam.sensor_width, cam.sensor_fit = LENS, 36, "AUTO"
@@ -620,7 +620,7 @@ def render_shot(cfg, shot):
         heat([x for o in subject for x in (o, *o.children_recursive)], c, r)
     studio(c, r, floor, warm=0.5 if shot["subject"] in ("apple", "croissant", "buns", "cake") else 0)
     frames = shot["frames"]
-    d0 = camera(c, r, shot["move"], shot.get("seed", 0), frames, rng)
+    d0 = camera(c, r, shot["move"], frames, rng)
     dust(c, r, d0, rng)
     s.frame_start, s.frame_end = 1, frames
     out = os.path.join(os.path.abspath(cfg["out"]), shot["id"])
