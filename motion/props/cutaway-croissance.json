@@ -1,0 +1,76 @@
+{
+  "hook": {
+    "title": "Pourquoi un muscle grossit après la séance ?",
+    "sub": "Indice : pas pendant.",
+    "view": "arm",
+    "callouts": [{ "text": "Biceps", "at": "biceps" }],
+    "gauge": { "label": "Effort", "fill": 0.9 }
+  },
+  "beats": [
+    {
+      "title": "Pendant l'effort, vous l'abîmez",
+      "sub": "De toutes petites déchirures dans les fibres.",
+      "view": "repair",
+      "stage": 0,
+      "bang": "CRAC !",
+      "callouts": [{ "text": "Micro-lésion", "at": "dechirure" }],
+      "gauge": { "label": "Fatigue", "fill": 0.85 }
+    },
+    {
+      "title": "Après, le chantier commence",
+      "sub": "Des cellules satellites arrivent sur place.",
+      "view": "repair",
+      "speed": "x1000",
+      "stage": 0.45,
+      "callouts": [{ "text": "Cellule satellite", "at": "cellule" }],
+      "gauge": { "label": "Fatigue", "fill": 0.55 }
+    },
+    {
+      "title": "Elles colmatent avec des protéines",
+      "sub": "La fabrication reste haute jusqu'à 48 h.",
+      "view": "repair",
+      "speed": "x1000",
+      "x2": true,
+      "stage": 0.7,
+      "zoom": 1.6,
+      "focus": "proteine",
+      "callouts": [{ "text": "Protéines neuves", "at": "proteine" }],
+      "gauge": { "label": "Synthèse", "value": "48 h", "fill": 0.9 }
+    },
+    {
+      "title": "La fibre repousse plus épaisse",
+      "sub": "C'est ça, l'hypertrophie.",
+      "view": "repair",
+      "speed": "x10000",
+      "stage": 1,
+      "callouts": [{ "text": "Fibre renforcée", "at": "fibre" }],
+      "gauge": { "label": "Fatigue", "fill": 0.1 }
+    },
+    {
+      "title": "Séance après séance, le muscle grossit",
+      "sub": "Si vous mangez assez de protéines.",
+      "view": "muscle",
+      "speed": "x10000",
+      "stage": 1,
+      "callouts": [{ "text": "Faisceaux plus gros", "at": "faisceau" }],
+      "gauge": { "label": "Protéines", "value": "1,6 g/kg", "fill": 0.8 }
+    }
+  ],
+  "payoff": {
+    "title": "Le muscle se construit au repos.",
+    "sub": "Votre objectif protéines, macroBody le suit pour vous.",
+    "view": "arm",
+    "callouts": [{ "text": "Biceps", "at": "biceps" }],
+    "gauge": { "label": "Force", "fill": 1 }
+  },
+  "outro": "Envoyez ça à celui qui s'entraîne 7 jours sur 7.",
+  "address": "vous",
+  "accent": "protein",
+  "citations": [
+    { "url": "https://doi.org/10.1152/ajpendo.1997.273.1.E99", "title": "Phillips et al. 1997, Am J Physiol: muscle protein synthesis rises after resistance exercise and stays above rest for up to 48 h" },
+    { "url": "https://doi.org/10.1136/bjsports-2017-097608", "title": "Morton et al. 2018, Br J Sports Med (meta-analysis): gains in fat-free mass level off around 1.6 g of protein per kg of body weight per day" },
+    { "url": "https://doi.org/10.1152/japplphysiol.00126.2017", "title": "Snijders et al. / satellite cells: muscle stem (satellite) cells are activated after exercise-induced damage and fuse with fibres to repair and grow them (review of the role of satellite cells in muscle repair and hypertrophy)" }
+  ],
+  "music": "music-dusk",
+  "loop": false
+}

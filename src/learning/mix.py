@@ -9,8 +9,9 @@ pillar and humour vs informative gets. A pure function with tests, not a prompt.
   account typical): the options with at least MIX_MIN_POSTS posts re-split
   MIX_INDEX_WEIGHT of the score they hold together in proportion to their index. One such
   option alone keeps its score: the index only ranks options against each other.
-- floor: every allowed option gets MIX_FLOOR (min(floor, 1/k) for k options, so floors
-  never exceed the whole), the rest is split by score.
+- floor: every allowed option gets MIX_FLOOR, at most 0.5/k for k options (step 142: the
+  floors never take more than half the batch, so learning still moves the other half
+  however many templates the studio grows), the rest is split by score.
 - owner rules: an active `dont` learning at confidence `owner` whose scope predicate names
   an option (081) sets its share to 0, outside the floor.
 - humour vs informative starts from the owner's HUMOUR_SHARE (website setting, 125): the
@@ -79,9 +80,7 @@ def allocate(options: Iterable[str], likes: Mapping[str, int], dislikes: Mapping
         for o in ripe:
             score[o] = ((1 - index_weight) * score[o]
                         + index_weight * mass * index_stats[o][1] / total)
-    # ponytail: with 1/floor options or more every share is equal (no learning); lower
-    # MIX_FLOOR if a dimension ever gets that many options.
-    floor = min(floor, 1 / len(allowed))
+    floor = min(floor, 0.5 / len(allowed))
     for o in allowed:
         shares[o] = floor + (1 - floor * len(allowed)) * score[o]
     return shares

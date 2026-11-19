@@ -45,6 +45,7 @@ export const ASSETS = {
   "sfx-chime": audio("sfx-chime", "sfx"),
   "sfx-rip": audio("sfx-rip", "sfx"),
   "sfx-swish": audio("sfx-swish", "sfx"),
+  "music-dusk": audio("music-dusk", "music"),
 } as const satisfies Record<string, Entry>;
 
 export type AssetId = keyof typeof ASSETS;

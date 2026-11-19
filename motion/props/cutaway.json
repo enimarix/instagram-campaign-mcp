@@ -1,0 +1,85 @@
+{
+  "hook": {
+    "title": "Comment un muscle se contracte ?",
+    "sub": "Avec des milliards de petits moteurs.",
+    "view": "arm",
+    "zoom": 1.05,
+    "callouts": [{ "text": "Biceps", "at": "biceps" }],
+    "gauge": { "label": "Force", "fill": 0.85 }
+  },
+  "beats": [
+    {
+      "title": "On zoome dans le biceps",
+      "sub": "Des faisceaux de fibres, serrés comme des câbles.",
+      "view": "muscle",
+      "callouts": [{ "text": "Nerf", "at": "nerf" }, { "text": "Faisceau", "at": "faisceau" }, { "text": "Une fibre", "at": "fibre" }]
+    },
+    {
+      "title": "Une fibre, c'est une cellule géante",
+      "sub": "Remplie de myofibrilles rayées.",
+      "view": "fibre",
+      "speed": "1/10",
+      "callouts": [{ "text": "Myofibrille", "at": "myofibrille" }, { "text": "Sarcomère", "at": "sarcomere" }, { "text": "Noyau", "at": "noyau" }],
+      "gauge": { "label": "Force", "fill": 0.6 }
+    },
+    {
+      "title": "Ralenti 84 fois : le sarcomère",
+      "sub": "La myosine tire l'actine vers le centre.",
+      "view": "sarcomere",
+      "speed": "1/84",
+      "stage": 0.3,
+      "steps": { "items": ["1 S'accroche", "2 Tire", "3 Lâche", "4 Recharge"] },
+      "callouts": [{ "text": "Actine", "at": "actine" }, { "text": "Myosine", "at": "myosine" }, { "text": "Ligne Z", "at": "zline" }],
+      "gauge": { "label": "Force", "fill": 0.35 }
+    },
+    {
+      "title": "Chaque tête fait pareil",
+      "sub": "Elle s'accroche, tire, lâche, et recommence.",
+      "view": "sarcomere",
+      "speed": "1/42",
+      "zoom": 2.2,
+      "focus": "tete",
+      "stage": 0.5,
+      "steps": { "items": ["1 S'accroche", "2 Tire", "3 Lâche", "4 Recharge"] },
+      "callouts": [{ "text": "Tête de myosine", "at": "tete" }]
+    },
+    {
+      "title": "Pour lâcher, il lui faut de l'ATP",
+      "sub": "Le carburant de chaque coup de rame.",
+      "view": "sarcomere",
+      "speed": "1/10",
+      "zoom": 1.5,
+      "focus": "tete",
+      "stage": 0.7,
+      "bang": "ATP !",
+      "gauge": { "label": "Force", "fill": 0.6 }
+    },
+    {
+      "title": "Les lignes Z se rapprochent",
+      "sub": "Le muscle raccourcit.",
+      "view": "sarcomere",
+      "speed": "1/2",
+      "x2": true,
+      "stage": 1,
+      "callouts": [{ "text": "Ligne Z", "at": "zline" }],
+      "gauge": { "label": "Force", "fill": 0.95 }
+    }
+  ],
+  "payoff": {
+    "title": "Le même moteur, du biceps au cœur.",
+    "sub": "Et il tourne à chaque répétition.",
+    "view": "arm",
+    "callouts": [{ "text": "Biceps contracté", "at": "biceps" }],
+    "gauge": { "label": "Force", "fill": 1 }
+  },
+  "outro": "Envoyez ça à votre partenaire de salle.",
+  "address": "vous",
+  "accent": "protein",
+  "citations": [
+    { "url": "https://openstax.org/books/anatomy-and-physiology-2e/pages/10-2-skeletal-muscle", "title": "OpenStax Anatomy and Physiology 2e, 10.2 Skeletal Muscle: a muscle is made of fascicles of muscle fibres; each fibre is one long multinucleated cell packed with myofibrils striated by sarcomeres" },
+    { "url": "https://openstax.org/books/anatomy-and-physiology-2e/pages/10-3-muscle-fiber-contraction-and-relaxation", "title": "OpenStax Anatomy and Physiology 2e, 10.3 Muscle Fiber Contraction and Relaxation: cross-bridge cycle (myosin head attaches to actin, power stroke pulls the thin filament to the M-line, ATP binding releases the head, ATP hydrolysis recocks it); Z-discs move closer, the sarcomere shortens" },
+    { "url": "https://openstax.org/books/anatomy-and-physiology-2e/pages/19-2-cardiac-muscle-and-electrical-activity", "title": "OpenStax Anatomy and Physiology 2e, 19.2 Cardiac Muscle: cardiac muscle contracts by the same sliding filament (actin-myosin) mechanism" }
+  ],
+  "music": "music-dusk",
+  "loop": false
+}

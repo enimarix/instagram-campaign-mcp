@@ -132,6 +132,32 @@
   beat (its strips joined: `sceneLine`), outro when given}, `music` (`music-kalimba`|none),
   `loop` (default false), `safeZone`. Every visible text refuses prices. Still:
   `npm run still:paperstory`.
+- `Cutaway` (`src/templates/Cutaway/`, style `cutaway`, « Pixel explicatif », step 142): a
+  pixel-art mechanism explainer, the body as a machine (after a radial-engine explainer Reel:
+  its look, not its frames). A cutaway diagram drawn in code that really moves, under a game
+  HUD: mode chip « ▶ VITESSE RÉELLE » / « ‖ RALENTI 1/84 » / « ▶▶ ACCÉLÉRÉ ×1000 » with its
+  dashes (the mechanism's clock eases between speeds), « ×2 » badge, a top-right gauge with a
+  green-to-red bar (its number counts between scenes), a framed title box (hook and payoff
+  big, white and yellow lines), a numbered steps row (lit step follows the mechanism's cycle
+  unless `current`), callouts in boxed labels with elbow leader lines, « BANG »-style bursts
+  with a dithered flash. Same view: the camera glides (zoom, focus on a named point); new view:
+  the old picture zooms through (in to a deeper view, out to a shallower one) while the new
+  one dithers in. Kit `src/cutaway/`: `kit.tsx` (the P = 5 px grid: an SVG mosaic filter over
+  the vector art, Bayer dither masks, dusk / night skies with drifting pixel clouds, HUD
+  boxes), `pixelfont.ts` (a 5x7 capitals bitmap font drawn as paths, regular and bold, French
+  accents above the capital), `palette.ts`, `views.ts` + `views/` (one file per mechanism:
+  `arm` curling a dumbbell, `muscle` belly with fascicles and a nerve signal, `fibre` with
+  striated myofibrils, `sarcomere` with myosin heads cycling on actin and ATP sparks, `repair`
+  micro-tears healed by satellite cells, `fat` cell emptying into the blood, `mito`
+  mitochondrion burning fatty acids into ATP, CO₂ and water). **A new subject = a new view**:
+  its component in `views/`, its entry in `views.ts` (anchors, hz at real speed, depth) and in
+  `views/index.tsx`. Props in `schema.ts` (examples `props/cutaway*.json`): `hook`, `beats`
+  (4–6), `payoff`, each a scene {title, sub?, view, speed, x2, zoom, focus?, stage? (the view's
+  slow change), callouts [{text, at}] ≤ 3, steps? {items, current?}, gauge? {label, value?,
+  fill}, bang?, sky? dusk|night}; `outro?` (= the end card's tagline), `address`, `accent`,
+  `cameo?` (a view id), `citations`, `voice` {audioSrc?, lines?: hook, each beat, payoff,
+  outro; a scene's line = title + sub}, `music` (`music-dusk`|none), `loop`, `safeZone`. Every
+  visible text refuses prices. Still: `npm run still:cutaway`.
 - End cards (`src/endcards/`, steps 130, 137): `<EndCard style=…>` picks the style's animated
   card; every template ends on its style's card. Fixed base (`base.tsx`: mB tile, wordmark,
   « 7 jours gratuits », macrobody.fr) adapted per video by the props in `schema.ts`: `tagline?`,
@@ -142,7 +168,8 @@
   cut-out pieces slide in at 12 fps steps, a cut-out character waves. `clean`: v5 light
   surface, drifting accent glows, kicker pill, tile scales up, wordmark rises from a mask.
   `pixel`: PRESS START, the tile dissolves in cell by cell, the texts type in. `live`: the last
-  frame freezes, blurs and dims under the clean stack in light text. Composition `EndCard`
+  frame freezes, blurs and dims under the clean stack in light text. `cutaway` (step 142): the HUD's
+  level-complete screen, the tile dithers in on the pixel grid beside a small running mechanism. Composition `EndCard`
   (`EndCardClip`) renders one card alone; Track A recipes use it (src/studio/motion.py
   `render_end_card`). Stills: `npm run still:endcard`, `npm run still:endcards`.
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).

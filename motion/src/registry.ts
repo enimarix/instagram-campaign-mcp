@@ -1,6 +1,8 @@
 import type { ComponentType } from "react";
 import type { z } from "zod";
 import { type Event, scriptEvents } from "./lib/events";
+import { Cutaway } from "./templates/Cutaway/Cutaway";
+import { cutawaySchema, timelineOf as cutawayTimeline } from "./templates/Cutaway/schema";
 import { BossBattle, timelineOf as bossBattleTimeline } from "./templates/BossBattle/BossBattle";
 import { bossBattleSchema } from "./templates/BossBattle/schema";
 import { DialogStory, timelineOf as dialogStoryTimeline } from "./templates/DialogStory/DialogStory";
@@ -25,7 +27,7 @@ export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -314,6 +316,34 @@ export const templates = {
       return [
         ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (paper): kraft cover tears open, mB tile, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? who}` },
+      ];
+    },
+  }),
+  Cutaway: template({
+    style: "cutaway",
+    component: Cutaway,
+    schema: cutawaySchema,
+    defaultProps: cutawaySchema.parse({
+      hook: { title: "Comment un muscle se contracte ?", sub: "Avec des milliards de petits moteurs.", view: "arm", callouts: [{ text: "Biceps", at: "biceps" }] },
+      beats: [
+        { title: "On zoome dans le biceps", view: "muscle" },
+        { title: "Une fibre, c'est une cellule géante", view: "fibre", speed: "1/10" },
+        { title: "Ralenti 84 fois : le sarcomère", view: "sarcomere", speed: "1/84", stage: 0.4 },
+        { title: "Les lignes Z se rapprochent", view: "sarcomere", speed: "1/2", stage: 1 },
+      ],
+      payoff: { title: "Le même moteur, du biceps au cœur.", view: "arm" },
+      citations: [],
+    }),
+    durationInFrames: (p) => cutawayTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => cutawayTimeline(p, FPS).timeline.hookFrame,
+    events: (p) => {
+      const { timeline, endStart } = cutawayTimeline(p, FPS);
+      const scene = (s: (typeof p.beats)[number]) =>
+        `${s.view} (${s.speed === "real" ? "real speed" : s.speed.startsWith("x") ? `time-lapse ${s.speed}` : `slow-mo ${s.speed}`}${s.x2 ? " ×2" : ""}${s.zoom !== 1 ? `, zoom ${s.zoom}${s.focus ? ` on ${s.focus}` : ""}` : ""}${s.callouts.length ? `, labels ${s.callouts.map((c) => c.text).join(" / ")}` : ""}${s.bang ? `, burst ${s.bang}` : ""})`;
+      const total = timeline.totalFrames;
+      return [
+        ...scriptEvents(timeline, FPS, [`hook card: ${scene(p.hook)}`, ...p.beats.map((b) => `beat: ${scene(b)}`), `payoff: ${scene(p.payoff)}`, "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (cutaway): level complete, mB tile dithers in, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? p.payoff.view}` },
       ];
     },
   }),

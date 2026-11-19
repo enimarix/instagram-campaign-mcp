@@ -8,6 +8,14 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-19: The batch mix's floors take at most half the batch (142)
+Each allowed option's floor in the batch mix (`MIX_FLOOR`, 0.10) is now capped at 0.5/k for
+k options (was 1/k): the floors never take more than half the batch, so likes and the
+engagement index still split the other half. Up to 5 options nothing changes.
+Reason: the new style templates (Cutaway, then PixelCinema and Editorial) bring the template
+dimension to 8-10 options; with 0.10 floors the learned part fell to 20 % at 8 templates
+and to nothing at 10 (every template equal, likes ignored).
+
 ## 2026-11-19: The voice models run in a worker process; takes are checked by faster-whisper (146)
 The voice service keeps the HTTP API in a light process (no torch, ~40 MB) and runs VoxCPM2 +
 Whisper in a worker process it terminates at idle unload, so the OS gets all its memory back.

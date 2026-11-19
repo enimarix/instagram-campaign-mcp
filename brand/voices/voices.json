@@ -6,7 +6,7 @@
       "label": "Conteur grave",
       "description": "French man in his fifties, deep warm storyteller, gentle humour. The default voice.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["paper", "clean", "voxel", "pixel", "blender"],
+      "styles": ["paper", "clean", "voxel", "pixel", "blender", "cutaway"],
       "address": ["vous"],
       "default": true
     },
