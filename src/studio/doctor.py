@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from ..agent.runner import AgentError, preflight
 from ..config import ENV_FILE, InstagramMCPSettings
-from . import downloader_service, ffmpeg, motion
+from . import cinematic, downloader_service, ffmpeg, motion
 
 Check = Dict[str, Any]
 
@@ -44,6 +44,10 @@ def checks(settings: InstagramMCPSettings, env_file: str = ENV_FILE) -> List[Che
     except motion.MotionError as e:
         add("Node.js + motion packages", False, str(e),
             "install Node.js 22.12+, then npm --prefix motion ci")
+    try:
+        add("Blender (cinematic style)", True, cinematic.find_blender(), "")
+    except cinematic.CinematicError as e:
+        add("Blender (cinematic style)", False, str(e), "python cinematic/setup.py")
     index = Path(settings.web_dist) / "index.html"
     add("website build", index.is_file(), str(index.parent),
         "npm --prefix web ci, then npm --prefix web run build")
