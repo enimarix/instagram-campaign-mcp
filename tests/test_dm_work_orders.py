@@ -345,7 +345,8 @@ def test_packet_and_brief_carry_dm_orders(store, settings, tmp_path, monkeypatch
 # --- backfill ---------------------------------------------------------------------------
 def test_migration_backfills_existing_picks(tmp_path, monkeypatch):
     path = str(tmp_path / "old.db")
-    monkeypatch.setattr(store_mod, "MIGRATIONS", MIGRATIONS[:-1])  # 134's schema
+    monkeypatch.setattr(store_mod, "MIGRATIONS",
+                        MIGRATIONS[:MIGRATIONS.index(store_mod.DM_ORDERS_SCHEMA)])  # 134
     old = CampaignStore(path)
     sid = _ref(old, "A")
     with old._tx() as c:

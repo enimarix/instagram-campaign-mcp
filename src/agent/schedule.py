@@ -38,6 +38,7 @@ from ..studio import work_orders
 from .packet import RUNS
 from .runner import (
     AGENT_DIR,
+    DEAD_RUN,
     PLAYBOOK_NAME,
     REPO,
     AgentError,
@@ -168,7 +169,8 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     run (ORDER_PLAYBOOK) at once. Returns it when started, else None. It starts when the
     newest of them (_NEWEST_WORK) is ORDER_RUN_DEBOUNCE_MINUTES old (sends batch into one
     run), no run that reads them started since (it has them: a request it left waiting
-    wakes nothing until a newer one comes) or still runs (one run at a time), fewer than
+    wakes nothing until a newer one comes; a run closed as dead by a restart doesn't
+    count, 155) or still runs (one run at a time), fewer than
     MAX_ORDER_RUNS_PER_DAY at-once runs started today (owner-local), and the agent
     preflight passes (asked again ORDER_RETRY after a failure). Otherwise they keep waiting
     and the orders' blocked_reason says why when it is the cap, the preflight or the
@@ -180,17 +182,21 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     newest = parse_iso(newest)
     if now - newest < timedelta(minutes=settings.order_run_debounce_minutes):
         return None
-    started = store.get_state("order_run_started_at")  # before its own row exists
-    if started and parse_iso(started) >= newest:
-        return None
-    for playbook in ORDER_READERS:
-        last = store.list_agent_runs(playbook, limit=1)
-        if last and parse_iso(last[0]["started_at"]) >= newest:
-            return None
+    for playbook in ORDER_READERS:  # first: it closes a run whose runner is gone (155)
         try:
             check_lock(store, playbook, settings.agent_timeout_minutes * 60)
         except AgentRunRefused:
             return None
+    # ponytail: the last 10 runs per reader; more than 10 since the newest request is unseen.
+    since = [r for p in ORDER_READERS for r in store.list_agent_runs(p, limit=10)
+             if parse_iso(r["started_at"]) >= newest]
+    if any(r["summary"] != DEAD_RUN for r in since):
+        return None
+    # a run a restart killed never had them (155), nor the start that made it
+    started = store.get_state("order_run_started_at")  # before its own row exists
+    if started and parse_iso(started) >= newest and not any(
+            parse_iso(r["started_at"]) >= parse_iso(started) for r in since):
+        return None
     day = _local(settings, now).date().isoformat()
     used = store.get_state("order_runs") or {}
     count = used.get("count", 0) if used.get("day") == day else 0

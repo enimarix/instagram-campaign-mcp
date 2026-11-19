@@ -2,13 +2,14 @@
 command or the workspace ever loosens; the rest drive a fake `claude` executable."""
 
 import json
+import os
 import sys
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
-from src.agent import runner
+from src.agent import proc, runner
 from src.config import APP_HOME, InstagramMCPSettings
 from src.store import to_iso, utcnow
 
@@ -154,6 +155,7 @@ def test_success_records_usage_and_a_log_without_secrets(cfg, agent_dir, store, 
                                                          monkeypatch):
     run = runner.run_agent(store, cfg, "hello", agent_dir=agent_dir, timeout_s=60)
     assert run["status"] == "succeeded" and run["summary"] == "made 3 ideas"
+    assert run["pid"] == os.getpid() and run["pid_started"] == proc.started(os.getpid())
     usage = run["usage"]
     assert usage["total_cost_usd"] == 0.42 and usage["num_turns"] == 7
     assert usage["usage"]["output_tokens"] == 20 and usage["permission_denials"] == 1

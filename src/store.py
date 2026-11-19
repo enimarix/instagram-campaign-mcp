@@ -608,6 +608,14 @@ SELECT p.id, 'owner', p.sender_note,
 FROM dm_picks p ORDER BY p.id;
 """
 
+# Migration 23: who runs an agent run (155): the runner's pid and that process's creation
+# time (opaque, from agent/proc.py: a reused pid has another one), so a run whose process
+# is gone frees its lock at once. Older rows stay NULL (the 24 h rule).
+AGENT_RUN_PID_SCHEMA = """
+ALTER TABLE agent_runs ADD COLUMN pid INTEGER;
+ALTER TABLE agent_runs ADD COLUMN pid_started INTEGER;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -616,7 +624,8 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          REACTION_REEL_SCHEMA, ASSET_TIMELINE_SCHEMA, DM_PICKS_SCHEMA,
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
-                         AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA]
+                         AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
+                         AGENT_RUN_PID_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -1758,8 +1767,11 @@ class CampaignStore:
             return c.execute("DELETE FROM experiments WHERE status='proposed'"
                              " AND report_date=?", (report_date,)).rowcount
 
-    def start_agent_run(self, playbook: str) -> Dict[str, Any]:
-        return self._insert("agent_runs", ("playbook",), {"playbook": playbook})
+    def start_agent_run(self, playbook: str, pid: Optional[int] = None,
+                        pid_started: Optional[int] = None) -> Dict[str, Any]:
+        """pid / pid_started: the runner process holding the run (155), when known."""
+        return self._insert("agent_runs", ("playbook", "pid", "pid_started"),
+                            {"playbook": playbook, "pid": pid, "pid_started": pid_started})
 
     def finish_agent_run(
         self,
@@ -1793,10 +1805,15 @@ class CampaignStore:
 
     def running_agent_run(self, playbook: str) -> Optional[Dict[str, Any]]:
         """The newest run of this playbook still marked running, if any (058's lock)."""
-        rows = self._select("SELECT * FROM agent_runs",
-                            {"playbook": playbook, "status": "running"},
-                            "started_at DESC, id DESC", 1)
+        rows = self.running_agent_runs(playbook, limit=1)
         return rows[0] if rows else None
+
+    def running_agent_runs(self, playbook: Optional[str] = None,
+                           limit: int = 100) -> List[Dict[str, Any]]:
+        """Runs still marked running (of this playbook, or all), newest first."""
+        return self._select("SELECT * FROM agent_runs",
+                            {"playbook": playbook, "status": "running"},
+                            "started_at DESC, id DESC", limit)
 
     def save_online_followers(self, day: date, hours: Mapping[int, int]) -> int:
         """Insert or replace followers online per UTC hour for one date; returns rows written."""

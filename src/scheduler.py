@@ -98,6 +98,7 @@ async def _up(host: str, port: int) -> None:
 
     settings = get_settings()
     configure_logging(settings.log_level)
+    _close_dead_runs(settings)
     server = uvicorn.Server(uvicorn.Config(create_app(settings), host=host, port=port))
     voice = _start_voice(settings)
     task = asyncio.create_task(_worker_after_voice(settings, voice))
@@ -109,6 +110,22 @@ async def _up(host: str, port: int) -> None:
             await task
         if voice is not None:
             downloader_service.stop(voice)
+
+
+def _close_dead_runs(settings: InstagramMCPSettings) -> None:
+    """Agent runs the last stop orphaned show as failed before the website opens (155)."""
+    from .agent.runner import close_dead_runs
+
+    try:
+        store = CampaignStore(settings.database_path)
+        try:
+            for run in close_dead_runs(store):
+                print(f"agent run {run['id']} ({run['playbook']}): its runner is gone,"
+                      " closed as failed", file=sys.stderr, flush=True)
+        finally:
+            store.close()
+    except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: the worker says so
+        print(f"agent runs not checked: {e!r}", file=sys.stderr, flush=True)
 
 
 def _start_voice(settings: InstagramMCPSettings):
