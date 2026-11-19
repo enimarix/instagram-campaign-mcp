@@ -185,10 +185,27 @@ def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice]) -> 
     return app
 
 
-def _exit_with_parent() -> None:
-    """Started by `ig-campaign up` with a stdin pipe: when the studio dies, even killed, the
-    pipe closes and this process exits, so no orphan keeps the GPU."""
-    sys.stdin.read()
+def _exit_with(pid: int) -> None:
+    """Exit once process `pid` (the studio that started us) is gone, even killed, so no
+    orphan keeps the GPU. Watching a pid, not a stdin pipe: on Windows a pending pipe read
+    blocks other calls on that handle and hung the model load."""
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel = ctypes.windll.kernel32
+        handle = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE; 0: already gone
+        if handle:
+            kernel.WaitForSingleObject(handle, 0xFFFFFFFF)
+    else:
+        while True:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            except PermissionError:
+                pass
+            time.sleep(2)
+    log.info("the studio (pid %d) is gone: exiting", pid)
     os._exit(0)
 
 
@@ -199,11 +216,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8766)
     p.add_argument("--voices", type=Path, default=VOICES_DIR)
-    p.add_argument("--exit-with-stdin", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--exit-with-pid", type=int, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    if args.exit_with_stdin:
-        threading.Thread(target=_exit_with_parent, daemon=True).start()
+    if args.exit_with_pid:
+        threading.Thread(target=_exit_with, args=(args.exit_with_pid,), daemon=True).start()
     settings, voices = Settings.from_env(), load_voices(args.voices)
     engine = Engine(settings)
     t0 = time.perf_counter()

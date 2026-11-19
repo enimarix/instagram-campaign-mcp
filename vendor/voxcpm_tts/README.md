@@ -53,7 +53,7 @@ TTS_SERVER_HF_HOME=D:\voice\hf
 ```
 
 `ig-campaign up` then starts the service on that port (loopback), waits until it answers
-before the worker starts, and stops it on exit; it also exits by itself when the studio dies.
+before the worker starts, and stops it on exit; it also exits by itself when the studio dies (it watches the studio's pid).
 Its output goes to `data/logs/tts.log`. To run it by hand instead:
 `python vendor/voxcpm_tts/server.py --port 8766` (with `HF_HOME` set).
 

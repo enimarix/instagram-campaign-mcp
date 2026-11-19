@@ -1,8 +1,8 @@
 """
 The local VoxCPM2 voice service (step 038, vendor/voxcpm_tts) as a child of `ig-campaign up`
 when TTS_SERVER_PYTHON is set: spawn() on TTS_HTTP_URL's port (loopback), wait_ready() before
-the worker starts, downloader_service.stop() on exit. The child exits by itself when its stdin
-pipe closes, so a killed studio leaves no process holding the GPU.
+the worker starts, downloader_service.stop() on exit. The child watches this process's pid and
+exits when it is gone, so a killed studio leaves no process holding the GPU.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def command(settings: InstagramMCPSettings) -> List[str]:
         raise ValueError("TTS_SERVER_PYTHON needs TTS_HTTP_URL with a port, e.g. "
                          "http://127.0.0.1:8766/tts")
     return [settings.tts_server_python, str(SERVER), "--host", "127.0.0.1", "--port", str(port),
-            "--exit-with-stdin"]
+            "--exit-with-pid", str(os.getpid())]
 
 
 def health_url(settings: InstagramMCPSettings) -> str:
@@ -46,7 +46,7 @@ def spawn(settings: InstagramMCPSettings, log_path: Path = LOG_PATH,
     cmd = command(settings)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab") as log:  # the child keeps its own handle
-        return popen(cmd, cwd=SERVER.parent, env=env, stdin=subprocess.PIPE, stdout=log,
+        return popen(cmd, cwd=SERVER.parent, env=env, stdin=subprocess.DEVNULL, stdout=log,
                      stderr=subprocess.STDOUT)
 
 

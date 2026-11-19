@@ -5,6 +5,7 @@ import asyncio
 import base64
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -210,8 +211,8 @@ def test_spawn_runs_the_server_on_the_url_port_with_hf_home(tmp_path):
 
     assert tts_service.spawn(_cfg(), tmp_path / "tts.log", popen=popen) == "proc"
     assert seen["cmd"] == ["py.exe", str(VENDOR / "server.py"), "--host", "127.0.0.1",
-                           "--port", "8766", "--exit-with-stdin"]
-    assert seen["env"]["HF_HOME"] == "D:/hf" and seen["stdin"] == subprocess.PIPE
+                           "--port", "8766", "--exit-with-pid", str(os.getpid())]
+    assert seen["env"]["HF_HOME"] == "D:/hf" and seen["stdin"] == subprocess.DEVNULL
     with pytest.raises(ValueError, match="port"):
         tts_service.command(_cfg(tts_http_url="http://127.0.0.1/tts"))
     assert tts_service.health_url(_cfg()) == "http://127.0.0.1:8766/health"
