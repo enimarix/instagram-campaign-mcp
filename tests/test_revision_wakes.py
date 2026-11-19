@@ -9,7 +9,7 @@ from src import store as store_mod
 from src.agent import runner, schedule
 from src.studio import work_orders
 from src.studio.assets import transition
-from src.studio.feedback import add_comment
+from src.studio.feedback import add_comment, edit_comment
 
 from .test_agent_packet import _asset
 from .test_dm_work_orders import T0, Clock, Starts, _dm_order, cfg
@@ -45,12 +45,17 @@ def test_a_change_request_starts_the_run_after_the_debounce(store, clock):
 
 
 def test_a_request_older_than_the_last_revise_run_wakes_nothing(store, clock):
-    _ask(store)  # read by the run below and left waiting (e.g. needs a missing capability)
+    aid = _ask(store)  # read by the run below and left waiting (needs a missing capability)
     clock.set(5)
     run = store.start_agent_run("daily-revise")
+    store.mark_feedback_digested([fb["id"] for fb in store.list_feedback(asset_id=aid)])
     store.finish_agent_run(run["id"], "succeeded")
     f = Starts()
     assert _run(store, 60, f=f) is None and f.checks == 0
+    clock.set(70)  # the owner edits the request: it is new again
+    [fb] = store.list_feedback(asset_id=aid)
+    edit_comment(store, fb["id"], text="plus court, et la fin plus nette")
+    assert _run(store, 73, f=f) == "daily-revise"
 
 
 def test_comments_that_wake_nothing(store, clock):

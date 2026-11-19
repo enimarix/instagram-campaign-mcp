@@ -55,12 +55,13 @@ ORDER_PLAYBOOK = "daily-revise"  # the light run (packet.RUNS)
 # the runs that see orders or change requests: one started after the newest has them
 ORDER_READERS = tuple(p for p, (_, s) in RUNS.items()
                       if s and ("work_orders" in s or "revisions" in s))
-# the newest thing the light run is for: a scheduled order, or a wanting-changes comment on
-# an asset still `revision_requested` (147). MAX skips NULLs; both columns are to_iso().
+# the newest thing the light run is for: a scheduled order, or a wanting-changes comment
+# (written or edited by the owner; the agent's digest doesn't touch updated_at) on an asset
+# still `revision_requested` (147). MAX skips NULLs; both columns are to_iso().
 _NEWEST_WORK = (
     "SELECT MAX(t) FROM (SELECT MAX(scheduled_at) AS t FROM work_orders"
     " WHERE status = 'scheduled'"
-    " UNION ALL SELECT MAX(f.created_at) FROM feedback f JOIN assets a ON a.id = f.asset_id"
+    " UNION ALL SELECT MAX(f.updated_at) FROM feedback f JOIN assets a ON a.id = f.asset_id"
     " WHERE f.wants_changes = 1 AND a.status = 'revision_requested')")
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
