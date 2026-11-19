@@ -47,7 +47,8 @@ def test_good_clip_passes(tmp_path):
     r = check(tmp_path)
     assert r["passed"] and r["reasons"] == [] and r["warnings"] == []
     assert [c["name"] for c in r["checks"]] == ["spec", "duration", "audio", "loudness",
-                                                 "black", "freeze", "caption", "price"]
+                                                 "black", "freeze", "caption", "price",
+                                                 "true_peak", "jumps"]  # + listening (149)
     assert r["loudness_lufs"] == pytest.approx(-14, abs=1)
 
 
