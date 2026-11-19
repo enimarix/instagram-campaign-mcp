@@ -195,6 +195,9 @@ def test_cutaway_script_reads_each_title_then_its_sub():
     no_sub = {k: v for k, v in _example("cutaway").items() if k != "outro"}
     no_sub["payoff"] = {"title": "Le même moteur.", "view": "arm"}
     assert motion.SCRIPTS["Cutaway"](no_sub)[-1] == "Le même moteur."
+
+
+@needs_motion
 def test_validate_props_editorial_examples_events_and_no_price():
     for name in ("editorial", "editorial-habitudes", "editorial-courbatures"):
         v = motion.validate_props("Editorial", _example(name))
