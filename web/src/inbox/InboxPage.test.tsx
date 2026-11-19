@@ -680,3 +680,32 @@ describe('InboxPage feed', () => {
     })
   })
 })
+
+describe('Sent back for changes (156)', () => {
+  it("shows the AI's decision on each video sent back", async () => {
+    stubApi({
+      'GET /api/assets': [200, [
+        ...ASSETS,
+        asset(12, { status: 'revision_requested', agent_decision: { kind: 'restyled', text: 'Refaite en Macro 3D', why: 'plusieurs décors', style: 'macro3d', order_id: 4, request_id: null, at: '2026-11-20T14:00:00+00:00' } }),
+        asset(13, { status: 'revision_requested', agent_decision: { kind: 'waiting', text: 'En attente : rendu de nuit', why: 'rendu de nuit', style: null, order_id: null, request_id: null, at: '2026-11-20T14:00:00+00:00' } }),
+        asset(14, { status: 'revision_requested' }),
+      ]],
+    })
+    renderPage()
+    const list = await screen.findByRole('list', { name: 'Sent back' })
+    expect(screen.getByText('3 vidéos renvoyées pour changements')).toBeTruthy()
+    expect(within(list).getByText('Refaite en Macro 3D')).toBeTruthy()
+    expect(within(list).getByText('plusieurs décors')).toBeTruthy()
+    expect(within(list).getByText('En attente : rendu de nuit')).toBeTruthy()
+    expect(within(list).getByText("Pas encore vue par l'IA")).toBeTruthy()
+    expect(within(list).getByRole('link', { name: 'Vidéo 12' }).getAttribute('href')).toBe('/assets/12')
+    expect(screen.queryByRole('article', { name: 'Video 12' })).toBeNull() // not in the feed
+  })
+
+  it('shows nothing when no video waits', async () => {
+    stubApi()
+    renderPage()
+    await screen.findByRole('article', { name: 'Video 1' })
+    expect(screen.queryByRole('list', { name: 'Sent back' })).toBeNull()
+  })
+})

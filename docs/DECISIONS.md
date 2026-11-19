@@ -8,6 +8,24 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-20: The agent never parks a change request; it asks for styles, invented ones too (156)
+Every video the owner sends back gets a decision the Inbox shows (`assets.agent_decision`):
+remade in its style, restyled (a « même vidéo, autre style » work order the agent makes at
+once; the old video is archived when the new one is submitted), a style requested
+(`request_style`, new `style_requests` table) or waiting with a reason. Style requests are
+`reference` (from a Reel) or `invented` (an original concept: look, palette, motion,
+typography, sound, 3 scenes, why); the owner says « Construire » / « Non » on the Agent page
+and the lead's dev loop builds the accepted ones (`ig-campaign style-requests list --status
+accepted`, then `mark ID building|live`): the agent never writes code. The weekly invented
+style is folded into `daily-learn` (it runs when `invent_due`, i.e. no invented request in 7
+days, even on a quiet day) instead of a new `weekly-styles` schedule entry, so no schedule
+default and no OS task change. A new enabled style or template (compared with a copy in
+worker_state) starts the light run again while any video waits for changes or an order is
+scheduled.
+Reason: owner 2026-11-20: run 9 read 10 change requests and remade none (« re-rendering would
+only give the same videos »), and nothing said why. Folding into daily-learn keeps one
+nightly analysis run that already reads the style breakdowns.
+
 ## 2026-11-19: Macro 3D is Remotion over Blender plates (154)
 The `macro3d` style renders in two passes: Blender (`cinematic/engine/macro.py`) renders the
 photoreal shots the Remotion template lists (`plates` from `schemas.mjs --validate`), cached per

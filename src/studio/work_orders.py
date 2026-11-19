@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, to_iso, utcnow
 from . import dm_picks, styles
-from .assets import InvalidTransition
+from .assets import InvalidTransition, transition
 from .downloader import _same_post, permalink
 
 MODES = ("inspired", "react", "owner")
@@ -356,11 +356,22 @@ def start(store: CampaignStore, order_id: int, idea: Dict[str, Any]) -> None:
 
 def mark_in_feed(store: CampaignStore, asset: Dict[str, Any]) -> None:
     """submit_asset on an asset whose idea was made for an order: the order is in_feed,
-    linked to this (newest submitted) asset. Nothing when the idea has no order."""
+    linked to this (newest submitted) asset. Nothing when the idea has no order. A change
+    order's old video still sent back for changes is archived: its remake in another
+    style is in the feed now (156, like a new version of the same style)."""
     with store._tx() as c:
         c.execute("UPDATE work_orders SET status='in_feed', asset_id=?, updated_at=?"
                   " WHERE idea_id=? AND status IN ('in_production','in_feed')",
                   (asset["id"], to_iso(utcnow()), asset["idea_id"]))
+        old = [r[0] for r in c.execute(
+            "SELECT a.id FROM work_orders w JOIN assets a ON a.id = w.from_asset_id"
+            " WHERE w.idea_id=? AND w.origin='change' AND a.status='revision_requested'",
+            (asset["idea_id"],))]
+    for asset_id in old:
+        try:
+            transition(store, asset_id, "archived", actor="system")
+        except InvalidTransition:  # the owner moved it meanwhile
+            pass
 
 
 def open_by_source(store: CampaignStore, source_ids: Sequence[int]) -> Dict[int, Dict]:

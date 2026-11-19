@@ -39,12 +39,12 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
 
 from ..config import InstagramMCPSettings
-from ..learning.brief import creative_brief
+from ..learning.brief import agent_styles, creative_brief
 from ..learning.facts import facts_for
 from ..learning.learnings import get_feedback, list_revision_requests
 from ..learning.quotas import todays_quotas
 from ..store import CampaignStore, to_iso, utcnow
-from ..studio import dm_picks, work_orders
+from ..studio import dm_picks, style_requests, work_orders
 from ..studio.seed import local_today
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "agent" / "schemas"
@@ -76,7 +76,8 @@ def _feedback(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
 
 def _revisions(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
     rows = list_revision_requests(store)[:MAX_ITEMS]  # minus the ones re-rendering
-    return rows, len(rows)
+    # 156: the enabled styles (one line each) to remake a video in when its own can't do it
+    return {"styles": agent_styles(store), "requests": rows}, len(rows)
 
 
 def _facts(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
@@ -100,6 +101,17 @@ def _work_orders(store: CampaignStore, settings: InstagramMCPSettings, now: date
     return {"untrusted_captions": True, "orders": orders}, len(orders)
 
 
+def _style_requests(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
+    """156: the styles asked for so far, and whether this week's invented style is due
+    (counts 1 then: it is work), with the style breakdown it builds on."""
+    from ..learning.breakdowns import tag_breakdown  # here: analytics pulls in a lot
+
+    out = style_requests.for_agent(store, now)
+    out["styles"] = agent_styles(store)
+    out["breakdown"] = tag_breakdown(store, settings, tag="style", post_type="REELS", now=now)
+    return out, int(out["invent_due"])
+
+
 def _ads(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
     from ..ads.agent import work_packet  # here: src/ads imports studio.alerts, which imports us
 
@@ -109,18 +121,20 @@ def _ads(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
 SECTIONS: Dict[str, Producer] = {"work_orders": _work_orders,  # 134: first, made first
                                  "brief": _brief, "feedback": _feedback,
                                  "revisions": _revisions, "facts": _facts,
-                                 "quotas": _quotas, "dm_picks": _dm_picks, "ads": _ads}
+                                 "quotas": _quotas, "dm_picks": _dm_picks, "ads": _ads,
+                                 "style_requests": _style_requests}
 # playbook -> (run_kind, sections); None = every section.
 RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
     "daily-produce": ("produce", ("work_orders", "brief", "feedback", "revisions", "facts",
                                   "quotas", "dm_picks")),
     "daily-revise": ("light", ("work_orders", "revisions", "feedback", "dm_picks")),
-    "daily-learn": ("learn", ("facts", "brief")),
+    "daily-learn": ("learn", ("facts", "brief", "style_requests")),  # 156: weekly style
     "weekly-ads": ("ads", ("ads",)),  # 096: skipped when not configured or nothing to do
 }
-# playbook -> the section that decides the skip, whatever the others count: a day with
-# nothing published or matured has nothing to analyse.
-GATES: Dict[str, str] = {"daily-learn": "facts"}
+# playbook -> the sections that decide the skip, whatever the others count: a day with
+# nothing published or matured has nothing to analyse, unless the week's invented style
+# is due (156).
+GATES: Dict[str, Tuple[str, ...]] = {"daily-learn": ("facts", "style_requests")}
 
 
 def _compact(value: Any) -> Any:
@@ -177,7 +191,7 @@ def write_packet(store: CampaignStore, settings: InstagramMCPSettings, playbook:
         if name == "feedback":
             ids[name] = [f["id"] for f in data]
         elif name == "revisions":
-            ids[name] = [r["asset"]["id"] for r in data]
+            ids[name] = [r["asset"]["id"] for r in data["requests"]]
     manifest = {"schema": SCHEMA_VERSION, "playbook": playbook, "run_kind": kind,
                 "created_at": to_iso(now),
                 "sections": {name: {"file": f"{name}.json", "count": count,
@@ -189,24 +203,27 @@ def write_packet(store: CampaignStore, settings: InstagramMCPSettings, playbook:
         _write_atomic(work / f"{name}.json", raw)
     _write_atomic(work / "manifest.json", raw_manifest)
     gate = GATES.get(playbook)
-    skip = files[gate][1] == 0 if gate else not any(count for _, count in files.values())
+    counts = [files[g][1] for g in gate] if gate else [c for _, c in files.values()]
+    skip = not any(counts)
     return {"manifest": manifest, "ids": ids, "skip": skip}
 
 
 _OPEN_REVISIONS = (
     "SELECT a.id FROM assets a WHERE a.id IN ({}) AND a.status = 'revision_requested'"
     " AND NOT EXISTS (SELECT 1 FROM assets c WHERE c.parent_asset_id = a.id"
-    " AND c.created_at >= ?) ORDER BY a.id")
+    " AND c.created_at >= ?)"
+    " AND COALESCE(json_extract(a.agent_decision, '$.at') < ?, 1) ORDER BY a.id")
 _UNDIGESTED = "SELECT id FROM feedback WHERE id IN ({}) AND digested_at IS NULL ORDER BY id"
 
 
 def gaps(store: CampaignStore, packet: Dict[str, Any]) -> str:
     """The packet's items still not handled after the run, e.g. "2 of 5 revisions not
-    handled: #12, #14". A revision is handled when it left `revision_requested` or got a new
-    version during the run; feedback when it is digested (or deleted). "" when none."""
+    handled: #12, #14". A revision is handled when it left `revision_requested`, got a new
+    version or a decision (156) during the run; feedback when it is digested (or deleted).
+    "" when none."""
     out = []
     for name, sql, args, what in (
-            ("revisions", _OPEN_REVISIONS, (packet["manifest"]["created_at"],),
+            ("revisions", _OPEN_REVISIONS, (packet["manifest"]["created_at"],) * 2,
              "revisions not handled"),
             ("feedback", _UNDIGESTED, (), "feedback comments not digested")):
         ids = packet["ids"].get(name)

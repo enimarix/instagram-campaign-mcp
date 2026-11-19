@@ -350,6 +350,27 @@ def _restore(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- style requests (156) -----------------------------------------------------
+def _style_requests(args: argparse.Namespace) -> int:
+    """The lead's hand-off: the requests as JSON (`list --status accepted`: what to build
+    next), and `mark ID building|live` as the style step moves."""
+    from .studio import style_requests
+
+    store = CampaignStore(get_settings().database_path)
+    try:
+        if args.style_command == "mark":
+            result = style_requests.mark(store, args.id, args.status)
+        else:
+            result = style_requests.list_requests(store, args.status, args.limit)
+    except (KeyError, ValueError) as e:
+        print(f"style-requests: {e}", file=sys.stderr)
+        return 1
+    finally:
+        store.close()
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
 # --- doctor (100) ---------------------------------------------------------
 def _doctor() -> int:
     from .studio.doctor import checks
@@ -434,6 +455,16 @@ def main(argv: list[str] | None = None) -> None:
                                          " first; the current one is kept aside)")
     rs.add_argument("backup", help="A backup file, e.g. data/backups/studio-2026-11-17.db")
     rs.add_argument("--yes", action="store_true", help="Don't ask (needed when not interactive)")
+    sr = sub.add_parser("style-requests", help="Styles the agent asked for (156): the"
+                        " accepted ones are the next style steps").add_subparsers(
+        dest="style_command", required=True)
+    srl = sr.add_parser("list", help="Print them as JSON, newest first")
+    srl.add_argument("--status", choices=("proposed", "accepted", "declined", "building",
+                                          "live"))
+    srl.add_argument("--limit", type=int, default=100)
+    srm = sr.add_parser("mark", help="accepted -> building (step started) -> live (merged)")
+    srm.add_argument("id", type=int)
+    srm.add_argument("status", choices=("building", "live"))
     sub.add_parser("doctor", help="Check what the studio needs (ffmpeg, Node, website, "
                                   "downloader, Claude Code, .env); changes nothing")
     args = parser.parse_args(argv)
@@ -458,6 +489,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_restore(args))
     if args.command == "doctor":
         sys.exit(_doctor())
+    if args.command == "style-requests":
+        sys.exit(_style_requests(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 

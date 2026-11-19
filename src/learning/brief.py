@@ -46,7 +46,7 @@ def _rows(store: CampaignStore, sql: str, *args: Any) -> List[Dict[str, Any]]:
         return [dict(r) for r in c.execute(sql, args).fetchall()]
 
 
-def _styles(store: CampaignStore) -> Optional[List[Dict[str, Any]]]:
+def agent_styles(store: CampaignStore) -> Optional[List[Dict[str, Any]]]:
     """The styles the owner has on (138): pick one per idea (Auto orders, own ideas)."""
     from ..studio.motion import MotionError  # here: motion pulls in most of the studio
 
@@ -93,7 +93,7 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
             store, quotas["limits"]["explore"] - quotas["counts"]["explore"]),
         "quotas": quotas,
         # 138: the styles to make ideas in (quotas.styles: today's count and share limit)
-        "styles": _styles(store),
+        "styles": agent_styles(store),
         # Exploit ideas follow the mix; explore ideas (limits.explore) are free picks.
         "mix": with_counts(mix, quotas["limits"]["ideas"] - quotas["limits"]["explore"]),
         "today": [{k: i[k] for k in IDEA_KEYS}

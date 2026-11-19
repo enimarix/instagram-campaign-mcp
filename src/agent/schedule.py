@@ -9,7 +9,7 @@ one), it has no run started today, it isn't running and its file exists. Three c
 - the `up` / `worker` process: catch_up() at start and every CATCH_UP_EVERY, starting due
   runs detached (a run missed while the PC was off starts at the next logon, same day),
   and the light run the owner's scheduled work orders (136) and change requests (147) ask
-  for (order_run);
+  for, or new capability re-wakes (156) (order_run);
 - the website's Settings page: overview() (next and last run per playbook).
 
 install_schedule() registers the OS side: on Windows a logon task for `up` and one daily
@@ -34,7 +34,7 @@ import structlog
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from ..studio import work_orders
+from ..studio import styles, work_orders
 from .packet import RUNS
 from .runner import (
     AGENT_DIR,
@@ -64,6 +64,10 @@ _NEWEST_WORK = (
     " WHERE status = 'scheduled'"
     " UNION ALL SELECT MAX(f.updated_at) FROM feedback f JOIN assets a ON a.id = f.asset_id"
     " WHERE f.wants_changes = 1 AND a.status = 'revision_requested')")
+# 156: something the light run would look at again when the studio can make more
+_WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_requested')"
+            " OR EXISTS (SELECT 1 FROM work_orders WHERE status = 'scheduled')")
+CAPABILITIES_KEY = "style_capabilities"  # worker_state: {styles, gained_at}
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
 AGENT_TASK = "IGCampaignAgent-"  # + playbook
@@ -162,6 +166,29 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
     return rows
 
 
+def capability_gained(store: CampaignStore, now: datetime) -> Optional[datetime]:
+    """When the studio last gained capability (156): an enabled style or a template it did
+    not have (styles.capabilities, compared with the copy in worker_state). The first look
+    only records it; a style turned off changes the copy, not the time; no Node: the last
+    known time. None: never.
+    ponytail: the registry is cached per process (motion.list_templates), so a new template
+    counts after the studio restarts; while Node fails, each look runs it again."""
+    seen = store.get_state(CAPABILITIES_KEY) or {}
+    gained = seen.get("gained_at")
+    try:
+        now_has = styles.capabilities(store)
+    except Exception as e:  # noqa: BLE001 - e.g. a broken styles.json: never block the orders
+        logger.warning("style_capabilities_unreadable", error=repr(e))
+        now_has = None
+    if now_has is not None and now_has != seen.get("styles"):
+        had = seen.get("styles")
+        if had is not None and any(t not in had.get(s, ()) for s, ts in now_has.items()
+                                   for t in ts):
+            gained = to_iso(now)
+        store.set_state(CAPABILITIES_KEY, {"styles": now_has, "gained_at": gained})
+    return parse_iso(gained) if gained else None
+
+
 def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
               start: Callable[..., Any], check: Optional[Callable[..., Any]] = None
               ) -> Optional[str]:
@@ -174,12 +201,18 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     MAX_ORDER_RUNS_PER_DAY at-once runs started today (owner-local), and the agent
     preflight passes (asked again ORDER_RETRY after a failure). Otherwise they keep waiting
     and the orders' blocked_reason says why when it is the cap, the preflight or the
-    playbook."""
+    playbook. New capability (capability_gained: a style or template went live) counts as
+    the newest request while a video waits for changes or an order is scheduled (156), so
+    every one is looked at again."""
+    gained = capability_gained(store, now)
     with store._tx() as c:
         newest = c.execute(_NEWEST_WORK).fetchone()[0]
-    if newest is None:
+        times = [parse_iso(newest)] if newest else []
+        if gained and c.execute(_WAITING).fetchone()[0]:
+            times.append(gained)
+    if not times:
         return None
-    newest = parse_iso(newest)
+    newest = max(times)
     if now - newest < timedelta(minutes=settings.order_run_debounce_minutes):
         return None
     for playbook in ORDER_READERS:  # first: it closes a run whose runner is gone (155)

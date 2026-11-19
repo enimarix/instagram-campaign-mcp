@@ -28,7 +28,18 @@ from .learning import brief, facts, learnings, report
 from .learning import experiments as experiments_
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
-from .studio import dm_picks, downloader, motion, production, remix, research, stock, work_orders
+from .studio import (
+    dm_picks,
+    downloader,
+    motion,
+    production,
+    remix,
+    research,
+    stock,
+    style_requests,
+    work_orders,
+)
+from .studio import feedback as feedback_
 from .studio import frames as frames_
 from .studio.publish import cancel_post, refuse_asset_file
 
@@ -950,6 +961,41 @@ async def list_revision_requests() -> Dict[str, Any]:
 
 
 @mcp.tool(annotations=LOCAL_WRITE)
+async def decide_revision(asset_id: int, decision: Literal["remade", "restyled", "waiting"],
+                          why: str, style: Optional[str] = None) -> Dict[str, Any]:
+    """Say what you did with a video the owner sent back (its Inbox card shows it; never
+    leave one without): remade (re-rendered in its own style with render_motion(asset_id=
+    ...)), restyled (its style cannot meet the note: remade in `style`, an enabled one;
+    returns a « même vidéo, autre style » work order: make it with create_idea(
+    work_order_id=...), the old video is archived once the new one is submitted) or
+    waiting (why: what it waits for). No style fits: request_style instead."""
+    return await _studio(feedback_.decide_revision, store(), asset_id, decision, why, style)
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
+async def request_style(kind: Literal["reference", "invented"], name: str, why: str,
+                        scenes: List[str], look: Optional[str] = None,
+                        palette: Optional[str] = None, motion_language: Optional[str] = None,
+                        typography: Optional[str] = None, sound: Optional[str] = None,
+                        reference: Optional[str] = None,
+                        unblocks_asset_ids: Optional[List[int]] = None,
+                        unblocks_order_ids: Optional[List[int]] = None) -> Dict[str, Any]:
+    """Ask the owner for a new visual style (he says « Construire » or « Non »; the
+    accepted ones are built by the developers, never by you). kind reference: a style
+    seen in a Reel or DM pick (reference: its link or notes); invented: an original
+    concept, with look, palette, motion_language, typography and sound all given. Both:
+    a short name, exactly 3 example scenes, why it would work for macroBody (what
+    performs), and the waiting videos (revision_requested) and open work orders it would
+    unblock (their Inbox cards then say « Nouveau style demandé : <name> »)."""
+    return await _studio(style_requests.request_style, store(), kind, name, why, scenes,
+                         look=look, palette=palette, motion=motion_language,
+                         typography=typography,
+                         sound=sound, reference=reference,
+                         unblocks_asset_ids=unblocks_asset_ids or (),
+                         unblocks_order_ids=unblocks_order_ids or ())
+
+
+@mcp.tool(annotations=LOCAL_WRITE)
 async def add_learning(statement: str, kind: str, origin: str,
                        evidence_feedback_ids: Optional[List[int]] = None,
                        evidence: Optional[List[Dict[str, Any]]] = None,
@@ -1189,6 +1235,10 @@ AGENT_TOOLS = frozenset({
     "get_feedback",
     "mark_feedback_digested",
     "list_revision_requests",
+    # Step 156: never park a change request: say what was decided (a restyle is a change
+    # work order the agent then makes) or ask the owner for a style; local writes, no code.
+    "decide_revision",
+    "request_style",
     "add_learning",
     "update_learning",
     "list_learnings",

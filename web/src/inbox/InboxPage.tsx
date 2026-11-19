@@ -18,6 +18,7 @@ import {
 } from '../api/client'
 import AssetCard from './AssetCard'
 import ReasonSheet from './ReasonSheet'
+import SentBack from './SentBack'
 import { Button } from '../ui/Button'
 import { EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
@@ -325,6 +326,7 @@ export default function InboxPage() {
         <p role="status" className="mx-auto max-w-md text-sm text-muted tabular-nums">
           {tab === 'bench' ? bench && supply(bench) : assets && `${decided} of ${decided + feed.length} decided`}
         </p>
+        {tab === 'today' && <SentBack />}
         {banner && (
           <div role="region" aria-label="Saved video suggestion"
             className="mx-auto flex max-w-md flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn/12 p-3 text-sm">

@@ -209,14 +209,26 @@ Skip this phase in a dry run.
 
 Skip this phase in a dry run.
 
-`list_revision_requests`. For each asset (newest first, at most 5 per run):
-1. Read the comments: they say what to change (often the hook, the length or a fact).
-2. Motion video: `list_motion_templates` (once per run) for the template's schema.
-   Rebuild the props from the idea's hook and the comments: change what the owner asked
-   for and nothing else. `render_motion(template=…, props=…, asset_id=<that asset>)`.
-3. Remix video (its idea has track `remix`): `render_remix` again for the same idea and
-   source with the hook, script or trim changed as asked, and nothing else.
-4. Add the job id to the wait list. The new version replaces the old one in the inbox
+`list_revision_requests` (or `revisions.json`: `requests`, and the enabled `styles` with
+their one-line descriptions). **Never leave a request without a decision**, the same way
+as the afternoon run (`daily-revise`, step 2). For each asset (newest first, at most 5
+per run):
+1. Read the comments: they say what to change (often the hook, the length or a fact;
+   sometimes "more scenes, more people, real animations": more than the template gives).
+2. Its own style can give it: motion video: `list_motion_templates` (once per run) for
+   the template's schema, rebuild the props from the idea's hook and the comments
+   (change what the owner asked for and nothing else), `render_motion(template=…,
+   props=…, asset_id=<that asset>)`; remix video (its idea has track `remix`):
+   `render_remix` again for the same idea and source with the hook, script or trim
+   changed as asked. Then `decide_revision(asset_id, "remade", "<what you changed>")`.
+3. Its style cannot, another enabled one can: `decide_revision(asset_id, "restyled",
+   "<why this style>", style=<id>)` and make the work order it returns like any change
+   order (phase 1a).
+4. No enabled style can: `request_style(…, unblocks_asset_ids=[…])` (a reference or an
+   invented style; see `daily-revise` step 2).
+5. Only when it must wait (a render pending): `decide_revision(asset_id, "waiting",
+   "<what for>")`.
+6. Add the job ids to the wait list. The new version replaces the old one in the inbox
    once it renders.
 
 These versions do not count toward today's quota.

@@ -88,6 +88,7 @@ export type Asset = {
   // « Créer une vidéo » or « même vidéo, autre style » (138)
   work_order?: { id: number; mode: WorkMode; instruction: string | null; permalink: string | null; source: OrderSource; style?: string | null } | null
   style?: string | null // list rows: the idea's style (138)
+  agent_decision?: AgentDecision | null // a video sent back: what the AI decided (156)
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -1013,3 +1014,41 @@ export const createVideo = (body: { instruction: string; style: string | null })
 /** « Même vidéo, autre style »: a work order to remake this video (style null: the AI picks another). */
 export const restyleAsset = (assetId: number, body: { style: string | null; note?: string }) =>
   post<WorkOrder>(`/api/assets/${assetId}/restyle`, body)
+
+/** The AI's latest decision on a video sent back for changes (156); `text` is what the
+ * Inbox shows: « Refaite en Macro 3D », « Nouveau style demandé : … », « En attente : … ». */
+export type AgentDecision = {
+  kind: 'remade' | 'restyled' | 'style_requested' | 'waiting'
+  text: string
+  why: string
+  style: string | null
+  order_id: number | null
+  request_id: number | null
+  at: string
+}
+export type StyleRequestStatus = 'proposed' | 'accepted' | 'declined' | 'building' | 'live'
+/** A style the AI asks for (156): from a Reel (reference) or from imagination (invented). */
+export type StyleRequest = {
+  id: number
+  kind: 'reference' | 'invented'
+  name: string
+  concept: {
+    look: string | null
+    palette: string | null
+    motion: string | null
+    typography: string | null
+    sound: string | null
+    scenes: string[]
+    why: string
+    reference: string | null
+  }
+  unblocks: { asset_ids: number[]; order_ids: number[] }
+  status: StyleRequestStatus
+  owner_note: string | null
+  decided_at: string | null
+  created_at: string
+}
+export const listStyleRequests = () => request<StyleRequest[]>('/api/style-requests')
+/** « Construire » (accepted) or « Non » (declined), with an optional note. */
+export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'declined'; note?: string }) =>
+  send<StyleRequest>('PATCH', `/api/style-requests/${id}`, body)

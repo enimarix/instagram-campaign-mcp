@@ -16,6 +16,7 @@ AGENT_ALLOWED = {
     "create_idea", "get_render_status", "get_asset_frames", "wait_for_renders",
     "submit_asset", "list_assets",
     "get_feedback", "mark_feedback_digested", "list_revision_requests", "add_learning",
+    "decide_revision", "request_style",
     "update_learning", "list_learnings", "get_creative_brief", "get_daily_facts",
     "save_daily_report", "open_experiment", "list_experiments",
     "add_to_watchlist", "list_watchlist", "remove_from_watchlist", "research_trends",
