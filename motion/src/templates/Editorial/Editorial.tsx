@@ -17,6 +17,7 @@ import { FlatTree, Tree } from "../../editorial/Tree";
 import { CROWN, gustOf, GUST_RANGE, TREE } from "../../editorial/blossom.ts";
 import { EndCard } from "../../endcards/EndCard";
 import { frenchSpaces } from "../../lib/french";
+import { spokenLines } from "../../lib/duck";
 import { loopFade } from "../../lib/timeline";
 import { type Camera, cameraOf, payoffCamera } from "./layout";
 import { bloomOf, cameoOf, type Chapter, type EditorialProps, timelineOf } from "./schema";
@@ -388,7 +389,7 @@ export const Editorial = (props: EditorialProps) => {
           <Html5Audio src={assetById(id).src} volume={volume} />
         </Sequence>
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>
