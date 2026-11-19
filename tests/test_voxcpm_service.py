@@ -3,6 +3,7 @@ and its start/stop from `ig-campaign up`. No torch, no GPU, no network."""
 
 import asyncio
 import base64
+import functools
 import importlib.util
 import json
 import os
@@ -257,6 +258,72 @@ def test_a_failed_load_releases_the_gpu(tmp_path):
                             gpu_path=str(lock))
     answer = TestClient(app, raise_server_exceptions=False).post("/tts", json={"text": SCRIPT})
     assert answer.status_code == 500 and _gpu_free(lock)
+
+
+# --- the engine's worker process (step 146) ---------------------------------------------
+class ChildEngine:
+    """Built in the worker process by engine_worker.serve: its audio names that process.
+    Text with "crash" kills the process mid-take."""
+
+    def __init__(self, fail_load=False):
+        self.fail_load = fail_load
+
+    def load(self):
+        if self.fail_load:
+            raise RuntimeError("CUDA out of memory")
+
+    def take(self, text, card, card_text):
+        if "crash" in text.lower():
+            os._exit(3)
+        words = [{"text": w, "start_s": i * 0.5, "end_s": i * 0.5 + 0.4}
+                 for i, w in enumerate(text.split())]
+        return f"pid {os.getpid()}".encode(), len(words) * 0.5, words
+
+    def vram_gb(self):
+        return 5.5
+
+
+def _worker_app(lock, now, **engine_kw):
+    worker = server.Worker(functools.partial(ChildEngine, **engine_kw))
+    app = server.create_app(worker, server.Settings(idle_unload_s=120), server.load_voices(),
+                            gpu_path=str(lock), clock=lambda: now[0])
+    return worker, app, TestClient(app)
+
+
+def test_the_models_live_in_a_worker_process_terminated_at_unload(tmp_path):
+    lock, now = tmp_path / "gpu.lock", [1000.0]
+    worker, app, http = _worker_app(lock, now)
+    answer = http.post("/tts", json={"text": SCRIPT})
+    assert answer.status_code == 200
+    proc = worker.model
+    assert _decoded(answer.json()) == f"pid {proc.pid}" != f"pid {os.getpid()}"
+    assert proc.is_alive() and not _gpu_free(lock) and worker.vram_gb() == 5.5
+    assert http.post("/tts", json={"text": SCRIPT}).status_code == 200
+    assert worker.model is proc  # one worker while loaded
+    now[0] += 120
+    assert app.state.unload_if_idle()
+    assert not proc.is_alive() and proc.exitcode is not None  # gone: the OS has its memory
+    assert _gpu_free(lock) and not http.get("/health").json()["loaded"]
+
+
+def test_a_dead_worker_is_a_503_that_frees_the_gpu_and_the_next_request_starts_anew(tmp_path):
+    lock, now = tmp_path / "gpu.lock", [1000.0]
+    worker, app, http = _worker_app(lock, now)
+    answer = http.post("/tts", json={"text": "Crash ici"})
+    assert answer.status_code == 503 and "exit code 3" in answer.json()["detail"]
+    assert worker.model is None and _gpu_free(lock)
+    assert not http.get("/health").json()["loaded"]
+    answer = http.post("/tts", json={"text": SCRIPT})
+    assert answer.status_code == 200 and worker.model.is_alive()
+    worker.unload()
+
+
+def test_a_worker_whose_load_fails_is_a_503_that_frees_the_gpu(tmp_path):
+    lock = tmp_path / "gpu.lock"
+    worker, app, http = _worker_app(lock, [0.0], fail_load=True)
+    answer = http.post("/tts", json={"text": SCRIPT})
+    assert answer.status_code == 503 and "CUDA out of memory" in answer.json()["detail"]
+    assert worker.model is None and _gpu_free(lock)
 
 
 def test_the_studio_http_provider_reads_the_service_answer(tmp_path, monkeypatch):

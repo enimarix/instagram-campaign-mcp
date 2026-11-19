@@ -15,10 +15,11 @@ take is kept. One request at a time.
 
 The GPU is shared (step 145): the models load on the first request, under the machine's GPU
 lock (src/studio/gpu_lock.py, the one Blender and Remotion renders take), and the lock is held
-while they are loaded. After VOXCPM_IDLE_UNLOAD_S without a request (default 120 s) both are
-dropped (VRAM and Whisper's ~3 GB of RAM) and the lock released, so a render can run. A load
-costs ~35 s. torch / voxcpm / transformers are imported only by Engine.load(), so CI imports
-this module without them.
+while they are loaded. The models live in a worker process (engine_worker.py, step 146):
+after VOXCPM_IDLE_UNLOAD_S without a request (default 120 s) it is terminated, so the OS
+takes back all its VRAM and RAM, and the lock released, so a render can run. A worker that
+dies or fails = HTTP 503, the lock released, and the next request starts a new one. A load
+costs ~35 s. This process imports no torch (~60 MB), and CI imports it without torch.
 
 Run: python vendor/voxcpm_tts/server.py [--host 127.0.0.1] [--port 8766] (README.md).
 """
@@ -28,9 +29,8 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
-import gc
+import functools
 import importlib.util
-import io
 import json
 import logging
 import os
@@ -43,6 +43,7 @@ from typing import Any, Callable, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from engine_worker import MODEL_ID, WHISPER_ID, Engine, Worker, WorkerFailed
 from speech import line_spans, score, speak, take_text
 
 log = logging.getLogger("voxcpm_tts")
@@ -53,10 +54,7 @@ _spec = importlib.util.spec_from_file_location("gpu_lock", REPO / "src" / "studi
 gpu_lock = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gpu_lock)
 
-MODEL_ID = "openbmb/VoxCPM2"
-WHISPER_ID = "openai/whisper-large-v3-turbo"
 VOICES_DIR = REPO / "brand" / "voices"
-PEAK = 0.99  # never clip; loudness is the studio's loudnorm (step 033)
 
 
 class Settings(BaseModel):
@@ -98,65 +96,7 @@ def load_voices(folder: Path = VOICES_DIR) -> Dict[str, Voice]:
     return voices
 
 
-class Engine:
-    """VoxCPM2 + Whisper. take() returns (wav bytes, duration_s, Whisper words)."""
-
-    def __init__(self, settings: Settings):
-        self.s = settings
-        self.model = self.asr = None
-
-    def load(self) -> None:
-        import torch  # lazy: CI has no torch
-        from transformers import pipeline
-        from voxcpm import VoxCPM
-
-        self.model = VoxCPM.from_pretrained(MODEL_ID, load_denoiser=False)
-        # float32: the checkpoint's own fp16 runs ~16x slower on the CPU (190 s vs 12 s).
-        self.asr = pipeline("automatic-speech-recognition", model=WHISPER_ID, device="cpu",
-                            dtype=torch.float32)
-
-    def unload(self) -> None:
-        """Drop both models: VRAM back to the driver, Whisper's RAM back to the OS."""
-        self.model = self.asr = None
-        gc.collect()
-        try:
-            import torch
-            torch.cuda.empty_cache()
-        except Exception:  # noqa: BLE001 - no torch / no CUDA: nothing cached
-            pass
-
-    def take(self, text: str, voice: Voice):
-        import numpy as np
-        import soundfile as sf
-
-        card = str(voice.card)
-        wav = self.model.generate(text=text, prompt_wav_path=card, prompt_text=voice.card_text,
-                                  reference_wav_path=card, cfg_value=self.s.cfg,
-                                  inference_timesteps=self.s.steps)
-        sr = self.model.tts_model.sample_rate
-        wav = np.asarray(wav, dtype=np.float32)
-        peak = float(np.abs(wav).max()) if wav.size else 0.0
-        if peak > PEAK:
-            wav *= PEAK / peak
-        out = self.asr({"raw": wav, "sampling_rate": sr}, return_timestamps="word",
-                       generate_kwargs={"language": "french"}, chunk_length_s=30)
-        words = [{"text": c["text"].strip(), "start_s": float(c["timestamp"][0]),
-                  "end_s": float(c["timestamp"][1] if c["timestamp"][1] is not None
-                                 else len(wav) / sr)}
-                 for c in out["chunks"] if c["text"].strip()]
-        buf = io.BytesIO()
-        sf.write(buf, wav, sr, format="WAV", subtype="PCM_16")
-        return buf.getvalue(), len(wav) / sr, words
-
-    def vram_gb(self) -> Optional[float]:
-        try:
-            import torch
-            return round(torch.cuda.max_memory_allocated() / 1e9, 2)
-        except Exception:  # noqa: BLE001 - no CUDA: no number
-            return None
-
-
-def synthesize(engine: Engine, settings: Settings, script: str, voice: Voice) -> Dict[str, Any]:
+def synthesize(engine: Worker, settings: Settings, script: str, voice: Voice) -> Dict[str, Any]:
     """Takes until one scores >= min_score (at most max_takes); the best one wins."""
     lines = [line.strip() for line in script.splitlines() if line.strip()]
     if not lines:
@@ -187,7 +127,7 @@ class TTSRequest(BaseModel):
     voice: str = ""
 
 
-def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice], *,
+def create_app(engine: Worker, settings: Settings, voices: Dict[str, Voice], *,
                gpu_path: Optional[str] = None,
                clock: Callable[[], float] = time.monotonic) -> FastAPI:
     """The HTTP service. `app.state.unload_if_idle()` drops the models once idle (main() calls
@@ -198,6 +138,10 @@ def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice], *,
     last_used = [clock()]
     default = next(v.id for v in voices.values() if v.default)
 
+    def drop() -> None:
+        engine.unload()
+        gpu.close()
+
     def load() -> None:
         if engine.model is not None:
             return
@@ -207,8 +151,7 @@ def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice], *,
         try:
             engine.load()
         except BaseException:
-            engine.unload()
-            gpu.close()
+            drop()
             raise
         log.info("loaded %s + %s in %.0fs (waited %.0fs for the GPU)", MODEL_ID, WHISPER_ID,
                  time.perf_counter() - t1, t1 - t0)
@@ -219,8 +162,7 @@ def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice], *,
             if engine.model is None or idle < settings.idle_unload_s:
                 return False
             t0 = time.perf_counter()
-            engine.unload()
-            gpu.close()
+            drop()
             log.info("idle %.0fs: models unloaded in %.1fs, GPU released", idle,
                      time.perf_counter() - t0)
             return True
@@ -246,6 +188,11 @@ def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice], *,
                 return synthesize(engine, settings, req.text, voice)
             except ValueError as e:
                 raise HTTPException(400, str(e)) from None
+            except WorkerFailed as e:  # the worker is gone or broken: drop it, free the GPU
+                drop()
+                log.error("voice engine failed: %s", e)
+                raise HTTPException(503, f"voice engine failed ({e}); the next request "
+                                         "starts a new one") from None
             finally:
                 last_used[0] = clock()
 
@@ -298,7 +245,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.exit_with_pid:
         threading.Thread(target=_exit_with, args=(args.exit_with_pid,), daemon=True).start()
     settings, voices = Settings.from_env(), load_voices(args.voices)
-    app = create_app(Engine(settings), settings, voices)
+    app = create_app(Worker(functools.partial(Engine, settings.steps, settings.cfg)), settings,
+                     voices)
     threading.Thread(target=_unload_when_idle, args=(app.state.unload_if_idle,),
                      daemon=True).start()
     log.info("up; %s loads on the first request (GPU lock %s); voices %s; %s", MODEL_ID,
