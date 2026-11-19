@@ -290,6 +290,7 @@ The owner declined the first 8-bit FactQuest render ("not good at all") and aske
 ## Done
 
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 143 — Template `PixelCinema` (« Pixel ciné ») — https://github.com/enimarix/instagram-campaign-mcp/pull/155 (2026-11-19) — painterly living pixel scenes (rainy window, dawn pier, fridge) with a new shot per beat, wide beams, lightning frame, clean type with amber word; owner audio fixes: soft thunder in the gaps, sfx and music ducked, voice >= +13.7 LU
 - [x] 144 — Template `Editorial` (« Éditorial ») — https://github.com/enimarix/instagram-campaign-mcp/pull/156 (2026-11-19) — black editorial type duo (grotesk + pink italic serif), chapters + scrubber, fine pixel blossom tree, shaded anatomy characters, French accents via the 142 bitmap font, own end card; 3 voiced samples
 - [x] 148 — Voice above the music + new beds — https://github.com/enimarix/instagram-campaign-mcp/pull/158 (2026-11-19) — music ducked -15 dB under every spoken line in all voiced motion templates (voice +15 LU over the bed, was -0.7), 3 composed Cutaway beds (lo-fi chiptune, synthwave, clockwork) for the owner to pick
 - [x] 147 — A change request wakes the AI at once — https://github.com/enimarix/instagram-campaign-mcp/pull/157 (2026-11-19) — order_run triggers on the newest of scheduled orders and wanting-changes comments on revision_requested assets, same debounce/cap/lock, once per new request
@@ -454,7 +455,17 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - H8 — Claude Code CLI installed and signed in, accepted budget per run
 - H9 — content language(s), target countries, what the account is for
 
+
+### Phase 5d — Studio tools (owner, 2026-11-19: « to be installed and tested and used for future videos when needed »)
+- [ ] 149 — Earshot audio check (Leonxlnx/earshot, MIT, CPU-only) — **verify in docs**; every render's QC also listens: each sfx lands on its cut, voice ≥ 12 LU above music+sfx under speech, no harsh peaks (the Pixel ciné thunder case), a fail reason the agent can act on — deps: 148 · touches: `src/studio/qc.py`, a new `src/studio/listen.py`, `tests/`
+- [ ] 150 — Openverse sound effects (WordPress/openverse API) — **verify in docs**; search + download sfx on demand, only licences allowing commercial use (CC0, CC-BY; never NC/ND), licence + attribution recorded per file (ASSETS_LICENSES / asset credits), cached, picked by the agent per scene — deps: 149 · touches: a new `src/studio/sfx.py`, `motion/` assets loader, `tests/`
+- [ ] 151 — HyperFrames spike (heygen-com/hyperframes, Apache-2.0) — **verify in docs**; install, render one macroBody scene (same brief as a Remotion template), compare quality / speed / RAM+GPU against Remotion under the GPU lock, write the keep-or-drop decision in DECISIONS — deps: 145 · touches: `vendor/hyperframes/` (spike), `docs/DECISIONS.md`
+- [ ] 152 — Blender upgrade: several characters, several sets (gym, kitchen, table), dance / walk cycles, props and vehicles (owner DM #8 « weird dance… guy in the gym, kitchen, eating ») — deps: cinematic · touches: `cinematic/`, `src/studio/cinematic.py`, `tests/`
+
 ## Follow-ups (parked from reviews)
+- (143) The motion events test list leaves out Cutaway: its hook event is not worded the way the test expects; align Cutaway's hook event and add it to the list.
+- (live, 2026-11-19) The owner games on the same PC (Rocket League: ~6.5 GB RAM + GPU) while the studio renders: the GPU lock can't see it. The worker / voice service should defer heavy jobs when free RAM < 8 GB or another process uses > ~2 GB VRAM (or a known game is in the foreground), and resume after.
+- (live, asset 17) The final mix reaches +0.6 dBFS true peak after the -14 LUFS loudnorm: add a true-peak limit (-1 dBTP) to the shared finish (ffmpeg loudnorm TP / alimiter).
 - (148) Duck the template sfx (blips, swish, hits) under speech too; normalise the TTS voice level (ducking assumes ~-29 LUFS voice). Owner to pick the Cutaway bed (music-cutaway-a/b/c) → set it as the Cutaway default.
 - (143, live) Killing a render's Python parent leaves the Node/Chrome (or Blender) child rendering after the GPU lock is released, so it can overlap the next render: start renderers in a Windows job object / kill the process tree on parent exit.
 - (146, live) A long voice-over in one take (622 steps, ~50 s) pushes VRAM to 7977/8192 MiB on its own: split scripts longer than ~25 s of speech into takes at script-line boundaries (scene-sized, never single short lines) to keep VRAM bounded.
