@@ -74,6 +74,11 @@ SCRIPTS = {
     "PaperStory": lambda p: [_paper_line(p["hook"]["labels"]),
                              *(_paper_line(b["labels"]) for b in p["beats"]),
                              *([p["outro"]] if p.get("outro") else [])],
+    # The title box, then its yellow sub, joined like PaperStory's strips (lineOf in
+    # motion/src/templates/Cutaway/schema.ts).
+    "Cutaway": lambda p: [_paper_line([s["title"], *([s["sub"]] if s.get("sub") else [])])
+                          for s in (p["hook"], *p["beats"], p["payoff"])]
+                         + ([p["outro"]] if p.get("outro") else []),
 }
 
 

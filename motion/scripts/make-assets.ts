@@ -325,6 +325,49 @@ const songs: Record<string, Song> = {
       },
     ],
   },
+  // The cutaway style's bed (step 142): a dusk synth loop under the pixel explainers. Triangle
+  // arpeggios over Dm9 Bbmaj7 Gm7 A7, a thin square lead, sine bass, a light kick and hat.
+  // D minor, 92 bpm, 4 bars.
+  "music-dusk": {
+    bpm: 92,
+    tracks: [
+      {
+        wave: "triangle", volume: 0.16,
+        steps: [
+          "D4 F4 A4 C5 E5 C5 A4 F4 D4 F4 A4 C5 E5 C5 A4 F4",
+          "A#3 D4 F4 A4 C5 A4 F4 D4 A#3 D4 F4 A4 C5 A4 F4 D4",
+          "G3 A#3 D4 F4 A4 F4 D4 A#3 G3 A#3 D4 F4 A4 F4 D4 A#3",
+          "A3 C#4 E4 G4 A4 G4 E4 C#4 A3 C#4 E4 G4 A4 G4 E4 C#4",
+        ].join(" "),
+      },
+      {
+        wave: "square", duty: 0.125, volume: 0.06,
+        steps: [
+          "A5 - - - - - - - G5 - - - F5 - - -",
+          "F5 - - - - - - - D5 - - - E5 - - -",
+          "D5 - - - - - - - . . . . A#4 - - -",
+          "C#5 - - - - - - - E5 - - - - - - -",
+        ].join(" "),
+      },
+      {
+        wave: "bass", volume: 0.26,
+        steps: [
+          "D2 - - - - - - - D2 - - - - - - -",
+          "A#1 - - - - - - - A#1 - - - - - - -",
+          "G1 - - - - - - - G1 - - - - - - -",
+          "A1 - - - - - - - A1 - - - - - - -",
+        ].join(" "),
+      },
+      {
+        wave: "kick", volume: 0.18,
+        steps: "C2 - . . . . . . C2 - . . . . . . ".repeat(4).trim(),
+      },
+      {
+        wave: "noise", volume: 0.03,
+        steps: ". . x . . . x . . . x . . . x . ".repeat(4).trim(),
+      },
+    ],
+  },
 };
 
 const effects: Record<string, Float64Array> = {

@@ -1,0 +1,67 @@
+{
+  "hook": {
+    "title": "Quand vous perdez du gras, il part où ?",
+    "sub": "Non, il ne fond pas en chaleur.",
+    "view": "fat",
+    "callouts": [{ "text": "Gouttelette de gras", "at": "goutte" }],
+    "gauge": { "label": "kg de gras", "value": "10", "fill": 1 }
+  },
+  "beats": [
+    {
+      "title": "La cellule vide sa réserve",
+      "sub": "Le gras part dans le sang, en acides gras.",
+      "view": "fat",
+      "speed": "x1000",
+      "stage": 0.6,
+      "callouts": [{ "text": "Acides gras", "at": "acides" }, { "text": "Sang", "at": "sang" }],
+      "gauge": { "label": "kg de gras", "value": "6", "fill": 0.6 }
+    },
+    {
+      "title": "Direction : les mitochondries",
+      "sub": "Les petites centrales de vos cellules.",
+      "view": "mito",
+      "callouts": [{ "text": "Mitochondrie", "at": "mitochondrie" }, { "text": "Crêtes", "at": "crete" }]
+    },
+    {
+      "title": "Elles le brûlent avec de l'oxygène",
+      "sub": "Et en tirent de l'énergie : l'ATP.",
+      "view": "mito",
+      "speed": "1/5",
+      "bang": "ATP !",
+      "callouts": [{ "text": "O₂", "at": "o2" }, { "text": "ATP", "at": "atp" }]
+    },
+    {
+      "title": "Il en reste du CO₂ et de l'eau",
+      "view": "mito",
+      "speed": "1/10",
+      "zoom": 1.7,
+      "focus": "co2",
+      "callouts": [{ "text": "CO₂", "at": "co2" }, { "text": "Eau", "at": "eau" }],
+      "gauge": { "label": "en CO₂", "value": "84 %", "fill": 0.84 }
+    },
+    {
+      "title": "84 % du gras part en CO₂",
+      "sub": "Et ce CO₂, vous le soufflez.",
+      "view": "mito",
+      "speed": "1/2",
+      "x2": true,
+      "steps": { "items": ["Gras", "Sang", "Mitochondrie", "CO₂", "Poumons"], "current": 4 }
+    }
+  ],
+  "payoff": {
+    "title": "Vous perdez votre gras en respirant.",
+    "sub": "Sur 10 kg, 8,4 kg partent par les poumons.",
+    "view": "fat",
+    "stage": 1,
+    "speed": "x1000",
+    "gauge": { "label": "kg de gras", "value": "0", "fill": 0.05 }
+  },
+  "outro": "Envoyez ça à celui qui pense que le gras part en sueur.",
+  "address": "vous",
+  "accent": "fat",
+  "citations": [
+    { "url": "https://doi.org/10.1136/bmj.g7257", "title": "Meerman & Brown 2014, BMJ 349:g7257, When somebody loses weight, where does the fat go? Of 10 kg of fat oxidised, 8.4 kg leaves as CO2 through the lungs (84 %) and 1.6 kg as water" }
+  ],
+  "music": "music-dusk",
+  "loop": false
+}

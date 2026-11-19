@@ -5,12 +5,13 @@ import { AbsoluteFill } from "remotion";
 import { CRTOverlay } from "../components/CRTOverlay";
 import type { EndCardProps } from "./schema.ts";
 import { CleanEndCard } from "./CleanEndCard";
+import { CutawayEndCard } from "./CutawayEndCard";
 import { LiveEndCard } from "./LiveEndCard";
 import { PaperEndCard } from "./PaperEndCard";
 import { PixelEndCard } from "./PixelEndCard";
 import { VoxelEndCard } from "./VoxelEndCard";
 
-const CARDS = { voxel: VoxelEndCard, paper: PaperEndCard, clean: CleanEndCard, pixel: PixelEndCard, live: LiveEndCard } as const;
+const CARDS = { voxel: VoxelEndCard, paper: PaperEndCard, clean: CleanEndCard, pixel: PixelEndCard, live: LiveEndCard, cutaway: CutawayEndCard } as const;
 
 export const EndCard = ({ style, ...props }: EndCardProps) => {
   const Card = CARDS[style];

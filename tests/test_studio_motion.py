@@ -130,11 +130,13 @@ def test_script_gives_one_line_per_voice_timing(template, props):
 def test_schema_export_gives_every_template_a_style():
     out = motion._node("schemas.mjs", [], timeout_s=motion.SCHEMA_TIMEOUT_S)
     styles = {s["id"]: s["label"] for s in out["styles"]}
-    assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier"}
+    assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier",
+                      "cutaway": "Pixel explicatif"}
     by_id = {t["id"]: t["style"] for t in out["templates"]}
     assert set(by_id.values()) <= set(styles)
     assert by_id["VoxelQuest"] == "voxel" and by_id["FactQuest"] == "pixel"
     assert by_id["PaperStory"] == "paper"
+    assert by_id["Cutaway"] == "cutaway"
 
 
 @needs_motion
@@ -168,6 +170,31 @@ def test_paperstory_script_joins_the_strips_like_the_template():
                          "Trois parts de pizza ? Trop."]
     assert lines[-1] == "Terminez la journée pile sur vos objectifs."
     assert motion._paper_line(["Léa mange", "2 000 kcal", "comme sur l'étiquette."]) ==         "Léa mange 2 000 kcal comme sur l'étiquette."
+
+
+@needs_motion
+def test_validate_props_cutaway_examples_events_and_no_price():
+    for name in ("cutaway", "cutaway-croissance", "cutaway-graisse"):
+        v = motion.validate_props("Cutaway", _example(name))
+        assert 25 <= v["durationInFrames"] / v["fps"] <= 45, name
+        assert v["coverFrame"] <= v["fps"]  # the hook box is up from frame 0
+        assert any(e["e"].startswith("end card (cutaway)") for e in v["events"])
+        assert any(e["e"].startswith("payoff") for e in v["events"])
+    bad = {**_example("cutaway"), "outro": "Seulement 4,99 € par mois"}
+    with pytest.raises(ValueError, match="no price on screen"):
+        motion.validate_props("Cutaway", bad)
+
+
+def test_cutaway_script_reads_each_title_then_its_sub():
+    # Same lines as cutawayScript in motion/src/templates/Cutaway/schema.ts (test/cutaway.test.ts).
+    lines = motion.SCRIPTS["Cutaway"](_example("cutaway"))
+    assert lines[0] == "Comment un muscle se contracte ? Avec des milliards de petits moteurs."
+    assert lines[3] == ("Ralenti 84 fois : le sarcomère. "
+                        "La myosine tire l'actine vers le centre.")
+    assert lines[-1] == "Envoyez ça à votre partenaire de salle."
+    no_sub = {k: v for k, v in _example("cutaway").items() if k != "outro"}
+    no_sub["payoff"] = {"title": "Le même moteur.", "view": "arm"}
+    assert motion.SCRIPTS["Cutaway"](no_sub)[-1] == "Le même moteur."
 
 
 @needs_motion
