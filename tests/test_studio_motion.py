@@ -60,7 +60,7 @@ def test_validate_props_uses_the_templates_own_message():
 
 @needs_motion
 @pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
-                                      "PixelSkit", "VoxelQuest", "PaperStory"])
+                                      "PixelSkit", "VoxelQuest", "PaperStory", "Editorial"])
 def test_schema_events_give_every_template_a_timeline(template):
     v = motion.validate_props(template, _example(template.lower()))
     timeline = recipe.compress_timeline(v["events"])
@@ -131,12 +131,12 @@ def test_schema_export_gives_every_template_a_style():
     out = motion._node("schemas.mjs", [], timeout_s=motion.SCHEMA_TIMEOUT_S)
     styles = {s["id"]: s["label"] for s in out["styles"]}
     assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier",
-                      "cutaway": "Pixel explicatif"}
+                      "cutaway": "Pixel explicatif", "editorial": "Éditorial"}
     by_id = {t["id"]: t["style"] for t in out["templates"]}
     assert set(by_id.values()) <= set(styles)
     assert by_id["VoxelQuest"] == "voxel" and by_id["FactQuest"] == "pixel"
     assert by_id["PaperStory"] == "paper"
-    assert by_id["Cutaway"] == "cutaway"
+    assert by_id["Cutaway"] == "cutaway" and by_id["Editorial"] == "editorial"
 
 
 @needs_motion
@@ -195,6 +195,33 @@ def test_cutaway_script_reads_each_title_then_its_sub():
     no_sub = {k: v for k, v in _example("cutaway").items() if k != "outro"}
     no_sub["payoff"] = {"title": "Le même moteur.", "view": "arm"}
     assert motion.SCRIPTS["Cutaway"](no_sub)[-1] == "Le même moteur."
+def test_validate_props_editorial_examples_events_and_no_price():
+    for name in ("editorial", "editorial-habitudes", "editorial-courbatures"):
+        v = motion.validate_props("Editorial", _example(name))
+        assert 20 <= v["durationInFrames"] / v["fps"] <= 40, name
+        assert v["coverFrame"] <= 1.5 * v["fps"]  # type-only hook: key word and strike are in
+        assert any(e["e"].startswith("end card (editorial)") for e in v["events"])
+        assert any(e["e"].startswith("chapter 01/") for e in v["events"])
+    bad = {**_example("editorial"), "outro": "Seulement 4,99 € par mois"}
+    with pytest.raises(ValueError, match="no price on screen"):
+        motion.validate_props("Editorial", bad)
+
+
+def test_editorial_script_reads_hook_chapters_payoff_outro():
+    # Same lines as editorialScript in motion/src/templates/Editorial/schema.ts (test/editorial.test.ts).
+    lines = motion.SCRIPTS["Editorial"](_example("editorial-courbatures"))
+    assert lines == [
+        "Ce n'est pas l'acide lactique. C'est le muscle qui se répare.",
+        "Tes courbatures culminent 48 à 72 h après la séance.",
+        "La vraie cause, des micro-lésions du muscle",
+        "La séance d'après, déjà moins douloureuse",
+        "Le muscle se répare, plus solide à chaque séance",
+        "La douleur passe. Le muscle reste.",
+        "Suivez vos protéines, le muscle fait le reste.",
+    ]
+    assert motion._editorial_line("Ralentissez", "et la satiété suit") == "Ralentissez, et la satiété suit"
+    assert motion._editorial_line("Fini.", "ensuite") == "Fini. ensuite"
+    assert motion._editorial_line("Le même objectif", "Écoutez") == "Le même objectif. Écoutez"
 
 
 @needs_motion

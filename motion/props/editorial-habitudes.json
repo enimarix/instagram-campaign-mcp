@@ -1,0 +1,63 @@
+{
+  "kicker": "macroBody",
+  "hook": {
+    "lead": "Ce n'est pas la motivation.",
+    "key": "C'est l'habitude.",
+    "strike": "motivation"
+  },
+  "eyebrow": "Une habitude, c'est",
+  "chapters": [
+    {
+      "scene": "split",
+      "title": "Le même objectif",
+      "key": "deux façons très différentes"
+    },
+    {
+      "scene": "tree",
+      "title": "Ça prend du temps",
+      "action": "bloom",
+      "from": 0.1,
+      "bloom": 0.4,
+      "stat": {
+        "value": "66",
+        "unit": "jours",
+        "note": "pour qu'un geste devienne automatique"
+      },
+      "key": "66 jours en moyenne, pas 21"
+    },
+    {
+      "scene": "type",
+      "title": "Un raté ne casse rien",
+      "key": "la courbe continue de monter"
+    },
+    {
+      "scene": "tree",
+      "title": "Un seul geste à la fois",
+      "key": "noter son petit-déj, par exemple",
+      "action": "frame",
+      "bloom": 1
+    },
+    {
+      "scene": "tree",
+      "title": "Puis ça tourne seul",
+      "key": "sans même y penser",
+      "action": "petals",
+      "bloom": 1
+    }
+  ],
+  "payoff": {
+    "lead": "La motivation fane.",
+    "key": "L'habitude fleurit."
+  },
+  "outro": "Un repas noté aujourd'hui. Puis demain. Puis le suivant.",
+  "address": "vous",
+  "accent": "brand",
+  "citations": [
+    {
+      "url": "https://doi.org/10.1002/ejsp.674",
+      "title": "Lally et al. 2010, European Journal of Social Psychology: How are habits formed (median 66 days to automaticity; missing one opportunity did not materially affect the process)"
+    }
+  ],
+  "music": "music-lounge",
+  "loop": false
+}

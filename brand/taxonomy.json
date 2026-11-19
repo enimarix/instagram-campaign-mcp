@@ -40,7 +40,8 @@
       {"id": "PixelSkit", "label": "Pixel Skit", "description": "Humour: a 10-20 s relatable POV sketch with a punchline."},
       {"id": "VoxelQuest", "label": "Voxel Quest", "description": "3D 8-bit (voxel) story in the kitchen set: hook, problem, the app solves it, the golem levels up, animated end card."},
       {"id": "PaperStory", "label": "Paper Story", "description": "The owner's house style: paper cut-out story with a named character (Inès, Paul, Sam, Léa): question hook, problem, the app solves it, payoff, paper end card."},
-      {"id": "Cutaway", "label": "Cutaway", "description": "Pixel explainer (style « Pixel explicatif »): the body as a machine, a cutaway mechanism (muscle, sarcomere, repair, fat cell, mitochondrion) slowed down and labelled by a game HUD; hook question, 4-6 beats, payoff, the HUD's level-complete end card."}
+      {"id": "Cutaway", "label": "Cutaway", "description": "Pixel explainer (style « Pixel explicatif »): the body as a machine, a cutaway mechanism (muscle, sarcomere, repair, fat cell, mitochondrion) slowed down and labelled by a game HUD; hook question, 4-6 beats, payoff, the HUD's level-complete end card."},
+      {"id": "Editorial", "label": "Éditorial", "description": "Black editorial art direction: type-only hook (white grotesk + pink italic serif), 3-5 counted chapters with a pixel blossom tree that grows, cute anatomy characters (stomach, muscle, heart, bone, fat cell) on deep blue cards, before / after split, social-proof numbers, editorial end card."}
     ]
   },
   "feedback_reasons": {

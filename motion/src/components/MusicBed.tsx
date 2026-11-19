@@ -15,6 +15,7 @@ export type MusicId =
   | "music-cutaway-a"
   | "music-cutaway-b"
   | "music-cutaway-c"
+  | "music-lounge"
   | "none";
 
 // A template's background music (step 048a): a music loop from src/assets.ts under the whole

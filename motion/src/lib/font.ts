@@ -22,6 +22,8 @@ export const fonts = {
   paper: "Fredoka",
   /** The paper style's handwriting for asides: Caveat (variable, 400-700). */
   hand: "Caveat",
+  /** The editorial style's key words (step 144): Instrument Serif Italic. */
+  serif: "Instrument Serif",
 };
 
 const FACES = [
@@ -38,4 +40,5 @@ const FACES = [
 for (const f of FACES) {
   void loadFont({ family: f.family, url: staticFile(f.file), weight: f.weight, unicodeRange: f.unicodeRange });
 }
+void loadFont({ family: fonts.serif, url: staticFile("fonts/InstrumentSerif-Italic.ttf"), style: "italic" });
 void loadFont({ family: fonts.pixel, url: staticFile("fonts/PressStart2P-Regular.ttf") });
