@@ -290,6 +290,7 @@ The owner declined the first 8-bit FactQuest render ("not good at all") and aske
 ## Done
 
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 144 — Template `Editorial` (« Éditorial ») — https://github.com/enimarix/instagram-campaign-mcp/pull/156 (2026-11-19) — black editorial type duo (grotesk + pink italic serif), chapters + scrubber, fine pixel blossom tree, shaded anatomy characters, French accents via the 142 bitmap font, own end card; 3 voiced samples
 - [x] 148 — Voice above the music + new beds — https://github.com/enimarix/instagram-campaign-mcp/pull/158 (2026-11-19) — music ducked -15 dB under every spoken line in all voiced motion templates (voice +15 LU over the bed, was -0.7), 3 composed Cutaway beds (lo-fi chiptune, synthwave, clockwork) for the owner to pick
 - [x] 147 — A change request wakes the AI at once — https://github.com/enimarix/instagram-campaign-mcp/pull/157 (2026-11-19) — order_run triggers on the newest of scheduled orders and wanting-changes comments on revision_requested assets, same debounce/cap/lock, once per new request
 - [x] 142 — Template `Cutaway` (« Pixel explicatif ») — https://github.com/enimarix/instagram-campaign-mcp/pull/154 (2026-11-19) — dusk pixel-art mechanism explainer with game HUD and slow-mo ladder, shaded arm cover, sarcomere drum machine, NIVEAU TERMINÉ end card; 3 voiced samples (muscle contraction, growth, fat); mix floors capped at 0.5/k

@@ -38,6 +38,7 @@ export const ASSETS = {
   "music-cave": audio("music-cave", "music"),
   "music-marimba": audio("music-marimba", "music"),
   "music-kalimba": audio("music-kalimba", "music"),
+  "music-lounge": audio("music-lounge", "music"),
   "sfx-jump": audio("sfx-jump", "sfx"),
   "sfx-coin": audio("sfx-coin", "sfx"),
   "sfx-hit": audio("sfx-hit", "sfx"),

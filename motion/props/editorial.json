@@ -1,0 +1,90 @@
+{
+  "kicker": "macroBody",
+  "hook": {
+    "lead": "Ce n'est pas votre appétit.",
+    "key": "C'est votre chrono.",
+    "strike": "appétit"
+  },
+  "eyebrow": "La satiété, c'est",
+  "chapters": [
+    {
+      "scene": "tree",
+      "title": "Une question de tempo",
+      "key": "on avale, on enchaîne",
+      "action": "wind",
+      "bloom": 0.45
+    },
+    {
+      "scene": "anatomy",
+      "character": "stomach",
+      "mood": "neutral",
+      "then": "surprised",
+      "caption": "Ton estomac met 20 minutes à dire stop.",
+      "highlight": "20 minutes",
+      "stat": {
+        "value": "20",
+        "unit": "minutes",
+        "note": "avant que le cerveau sente la satiété"
+      }
+    },
+    {
+      "scene": "tree",
+      "title": "Ralentir, concrètement",
+      "action": "petals",
+      "bloom": 0.7,
+      "tags": [
+        {
+          "text": "fourchette posée",
+          "mark": "yes"
+        },
+        {
+          "text": "un verre d'eau",
+          "mark": "yes"
+        },
+        {
+          "text": "l'écran à table",
+          "mark": "no"
+        }
+      ],
+      "key": "trois gestes, à chaque repas"
+    },
+    {
+      "scene": "tree",
+      "title": "Mangez lentement",
+      "key": "et le repas s'allège",
+      "action": "bloom",
+      "bloom": 1,
+      "stat": {
+        "value": "−67",
+        "unit": "kcal",
+        "note": "par repas, en mangeant lentement"
+      }
+    },
+    {
+      "scene": "tree",
+      "title": "Chaque repas compte",
+      "key": "et ça devient un rythme",
+      "action": "loop",
+      "bloom": 1
+    }
+  ],
+  "payoff": {
+    "lead": "Ce n'est pas de la volonté.",
+    "key": "C'est du tempo."
+  },
+  "outro": "Prenez le temps, on compte pour vous.",
+  "address": "vous",
+  "accent": "kcal",
+  "citations": [
+    {
+      "url": "https://www.health.harvard.edu/blog/why-eating-slowly-may-help-you-feel-full-faster-20101019605",
+      "title": "Harvard Health Publishing: Why eating slowly may help you feel full faster (the brain takes about 20 minutes to register fullness)"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/18589027/",
+      "title": "Andrade et al. 2008, J Am Diet Assoc: eating slowly, 579 vs 646 kcal per ad libitum meal (about 67 kcal less)"
+    }
+  ],
+  "music": "music-lounge",
+  "loop": false
+}

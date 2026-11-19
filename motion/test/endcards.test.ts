@@ -14,7 +14,7 @@ import { PROPS } from "../src/voxel/models.ts";
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
 const ok = (props: object) => endCardSchema.safeParse(props).success;
 /** Minimal valid props per style. */
-const BASE = { voxel: {}, paper: {}, clean: {}, pixel: {}, live: { backdrop: "public/last-frame.jpg" } } as const;
+const BASE = { voxel: {}, paper: {}, clean: {}, pixel: {}, live: { backdrop: "public/last-frame.jpg" }, editorial: {} } as const;
 const PRICES = ["9,99 €", "29 $ / an", "5 euros par mois", "4.99"];
 
 test("every style parses with its example props and has a card of at least 2.5 s that holds 1 s", () => {
@@ -24,7 +24,7 @@ test("every style parses with its example props and has a card of at least 2.5 s
     assert.ok(CARD_S[style] - SETTLE_S[style] >= 1, `${style} holds the finished card ≥ 1 s`);
     assert.equal(cardFrames({ style }, 30), Math.round(CARD_S[style] * 30));
   }
-  for (const style of ["voxel", "paper", "clean", "pixel"]) assert.ok(ok(read(`${style}-endcard`)), style);
+  for (const style of ["voxel", "paper", "clean", "pixel", "editorial"]) assert.ok(ok(read(`${style}-endcard`)), style);
   assert.equal(cardFrames({ style: "clean", seconds: 5 }, 30), 150);
   assert.equal(ok({ style: "clean", seconds: 2 }), false); // shorter than END_CARD_MIN_S
 });

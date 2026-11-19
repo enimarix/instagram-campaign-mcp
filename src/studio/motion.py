@@ -59,6 +59,25 @@ def _paper_line(labels: Sequence[Any]) -> str:
     return line
 
 
+def _editorial_line(first: str, second: Optional[str] = None) -> str:
+    """Two Editorial texts read as one line: where the first ends without punctuation, a full
+    stop when the second starts a sentence, else a comma (= joinLine in
+    motion/src/templates/Editorial/schema.ts)."""
+    if not second:
+        return first
+    if re.search(r"[.!?…:;,]$", first):
+        return f"{first} {second}"
+    return f"{first}. {second}" if second[:1].isupper() else f"{first}, {second}"
+
+
+def _editorial_script(p: Dict[str, Any]) -> List[str]:
+    chapters = [c["caption"] if c["scene"] == "anatomy" else _editorial_line(c["title"], c.get("key"))
+                for c in p["chapters"]]
+    return [_editorial_line(p["hook"]["lead"], p["hook"]["key"]), *chapters,
+            _editorial_line(p["payoff"]["lead"], p["payoff"]["key"]),
+            *([p["outro"]] if p.get("outro") else [])]
+
+
 # Script lines (hook first) of templates with a voice, in the order of `voice.lines` (each
 # schema's refine). The voice reads the text the viewer sees, as is.
 SCRIPTS = {
@@ -79,6 +98,7 @@ SCRIPTS = {
     "Cutaway": lambda p: [_paper_line([s["title"], *([s["sub"]] if s.get("sub") else [])])
                           for s in (p["hook"], *p["beats"], p["payoff"])]
                          + ([p["outro"]] if p.get("outro") else []),
+    "Editorial": _editorial_script,
 }
 
 

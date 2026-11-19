@@ -1,0 +1,80 @@
+{
+  "kicker": "macroBody",
+  "hook": {
+    "lead": "Ce n'est pas l'acide lactique.",
+    "key": "C'est le muscle qui se répare.",
+    "strike": "l'acide lactique"
+  },
+  "eyebrow": "Les courbatures, c'est",
+  "chapters": [
+    {
+      "scene": "anatomy",
+      "character": "muscle",
+      "mood": "happy",
+      "then": "sore",
+      "caption": "Tes courbatures culminent 48 à 72 h après la séance.",
+      "highlight": "48 à 72 h",
+      "stat": {
+        "value": "48-72",
+        "unit": "heures",
+        "note": "le pic de la douleur"
+      }
+    },
+    {
+      "scene": "type",
+      "title": "La vraie cause",
+      "key": "des micro-lésions du muscle"
+    },
+    {
+      "scene": "split",
+      "title": "La séance d'après",
+      "key": "déjà moins douloureuse",
+      "before": "1re séance",
+      "after": "2e séance"
+    },
+    {
+      "scene": "tree",
+      "title": "Le muscle se répare",
+      "key": "plus solide à chaque séance",
+      "action": "bloom",
+      "bloom": 1,
+      "tags": [
+        {
+          "text": "bouger doucement",
+          "mark": "yes"
+        },
+        {
+          "text": "bien dormir",
+          "mark": "yes"
+        },
+        {
+          "text": "assez de protéines",
+          "mark": "yes"
+        }
+      ]
+    }
+  ],
+  "payoff": {
+    "lead": "La douleur passe.",
+    "key": "Le muscle reste."
+  },
+  "outro": "Suivez vos protéines, le muscle fait le reste.",
+  "address": "vous",
+  "accent": "protein",
+  "citations": [
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30537791/",
+      "title": "Hotfiel et al. 2018, Sportverletz Sportschaden: DOMS, primary mechanism ultrastructural muscle damage, peak soreness 48-72 h post-exercise"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/12617692/",
+      "title": "Cheung, Hume, Maxwell 2003, Sports Med: lactic acid is one of six hypothesised theories of DOMS; eccentric activities induce micro-injury"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/12641640/",
+      "title": "McHugh 2003, Scand J Med Sci Sports: the repeated bout effect, one bout protects against damage from later bouts"
+    }
+  ],
+  "music": "music-lounge",
+  "loop": false
+}

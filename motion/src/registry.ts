@@ -21,13 +21,15 @@ import { quizChestSchema, REVEAL_S } from "./templates/QuizChest/schema";
 import { TimelineDemo, timelineDemoSchema, timelineOf } from "./templates/TimelineDemo";
 import { VoxelQuest } from "./templates/VoxelQuest/VoxelQuest";
 import { timelineOf as voxelQuestTimeline, voxelQuestSchema } from "./templates/VoxelQuest/schema";
+import { coverFrame as editorialCover, Editorial } from "./templates/Editorial/Editorial";
+import { cameoOf as editorialCameo, editorialSchema, timelineOf as editorialTimeline } from "./templates/Editorial/schema";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -344,6 +346,43 @@ export const templates = {
       return [
         ...scriptEvents(timeline, FPS, [`hook card: ${scene(p.hook)}`, ...p.beats.map((b) => `beat: ${scene(b)}`), `payoff: ${scene(p.payoff)}`, "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (cutaway): level complete, mB tile dithers in, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? p.payoff.view}` },
+      ];
+    },
+  }),
+  Editorial: template({
+    style: "editorial",
+    component: Editorial,
+    schema: editorialSchema,
+    defaultProps: {
+      kicker: "macroBody",
+      hook: { lead: "Ce n'est pas la faim.", key: "C'est le timing.", strike: "faim" },
+      chapters: [
+        { scene: "tree", title: "Vous mangez vite", key: "en cinq minutes chrono", action: "wind", bloom: 0.35, tags: [] },
+        { scene: "anatomy", character: "stomach", mood: "neutral", then: "surprised", caption: "Ton estomac met 20 minutes à dire stop.", highlight: "20 minutes", stat: { value: "20", unit: "minutes", note: "avant le signal de satiété" } },
+        { scene: "tree", title: "Ralentissez", key: "et la satiété suit", action: "bloom", bloom: 1, tags: [] },
+      ],
+      payoff: { lead: "Ce n'est pas de la volonté.", key: "C'est de la méthode." },
+      address: "vous",
+      accent: "brand",
+      citations: [{ url: "https://www.health.harvard.edu/blog/why-eating-slowly-may-help-you-feel-full-faster-20101019605", title: "Harvard Health: the brain takes about 20 minutes to register fullness" }],
+      music: "music-lounge",
+      loop: false,
+    },
+    durationInFrames: (p) => editorialTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => editorialCover(p, FPS),
+    events: (p) => {
+      const { timeline, endStart } = editorialTimeline(p, FPS);
+      const chapter = (c: (typeof p.chapters)[number], i: number) => {
+        const n = `chapter ${String(i + 1).padStart(2, "0")}/${String(p.chapters.length).padStart(2, "0")}`;
+        if (c.scene === "tree") return `${n} tree ${c.action} shot (bloom ${c.bloom}${c.tags.length ? `, tags ${c.tags.map((t) => t.text).join(", ")}` : ""}${c.stat ? `, stat ${c.stat.value} ${c.stat.unit}` : ""})`;
+        if (c.scene === "split") return `${n} before / after split (${c.before} vs ${c.after})`;
+        if (c.scene === "type") return `${n} type-only beat`;
+        return `${n} anatomy card: ${c.character} ${c.mood}${c.then ? ` -> ${c.then}` : ""}${c.stat ? `, stat ${c.stat.value} ${c.stat.unit}` : ""}`;
+      };
+      const total = timeline.totalFrames;
+      return [
+        ...scriptEvents(timeline, FPS, ["hook card", ...p.chapters.map(chapter), "payoff over the tree in full bloom", "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (editorial): mB tile, macroBody, 7 jours gratuits, macrobody.fr; cameo ${editorialCameo(p)}` },
       ];
     },
   }),

@@ -6,7 +6,7 @@
       "label": "Conteur grave",
       "description": "French man in his fifties, deep warm storyteller, gentle humour. The default voice.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["paper", "clean", "voxel", "pixel", "blender", "cutaway"],
+      "styles": ["paper", "clean", "voxel", "pixel", "blender", "cutaway", "editorial"],
       "address": ["vous"],
       "default": true
     },
@@ -23,7 +23,7 @@
       "label": "Douce nuit",
       "description": "French woman, soft intimate late-night voice, calm, close to the microphone. For evening stories, cravings at night, sleep, calm moments.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["paper", "clean", "blender"],
+      "styles": ["paper", "clean", "blender", "editorial"],
       "address": ["vous", "tu"]
     }
   ]
