@@ -6,7 +6,7 @@ export type Span = { start_s: number; end_s: number };
 
 // Levels against the bed alone (no voice): measured on the conteur_grave voice (about -29 LUFS)
 // over the step-148 beds (about -18 LUFS at the file, x0.25 in MusicBed): the voice ends ~15 LU
-// above the bed while it speaks, ~6 LU in the gaps (report in the step-148 PR).
+// above the bed while it speaks, ~7 LU in the gaps (report in the step-148 PR).
 /** The bed's level while a line is spoken. */
 export const DUCK_DB = -15;
 /** The bed's level between lines of a voiced video (a voice-over sits a little forward). */

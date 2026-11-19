@@ -49,7 +49,7 @@ export const ASSETS = {
   "sfx-swish": audio("sfx-swish", "sfx"),
   "music-dusk": audio("music-dusk", "music"),
   // Cutaway candidates (step 148), stereo, an intro then a seamless loop: lo-fi chiptune hip-hop,
-  // dusk synthwave, cinematic clockwork. The intro lengths match songs in make-assets.ts.
+  // dusk synthwave, cinematic clockwork. The intro lengths match the songs in scripts/beds.ts (test/beds.test.ts).
   "music-cutaway-a": { ...audio("music-cutaway-a", "music"), loopStart_s: 5.6 },
   "music-cutaway-b": { ...audio("music-cutaway-b", "music"), loopStart_s: 4.8 },
   "music-cutaway-c": { ...audio("music-cutaway-c", "music"), loopStart_s: 4.4 },

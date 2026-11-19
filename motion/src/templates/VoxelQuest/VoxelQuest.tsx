@@ -9,11 +9,11 @@ import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } f
 import { assetById } from "../../assets";
 import { brand, safeArea } from "../../brand";
 import { MusicBed } from "../../components/MusicBed";
-import { spokenLines } from "../../lib/duck";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { EndCard } from "../../endcards/EndCard";
 import { BACKGROUND } from "../../endcards/VoxelEndCard";
 import { ACCENTS, type FormId, TEXT_ACCENT } from "../../endcards/schema";
+import { spokenLines } from "../../lib/duck";
 import { fonts } from "../../lib/font";
 import { frenchSpaces } from "../../lib/french";
 import { loopFade, type Scene, sceneAt } from "../../lib/timeline";
