@@ -223,13 +223,14 @@
   before it grey, the key word in a thin blue selection box with corner handles), the small
   honest label bottom-left (« Illustration agrandie », « Énergie en couleur », « Vue en coupe »;
   automatic from the subject and look), a callout tag with a leader line, a counter (kcal, g,
-  kg, days), and Marco (`Presenter.tsx`), the macroBody coach drawn in code: white sweatband
+  kg, days; small, or big and glowing), and Marco (`Presenter.tsx`), the macroBody coach drawn in code: white sweatband
   with an emerald stripe over a short quiff, trimmed beard, emerald tee with the mB tile, a
   whistle; 8 poses (`poses.ts`: explain, point, stop, think, temple, shrug, thumbs, wow) cut on
   the beat (read from the line when not given, a reaction on a scene's second shot), a mouth
   from the letter being said, blinks, a slight bob. Props in `schema.ts` (examples
   `props/macro3d*.json`): `scenes` (4-10: `line`, `key?`, `subject`, `cut?`, `look`, `moves?`,
-  `label?`, `callout?`, `counter?` {from, to, unit, decimals}, `pose?`), `outro?` (= the end
+  `label?`, `callout?`, `counter?` {from, to, unit, decimals, big (the scene's one big glowing
+  number in the middle, like the reference's « 18.2M »)}, `pose?`), `outro?` (= the end
   card's tagline, read over it), `address` (tu), `accent`, `citations`, `voice` {audioSrc?,
   lines?: each scene, then the outro}, `plate?` (set by the studio), `music`
   (`music-cutaway-c` default, `-b`, `music-dusk`, `music-nocturne`, none), `loop`, `safeZone`.
