@@ -49,12 +49,12 @@ describe('App', () => {
     )
     const links = within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link')
     expect(links.map((l) => l.textContent)).toEqual([
-      'Inbox', 'Calendar', 'Analytics', 'Trends', 'Learnings', 'Ads', 'Agent', 'Settings',
+      'Inbox', 'Trending', 'Calendar', 'Analytics', 'Learnings', 'Ads', 'Agent', 'Settings',
     ])
     expect(links.find((l) => l.textContent === 'Settings')?.getAttribute('aria-current')).toBe('page')
-    // phone: four tabs and "More", which is current for the pages behind it
+    // phone: five tabs and "More", which is current for the pages behind it
     const tabs = within(screen.getByRole('navigation', { name: 'Tabs' })).getAllByRole('link')
-    expect(tabs.map((l) => l.textContent)).toEqual(['Inbox', 'Calendar', 'Analytics', 'Agent', 'More'])
+    expect(tabs.map((l) => l.textContent)).toEqual(['Inbox', 'Trending', 'Calendar', 'Analytics', 'Agent', 'More'])
     expect(tabs.filter((l) => l.getAttribute('aria-current')).map((l) => l.textContent)).toEqual(['More'])
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
   })
@@ -79,7 +79,7 @@ describe('App', () => {
       </MemoryRouter>,
     )
     const list = within(screen.getByRole('main')).getAllByRole('link')
-    expect(list.map((l) => l.textContent)).toEqual(['Trends', 'Learnings', 'Ads', 'Settings'])
+    expect(list.map((l) => l.textContent)).toEqual(['Learnings', 'Ads', 'Settings'])
   })
 
   it('routes /ads to the Ads page', async () => {

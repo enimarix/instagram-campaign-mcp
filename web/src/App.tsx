@@ -14,6 +14,7 @@ import ReportPage from './pages/Report'
 import Settings from './pages/Settings'
 import Trends from './pages/Trends'
 import TokenBanner from './TokenBanner'
+import TrendingPage from './trending/TrendingPage'
 import {
   AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, InboxIcon, MegaphoneIcon, MoreIcon, SettingsIcon,
   TrendsIcon,
@@ -25,9 +26,9 @@ import { ToastProvider } from './ui/Toast'
 // `tab`: also in the phone's bottom bar; the rest sit behind "More" there.
 const NAV = [
   { path: '/inbox', label: 'Inbox', Icon: InboxIcon, tab: true },
+  { path: '/trending', label: 'Trending', Icon: TrendsIcon, tab: true },
   { path: '/calendar', label: 'Calendar', Icon: CalendarIcon, tab: true },
   { path: '/analytics', label: 'Analytics', Icon: ChartIcon, tab: true },
-  { path: '/trends', label: 'Trends', Icon: TrendsIcon },
   { path: '/learnings', label: 'Learnings', Icon: BulbIcon },
   { path: '/ads', label: 'Ads', Icon: MegaphoneIcon },
   { path: '/agent', label: 'Agent', Icon: AgentIcon, tab: true },
@@ -80,6 +81,7 @@ export default function App() {
               <Route path="/analytics/breakdowns" element={<Breakdowns />} />
               <Route path="/reports" element={<ReportPage />} />
               <Route path="/reports/:date" element={<ReportPage />} />
+              <Route path="/trending" element={<TrendingPage />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/learnings" element={<Learnings />} />
               <Route path="/ads" element={<Ads />} />
@@ -93,7 +95,7 @@ export default function App() {
         </div>
 
         <nav aria-label="Tabs"
-          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/90 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur-md lg:hidden">
+          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-surface/90 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur-md lg:hidden">
           {NAV.filter((n) => n.tab).map(({ path, label, Icon }) => (
             <NavLink key={path} to={path} className={({ isActive }) => tabLink(isActive)}>
               {({ isActive }) => <>{tabIcon(Icon, isActive)}{label}</>}

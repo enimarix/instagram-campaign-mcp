@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
-  addInspiration, addWatch, deleteInspiration, downloadReel, errorMessage, getTrends, listInspirations,
-  listWatchlist, removeWatch, setInspirationStatus,
-  type Inspiration, type TrendItem, type TrendReport, type Watch,
+  addInspiration, deleteInspiration, downloadReel, errorMessage, getTrends, listInspirations,
+  setInspirationStatus, type Inspiration, type TrendItem, type TrendReport,
 } from '../api/client'
 import { safeUrl } from '../inbox/ui'
-import { Button, IconButton } from '../ui/Button'
+import { Button } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
-import { CloseIcon } from '../ui/icons'
 import { PageHeader } from '../ui/PageHeader'
 import { field, link, type Tone } from '../ui/styles'
 import { useToast } from '../ui/useToast'
 import { AskPermissionButton } from './Permissions'
-
-const label = (w: Pick<Watch, 'kind' | 'value'>) => (w.kind === 'hashtag' ? '#' : '@') + w.value
 
 /** Saves the Reel for a reaction (step 063b); the toast says downloaded, or refused and why. */
 function DownloadButton({ target }: { target: { source_id: number } | { url: string } }) {
@@ -177,51 +173,6 @@ function Inspirations() {
   )
 }
 
-function Watchlist() {
-  const { items, error, act } = useEditableList(listWatchlist)
-  const [kind, setKind] = useState<Watch['kind']>('hashtag')
-  const [value, setValue] = useState('')
-
-  function submit(e: FormEvent) {
-    e.preventDefault()
-    if (value.trim()) void act(() => addWatch(kind, value.trim()).then(() => setValue('')))
-  }
-
-  return (
-    <Card as="section" aria-label="Watchlist">
-      <h2 className="font-semibold">Watchlist</h2>
-      <p className="text-xs text-muted">The agent's research looks these up (hashtag top posts, accounts' recent posts).</p>
-      <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
-        <select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Watch['kind'])}
-          className={field}>
-          <option value="hashtag">Hashtag</option>
-          <option value="account">Account</option>
-        </select>
-        <input aria-label="Hashtag or username" value={value} onChange={(e) => setValue(e.target.value)}
-          placeholder={kind === 'hashtag' ? '#fitness' : '@username'}
-          className={`${field} min-w-0 flex-1`} />
-        <Button type="submit" variant="primary">Add</Button>
-      </form>
-      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
-      {items === null ? (
-        <Skeleton className="mt-3 h-11" />
-      ) : items.length === 0 ? (
-        <p className="mt-3 text-sm text-muted">Nothing watched yet</p>
-      ) : (
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {items.map((w) => (
-            <li key={w.id} className="flex items-center rounded-full bg-surface-2 pl-4 text-sm">
-              <span className="break-all">{label(w)}</span>
-              <IconButton variant="ghost" label={`Remove ${label(w)}`} icon={<CloseIcon className="size-4" />}
-                className="rounded-full text-muted" onClick={() => void act(() => removeWatch(w.id))} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  )
-}
-
 export default function Trends() {
   const [report, setReport] = useState<TrendReport | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -233,17 +184,16 @@ export default function Trends() {
   const tags = report ? Object.entries(report.hashtags) : []
   return (
     <section>
-      <PageHeader title="Trends">Last 14 days. ×N = the post against its account's (or hashtag's) median.</PageHeader>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Inspirations />
-        <Watchlist />
-      </div>
+      <PageHeader title="Trends" back={{ to: '/trending', label: 'Trending' }}>
+        Last 14 days. ×N = the post against its account's (or hashtag's) median. The watched topics are edited on Trending.
+      </PageHeader>
+      <Inspirations />
       <section aria-label="Trend report" className="mt-8">
         {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
         {report === null ? (
           !error && <Skeleton className="h-32" />
         ) : report.accounts.length === 0 && tags.length === 0 ? (
-          <EmptyState title="No trends yet">Add to the watchlist, then let the agent research.</EmptyState>
+          <EmptyState title="No trends yet">Add topics on Trending, then refresh.</EmptyState>
         ) : (
           <>
             {report.accounts.length > 0 && <h2 className="text-lg font-semibold">Watched accounts</h2>}

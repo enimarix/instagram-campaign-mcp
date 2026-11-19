@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Asset } from '../api/client'
+import { orderSource } from '../trending/format'
 import { IconButton } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { BookmarkIcon, CheckIcon, CloseIcon, EditIcon, InfoIcon, SoundOffIcon, SoundOnIcon } from '../ui/icons'
@@ -70,6 +71,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
         </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-2 bg-linear-to-t from-black/85 via-black/50 to-transparent px-4 pt-20 pr-24 pb-4 text-white lg:pr-4">
           <div className="flex flex-wrap gap-1.5">
+            {a.work_order && <Chip tone="info">{orderSource(a.work_order) === 'dm' ? 'Mes envois' : 'Tendance'}</Chip>}
             {a.dm_pick_sender && <Chip tone="accent">DM pick from @{a.dm_pick_sender}</Chip>}
             {a.rights_basis === 'commentary' && <Chip tone="warn">commentary</Chip>}
             {a.recipe?.inputs?.reaction && <Chip tone="accent">reaction</Chip>}
@@ -79,6 +81,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
             {showBestBefore && a.best_before && <Chip tone="warn">best before {a.best_before}</Chip>}
           </div>
           {change && <p className="line-clamp-2 text-sm font-medium">{change}</p>}
+          {a.work_order?.instruction && <p className="line-clamp-2 text-sm">Ta consigne : « {a.work_order.instruction} »</p>}
           {a.self_score != null && (
             <p className="truncate text-sm" title={a.self_score_reason ?? undefined}>
               <strong className="mr-1 text-base tabular-nums">{a.self_score}/10</strong> {a.self_score_reason}

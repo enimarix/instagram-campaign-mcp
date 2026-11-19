@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router'
 import type { DownloaderStatus, WorkerStatus } from '../api/client'
 import Settings from './Settings'
 
@@ -67,7 +68,7 @@ afterEach(() => {
 describe('Settings', () => {
   it('renders every section from the APIs', async () => {
     stubApi()
-    render(<Settings />)
+    render(<MemoryRouter><Settings /></MemoryRouter>)
     await screen.findByText('Running')
     const worker = section('Worker')
     expect(within(worker).getByText('3 minutes ago')).toBeTruthy()
@@ -95,14 +96,14 @@ describe('Settings', () => {
 
   it('says so when no agent run is scheduled', async () => {
     stubApi({ 'GET /api/agent/schedule': [200, []] })
-    render(<Settings />)
+    render(<MemoryRouter><Settings /></MemoryRouter>)
     expect(await within(section('Agent schedule')).findByText('None (AGENT_SCHEDULE is empty)')).toBeTruthy()
   })
 
   it('pauses publishing after a confirm', async () => {
     const calls = stubApi()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    render(<Settings />)
+    render(<MemoryRouter><Settings /></MemoryRouter>)
     fireEvent.click(await screen.findByRole('button', { name: 'Pause publishing' }))
     expect(calls).not.toContain('POST /api/worker/pause')
     fireEvent.click(screen.getByRole('button', { name: 'Pause publishing' }))
@@ -121,7 +122,7 @@ describe('Settings', () => {
     [downloader({ set_up: false, health: null }), 'not set up', ['ig-campaign downloader setup']],
   ] as const)('shows the Reel downloader state %#', async (status, chip, texts) => {
     stubApi({ 'GET /api/downloader/status': [200, status] })
-    render(<Settings />)
+    render(<MemoryRouter><Settings /></MemoryRouter>)
     const dl = section('Reel downloader')
     expect(await within(dl).findByText(chip)).toBeTruthy()
     for (const t of texts) expect(within(dl).getByText((_, el) => el?.tagName === 'DD' && el.textContent?.includes(t) === true)).toBeTruthy()
@@ -135,7 +136,7 @@ describe('Settings', () => {
       'GET /api/account': [200, { configured: false }],
       'GET /api/token': [200, { configured: false, valid: null, expires_at: null, days_left: null, can_refresh: false, scopes: [] }],
     })
-    render(<Settings />)
+    render(<MemoryRouter><Settings /></MemoryRouter>)
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
     const ig = section('Instagram')
     expect(within(ig).getByText('No')).toBeTruthy()
