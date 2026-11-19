@@ -22,7 +22,7 @@ export const SECTIONED: readonly Subject[] = ["egg", "stomach"];
 export const MOVES = ["push", "pull", "orbit", "rise", "slide", "top", "whip"] as const;
 export type Move = (typeof MOVES)[number];
 
-/** plain; heat (false colour, « Énergie en couleur »); section (cut open). */
+/** plain; heat (a thermal gradient travelling along the subject, « Énergie en couleur »); section (cut open). */
 export const LOOKS = ["plain", "heat", "section"] as const;
 export type Look = (typeof LOOKS)[number];
 

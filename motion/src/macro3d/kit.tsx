@@ -70,6 +70,8 @@ export const Caption = ({ line, keyWord, start, end, t, fps }: { line: string; k
   };
   return (
     <div style={{ position: "absolute", top: CAPTION_Y, left: 120, right: 120, display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 16, rowGap: 6, fontFamily: SANS, fontWeight: 600, fontSize: 58, lineHeight: 1.16, letterSpacing: "-0.01em", textShadow: "0 0 4px rgba(0,0,0,0.8), 0 2px 18px rgba(0,0,0,0.7)" }}>
+      {/* a soft dark pool behind the line: it reads even over a bright object */}
+      <div style={{ position: "absolute", inset: "-110px -150px", background: "radial-gradient(closest-side, rgba(0,0,0,0.55), rgba(0,0,0,0.3) 60%, transparent)", opacity: easeOut(span(t * fps, start * fps, 6)) }} />
       {groups.map((g) =>
         keys.includes(g[0].i) ? (
           <span key={g[0].i} style={{ position: "relative", display: "inline-flex", columnGap: 16 }}>

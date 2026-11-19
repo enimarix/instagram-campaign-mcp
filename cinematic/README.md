@@ -52,8 +52,10 @@ the photoreal plates, `motion/src/templates/Macro3D/` composes the word-by-word 
   lights, out-of-focus dust near the lens), one subject at real size, a 60 mm lens with a
   macro depth of field (about half the subject sharp), and one camera move: `push`, `pull`,
   `orbit`, `rise`, `slide` (close along the surface), `top` (overhead, turning), `whip` (fast,
-  with motion blur). Looks: `plain`, `heat` (the subject in false colour, « Énergie en couleur »),
-  `section` (egg and stomach cut open).
+  with motion blur). The subject sits a little below the frame's centre and fills about 78 % of
+  its width, so the top 22 % (the captions) stays dark. Looks: `plain`, `heat` (« Énergie en
+  couleur »: a smooth thermal gradient, indigo to yellow, travelling along the subject during
+  the shot, along the fibres for the muscle), `section` (egg and stomach cut open).
 - Subjects (`SUBJECTS`, = `motion/src/macro3d/subjects.ts`, a test keeps them equal): the
   scanned Poly Haven foods (apple, avocado, banana, lemon, lime, onion, sweet_potato,
   croissant, buns, cake) and the procedural ones listed in the table above (scale shows the

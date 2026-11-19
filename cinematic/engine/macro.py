@@ -427,6 +427,9 @@ def stomach(p, rng):
     return cc, rr, True
 
 
+MUSCLE_DEG = 55  # the bundle's heading, also the heat's axis
+
+
 def muscle(p, rng):
     """Fascicles of fibres, cut at both ends (the classic muscle illustration)."""
     r = 0.025
@@ -450,7 +453,7 @@ def muscle(p, rng):
                 made.append(tube(f"f{len(made)}", pts, reds[rng.randrange(4)], step * 0.5 * rng.uniform(0.82, 1.0)))
     for o in made:
         o.location += c
-        o.rotation_euler.z = math.radians(55)
+        o.rotation_euler.z = math.radians(MUSCLE_DEG)
     return c, 2.0 * r, True  # framed on the bundle's length, not its width
 
 
@@ -515,43 +518,53 @@ SUBJECTS = {
 }
 
 
-def heat(objects, c, r):
-    """False colour: every subject surface glows from cold blue to hot yellow (bottom to top + noise)."""
-    m = bpy.data.materials.new("heat")
-    m.use_nodes = True
-    nt = m.node_tree
-    nt.nodes.remove(nt.nodes["Principled BSDF"])
-    out = nt.nodes["Material Output"]
-    tc, sep = nt.nodes.new("ShaderNodeNewGeometry"), nt.nodes.new("ShaderNodeSeparateXYZ")
-    norm = nt.nodes.new("ShaderNodeMapRange")
-    norm.inputs["From Min"].default_value, norm.inputs["From Max"].default_value = c.z - r, c.z + r
-    noise = nt.nodes.new("ShaderNodeTexNoise")
-    noise.inputs["Scale"].default_value = 3.0
-    mix = nt.nodes.new("ShaderNodeMath")
-    mix.operation = "MULTIPLY_ADD"
-    mix.inputs[1].default_value = 0.35
-    ramp = nt.nodes.new("ShaderNodeValToRGB")
-    els = ramp.color_ramp.elements
-    els[0].position, els[0].color = 0.15, (0.02, 0.02, 0.2, 1)
-    els[1].position, els[1].color = 0.95, (1.0, 0.85, 0.15, 1)
-    for pos, col in ((0.35, (0.35, 0.03, 0.5, 1)), (0.55, (0.9, 0.08, 0.1, 1)), (0.75, (1.0, 0.5, 0.0, 1))):
-        e = els.new(pos)
-        e.color = col
-    em = nt.nodes.new("ShaderNodeEmission")
-    em.inputs["Strength"].default_value = 0.45
-    noise.inputs["Scale"].default_value = 1.5 / r
-    nt.links.new(tc.outputs["Position"], sep.inputs[0])
-    nt.links.new(tc.outputs["Position"], noise.inputs["Vector"])
-    nt.links.new(noise.outputs["Fac"], mix.inputs[0])
-    nt.links.new(sep.outputs["Z"], norm.inputs["Value"])
-    nt.links.new(norm.outputs["Result"], mix.inputs[2])
-    nt.links.new(mix.outputs[0], ramp.inputs["Fac"])
-    nt.links.new(ramp.outputs["Color"], em.inputs["Color"])
-    nt.links.new(em.outputs[0], out.inputs["Surface"])
-    for o in objects:
-        if o.type in ("MESH", "CURVE"):
-            o.data.materials.clear()
-            o.data.materials.append(m)
+def heat(objects, r, frames, axis=(0, 0, 1)):
+    """Thermal colour on the real surfaces: an emissive heat gradient (indigo, magenta, orange, yellow)
+    travelling along `axis` (the fibres) over the shot, the shape kept underneath. The axis's
+    length is the gradient's frequency, in radians per subject radius."""
+    axis = Vector(axis)
+    for m in {s.material for o in objects if o.type in ("MESH", "CURVE") for s in o.material_slots if s.material}:
+        nt = m.node_tree
+        p = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None) if nt else None
+        if not p:
+            continue
+        geo = nt.nodes.new("ShaderNodeNewGeometry")
+        along = nt.nodes.new("ShaderNodeVectorMath")
+        along.operation = "DOT_PRODUCT"
+        along.inputs[1].default_value = axis / r
+        nt.links.new(geo.outputs["Position"], along.inputs[0])
+        phase = nt.nodes.new("ShaderNodeValue")  # the gradient's travel, keyframed below
+        for f, v in ((1, 0.0), (frames, 2.4)):
+            phase.outputs[0].default_value = v
+            phase.outputs[0].keyframe_insert("default_value", frame=f)
+        wave = nt.nodes.new("ShaderNodeMath")
+        wave.operation = "SUBTRACT"
+        nt.links.new(along.outputs["Value"], wave.inputs[0])
+        nt.links.new(phase.outputs[0], wave.inputs[1])
+        sine = nt.nodes.new("ShaderNodeMath")
+        sine.operation = "SINE"
+        nt.links.new(wave.outputs[0], sine.inputs[0])
+        fac = nt.nodes.new("ShaderNodeMapRange")
+        fac.inputs["From Min"].default_value, fac.inputs["From Max"].default_value = -1.0, 1.0
+        nt.links.new(sine.outputs[0], fac.inputs["Value"])
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        ramp.color_ramp.interpolation = "EASE"
+        els = ramp.color_ramp.elements
+        els[0].position, els[0].color = 0.0, (0.06, 0.0, 0.3, 1)  # cold: deep indigo
+        els[1].position, els[1].color = 1.0, (1.0, 0.78, 0.22, 1)  # hot: yellow
+        for pos, col in ((0.35, (0.75, 0.02, 0.3, 1)), (0.68, (1.0, 0.35, 0.02, 1))):
+            els.new(pos).color = col
+        nt.links.new(fac.outputs["Result"], ramp.inputs["Fac"])
+        nt.links.new(ramp.outputs["Color"], p.inputs["Emission Color"])
+        strength = nt.nodes.new("ShaderNodeMath")  # brighter where hotter
+        strength.operation = "MULTIPLY_ADD"
+        strength.inputs[1].default_value, strength.inputs[2].default_value = 0.8, 0.2
+        nt.links.new(fac.outputs["Result"], strength.inputs[0])
+        nt.links.new(strength.outputs[0], p.inputs["Emission Strength"])
+        for link in list(p.inputs["Base Color"].links):  # a dark surface: only the heat colours it
+            nt.links.remove(link)
+        p.inputs["Base Color"].default_value = (0.03, 0.03, 0.03, 1)
+        p.inputs["Subsurface Weight"].default_value = 0.0
 
 
 # ---------------- camera ----------------
@@ -559,6 +572,9 @@ def heat(objects, c, r):
 def ease(t):
     return t * t * (3 - 2 * t)
 
+
+FILL = 0.78  # the subject's share of the frame width
+DROP = 0.1  # the subject's centre below the frame's, in half-heights (captions: the top 22 %)
 
 MOVES = {
     # t (0..1) -> (azimuth deg, elevation deg, distance x, focus shift toward the camera x r)
@@ -581,7 +597,8 @@ def camera(c, r, move, frames, rng):
     s.camera = o
     w, h = s.render.resolution_x, s.render.resolution_y
     half = math.atan(18 * min(w, h) / max(w, h) / LENS)  # half the narrow (horizontal) field
-    d0 = r / (0.9 * math.tan(half))  # the subject fills about 90 % of the width
+    d0 = r / (FILL * math.tan(half))
+    tan_v = math.tan(half) * max(w, h) / min(w, h)  # half the tall (vertical) field
     a0 = rng.uniform(-40, 40)
     target = link(bpy.data.objects.new("target", None))
     k = o.constraints.new("TRACK_TO")
@@ -594,8 +611,11 @@ def camera(c, r, move, frames, rng):
         az, el = math.radians(a0 + az), math.radians(el)
         out = Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el)))
         o.location = c + out * d0 * dist
-        # aimed a little below the centre: the subject sits in the upper middle, above Marco
-        target.location = c + out * r * near - Vector((0, 0, 0.35 * r * math.cos(el)))
+        # aimed above the centre (along the camera's up): the subject sits low, out of the caption
+        # band; a close-up drops further, so its top edge stays under the band
+        up = Vector((-math.sin(az) * math.sin(el), math.cos(az) * math.sin(el), math.cos(el)))
+        half_h = d0 * dist * tan_v
+        target.location = c + out * r * near + up * max(DROP, r / half_h - 0.45) * half_h
         o.keyframe_insert("location", frame=f)
         target.keyframe_insert("location", frame=f)
     # depth of field: about half the subject sharp at its distance (a real macro lens)
@@ -617,7 +637,9 @@ def render_shot(cfg, shot):
     c, r, floor = SUBJECTS[shot["subject"]](shot, rng)
     subject = [o for o in bpy.data.objects if o not in before]
     if shot["look"] == "heat":
-        heat([x for o in subject for x in (o, *o.children_recursive)], c, r)
+        a = math.radians(MUSCLE_DEG)
+        axis = (math.cos(a), math.sin(a), 0) if shot["subject"] == "muscle" else (1.0, 0, 2.0)
+        heat([x for o in subject for x in (o, *o.children_recursive)], r, shot["frames"], axis)
     studio(c, r, floor, warm=0.5 if shot["subject"] in ("apple", "croissant", "buns", "cake") else 0)
     frames = shot["frames"]
     d0 = camera(c, r, shot["move"], frames, rng)
