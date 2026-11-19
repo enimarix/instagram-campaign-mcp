@@ -30,7 +30,11 @@ def test_validate_routes_without_node(monkeypatch):
     # "Again?" reads in MIN_LINE_S 1.2 s, then the 0.8 s tail and the 3.5 s end card
     assert v["durationInFrames"] == round((1.2 + 0.8 + 3.5) * 30)
     assert v["coverFrame"] == 30 and v["props"]["character"] == "dad"
-    assert [e["e"].split(":")[0] for e in v["events"]] == ["hook text", "caption", "end card (live)"]
+    assert sorted(e["e"].split(":")[0] for e in v["events"]) == [
+        "caption", "end card (live)", "hook text", "music bed (looped)"]
+    quiet = motion.validate_props(cinematic.TEMPLATE, {**ONE_LINE, "music": "none"})
+    assert quiet["events"][-1]["e"] == "end card (live)"
+    assert (cinematic.AUDIO / "music-lounge.wav").is_file()  # the default bed exists
 
 
 @pytest.mark.parametrize("bad", [
@@ -38,6 +42,7 @@ def test_validate_routes_without_node(monkeypatch):
     {**ONE_LINE, "lines": []},
     {**ONE_LINE, "hook": "POV: 9,99 € par mois"},  # never a price on screen
     {**ONE_LINE, "voice": {"lines": []}},  # one timing per line
+    {**ONE_LINE, "music": "music-unknown"},
 ])
 def test_bad_props_are_value_errors(bad):
     with pytest.raises(ValueError):
@@ -106,3 +111,4 @@ def test_render_asset_finishes_fake_blender_frames(monkeypatch, tmp_path):
     assert info.duration == pytest.approx(2.0 + 3.5, abs=0.15)  # + the end card
     assert cover_ms == 1000
     assert timeline[-1]["e"] == "end card (live)"
+    assert {"t": 0, "d": pytest.approx(info.duration), "e": "music bed (looped)"} in timeline

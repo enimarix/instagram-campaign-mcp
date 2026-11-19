@@ -155,7 +155,7 @@ const sq = (from: number, seconds: number, extra: Partial<Tone> = {}): Tone => (
 
 const mallet = (from: number, seconds: number, volume = 0.3): Tone => ({ wave: "marimba", from, seconds, volume });
 
-// Two 2-bar chiptune loops (the bar count keeps each file small, ~140 KB) and 4-bar marimba and kalimba beds.
+// Two 2-bar chiptune loops (the bar count keeps each file small, ~140 KB) and 4-bar marimba, kalimba and lounge beds.
 const songs: Record<string, Song> = {
   // Bright C major, 150 bpm.
   "music-overworld": {
@@ -278,6 +278,49 @@ const songs: Record<string, Song> = {
       },
       {
         wave: "noise", volume: 0.025,
+        steps: ". . x . . . x . . . x . . . x . ".repeat(4).trim(),
+      },
+    ],
+  },
+  // The blender style's bed: a warm, slow "cutscene at the dinner table" loop. Soft marimba
+  // arpeggios over Gmaj7 Em7 Cmaj7 D7, a sparse glockenspiel answer, sine bass, a light kick
+  // and shaker. G major, 84 bpm, 4 bars.
+  "music-lounge": {
+    bpm: 84,
+    tracks: [
+      {
+        wave: "marimba", volume: 0.16,
+        steps: [
+          "G3 - B3 - D4 - F#4 - B4 - F#4 - D4 - B3 -",
+          "E3 - G3 - B3 - D4 - G4 - D4 - B3 - G3 -",
+          "C3 - E3 - G3 - B3 - E4 - B3 - G3 - E3 -",
+          "D3 - F#3 - A3 - C4 - F#4 - C4 - A3 - F#3 -",
+        ].join(" "),
+      },
+      {
+        wave: "glock", volume: 0.07,
+        steps: [
+          ". . . . . . . . B5 - - - A5 - - -",
+          ". . . . . . . . G5 - - - - - - -",
+          ". . . . . . . . E5 - - - G5 - - -",
+          ". . . . . . . . F#5 - - - - - A5 -",
+        ].join(" "),
+      },
+      {
+        wave: "bass", volume: 0.24,
+        steps: [
+          "G2 - - - - - - - D2 - - - - - - -",
+          "E2 - - - - - - - B1 - - - - - - -",
+          "C2 - - - - - - - G1 - - - - - - -",
+          "D2 - - - - - - - A1 - - - - - - -",
+        ].join(" "),
+      },
+      {
+        wave: "kick", volume: 0.18,
+        steps: "C2 - - - . . . . C2 - - - . . . . ".repeat(4).trim(),
+      },
+      {
+        wave: "noise", volume: 0.03,
         steps: ". . x . . . x . . . x . . . x . ".repeat(4).trim(),
       },
     ],

@@ -46,6 +46,8 @@ CARD_S = 3.5
 COVER_S = 1.0  # the hook is on screen from frame 0
 S_PER_FRAME = 8.0  # Blender timeout budget per frame (measured ~2.5 s at 720x1280, EEVEE)
 TAIL_CHARS = 2000
+AUDIO = ROOT.parent / "motion" / "public" / "audio"  # the generated beds (motion/scripts/make-assets.ts)
+MUSIC_DB = -22.0  # under the voice
 # Seated at the dining table (cast.json `location`): a close and a wide camera.
 CAMERAS = {"close": {"pos": [0.28, -1.4, 1.3], "look_at": [0, 0.15, 1.15], "lens": 40},
            "wide": {"pos": [1.35, -2.35, 1.55], "look_at": [-0.1, -0.2, 1.0], "lens": 24}}
@@ -99,6 +101,8 @@ class Props(_Model):
     captions: bool = True
     outro: Optional[str] = Field(None, max_length=60, description="The end card's tagline")
     accent: recipe.Accent = "brand"
+    music: Literal["music-lounge", "music-marimba", "music-kalimba", "none"] = Field(
+        "music-lounge", description="Background bed, looped under the whole video and the card")
     citations: List[Citation] = []
     voice: Optional[Voice] = None
 
@@ -142,6 +146,8 @@ def _plan(p: Props) -> Tuple[List[LineTiming], float, recipe.Recipe]:
             for t, line in zip(timings, p.lines)]})
     ops.append({"op": "end_card", "style": "live", "accent": p.accent, "duration_s": CARD_S,
                 **({"text": p.outro} if p.outro else {})})
+    if p.music != "none":  # after the end card, so the bed runs under the card too
+        ops.append({"op": "music", "level_db": MUSIC_DB})
     return timings, body_s, recipe.Recipe.model_validate({"ops": ops})
 
 
@@ -255,7 +261,8 @@ def render_asset(props: Dict[str, Any], out: PathLike, media_root: PathLike, *,
                     "-af", f"apad,atrim=0:{frames / BLENDER_FPS:.3f}", "-t",
                     f"{frames / BLENDER_FPS:.3f}", "-c:v", "libx264", "-crf", "17",
                     "-c:a", "aac", "-b:a", "192k", raw], timeout_s=timeout_s)
-        info = recipe.render(rec, {"source": raw}, out, timeout_s=timeout_s, end_card=end_card)
+        inputs = {"source": raw, **({"music": AUDIO / f"{p.music}.wav"} if p.music != "none" else {})}
+        info = recipe.render(rec, inputs, out, timeout_s=timeout_s, end_card=end_card)
     return info, round(COVER_S * 1000), recipe.recipe_timeline(rec, info.duration)
 
 
