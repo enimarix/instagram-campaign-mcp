@@ -19,7 +19,7 @@ def test_template_is_listed_with_its_style(monkeypatch):
     finally:
         motion.list_templates.cache_clear()
     t = ids[cinematic.TEMPLATE]
-    assert t["style"] == "cinematic" and "Hello" in ids
+    assert t["style"] == "blender" and "Hello" in ids
     assert set(t["jsonSchema"]["properties"]) >= {"hook", "lines", "character", "voice"}
     assert motion.validate_props(cinematic.TEMPLATE, t["defaultProps"])  # defaults are valid
 
