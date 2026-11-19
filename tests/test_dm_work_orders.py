@@ -90,6 +90,70 @@ async def test_poll_makes_each_pick_a_work_order(client, store):
     assert [o["id"] for o in work_orders.for_agent(store)] == [noted["id"]]
 
 
+# --- 141: a DM Reel's text is always its note -------------------------------------------
+async def _notes(client, store, messages):
+    """One poll of conversation C1 (`messages` newest first, as the API lists them):
+    {message_id: (sender_note, order status)}."""
+    D.pin_account(store, "friend.one")
+    _mock([("C1", [BRAND, FRIEND])], {"C1": messages})
+    await D.poll_dm_picks(client, store, budget_left=lambda: True)
+    by_pick = {o["pick_id"]: o["status"] for o in work_orders.list_orders(store)}
+    return {p["message_id"]: (p["sender_note"], by_pick[p["id"]])
+            for p in D.list_picks(store, None)}
+
+
+@respx.mock
+async def test_same_second_text_after_the_share_is_its_note(client, store):
+    respx.get(f"{API}/1789/media").respond(json={"data": []})
+    # the live case (pick 38): the text was sent after the share, in the same second
+    assert await _notes(client, store, [
+        _msg("m2", FRIEND, "18:51", "Macrobody being crushed"),
+        _msg("m1", FRIEND, "18:51", share=THEIRS)]) == {
+        "m1": ("Macrobody being crushed", "scheduled")}
+    [order] = work_orders.list_orders(store)
+    assert order["instruction"] == "Macrobody being crushed" and order["scheduled_at"]
+
+
+@respx.mock
+async def test_text_just_before_the_share_is_its_note(client, store):
+    respx.get(f"{API}/1789/media").respond(json={"data": []})
+    assert await _notes(client, store, [
+        _msg("m2", FRIEND, "01:00", share=THEIRS),
+        _msg("m1", FRIEND, "00:30", "fais-en une réaction")]) == {
+        "m2": ("fais-en une réaction", "scheduled")}
+
+
+@respx.mock
+async def test_each_share_gets_its_own_text(client, store):
+    respx.get(f"{API}/1789/media").respond(json={"data": []})
+    assert await _notes(client, store, [
+        _msg("s3", FRIEND, "00:40", share=THEIRS + "?3"),  # t2 is s2's: no note
+        _msg("t2", FRIEND, "00:30", "second"),
+        _msg("s2", FRIEND, "00:20", share=THEIRS + "?2"),
+        _msg("t1", FRIEND, "00:10", "first"),
+        _msg("s1", FRIEND, "00:00", share=THEIRS)]) == {
+        "s1": ("first", "scheduled"), "s2": ("second", "scheduled"),
+        "s3": (None, "needs_instruction")}
+
+
+@respx.mock
+async def test_a_note_on_a_later_poll_schedules_the_waiting_order(client, store, clock):
+    respx.get(f"{API}/1789/media").respond(json={"data": []})
+    shares = [_msg("s2", FRIEND, "01:00", share=THEIRS + "?2"),
+              _msg("s1", FRIEND, "00:00", share=THEIRS)]
+    assert await _notes(client, store, shares) == {
+        "s1": (None, "needs_instruction"), "s2": (None, "needs_instruction")}
+    owner = next(o for o in work_orders.list_orders(store) if o["permalink"] == THEIRS + "?2")
+    work_orders.set_instruction(store, owner["id"], "the owner's own words")
+    texts = [_msg("t2", FRIEND, "01:10", "late for s2"),
+             _msg("t1", FRIEND, "00:10", "late for s1")]
+    assert await _notes(client, store, [texts[0], shares[0], texts[1], shares[1]]) == {
+        "s1": ("late for s1", "scheduled"), "s2": (None, "scheduled")}
+    by_url = {o["permalink"]: o for o in work_orders.list_orders(store)}
+    assert by_url[THEIRS]["instruction"] == "late for s1" and by_url[THEIRS]["scheduled_at"]
+    assert by_url[THEIRS + "?2"]["instruction"] == "the owner's own words"  # untouched
+
+
 # --- the owner's instruction ------------------------------------------------------------
 def test_patch_sets_the_instruction_and_schedules(store, settings):
     oid = _dm_order(store)
