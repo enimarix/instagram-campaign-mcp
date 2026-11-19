@@ -14,7 +14,7 @@ import { PaperStory } from "./templates/PaperStory/PaperStory";
 import { coverFrame as paperStoryCover, transitionInto } from "./templates/PaperStory/layout";
 import { paperStorySchema, timelineOf as paperStoryTimeline } from "./templates/PaperStory/schema";
 import { PixelSkit, timelineOf as pixelSkitTimeline } from "./templates/PixelSkit/PixelSkit";
-import { pixelSkitSchema } from "./templates/PixelSkit/schema";
+import { pixelSkitSchema, voiceParts } from "./templates/PixelSkit/schema";
 import { Preview8bit, preview8bitSchema } from "./templates/Preview8bit";
 import { QuizChest, timelineOf as quizChestTimeline } from "./templates/QuizChest/QuizChest";
 import { quizChestSchema, REVEAL_S } from "./templates/QuizChest/schema";
@@ -51,7 +51,11 @@ export type Template<S extends z.ZodType> = {
   events?: (props: z.infer<S>) => Event[];
   /** Shots another engine renders before the template (Macro3D: the Blender plates, src/studio/macro3d.py). */
   plates?: (props: z.infer<S>) => Shot[];
+  /** Where the voice file plays when the template pauses it: from audio_s on it plays at video at_s (the QC listens there, step 158); none = the whole file from 0. */
+  voiceParts?: (props: z.infer<S>) => VoicePart[];
 };
+
+export type VoicePart = { audio_s: number; at_s: number };
 
 /** What the 8-bit templates' end card shows (step 137), for their timelines. */
 const PIXEL_CARD = "end card (pixel): mB tile, macroBody, 7 jours gratuits, macrobody.fr";
@@ -178,6 +182,10 @@ export const templates = {
     },
     durationInFrames: (p) => quizChestTimeline(p, FPS).timeline.totalFrames,
     coverFrame: (p) => quizChestTimeline(p, FPS).timeline.hookFrame,
+    voiceParts: (p) => {
+      const { countdownStart, gap } = quizChestTimeline(p, FPS);
+      return [{ audio_s: 0, at_s: 0 }, { audio_s: countdownStart / FPS, at_s: (countdownStart + gap) / FPS }];
+    },
     events: (p) => {
       const { timeline, countdownStart, reveal } = quizChestTimeline(p, FPS);
       const choice = p.choices[p.answer];
@@ -242,6 +250,7 @@ export const templates = {
     },
     durationInFrames: (p) => pixelSkitTimeline(p, FPS).timeline.totalFrames,
     coverFrame: (p) => pixelSkitTimeline(p, FPS).timeline.hookFrame,
+    voiceParts: (p) => voiceParts(pixelSkitTimeline(p, FPS).pauses).map((v) => ({ audio_s: v.trimBefore / FPS, at_s: v.from / FPS })),
     events: (p) => {
       const { timeline, punch, land, freezeStart, freezeEnd } = pixelSkitTimeline(p, FPS);
       const beat = (b: (typeof p.beats)[number], i: number) =>

@@ -1,4 +1,4 @@
-"""Step 149: the render QC listens (synthetic WAVs written here, no real renders)."""
+"""Steps 149, 158: the render QC listens (synthetic WAVs written here, no real renders)."""
 
 import random
 import struct
@@ -44,25 +44,66 @@ def voice_and_master(tmp_path, *, bed_db=(-15.0, -15.0), offset_s=0.5, gain=1.4)
     return write(tmp_path / "voice.wav", voice), write(tmp_path / "master.wav", master)
 
 
+LATER = [{"audio_s": 0, "at_s": 0.5}]  # the template plays the voice 0.5 s in
+
+
 @needs_ffmpeg
 def test_voice_above_bed_measures_each_span(tmp_path):
     voice, master = voice_and_master(tmp_path, bed_db=(-15, -6))
     spans = listen.voice_above_bed(listen.pcm(master, timeout_s=60),
-                                   listen.pcm(voice, timeout_s=60))
-    assert [s["t"] for s in spans] == pytest.approx([1.5, 4.0], abs=0.02)  # found 0.5 s later
+                                   listen.pcm(voice, timeout_s=60), LATER)
+    assert [s["t"] for s in spans] == pytest.approx([1.5, 4.0], abs=0.02)  # placed 0.5 s later
     assert [s["lu"] for s in spans] == pytest.approx([15, 6], abs=1)
+
+
+def test_placed_cuts_spans_where_the_voice_pauses():
+    parts = [{"audio_s": 0, "at_s": 0}, {"audio_s": 3.0, "at_s": 4.2}]
+    # a span over the pause is cut there; pieces shorter than SPAN_MIN_S are left out
+    assert listen.placed([(100, 250), (280, 400), (290, 310)], parts) == [
+        (100, 250, 0), (300, 400, 120)]
+    assert listen.placed([(100, 250)], None) == [(100, 250, 0)]
+
+
+@needs_ffmpeg
+def test_a_re_timed_voice_is_heard_where_the_template_plays_it(tmp_path):
+    """QuizChest / PixelSkit: the voice stops for a countdown (here 1.5 s with a loud sting
+    and the bed up), then goes on from where it stopped."""
+    voice = [0.0] * round(6 * SR)
+    for start, end in [(0.5, 2.0), (3.5, 5.0)]:
+        burst = noise(end - start, -20, seed=round(start * 10))
+        voice[round(start * SR):round(start * SR) + len(burst)] = burst
+    cut, pause = round(3.0 * SR), round(1.5 * SR)
+    played = voice[:cut] + [0.0] * pause + voice[cut:]
+    sting = [0.0] * round(3.4 * SR) + noise(0.6, -14, seed=5)
+    bed = noise(len(played) / SR, -36, seed=9)
+    master = [v + b + (sting[i] if i < len(sting) else 0.0)
+              for i, (v, b) in enumerate(zip(played, bed))]
+    voice_path = write(tmp_path / "voice.wav", voice)
+    master_path = write(tmp_path / "master.wav", master)
+    parts = [{"audio_s": 0, "at_s": 0}, {"audio_s": 3.0, "at_s": 4.5}]
+    spans = listen.voice_above_bed(listen.pcm(master_path, timeout_s=60),
+                                   listen.pcm(voice_path, timeout_s=60), parts)
+    assert [s["t"] for s in spans] == pytest.approx([0.5, 5.0], abs=0.02)
+    assert [s["lu"] for s in spans] == pytest.approx([16, 16], abs=1.5)  # true numbers
+    [(_, ok, detail)] = listen.checks(master_path, voice_path, None, {}, timeout_s=60,
+                                      voice_parts=parts)
+    assert ok, detail
+    [(_, ok, _)] = listen.checks(master_path, voice_path, None, {}, timeout_s=60)
+    assert not ok  # read from 0, the second line lands on the sting: the old false alarm
 
 
 @needs_ffmpeg
 def test_checks_flag_the_buried_span(tmp_path):
     voice, master = voice_and_master(tmp_path, bed_db=(-15, -6))
-    [(name, ok, detail)] = listen.checks(master, voice, None, {}, timeout_s=60)
+    [(name, ok, detail)] = listen.checks(master, voice, None, {}, timeout_s=60,
+                                         voice_parts=LATER)
     assert name == "voice_above_bed" and not ok
     assert detail.startswith("voice only ") and "LU above the bed at 4.0 s (bed " in detail
     assert "1.5 s" not in detail  # the first span is fine
 
     voice, master = voice_and_master(tmp_path, bed_db=(-16, -16))
-    [(_, ok, detail)] = listen.checks(master, voice, None, {}, timeout_s=60)
+    [(_, ok, detail)] = listen.checks(master, voice, None, {}, timeout_s=60,
+                                      voice_parts=LATER)
     assert ok and detail.startswith("voice 1") and "above the bed" in detail
 
 

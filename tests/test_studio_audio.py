@@ -89,6 +89,25 @@ def test_every_render_is_normalised_to_target(tmp_path, gain_db):
 
 
 @needs_ffmpeg
+def test_the_encoded_master_stays_under_the_true_peak_ceiling(tmp_path):
+    """Step 158: a quiet voice-like bed with hot clicks (a sting) used to come out of the AAC
+    encode over -1 dBTP; the finish limits it and checks the encoded file."""
+    src = tmp_path / "in.mp4"
+    ffmpeg.run(["-f", "lavfi", "-i", f"testsrc2=size={SMALL}:rate=30:duration=4",
+                "-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.1:duration=4:seed=3",
+                "-f", "lavfi", "-i", "aevalsrc='if(lt(mod(t,0.7),0.003),0.6*sin(2*PI*900*t),0)'"
+                ":d=4:s=48000", "-filter_complex", "[1:a][2:a]amix=inputs=2:normalize=0[a]",
+                "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-shortest", *H264, src],
+               timeout_s=60)
+    out = tmp_path / "out.mp4"
+    recipe.normalize_loudness(src, out, timeout_s=120, log_path=tmp_path / "ln.log")
+    lufs, peak = recipe.loudness(out, timeout_s=60)
+    assert peak <= recipe.TRUE_PEAK_MAX
+    assert lufs == pytest.approx(recipe.LOUDNESS_I, abs=0.5)
+    assert ffmpeg.probe(out).duration == pytest.approx(4.0, abs=0.1)
+
+
+@needs_ffmpeg
 def test_mute_original_keeps_length_and_copies_video(tmp_path):
     src = make_clip(tmp_path / "in.mp4")
     before = ffmpeg.probe(src)

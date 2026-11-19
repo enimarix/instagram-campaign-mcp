@@ -17,7 +17,7 @@ import { Kraft } from "../paper/kit";
 import { type CharacterId, CHARACTERS, stepped } from "../paper/palette.ts";
 import { backOut, easeInOut, easeOut, span } from "../voxel/anim.ts";
 import { MbTile, taglineOf, TRIAL, URL, Wordmark } from "./base";
-import { ACCENTS, type CardProps, cameoOf } from "./schema.ts";
+import { ACCENTS, type CardProps, cameoOf, cardVolume } from "./schema.ts";
 
 /** The owner's paper palette (brand-sources.md). */
 export const PAPER = { kraft: "#C9A67A", kraftDark: "#B48F62", cream: "#FFF8EC", navy: "#2C3A63", mint: "#BFE8D6" } as const;
@@ -189,10 +189,10 @@ export const PaperEndCard = ({ tagline, accent, address, cameo, font }: Omit<Car
         </>
       )}
       <Sequence from={AT.tear} durationInFrames={20} layout="none">
-        <Html5Audio src={assetById("sfx-select").src} volume={0.25} />
+        <Html5Audio src={assetById("sfx-select").src} volume={cardVolume("sfx-select", -8)} />
       </Sequence>
       <Sequence from={AT.pill} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-pop").src} volume={0.4} />
+        <Html5Audio src={assetById("sfx-pop").src} volume={cardVolume("sfx-pop")} />
       </Sequence>
     </AbsoluteFill>
   );

@@ -12,7 +12,7 @@ import { VIEWS, type ViewId } from "../cutaway/views";
 import { VIEW_COMPONENTS } from "../cutaway/views/index";
 import { fonts } from "../lib/font";
 import { MbTile, NAME_PARTS, taglineOf, TRIAL, URL } from "./base";
-import { ACCENTS, type CardProps, cameoOf } from "./schema.ts";
+import { ACCENTS, type CardProps, cameoOf, cardVolume } from "./schema.ts";
 
 /** Frames (from the card's start) at which each piece comes in. */
 const AT = { box: 4, tile: 14, flash: 28, cameo: 30, word: 34, tagline: 48, button: 62, url: 70 };
@@ -89,10 +89,10 @@ export const CutawayEndCard = ({ tagline, accent, address, cameo }: Omit<CardPro
         ))}
       </div>
       <Sequence from={AT.flash} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-confirm").src} volume={0.5} />
+        <Html5Audio src={assetById("sfx-confirm").src} volume={cardVolume("sfx-confirm")} />
       </Sequence>
       <Sequence from={AT.button} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-coin").src} volume={0.5} />
+        <Html5Audio src={assetById("sfx-coin").src} volume={cardVolume("sfx-coin")} />
       </Sequence>
     </AbsoluteFill>
   );

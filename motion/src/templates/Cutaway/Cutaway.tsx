@@ -15,6 +15,7 @@ import { chipText, dashesOf, mechanismClock, VIEWS, type ViewId } from "../../cu
 import type { ViewState } from "../../cutaway/views/common";
 import { cycleOf, VIEW_COMPONENTS } from "../../cutaway/views/index";
 import { EndCard } from "../../endcards/EndCard";
+import { cardVolume } from "../../endcards/schema";
 import { spokenLines } from "../../lib/duck";
 import { loopFade } from "../../lib/timeline";
 import { easeInOut, easeOut, span } from "../../voxel/anim.ts";
@@ -304,7 +305,8 @@ const cuesOf = (plan: Plan, endStart: number, fps: number) => {
     if (!i) return;
     const s = plan.all[i];
     const last = i === plan.all.length - 1;
-    cues.push([sc.startFrame, last ? "sfx-confirm" : "sfx-select", 0.35]);
+    // The payoff's confirm lands on the voice: 6 LU under it (at 0.35 it buried a word, step 158).
+    cues.push(last ? [sc.startFrame, "sfx-confirm", cardVolume("sfx-confirm", -6)] : [sc.startFrame, "sfx-select", 0.35]);
     if (plan.resolved[i].cut) cues.push([sc.startFrame, "sfx-swish", 0.3]);
     if (s.bang) cues.push([sc.startFrame + bangStart(sc.endFrame - sc.startFrame), "sfx-hit", 0.45]);
     s.callouts.forEach((_, k) => cues.push([sc.startFrame + calloutStart(i, k, plan.resolved[i].cut, fps), "sfx-select", 0.15]));

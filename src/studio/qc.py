@@ -159,7 +159,8 @@ def run_qc(asset: Dict[str, Any], idea: Optional[Dict[str, Any]], master_path: s
     if info.has_audio:  # the listening checks flag for the owner, they never fail a render
         try:
             heard = listen.checks(path, listen.voice_track(asset.get("recipe"), media_root),
-                                  asset.get("timeline"), found, timeout_s=ANALYSIS_TIMEOUT_S)
+                                  asset.get("timeline"), found, timeout_s=ANALYSIS_TIMEOUT_S,
+                                  voice_parts=asset.get("voice_parts"))
         except Exception as e:  # noqa: BLE001 - a listening failure must not fail the render
             heard = [("listen", False, f"could not listen: {type(e).__name__}: {e}"[:200])]
         for name, ok, detail in heard:
