@@ -14,9 +14,6 @@ export const MODES: ModeOption<WorkMode>[] = [
   ...TREND_MODES,
 ]
 
-/** Where an Inbox asset's order came from. ponytail: asset rows don't carry `source` yet
- * (store.list_assets); DM orders are made in mode owner, so the mode stands in until it does. */
-export const orderSource = (o: { source?: 'dm' | 'trend'; mode: WorkMode }) => o.source ?? (o.mode === 'owner' ? 'dm' : 'trend')
 export const modeLabel = (m: WorkMode | null) => MODES.find((x) => x.id === m)?.label ?? null
 
 /** Only Instagram's own embed pages go in an iframe. */

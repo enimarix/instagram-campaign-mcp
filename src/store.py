@@ -1556,7 +1556,7 @@ class CampaignStore:
         source by DM, else None) for the inbox, and change_request: on a revised video, the
         owner's newest change request on the version it replaces {text, reason_codes}, and
         work_order: the owner's work order (Trending or DM) its idea was made for {id, mode,
-        instruction, permalink} (every version of that idea), else None."""
+        instruction, permalink, source (dm | trend)} (every version of that idea), else None."""
         return self._select(
             "SELECT a.*, i.track, i.strategy, i.experiment, s.rights_basis,"
             " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
@@ -1565,7 +1565,9 @@ class CampaignStore:
             "  FROM feedback f WHERE f.asset_id = a.parent_asset_id AND f.wants_changes = 1"
             "  ORDER BY f.id DESC LIMIT 1) AS change_request,"
             " (SELECT json_object('id', w.id, 'mode', w.mode, 'instruction', w.instruction,"
-            "  'permalink', COALESCE(ws.url, wp.reel_url)) FROM work_orders w"
+            "  'permalink', COALESCE(ws.url, wp.reel_url),"
+            "  'source', CASE WHEN w.pick_id IS NULL THEN 'trend' ELSE 'dm' END)"
+            "  FROM work_orders w"
             "  LEFT JOIN sources ws ON ws.id = w.source_id"
             "  LEFT JOIN dm_picks wp ON wp.id = w.pick_id"
             "  WHERE w.idea_id = a.idea_id ORDER BY w.id DESC LIMIT 1) AS work_order"

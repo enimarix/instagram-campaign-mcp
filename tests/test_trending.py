@@ -25,8 +25,16 @@ NOW = datetime(2026, 11, 17, 12, tzinfo=timezone.utc)
 QC_OK = {"passed": True, "checks": [], "reasons": []}
 
 
+def _ago(days, now=None):
+    """An Instagram timestamp `days` before now (the real clock by default: the feed API
+    keeps only recent Reels)."""
+    return ((now or datetime.now(timezone.utc)) - timedelta(days=days)).strftime(
+        "%Y-%m-%dT%H:%M:%S+0000")
+
+
 def _ref(store, pid, *, likes=10, views=None, author=None, hashtag=None, path="reel",
-         ts="2026-11-16T10:00:00+0000", **stats):
+         ts=None, **stats):
+    ts = ts or _ago(1)
     stats = {"likes": likes, "views": views, "timestamp": ts, "caption": f"Hook {pid}\nmore",
              "media_type": "VIDEO", **stats}
     if hashtag:
@@ -52,7 +60,7 @@ def test_refresh_runs_research_and_returns_the_budget(store, settings):
     assert out["hashtags_searched"] == ["mealprep"] and out["accounts"] == ["rival"]
     assert out["stored"] == 2 and out["stopped"] is None
     assert out["hashtag_budget"] == {"limit": 30, "used": 1, "left": 29}
-    feed = {i["permalink"]: i for i in research.trending_feed(store)}
+    feed = {i["permalink"]: i for i in research.trending_feed(store, now=NOW)["items"]}
     t1 = feed["https://www.instagram.com/reel/T1/"]
     assert t1["media_url"] == "https://cdn/t1.mp4" and t1["topic"] == "mealprep"
     a1 = feed["https://www.instagram.com/reel/A1/"]
@@ -78,7 +86,7 @@ def test_expired_cdn_links_are_dropped_on_the_next_run(store):
                     research.HASHTAG_URLS, hashtag="fit")
     research._store(store, _post("X", like_count=None), None, out, research.HASHTAG_URLS,
                     hashtag="fit")
-    [item] = research.trending_feed(store)
+    [item] = research.trending_feed(store, now=NOW)["items"]
     assert item["media_url"] is None and item["likes"] == 10  # hidden likes: kept
 
 
@@ -86,10 +94,10 @@ def test_expired_cdn_links_are_dropped_on_the_next_run(store):
 def test_feed_ranks_by_outlier_then_recency_filters_and_embeds(store):
     for k in range(5):  # a hashtag group of 5: outliers known (likes / median 10)
         _ref(store, f"H{k}", likes=10 * (k + 1) if k == 4 else 10, hashtag="fitfood")
-    old = _ref(store, "P1", path="p", hashtag="lonely", ts="2026-11-01T10:00:00+0000")
-    new = _ref(store, "R1", author="someone", ts="2026-11-16T11:00:00+0000")
+    old = _ref(store, "P1", path="p", hashtag="lonely", ts=_ago(16))
+    new = _ref(store, "R1", author="someone", ts=_ago(0.5))
     store.add_source("pexels", url="https://pexels/1", external_id="9")  # not a Trending Reel
-    feed = research.trending_feed(store)
+    feed = research.trending_feed(store)["items"]
     assert feed[0]["permalink"].endswith("/H4/") and feed[0]["outlier"] == 5.0
     assert [i["id"] for i in feed[-2:]] == [new, old]  # unscored: newest first
     assert len(feed) == 7
@@ -98,24 +106,65 @@ def test_feed_ranks_by_outlier_then_recency_filters_and_embeds(store):
     assert feed[0]["embed_url"] == "https://www.instagram.com/reel/H4/embed"
     assert p1["caption_quote"] == "Hook P1\nmore" and p1["reaction"] is None
     assert p1["work_order"] is None
-    assert [i["id"] for i in research.trending_feed(store, topic="#Lonely")] == [old]
-    assert [i["id"] for i in research.trending_feed(store, topic="@someone")] == [new]
-    assert len(research.trending_feed(store, limit=2)) == 2
+    ids = [i["id"] for i in research.trending_feed(store, topic="#Lonely")["items"]]
+    assert ids == [old]
+    assert [i["id"] for i in research.trending_feed(store, topic="@someone")["items"]] == [new]
+    assert len(research.trending_feed(store, limit=2)["items"]) == 2
     assert research.embed_url("https://www.instagram.com/reels/AbC_1-x/?igsh=2") == \
         "https://www.instagram.com/reel/AbC_1-x/embed"
     assert research.embed_url("https://example.com/reel/x/") is None
 
 
+def test_feed_hides_old_and_undated_reels_unless_asked(store, settings):
+    # step 140: a 2020 #recettefit post topped the feed on its outlier alone
+    for k in range(5):
+        _ref(store, f"N{k}", likes=10, hashtag="recettefit", ts=_ago(k + 1, NOW))
+    ancient = _ref(store, "OLD", likes=500, hashtag="recettefit", ts=_ago(2272, NOW))
+    edge = _ref(store, "EDGE", hashtag="recettefit", ts=_ago(22, NOW))
+    undated = _ref(store, "U", hashtag="recettefit")
+    store.patch_source_stats(undated, {"timestamp": None})
+    out = research.trending_feed(store, now=NOW)
+    assert (out["window_days"], out["hidden_old"]) == (21, 3)
+    assert {ancient, edge, undated}.isdisjoint(i["id"] for i in out["items"])
+    assert len(out["items"]) == 5
+    every = research.trending_feed(store, now=NOW, include_old=True)
+    assert every["hidden_old"] == 3 and len(every["items"]) == 8
+    assert every["items"][-1]["id"] == undated  # no date: weighs nothing, listed last
+    wide = research.trending_feed(store, now=NOW, max_age_days=30)
+    assert wide["window_days"] == 30 and edge in [i["id"] for i in wide["items"]]
+    with TestClient(create_app(settings, store=store), base_url=LOCAL) as tc:
+        body = tc.get("/api/research/feed").json()  # the route reads the setting
+        assert body["window_days"] == settings.trending_max_age_days
+        assert len(tc.get("/api/research/feed?include_old=1").json()["items"]) == 8
+
+
+def test_feed_weights_the_outlier_by_freshness(store):
+    # a 4x outlier today beats a 6x one from 14 days ago (6 x 0.25 = 1.5), then a 1x one
+    for k in range(5):
+        _ref(store, f"B{k}", likes=10, author="acct", ts=_ago(3, NOW))
+    hot = _ref(store, "HOT", likes=40, author="acct", ts=_ago(0, NOW))
+    stale = _ref(store, "STALE", likes=60, author="acct", ts=_ago(14, NOW))
+    items = research.trending_feed(store, now=NOW)["items"]
+    assert [i["id"] for i in items[:2]] == [hot, stale]
+    assert (items[0]["outlier"], items[1]["outlier"]) == (4.0, 6.0)  # raw score unchanged
+    # same weighted score: the newer first
+    assert research._hot({"outlier": 2.0, "posted_at": "2026-11-17T12:00:00Z"}, NOW) > \
+        research._hot({"outlier": 4.0, "posted_at": "2026-11-10T12:00:00Z"}, NOW)
+
+
 def test_feed_api_reaction_and_suggested_topics(store):
     sid = _ref(store, "R1", hashtag="mealprep")
     store.add_watch("hashtag", "mealprep")
+    store.add_watch("account", "jeffnippard")
+    store.add_watch("hashtag", "tiboinshape")  # a hashtag of that name: not the account
     store.take_hashtag_search("mealprep", datetime.now(timezone.utc), 30, timedelta(days=7))
     with TestClient(create_app(_settings(), store=store), base_url=LOCAL) as tc:
-        assert [i["id"] for i in tc.get("/api/research/feed?topic=mealprep").json()] == [sid]
+        feed = tc.get("/api/research/feed?topic=mealprep").json()
+        assert [i["id"] for i in feed["items"]] == [sid] and feed["hidden_old"] == 0
         assert tc.get("/api/research/feed?limit=0").status_code == 422
         r = tc.post(f"/api/research/feed/{sid}/reaction", json={"reaction": "like"})
         assert r.json() == {"id": sid, "reaction": "like"}
-        assert tc.get("/api/research/feed").json()[0]["reaction"] == "like"
+        assert tc.get("/api/research/feed").json()["items"][0]["reaction"] == "like"
         assert tc.post("/api/research/feed/999/reaction",
                        json={"reaction": "like"}).status_code == 404
         assert tc.post(f"/api/research/feed/{sid}/reaction",
@@ -126,7 +175,11 @@ def test_feed_api_reaction_and_suggested_topics(store):
     assert all(re.fullmatch(r"\w+", t) for t in watched)  # valid hashtags only
     assert {"fr", "intl"} == {t["lang"] for t in topics["topics"]}
     assert topics["hashtag_budget"]["left"] == 29 and "30 unique hashtags" in topics["note"]
-    assert store.list_watchlist("hashtag") == [store.add_watch("hashtag", "mealprep")]
+    accounts = {a["username"]: a["watched"] for a in topics["accounts"]}
+    assert accounts["jeffnippard"] is True and accounts["tiboinshape"] is False
+    assert len(accounts) == len(research.SUGGESTED_ACCOUNTS) == 11
+    assert "hashtag budget" in topics["accounts_note"]
+    assert len(store.list_watchlist()) == 3  # suggesting adds nothing
 
 
 def test_reactions_feed_the_brief(store, settings, tmp_path, monkeypatch):
@@ -176,7 +229,8 @@ def test_work_order_validation_api(store):
         r = post([{"source_id": b, "mode": "react"}])
         assert "already has an open work order" in r.json()["message"]
         assert len(tc.get("/api/research/work-orders").json()) == 2
-        assert tc.get("/api/research/feed").json()[0]["work_order"]["status"] == "scheduled"
+        assert tc.get("/api/research/feed").json()["items"][0]["work_order"]["status"] == \
+            "scheduled"
         assert tc.get("/api/research/work-orders?status=bad").status_code == 422
         assert tc.delete(f"/api/research/work-orders/{made[1]['id']}").status_code == 204
         assert tc.delete(f"/api/research/work-orders/{made[1]['id']}").status_code == 404
@@ -215,7 +269,8 @@ def test_inspired_order_lifecycle_to_the_feed(store, settings):
     [row] = store.list_assets()
     assert row["work_order"] == {"id": order["id"], "mode": "inspired",
                                  "instruction": "Same joke, our macros",
-                                 "permalink": "https://www.instagram.com/reel/A/"}
+                                 "permalink": "https://www.instagram.com/reel/A/",
+                                 "source": "trend"}
     with pytest.raises(ValueError, match="only an open one"):
         work_orders.skip_order(store, order["id"], "late")
     other = store.add_asset(store.add_idea("motion", hook="x")["id"])

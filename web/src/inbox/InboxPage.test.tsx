@@ -414,17 +414,18 @@ describe('InboxPage feed', () => {
   })
 
   it('badges a video made from a work order with its instruction', async () => {
-    const order = { id: 4, mode: 'inspired' as const, instruction: 'version sans sucre', permalink: null }
+    const order = { id: 4, mode: 'inspired' as const, instruction: 'version sans sucre', permalink: null, source: 'trend' as const }
     stubApi({ 'GET /api/assets': [200, [
-      asset(1, { work_order: order }), asset(2, { work_order: { ...order, instruction: null, mode: 'owner' } }), // real rows: no source, DM orders are owner
-      asset(3, { work_order: { ...order, mode: 'owner', source: 'trend' } }), asset(4)]] })
+      asset(1, { work_order: order }), asset(2, { work_order: { ...order, instruction: null, mode: 'owner', source: 'dm' } }),
+      // a DM order the owner switched to inspired: the badge follows the source, not the mode (140)
+      asset(3, { work_order: { ...order, source: 'dm' } }), asset(4)]] })
     renderPage()
     await screen.findByText('0 of 4 decided')
     expect(within(card(1)).getByText('Tendance')).toBeTruthy()
     expect(within(card(1)).getByText('Ta consigne : « version sans sucre »')).toBeTruthy()
     expect(within(card(2)).getByText('Mes envois')).toBeTruthy()
     expect(within(card(2)).queryByText(/Ta consigne/)).toBeNull()
-    expect(within(card(3)).getByText('Tendance')).toBeTruthy() // an explicit source wins
+    expect(within(card(3)).getByText('Mes envois')).toBeTruthy()
     expect(within(card(4)).queryByText(/Tendance|Mes envois/)).toBeNull()
   })
 
