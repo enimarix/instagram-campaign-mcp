@@ -257,6 +257,8 @@ def test_cli_lists_and_marks(store, monkeypatch, capsys):
     rid = _invented(store)["id"]
     style_requests.decide(store, rid, "accepted")
     monkeypatch.setattr(scheduler, "CampaignStore", lambda path: store)
+    # configure_logging would bind loggers to capsys's stream, closed after this test.
+    monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)
     monkeypatch.setattr(store, "close", lambda: None)
     with pytest.raises(SystemExit) as done:
         scheduler.main(["style-requests", "list", "--status", "accepted"])
