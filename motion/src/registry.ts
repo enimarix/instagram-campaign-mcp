@@ -346,6 +346,9 @@ export const templates = {
       return [
         ...scriptEvents(timeline, FPS, [`hook card: ${scene(p.hook)}`, ...p.beats.map((b) => `beat: ${scene(b)}`), `payoff: ${scene(p.payoff)}`, "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (cutaway): level complete, mB tile dithers in, macroBody, 7 jours gratuits, macrobody.fr; cameo ${p.cameo ?? p.payoff.view}` },
+      ];
+    },
+  }),
   Editorial: template({
     style: "editorial",
     component: Editorial,

@@ -161,19 +161,23 @@
 - `Editorial` (`src/templates/Editorial/`, style `editorial`, « Éditorial », step 144): black
   editorial art direction, ~25–40 s with the voice. Type-only hook (a « • MACROBODY » chip, the
   `lead` in white Inter Tight 900 there from frame 0, the `key` rising in pink Instrument Serif
-  Italic, an optional `strike` drawn through a word of the lead; cover at 1.2 s), 3–5 chapters
+  Italic, an optional `strike` drawn through a word of the lead; a push and petals at depth from
+  frame 0; cover once key and strike are in, ≥ 1.2 s), 3–5 chapters
   counted « 01 / 04 » with a pink-playhead scrubber running with the video, then the `payoff` in
   duo type over the tree in full bloom and the editorial end card. Chapters: `tree` (the pixel
-  blossom tree, `src/editorial/blossom.ts` + `Tree.tsx`, seeded, on an 8 px grid; it stays in
-  place while the type changes: `bloom` grows from the last tree chapter's `bloom`, `wind` =
-  anticipation then a gust with wind lines and a cyan scrubber range, `petals`, `frame` =
-  viewfinder brackets and a dot grid, `loop` = a pink ring; up to 3 `tags` chips or one `stat`),
+  blossom tree, `src/editorial/blossom.ts` + `Tree.tsx`, seeded, on a 4 px grid, petals at three
+  depths; each action is its own shot with a camera move, `layout.ts` `cameraOf`: `bloom` = crane
+  up as it grows from the last tree chapter's `bloom`, `wind` = wide, anticipation then a gust
+  with wind lines and a cyan scrubber range, `petals` = macro close-up, `frame` = viewfinder
+  brackets then a zoom into them, `loop` = a pink ring, dolly out; up to 3 `tags` or one `stat`),
+  `type` (a type-only beat, the title big and kinetic),
   `split` (before / after: a flat pastel tree « sans méthode » over the rich one « avec
   méthode ») and `anatomy` (a deep blue card sliding up: a cute body part from
   `src/editorial/Character.tsx`, stomach / muscle / heart / bone / fat, moods neutral / happy /
   surprised / tired / sore, `then` = the mood it turns to halfway, pixelated by the `px` SVG
   filter; a Press Start 2P caption in capitals without accents, `highlight` in yellow; optional
-  `stat`). `stat` = the social-proof number (big value, pink italic unit, note): kcal, grams,
+  `stat`). No two chapters in a row share a composition (`compositionOf`; the schema refuses
+  it) and the first is not type-only. `stat` = the social-proof number (big value, pink italic unit, note): kcal, grams,
   minutes, never a price. Voice lines: hook (lead + key), each chapter (its caption, or title +
   key: `joinLine`), payoff, `outro?`. Music `music-lounge`. Examples `props/editorial*.json`.
   Still: `npm run still:editorial`.
@@ -188,8 +192,7 @@
   surface, drifting accent glows, kicker pill, tile scales up, wordmark rises from a mask.
   `pixel`: PRESS START, the tile dissolves in cell by cell, the texts type in. `live`: the last
   frame freezes, blurs and dims under the clean stack in light text. `cutaway` (step 142): the HUD's
-  level-complete screen, the tile dithers in on the pixel grid beside a small running mechanism. Composition `EndCard`
-  frame freezes, blurs and dims under the clean stack in light text. `editorial`: black,
+  level-complete screen, the tile dithers in on the pixel grid beside a small running mechanism. `editorial`: black,
   pixel petals drifting, the stores chip, the tagline in duo type (last word pink italic), the
   tile with a pink rim beside its cameo (the tree or an anatomy character), the wordmark rises,
   « 7 jours *gratuits* » pops in pink. Composition `EndCard`
