@@ -8,6 +8,16 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-19: Macro 3D is Remotion over Blender plates (154)
+The `macro3d` style renders in two passes: Blender (`cinematic/engine/macro.py`) renders the
+photoreal shots the Remotion template lists (`plates` from `schemas.mjs --validate`), cached per
+shot, then the Remotion template `Macro3D` composes the captions, the presenter and the end
+card over them. Both passes take the GPU lock one after the other (step 145). A 40 s video costs
+about 12-15 minutes of Blender the first time.
+Reason: photoreal macro plates need a real renderer (light, depth of field, subsurface), while
+the word-by-word captions, the presenter and the end card are motion design Remotion already
+does; one direction (the shot list in TypeScript) keeps the cuts and the overlays in step.
+
 ## 2026-11-19: The batch mix's floors take at most half the batch (142)
 Each allowed option's floor in the batch mix (`MIX_FLOOR`, 0.10) is now capped at 0.5/k for
 k options (was 1/k): the floors never take more than half the batch, so likes and the

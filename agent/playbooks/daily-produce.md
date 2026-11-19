@@ -349,7 +349,8 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 3. `preview_motion(template, props)` returns stills. Look at them: the hook readable in
    the first frame, no text cut off or overflowing, nothing hidden in the bottom third
    (Instagram's caption area), nothing crowded. Fix the props and preview again (at most
-   2 previews per idea).
+   2 previews per idea). Macro3D previews render Blender stills (about a minute): one is
+   enough.
 4. `render_motion(template=…, props=…, idea_id=…, caption=…)` for every idea; send them in
    parallel. Keep every returned job id in your wait list.
 

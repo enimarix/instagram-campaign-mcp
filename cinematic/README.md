@@ -34,8 +34,37 @@ TTS voice, QC and end card (`src/studio/cinematic.py`).
 | Kitchen + food props | Poly Haven models (stove, microwave, kettle, cabinets, pans, bowls, fruit, cake...) in `tools/models/polyhaven/`; Kenney Furniture Kit (fridges, stoves, sink, cabinets, coffee machine...) and Food Kit (200 foods) in `tools/models/kenney/` | CC0 |
 | Gym props | Polytoon Gym (comphonia): dumbbell + rack, plates, bars, bench, squat station, treadmill, bike, punching bag, plyo box) in `tools/models/polytoon-gym/Assets/Polytoon Gym/Gym/Models/` | CC0 |
 | Set textures | `engine/assets/` (damask, tree cards, food, wall art), drawn by `make_assets.py` | ours |
+| Macro 3D subjects | egg (whole, cut), salt and sugar crystals, water / oil gel drops, glycogen, protein chain, fibres, stomach (whole, cut), muscle fascicles, fat cells, bathroom scale, plate: built in code by `engine/macro.py`; the scanned foods are the Poly Haven models above | ours / CC0 |
 
 Props library (for new sets): `kit.prop("<path under tools/models>", loc, rot_z, height)` imports
 a model (.glb/.gltf/.fbx), stands it on `loc` and scales it to `height` m (Kenney models come
 small: give them a height), and finds FBX textures moved inside their pack. The lists are in
 `setup.py` (`POLYHAVEN`, `KENNEY`, `ITCH`): add a name there and re-run it.
+
+## Macro 3D plates (style `macro3d`, step 154)
+
+The `macro3d` style (template `Macro3D`, « Macro 3D ») is Remotion over Blender: Blender renders
+the photoreal plates, `motion/src/templates/Macro3D/` composes the word-by-word captions, Marco
+(the coach), the labels, the counter and the end card on top (`src/studio/macro3d.py`).
+
+- Engine: `engine/macro.py` (`blender -b -P engine/macro.py -- plates.json`). Each shot is its own
+  scene: a black studio void (a dark floor dissolving into black, a soft top key, two cool rim
+  lights, out-of-focus dust near the lens), one subject at real size, a 60 mm lens with a
+  macro depth of field (about half the subject sharp), and one camera move: `push`, `pull`,
+  `orbit`, `rise`, `slide` (close along the surface), `top` (overhead, turning), `whip` (fast,
+  with motion blur). Looks: `plain`, `heat` (the subject in false colour, « Énergie en couleur »),
+  `section` (egg and stomach cut open).
+- Subjects (`SUBJECTS`, = `motion/src/macro3d/subjects.ts`, a test keeps them equal): the
+  scanned Poly Haven foods (apple, avocado, banana, lemon, lime, onion, sweet_potato,
+  croissant, buns, cake) and the procedural ones listed in the table above (scale shows the
+  scene's counter on its display). A new subject = a function in `macro.py` + its id in
+  `subjects.ts`.
+- The template lists the shots (`layout.ts` `shotsOf`: a cut every 1-3 s, never the same move
+  twice in a row, the scene's `cut` subject halfway); `schemas.mjs --validate` hands them to
+  Python as `plates`. Shots render at 720x1280 and 30 fps, are graded (lanczos to 1080x1920, a
+  soft highlight glow, fine grain) and cached per shot under `<media root>/macro3d/shots/`, the
+  key hashing the shot and the engine's source; all shots end to end are the plate track
+  (`<media root>/macro3d/plates/`). Previews render only the stills they need.
+- Cost (RTX laptop GPU, EEVEE 48 samples): about 0.6 s per frame, so a 40 s video is about
+  12-15 minutes of Blender plus the Remotion pass; re-renders reuse the cached shots.
+
