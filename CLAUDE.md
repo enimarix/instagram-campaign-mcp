@@ -32,7 +32,7 @@ agent/skills/                project skills copied into the agent workspace
 brand/                       logo, palette, fonts, BIBLE.md, taxonomy.json
 docs/                        DECISIONS.md and deeper docs
 motion/                      Remotion templates (pixel, voxel, paper styles)
-cinematic/                   Blender engine (cinematic style; tools via cinematic/setup.py)
+cinematic/                   Blender engine (blender style; tools via cinematic/setup.py)
 data/                        runtime only, git-ignored
 ```
 

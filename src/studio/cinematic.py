@@ -1,5 +1,5 @@
 """
-The cinematic style: "PS2 cutscene" skits rendered by Blender (cinematic/, README there), a
+The `blender` style: "PS2 cutscene" skits rendered by Blender (cinematic/, README there), a
 second engine next to the Remotion templates in motion/.
 
 It plugs in behind the motion door (src/studio/motion.py routes template `CinematicSkit` here),
@@ -30,7 +30,7 @@ from .ffmpeg import MediaInfo, PathLike
 from .tts import LineTiming, reading_timings
 
 TEMPLATE = "CinematicSkit"
-STYLE, STYLE_LABEL = "cinematic", "Cinématique 3D"
+STYLE, STYLE_LABEL = "blender", "Blender"
 ROOT = Path(__file__).resolve().parents[2] / "cinematic"
 TOOLS = ROOT / "tools"
 BLENDER = TOOLS / "blender-5.2.4-windows-x64" / "blender.exe"

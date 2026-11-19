@@ -45,9 +45,9 @@ def checks(settings: InstagramMCPSettings, env_file: str = ENV_FILE) -> List[Che
         add("Node.js + motion packages", False, str(e),
             "install Node.js 22.12+, then npm --prefix motion ci")
     try:
-        add("Blender (cinematic style)", True, cinematic.find_blender(), "")
+        add("Blender (blender style)", True, cinematic.find_blender(), "")
     except cinematic.CinematicError as e:
-        add("Blender (cinematic style)", False, str(e), "python cinematic/setup.py")
+        add("Blender (blender style)", False, str(e), "python cinematic/setup.py")
     index = Path(settings.web_dist) / "index.html"
     add("website build", index.is_file(), str(index.parent),
         "npm --prefix web ci, then npm --prefix web run build")

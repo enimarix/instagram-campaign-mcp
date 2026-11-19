@@ -11,7 +11,7 @@ Recipes store the voice audio as a media path (`voice.audioSrc`, relative to the
 a render copies it into the bundle's `public/` and hands Remotion that URL instead.
 Node: `NODE_BIN` (a full path or a command name) overrides `node` on PATH.
 
-Template `CinematicSkit` (style `cinematic`) is not Remotion: Blender renders it
+Template `CinematicSkit` (style `blender`) is not Remotion: Blender renders it
 (src/studio/cinematic.py). The functions below route it there, so callers treat it like any
 motion template.
 """

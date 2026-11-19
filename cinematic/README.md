@@ -1,6 +1,6 @@
 # Growth Studio cinematic (Blender)
 
-The `cinematic` style (« Cinématique 3D »): "PS2 cutscene" skits. A low-poly character with a
+The `blender` style (label « Blender »): "PS2 cutscene" skits. A low-poly character with a
 real face sits at a dining table in warm sunset light and says a few lines while the camera
 cuts between a close and a wide shot. It is a second engine next to the Remotion templates in
 `motion/`, and it plugs in behind the same door: template `CinematicSkit` in
