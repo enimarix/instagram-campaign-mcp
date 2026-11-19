@@ -17,7 +17,7 @@ from src import store as store_mod
 from src.agent import packet, runner, schedule
 from src.api.app import create_app
 from src.store import MIGRATIONS
-from src.studio import feedback, motion, production, style_requests, work_orders
+from src.studio import feedback, motion, production, style_requests, styles, work_orders
 from src.studio.assets import transition
 from src.studio.feedback import add_comment
 
@@ -209,9 +209,7 @@ def test_a_new_template_or_style_wakes_the_waiting_videos(store, monkeypatch, cl
     assert _run(store, 120, f) is None  # once per gain
 
 
-def test_a_style_turned_off_wakes_nothing_and_nothing_waiting_wakes_nothing(store, monkeypatch):
-    from src.studio import styles
-
+def test_a_style_turned_off_wakes_nothing_and_nothing_waiting_wakes_nothing(store):
     f = Starts()
     _run(store, 0, f)
     styles.set_choice(store, "voxel", enabled=False)
@@ -228,6 +226,8 @@ def test_no_node_keeps_the_last_known_registry(store, monkeypatch):
     monkeypatch.setattr(motion, "list_templates", broken)
     assert schedule.capability_gained(store, T0) is None
     assert store.get_state(schedule.CAPABILITIES_KEY) is None
+    monkeypatch.setattr(styles, "capabilities", lambda s: json.loads("{bad"))  # styles.json
+    assert schedule.capability_gained(store, T0) is None  # never blocks the order runs
 
 
 # --- API, CLI, MCP, migration --------------------------------------------------------------

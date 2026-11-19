@@ -170,10 +170,16 @@ def capability_gained(store: CampaignStore, now: datetime) -> Optional[datetime]
     """When the studio last gained capability (156): an enabled style or a template it did
     not have (styles.capabilities, compared with the copy in worker_state). The first look
     only records it; a style turned off changes the copy, not the time; no Node: the last
-    known time. None: never."""
+    known time. None: never.
+    ponytail: the registry is cached per process (motion.list_templates), so a new template
+    counts after the studio restarts; while Node fails, each look runs it again."""
     seen = store.get_state(CAPABILITIES_KEY) or {}
     gained = seen.get("gained_at")
-    now_has = styles.capabilities(store)
+    try:
+        now_has = styles.capabilities(store)
+    except Exception as e:  # noqa: BLE001 - e.g. a broken styles.json: never block the orders
+        logger.warning("style_capabilities_unreadable", error=repr(e))
+        now_has = None
     if now_has is not None and now_has != seen.get("styles"):
         had = seen.get("styles")
         if had is not None and any(t not in had.get(s, ()) for s, ts in now_has.items()
