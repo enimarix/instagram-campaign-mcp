@@ -3,6 +3,7 @@
 // acids (zigzag chains riding the blood cells down the vessel). The mitochondrion: fatty acids
 // and O₂ flow in, the cristae spark as they burn, ATP rises out, CO₂ and water leave.
 import { C } from "../palette";
+import { ellipseD, RAMPS, Shade } from "../shade";
 import { type View, type ViewState, frac, LINE, pulse, Spark, Sparkles } from "./common";
 
 type P = readonly [number, number];
@@ -64,13 +65,13 @@ export const fat: View<"fat"> = {
         <rect x={VESSEL - 70} y={-400} width={140} height={960} fill={C.copperDark} stroke={C.ink} {...LINE} />
         <rect x={VESSEL - 52} y={-400} width={104} height={960} fill={C.copper} />
         {Array.from({ length: 8 }, (_, k) => {
-          const y = ((k * 120 + phase * 600) % 960) - 400;
+          // The blood flows at its own pace, whatever the playback: the view never stands still.
+          const y = ((k * 120 + phase * 600 + f * 3) % 960) - 400;
           return <ellipse key={k} cx={VESSEL + (k % 2 ? 18 : -18)} cy={y} rx={30} ry={16} fill={C.red} stroke={C.ink} {...LINE} />;
         })}
-        <circle cx={0} cy={0} r={R} fill={C.mauve} stroke={C.cream} strokeWidth={14} />
-        <circle cx={-20} cy={10} r={rd} fill={C.orange} stroke={C.yellowDark} {...LINE} />
-        <path d={`M${-20 + rd} ${10}A${rd} ${rd} 0 0 1 ${-20 - rd} ${10}A${rd} ${rd * 0.55} 0 0 0 ${-20 + rd} ${10}Z`} fill={C.yellowDark} opacity={0.55} />
-        <circle cx={-20 - rd * 0.35} cy={10 - rd * 0.4} r={rd * 0.28} fill={C.sun} />
+        <circle cx={0} cy={0} r={R + 7} fill={C.cream} />
+        <Shade d={ellipseD(0, 0, R, R)} c={[0, 0]} size={2 * R} ramp={RAMPS.violet} spec={false} />
+        <Shade d={ellipseD(-20, 10, rd, rd)} c={[-20, 10]} size={2 * rd} ramp={RAMPS.fat} />
         <Sparkles cx={-20} cy={10} rx={rd * 0.8} ry={rd * 0.8} n={30} seed={51} f={f} color={C.yellow} />
         <ellipse cx={nucleus[0]} cy={nucleus[1]} rx={52} ry={22} transform={`rotate(-40 ${nucleus[0]} ${nucleus[1]})`} fill={C.steel} stroke={C.ink} {...LINE} />
         {stage > 0.02 && Array.from({ length: ACIDS }, (_, k) => {
@@ -94,10 +95,9 @@ export const mito: View<"mito"> = {
     const q = (i: number, n: number) => frac(phase * 0.5 + i / n);
     return (
       <g>
-        <ellipse cx={0} cy={0} rx={390} ry={190} fill={C.copper} stroke={C.cream} strokeWidth={14} />
-        <path d="M-330 -60A390 190 0 0 1 330 -60" fill="none" stroke={C.copperLight} strokeWidth={14} strokeLinecap="round" />
-        <path d="M-300 120A390 190 0 0 0 300 120" fill="none" stroke={C.copperDark} strokeWidth={18} strokeLinecap="round" />
-        <ellipse cx={0} cy={0} rx={352} ry={154} fill={C.copperDark} stroke={C.copperLight} strokeWidth={8} />
+        <ellipse cx={0} cy={0} rx={397} ry={197} fill={C.cream} />
+        <Shade d={ellipseD(0, 0, 390, 190)} c={[0, 0]} size={380} axis={0} ramp={RAMPS.copper} />
+        <Shade d={ellipseD(0, 0, 352, 154)} c={[0, 0]} size={300} axis={0} ramp={[RAMPS.muscle[0], RAMPS.muscle[0], RAMPS.muscle[1], RAMPS.muscle[1], RAMPS.muscle[2]]} rim={null} spec={false} />
         {CRISTAE.map((x, k) => {
           const top = k % 2 === 0;
           const edge = 154 * Math.sqrt(Math.max(0, 1 - (x / 352) ** 2));

@@ -10,6 +10,7 @@ import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { BASE, Box, Defs, DitherRect, H, P, px, SkyLayer, STAGE, steps, Tag, tagHeight, Type, typeSize, W } from "../../cutaway/kit";
 import { C } from "../../cutaway/palette";
+import { DitherLayer } from "../../cutaway/shade";
 import { chipText, dashesOf, mechanismClock, VIEWS, type ViewId } from "../../cutaway/views";
 import type { ViewState } from "../../cutaway/views/common";
 import { cycleOf, VIEW_COMPONENTS } from "../../cutaway/views/index";
@@ -58,7 +59,7 @@ const camOf = (s: SceneProps, view: ViewId, st: ViewState): Cam => ({
 const toScreen = (cam: Cam, [x, y]: readonly [number, number]) => [STAGE[0] + (x - cam.center[0]) * cam.zoom, STAGE[1] + (y - cam.center[1]) * cam.zoom] as const;
 
 /** One picture of the art: sky and a view under a camera, through the pixel grid. */
-const Layer = ({ view, sky, st, cam, mask }: { view: ViewId; sky: "dusk" | "night"; st: ViewState; cam: Cam; mask?: string }) => {
+const Layer = ({ id, view, sky, st, cam, mask }: { id: string; view: ViewId; sky: "dusk" | "night"; st: ViewState; cam: Cam; mask?: string }) => {
   const { Draw } = VIEW_COMPONENTS[view];
   const tx = px(STAGE[0] - cam.center[0] * cam.zoom);
   const ty = px(STAGE[1] - cam.center[1] * cam.zoom);
@@ -67,7 +68,9 @@ const Layer = ({ view, sky, st, cam, mask }: { view: ViewId; sky: "dusk" | "nigh
       <g filter="url(#cw-px)">
         <SkyLayer sky={sky} f={st.f} pan={cam.center[0] * 0.1} />
         <g transform={`translate(${tx} ${ty}) scale(${cam.zoom})`}>
-          <Draw {...st} />
+          <DitherLayer id={id} zoom={cam.zoom}>
+            <Draw {...st} />
+          </DitherLayer>
         </g>
       </g>
     </g>
@@ -109,12 +112,12 @@ const Art = ({ plan, i, frame }: { plan: Plan; i: number; frame: number }) => {
     const e = easeOut(t);
     return (
       <>
-        <Layer view={pr.view} sky={pr.sky} st={pst} cam={{ ...pcam, zoom: pcam.zoom * (inward ? 1 + 1.6 * e : 1 - 0.5 * e) }} />
-        <Layer view={r.view} sky={r.sky} st={st} cam={{ ...cam, zoom: cam.zoom * (inward ? 0.6 + 0.4 * e : 1.6 - 0.6 * e) }} mask={`url(#cw-m${Math.round(steps(t + 1 / CUT, 8) * 16)})`} />
+        <Layer id="a" view={pr.view} sky={pr.sky} st={pst} cam={{ ...pcam, zoom: pcam.zoom * (inward ? 1 + 1.6 * e : 1 - 0.5 * e) }} />
+        <Layer id="b" view={r.view} sky={r.sky} st={st} cam={{ ...cam, zoom: cam.zoom * (inward ? 0.6 + 0.4 * e : 1.6 - 0.6 * e) }} mask={`url(#cw-m${Math.round(steps(t + 1 / CUT, 8) * 16)})`} />
       </>
     );
   }
-  return <Layer view={r.view} sky={r.sky} st={st} cam={liveCam(plan, i, frame)} />;
+  return <Layer id="b" view={r.view} sky={r.sky} st={st} cam={liveCam(plan, i, frame)} />;
 };
 
 /** Mode chip (top left) with its dashes, and the « ×2 » badge. */
@@ -136,7 +139,8 @@ const Chip = ({ plan, i, frame, fps }: { plan: Plan; i: number; frame: number; f
       {Array.from({ length: 6 }, (_, k) => (
         <rect key={k} x={65 + k * 34} y={CHIP_Y + tagHeight(4) + 12} width={24} height={10} fill={k < lit ? color : C.cloud} />
       ))}
-      {x2 && f >= 4 && <Type text="×2" x={65 + w + 24} y={CHIP_Y - (f < 8 ? 6 : 0)} unit={f < 8 ? 8 : 7} color={C.yellow} bold outline={C.ink} />}
+      {/* Beside a short chip; under a long one, clear of the gauge. */}
+      {x2 && f >= 4 && (w < 380 ? <Type text="×2" x={65 + w + 24} y={CHIP_Y - (f < 8 ? 6 : 0)} unit={f < 8 ? 8 : 7} color={C.yellow} bold outline={C.ink} /> : <Type text="×2" x={65 + 6 * 34 + 16} y={CHIP_Y + tagHeight(4) + 4 - (f < 8 ? 4 : 0)} unit={f < 8 ? 6 : 5} color={C.yellow} bold outline={C.ink} />)}
     </g>
   );
 };

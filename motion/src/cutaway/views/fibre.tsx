@@ -5,6 +5,7 @@
 // (yellow, then muscle) and the fibre grows thicker with one more myofibril.
 import type { ReactNode } from "react";
 import { C } from "../palette";
+import { RAMPS, Shade } from "../shade";
 import { type View, type ViewState, LINE, pulse } from "./common";
 
 const X0 = -360;
@@ -28,8 +29,8 @@ const Fibre = ({ shape, children }: { shape: FibreShape; children?: ReactNode })
   const rx = 0.4 * r;
   return (
     <g>
-      <ellipse cx={X0} cy={0} rx={rx} ry={r} fill={C.copperDark} stroke={C.ink} {...LINE} />
-      <rect x={X0} y={-r} width={X1 - X0} height={2 * r} fill={C.copperDark} />
+      <Shade d={`M${X0} ${-r}L${X1} ${-r}L${X1} ${r}L${X0} ${r}A${rx} ${r} 0 0 1 ${X0} ${-r}Z`} c={[(X0 + X1) / 2, 0]} size={2 * r} axis={0} ramp={RAMPS.copper} spec={false} />
+      <rect x={X0} y={-r * 0.86} width={X1 - X0} height={1.72 * r} fill={RAMPS.copper[0]} opacity={0.85} />
       <rect x={X0} y={r * 0.78} width={X1 - X0} height={r * 0.22} fill={C.ink} opacity={0.35} />
       <line x1={X0} y1={-r} x2={X1} y2={-r} stroke={C.cream} strokeWidth={12} />
       <line x1={X0 + 20} y1={-r + 16} x2={X1 - 20} y2={-r + 16} stroke={C.copperLight} strokeWidth={8} />
@@ -52,6 +53,8 @@ const Fibre = ({ shape, children }: { shape: FibreShape; children?: ReactNode })
           <g key={k} opacity={fresh ? newRod : 1}>
             <rect x={X0 + 20} y={y - h / 2} width={X1 - X0 - 20} height={h} rx={h / 2} fill={fresh ? C.yellow : C.cream} />
             {!fresh && bands}
+            <rect x={X0 + 24} y={y - h / 2 + 3} width={X1 - X0 - 28} height={h * 0.18} fill={C.white} opacity={0.45} />
+            <rect x={X0 + 24} y={y + h / 2 - h * 0.22} width={X1 - X0 - 28} height={h * 0.22} fill={RAMPS.copper[0]} opacity={0.4} />
           </g>
         );
       })}
