@@ -175,7 +175,7 @@
   méthode ») and `anatomy` (a deep blue card sliding up: a cute body part from
   `src/editorial/Character.tsx`, stomach / muscle / heart / bone / fat, moods neutral / happy /
   surprised / tired / sore, `then` = the mood it turns to halfway, pixelated by the `px` SVG
-  filter; a Press Start 2P caption in capitals without accents, `highlight` in yellow; optional
+  filter; a caption in 142's 5x7 bitmap pixel font (`src/cutaway/pixelfont.ts`, French accents above the capitals), `highlight` in yellow; optional
   `stat`). No two chapters in a row share a composition (`compositionOf`; the schema refuses
   it) and the first is not type-only. `stat` = the social-proof number (big value, pink italic unit, note): kcal, grams,
   minutes, never a price. Voice lines: hook (lead + key), each chapter (its caption, or title +

@@ -7,8 +7,10 @@ import { Easing } from "remotion";
 import { brand } from "../brand";
 import { fonts } from "../lib/font";
 import { frenchSpaces } from "../lib/french";
+import { CAP, LINE_PITCH, linePath, lineWidth } from "../cutaway/pixelfont.ts";
 import { seeded } from "../lib/game.ts";
 import { span } from "../voxel/anim.ts";
+import { captionLines, glue } from "./caption.ts";
 import { BLOSSOM, CYAN, DEEP, GREY, PINK, WHITE, YELLOW } from "./palette.ts";
 
 export const W = 1080;
@@ -24,10 +26,6 @@ export const ease = (f: number, start: number, length: number) => smooth(span(f,
 export const GROTESK: CSSProperties = { fontFamily: `"${fonts.display}", sans-serif`, fontWeight: 900, letterSpacing: "-0.045em", color: WHITE };
 export const SERIF: CSSProperties = { fontFamily: `"${fonts.serif}", serif`, fontStyle: "italic", fontWeight: 400, letterSpacing: "-0.01em", color: PINK };
 export const BODY: CSSProperties = { fontFamily: `"${fonts.body}", sans-serif`, color: WHITE };
-const PIXEL: CSSProperties = { fontFamily: `"${fonts.pixel}", monospace` };
-
-/** French spacing, and a number kept with the word after it (« 72 h », « 20 minutes »). */
-export const glue = (text: string) => frenchSpaces(text).replace(/(\d) (?=\p{L})/gu, "$1\u00a0");
 
 /** SVG defs every scene uses: `px` pixelates (8 px blocks) what it is applied to. */
 export const PixelDefs = () => (
@@ -214,25 +212,35 @@ export const StatCard = ({ value, unit, note, f, start, style }: { value: string
 };
 
 /**
- * Capitals for the pixel font, without accents: Press Start 2P draws accented capitals as
- * small letters (« SéANCE »), and French capitals may drop their accents.
+ * The pixel caption of an anatomy card, `width` px wide, centred: 142's bitmap font in bold
+ * capitals with French accents above the letters, the `highlight` part in yellow, a hard
+ * dark drop shadow one font pixel down-right.
  */
-export const pixelCaps = (text: string) => glue(text).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").normalize("NFC");
-
-/** The pixel caption of an anatomy card: capitals, the `highlight` part in yellow. */
-export const PixelCaption = ({ text, highlight, style }: { text: string; highlight?: string; style?: CSSProperties }) => {
-  const up = pixelCaps(text);
-  const mark = highlight ? pixelCaps(highlight) : "";
-  const at = mark ? up.indexOf(mark) : -1;
-  const parts = at < 0 ? [up] : [up.slice(0, at), up.slice(at, at + mark.length), up.slice(at + mark.length)];
+export const PixelCaption = ({ text, highlight, width, style }: { text: string; highlight?: string; width: number; style?: CSSProperties }) => {
+  const { unit, lines } = captionLines(text, highlight, width);
+  const pitch = LINE_PITCH * unit;
+  const top = 3 * unit; // room for the accents above the first line
+  let white = "";
+  let yellow = "";
+  lines.forEach((l, i) => {
+    let x = Math.round((width - lineWidth(l.text, true) * unit) / 2 / unit) * unit;
+    const y = top + i * pitch;
+    const [a, b] = l.mark ?? [l.text.length, l.text.length];
+    for (const [part, lit] of [[l.text.slice(0, a), false], [l.text.slice(a, b), true], [l.text.slice(b), false]] as const) {
+      if (!part) continue;
+      const d = linePath(part, x, y, unit, true);
+      if (lit) yellow += d;
+      else white += d;
+      x += (lineWidth(part, true) + 1) * unit;
+    }
+  });
+  const height = top + (lines.length - 1) * pitch + (CAP + 3) * unit;
   return (
-    <div style={{ ...PIXEL, fontSize: 40, lineHeight: 1.6, color: WHITE, textAlign: "center", textShadow: "4px 4px 0 #0C0E33", textWrap: "balance", ...style }}>
-      {parts.map((p, i) => (
-        <span key={i} style={i === 1 ? { color: YELLOW } : undefined}>
-          {p}
-        </span>
-      ))}
-    </div>
+    <svg width={width} height={height} style={{ display: "block", overflow: "visible", ...style }} shapeRendering="crispEdges">
+      <path d={white + yellow} fill="#0C0E33" transform={`translate(${unit} ${unit})`} />
+      <path d={white} fill={WHITE} />
+      <path d={yellow} fill={YELLOW} />
+    </svg>
   );
 };
 

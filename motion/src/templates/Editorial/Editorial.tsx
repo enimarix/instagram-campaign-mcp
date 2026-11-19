@@ -219,7 +219,7 @@ const AnatomyCard = ({ p, index, f, len }: SceneProps) => {
         {c.stat && <rect y={760} width={1000} height={800} fill="url(#statShade)" />}
       </DeepGround>
       <div style={{ position: "absolute", left: 70, top: 180, width: 860, opacity: ease(f, 2, 10) }}>
-        <PixelCaption text={c.caption} highlight={c.highlight} />
+        <PixelCaption text={c.caption} highlight={c.highlight} width={860} />
       </div>
       {c.stat && <StatCard {...c.stat} f={f} start={Math.round(len * 0.35)} style={{ position: "absolute", left: 50, top: 860 }} />}
     </div>

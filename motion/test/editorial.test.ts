@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { CAMEOS, CARD_S } from "../src/endcards/schema.ts";
 import { gustOf, makeTree, petalsAt, PX, snap, TREE } from "../src/editorial/blossom.ts";
+import { captionLines } from "../src/editorial/caption.ts";
 import { CHARACTER_IDS } from "../src/editorial/palette.ts";
 import { cameraOf, payoffCamera } from "../src/templates/Editorial/layout.ts";
 import { bloomOf, cameoOf, compositionOf, editorialSchema, editorialScript, joinLine, TREE_ACTIONS, timelineOf } from "../src/templates/Editorial/schema.ts";
@@ -128,4 +129,15 @@ test("every example alternates its compositions; every shot has a camera move", 
   assert.ok(cameraOf("petals", 0.5).z > 2, "petals is a close-up");
   assert.equal(cameraOf("frame", 0.3).z, 1); // wide while the viewfinder closes, then the zoom
   assert.ok(cameraOf("frame", 0.9).z > 1.4);
+});
+
+test("pixel captions keep French accents (142's bitmap font) and split the highlight across lines", () => {
+  const { unit, lines } = captionLines("Tes courbatures culminent 48 à 72 h après la séance.", "48 à 72 h", 860);
+  assert.ok(unit >= 4 && unit <= 7 && lines.length <= 4);
+  const all = lines.map((l) => l.text).join(" ");
+  assert.match(all, /après la séance\./); // accents kept (drawn above the capitals by the font)
+  assert.ok(!lines.some((l) => /\d$/.test(l.text.trim()) && l.text.endsWith(" ")), "a number stays with its unit");
+  const marked = lines.flatMap((l) => (l.mark ? [l.text.slice(...l.mark)] : [])).join(" ");
+  assert.equal(marked.replace(/\u00a0/g, " "), "48 à 72 h");
+  assert.ok(captionLines("Ton estomac met 20 minutes à dire stop.", undefined, 860).lines.every((l) => l.mark === null));
 });
