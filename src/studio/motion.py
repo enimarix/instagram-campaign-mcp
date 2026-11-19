@@ -266,10 +266,12 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     still_props = {**v["props"]}
     if "voice" in still_props:
         still_props["voice"] = {k: x for k, x in still_props["voice"].items() if k != "audioSrc"}
+    still_props.pop("plate", None)  # Macro3D: the studio's own plates only, never one from the props
     folder = Path(media_root) / "previews" / render.recipe_hash([template, still_props])
     folder.mkdir(parents=True, exist_ok=True)
-    plates = (macro3d.plate_stills(v["plates"], frames, folder, timeout_s=STILL_TIMEOUT_S)
-              if template == macro3d.TEMPLATE else {})
+    plates = {}
+    if template == macro3d.TEMPLATE:
+        plates = macro3d.plate_stills(v["plates"], frames, folder, timeout_s=STILL_TIMEOUT_S)
     paths = []
     with tempfile.TemporaryDirectory(dir=folder) as work:
         for f in dict.fromkeys(frames):
