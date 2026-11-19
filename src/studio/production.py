@@ -111,8 +111,9 @@ def _dm_pick_extra(store: CampaignStore, settings: InstagramMCPSettings, q: Dict
 
 def _check_quotas(q: Dict[str, Any], track: str, pillar: Optional[str],
                   strategy: Optional[str], *, extra: bool = False) -> None:
-    """extra: a DM-pick remix that may go past a full batch; it is outside the batch's
-    humour / informative split, the explore and reaction quotas still apply."""
+    """extra: an owner work order, or a DM-pick remix, that may go past a full batch; it is
+    outside the batch's humour / informative split (full or not: the owner's 7th fact order
+    was refused « informative 7/6 »), the explore and reaction quotas still apply."""
     limits, counts = q["limits"], q["counts"]
     full = counts["ideas"] >= limits["ideas"]
     if full and not extra:
@@ -124,7 +125,7 @@ def _check_quotas(q: Dict[str, Any], track: str, pillar: Optional[str],
         kind, other = "humour", "pick an informative pillar"
     else:
         kind, other = "informative", "pick a humour pillar"
-    if not full and counts[kind] >= limits[kind]:
+    if not full and not extra and counts[kind] >= limits[kind]:
         raise ValueError(f"{kind} {counts[kind] + 1}/{limits[kind]}: {other}")
     if track == "remix" and counts["reactions"] >= limits["reactions"]:
         raise ValueError(f"reaction quota used: {counts['reactions']}/{limits['reactions']}"

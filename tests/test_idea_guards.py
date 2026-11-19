@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 import pytest
 
 from src.learning.quotas import reaction_plan, todays_quotas
-from src.studio import production
+from src.studio import production, work_orders
 
 DAY = "2026-11-17"
 CITE = [{"url": "https://example.org/fact", "title": "Source"}]
@@ -188,3 +188,24 @@ def test_dm_pick_extras_keep_the_reaction_quota(store, settings):
     _fill(store, settings, 1)
     with pytest.raises(ValueError, match="reaction quota used"):
         _new(store, settings, "React to this", "remix", source_id=_clip(store, "downloaded"))
+
+
+def _order(store):
+    return work_orders.create_video(store, "Un fait sur les protéines")["id"]
+
+
+def test_owner_orders_are_outside_the_humour_mix(store, settings):
+    settings.batch_size = 4  # each side allowed 3; the batch is not full at 3
+    _fill(store, settings, 3, pillar="fun_facts", citations=CITE)
+    with pytest.raises(ValueError, match="informative 4/3: pick a humour pillar"):
+        _new(store, settings, "Honey never spoils", pillar="fun_facts", citations=CITE)
+    idea = _new(store, settings, "Honey never spoils", pillar="fun_facts", citations=CITE,
+                work_order_id=_order(store))  # the owner's 2026-11-20 sample order
+    assert idea["pillar"] == "fun_facts"
+
+
+def test_owner_orders_keep_the_explore_quota(store, settings):
+    _fill(store, settings, 3, strategy="explore")
+    with pytest.raises(ValueError, match="explore quota used: 3/3"):
+        _new(store, settings, "Owner experiment", strategy="explore",
+             work_order_id=_order(store))
