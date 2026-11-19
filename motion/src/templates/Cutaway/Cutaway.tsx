@@ -15,6 +15,7 @@ import { chipText, dashesOf, mechanismClock, VIEWS, type ViewId } from "../../cu
 import type { ViewState } from "../../cutaway/views/common";
 import { cycleOf, VIEW_COMPONENTS } from "../../cutaway/views/index";
 import { EndCard } from "../../endcards/EndCard";
+import { spokenLines } from "../../lib/duck";
 import { loopFade } from "../../lib/timeline";
 import { easeInOut, easeOut, span } from "../../voxel/anim.ts";
 import { lerpText, stepsLayout, titleLayout } from "./layout";
@@ -348,7 +349,7 @@ export const Cutaway = (props: CutawayProps) => {
           <Html5Audio src={assetById(id).src} volume={volume} />
         </Sequence>
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

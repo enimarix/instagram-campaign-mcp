@@ -13,6 +13,7 @@ import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { EndCard } from "../../endcards/EndCard";
 import { BACKGROUND } from "../../endcards/VoxelEndCard";
 import { ACCENTS, type FormId, TEXT_ACCENT } from "../../endcards/schema";
+import { spokenLines } from "../../lib/duck";
 import { fonts } from "../../lib/font";
 import { frenchSpaces } from "../../lib/french";
 import { loopFade, type Scene, sceneAt } from "../../lib/timeline";
@@ -349,7 +350,7 @@ export const VoxelQuest = (props: VoxelQuestProps) => {
       {cues.map((c, i) => (
         <Sfx key={i} at={c.at} id={c.id} />
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

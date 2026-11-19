@@ -12,6 +12,7 @@ import { Sprite } from "../../components/Sprite";
 import { Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
 import { CARD_S } from "../../endcards/schema";
+import { spokenLines } from "../../lib/duck";
 import { progress } from "../../lib/game";
 import { colors } from "../../lib/palette";
 import { snap } from "../../lib/pixel";
@@ -108,7 +109,7 @@ export const FactQuest = (props: FactQuestProps) => {
           color={s.index % 2 ? c.accent : c.secondary}
         />
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}

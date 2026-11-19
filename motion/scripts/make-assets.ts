@@ -1,7 +1,8 @@
 // Builds our own (code-generated) assets into public/: sprite sheets from src/lib/sprites.ts as
 // SVG, chiptune loops and sound effects from a tiny square/triangle/noise synth as WAV, and a
 // warmer marimba bed (step 130) and the paper style's kalimba / glockenspiel bed (step 131)
-// from the same synth's sine-based voices.
+// from the same synth's sine-based voices, and the mastered stereo beds of scripts/beds.ts
+// (step 148).
 // Run: `node scripts/make-assets.ts` (from motion/), then commit the files it writes.
 // Deterministic (no Math.random, no Math.sin: `sine` below is plain arithmetic): test/assets-licenses.test.ts checks the
 // committed files still match this script, so re-run it after editing art, songs or the palette.
@@ -11,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { palette } from "../src/lib/palette.ts";
 import { seeded, sheetSvg } from "../src/lib/game.ts";
 import * as art from "../src/lib/sprites.ts";
+import { BEDS, renderSong, wavStereo } from "./beds.ts";
 
 const RATE = 22050; // Hz, mono 16-bit: plenty for square waves, half the size of 44.1 kHz
 
@@ -396,6 +398,7 @@ export const build = (): Map<string, string | Buffer> => {
   for (const [name, a] of Object.entries(art)) files.set(`public/sprites/${name}.svg`, `${sheetSvg(a, palette)}\n`);
   for (const [name, s] of Object.entries(songs)) files.set(`public/audio/${name}.wav`, wav(song(s)));
   for (const [name, b] of Object.entries(effects)) files.set(`public/audio/${name}.wav`, wav(b));
+  for (const [name, song] of Object.entries(BEDS)) files.set(`public/audio/${name}.wav`, wavStereo(renderSong(song)));
   return files;
 };
 

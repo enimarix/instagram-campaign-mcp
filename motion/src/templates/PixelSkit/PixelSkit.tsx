@@ -12,6 +12,7 @@ import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
 import { CARD_S } from "../../endcards/schema";
+import { pausedLines, spokenLines } from "../../lib/duck";
 import type { PixelArt } from "../../lib/game";
 import { colors } from "../../lib/palette";
 import { buildTimeline, fitEndCard, loopFade, sceneAt } from "../../lib/timeline";
@@ -198,7 +199,7 @@ export const PixelSkit = (props: PixelSkitProps) => {
         return sfx && <Sfx key={s.index} id={sfxId(sfx)} from={s.startFrame + BEAT} />;
       })}
       {props.sting !== "none" && <Sfx id={sfxId(props.sting)} from={land} />}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={pausedLines(spokenLines(props.voice) ?? [], pauses, fps)} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {/* The voice pauses through the hold and the freeze: plain audio in parts around them. */}

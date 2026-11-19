@@ -14,6 +14,8 @@ type Entry = {
   frameHeight?: number;
   frames?: number;
   licence: string;
+  /** Music with an intro: where the loop starts, in seconds (a whole number of 30 fps frames). */
+  loopStart_s?: number;
   /** Stand-in until the real asset arrives (note says when). */
   placeholder?: string;
 };
@@ -46,6 +48,11 @@ export const ASSETS = {
   "sfx-rip": audio("sfx-rip", "sfx"),
   "sfx-swish": audio("sfx-swish", "sfx"),
   "music-dusk": audio("music-dusk", "music"),
+  // Cutaway candidates (step 148), stereo, an intro then a seamless loop: lo-fi chiptune hip-hop,
+  // dusk synthwave, cinematic clockwork. The intro lengths match the songs in scripts/beds.ts (test/beds.test.ts).
+  "music-cutaway-a": { ...audio("music-cutaway-a", "music"), loopStart_s: 5.6 },
+  "music-cutaway-b": { ...audio("music-cutaway-b", "music"), loopStart_s: 4.8 },
+  "music-cutaway-c": { ...audio("music-cutaway-c", "music"), loopStart_s: 4.4 },
 } as const satisfies Record<string, Entry>;
 
 export type AssetId = keyof typeof ASSETS;

@@ -12,6 +12,7 @@ import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
 import { CARD_S } from "../../endcards/schema";
+import { pausedLines, spokenLines } from "../../lib/duck";
 import type { PixelArt } from "../../lib/game";
 import { progress } from "../../lib/game";
 import { colors } from "../../lib/palette";
@@ -242,7 +243,7 @@ export const QuizChest = (props: QuizChestProps) => {
       <Flash startFrame={reveal} duration={FLASH} color={c.text} />
       <Sfx id="sfx-confirm" from={reveal} />
       <Sfx id="sfx-coin" from={reveal + COIN_DELAY} />
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={pausedLines(spokenLines(props.voice) ?? [], [{ at: countdownStart, frames: gap }], fps)} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {/* The voice pauses through the countdown and reveal: its first part up to the end of the

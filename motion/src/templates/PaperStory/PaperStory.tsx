@@ -15,6 +15,7 @@ import { EndCard } from "../../endcards/EndCard";
 import { PAPER } from "../../endcards/PaperEndCard";
 import { ACCENTS, TEXT_ACCENT } from "../../endcards/schema";
 import { countUp } from "../../lib/countUp";
+import { spokenLines } from "../../lib/duck";
 import { frenchSpaces } from "../../lib/french";
 import { loopFade, type Scene } from "../../lib/timeline";
 import { CharacterGroup, type Gesture, type Mood } from "../../paper/Character";
@@ -363,7 +364,7 @@ export const PaperStory = (props: PaperStoryProps) => {
           <Html5Audio src={assetById(id).src} volume={volume} />
         </Sequence>
       ))}
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

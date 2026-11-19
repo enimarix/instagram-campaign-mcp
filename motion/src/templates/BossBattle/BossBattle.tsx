@@ -13,6 +13,7 @@ import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
 import { CARD_S } from "../../endcards/schema";
+import { spokenLines } from "../../lib/duck";
 import { progress } from "../../lib/game";
 import { colors } from "../../lib/palette";
 import { snap } from "../../lib/pixel";
@@ -197,7 +198,7 @@ export const BossBattle = (props: BossBattleProps) => {
         </Fragment>
       ))}
       <Sfx id="sfx-confirm" from={last.startFrame + HIT + (knockout ? JINGLE : 0)} />
-      <MusicBed id={props.music} />
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}

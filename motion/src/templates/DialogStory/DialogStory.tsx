@@ -5,12 +5,14 @@ import { scriptAreas } from "../../brand";
 import { CRTOverlay } from "../../components/CRTOverlay";
 import { DialogBox } from "../../components/DialogBox";
 import { HookCard } from "../../components/HookCard";
+import { MusicBed } from "../../components/MusicBed";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sprite } from "../../components/Sprite";
 import { Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
 import { CARD_S } from "../../endcards/schema";
+import { spokenLines } from "../../lib/duck";
 import { colors } from "../../lib/palette";
 import { snap } from "../../lib/pixel";
 import { buildTimeline, fitEndCard, loopFade, sceneAt } from "../../lib/timeline";
@@ -41,8 +43,6 @@ const HOPS_PER_S = 4;
 const HOP = 3;
 const BOX_SCALE = 4;
 const GAP = 24;
-/** Background music level: under the voice and the sfx. */
-const MUSIC_VOLUME = 0.25;
 const DEFAULT_SPRITE = ["mascot", "slime"] as const;
 
 export const timelineOf = (props: DialogStoryProps, fps: number) =>
@@ -184,7 +184,7 @@ export const DialogStory = (props: DialogStoryProps) => {
       {scenes.slice(1).map((s) => (
         <Sfx key={s.index} id={roles[s.index].kind === "moral" ? "sfx-confirm" : "sfx-select"} from={s.startFrame + BEAT} />
       ))}
-      {props.music !== "none" && <Html5Audio src={assetById(props.music).src} loop volume={MUSIC_VOLUME} />}
+      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
