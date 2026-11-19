@@ -13,12 +13,12 @@ const FORE = 270;
 type V2 = readonly [number, number];
 const add = (a: V2, b: V2, k = 1): V2 => [a[0] + b[0] * k, a[1] + b[1] * k];
 
-/** The curl starts part-way up, so the Reel cover (0.4 s in) shows the biceps flexed. */
-const START = 0.22;
+/** The curl starts part-way up, so the Reel cover (0.4 s in) shows the biceps nearly flexed. */
+const START = 0.09;
 
 const geometry = (phase: number) => {
   const c = pulse(phase + START);
-  const a = rad(14 + 116 * c);
+  const a = rad(14 + 100 * c); // up to 114°: the forearm and dumbbell stay clear of the biceps window
   const dir: V2 = [Math.sin(a), Math.cos(a)];
   const wrist = add(E, dir, FORE);
   // The cutaway window over the biceps: it bulges forward and shortens as the arm curls.
