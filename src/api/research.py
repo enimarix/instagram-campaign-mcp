@@ -98,6 +98,7 @@ class WorkOrderItem(BaseModel):
     source_id: int
     mode: Literal["inspired", "react"]
     instruction: Optional[str] = None
+    style: Optional[str] = None  # 138: None = Auto
 
 
 class WorkOrdersIn(BaseModel):
@@ -149,6 +150,7 @@ class InstructionIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     instruction: str
     mode: Optional[Literal["inspired", "react", "owner"]] = None
+    style: Optional[str] = None  # 138: None = Auto; left out: unchanged
 
 
 @router.get("/research/work-orders")
@@ -158,7 +160,8 @@ def list_work_orders(status: Optional[WorkOrderStatus] = None,
 
 
 @router.get("/work-orders")
-def list_all_work_orders(source: Literal["all", "dm", "trend"] = "all",
+def list_all_work_orders(source: Literal["all", "dm", "trend", "create", "change",
+                                         "mine"] = "all",
                          status: Optional[WorkOrderStatus] = None,
                          limit: int = Query(100, ge=1, le=500),
                          store: CampaignStore = Depends(get_store)):
@@ -168,7 +171,8 @@ def list_all_work_orders(source: Literal["all", "dm", "trend"] = "all",
 @router.patch("/work-orders/{order_id}")
 def set_instruction(order_id: int, body: InstructionIn,
                     store: CampaignStore = Depends(get_store)):
-    return call(work_orders.set_instruction, store, order_id, body.instruction, body.mode)
+    return call(work_orders.set_instruction, store, order_id, body.instruction, body.mode,
+                **body.model_dump(include={"style"}, exclude_unset=True))
 
 
 @router.delete("/research/work-orders/{order_id}", status_code=204)

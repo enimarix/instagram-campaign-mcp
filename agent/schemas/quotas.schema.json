@@ -3,7 +3,7 @@
   "title": "Today's quotas (learning.quotas.todays_quotas)",
   "type": "object",
   "required": ["date", "limits", "counts", "humour_target", "clips_available",
-               "batch_size", "effective_batch_size"],
+               "batch_size", "effective_batch_size", "styles"],
   "$defs": {
     "numbers": {"type": "object",
                 "required": ["ideas", "explore", "humour", "informative", "reactions"],
@@ -16,6 +16,10 @@
     "humour_target": {"type": "integer"},
     "clips_available": {"type": "integer", "minimum": 0},
     "batch_size": {"type": "integer"},
-    "effective_batch_size": {"type": "integer"}
+    "effective_batch_size": {"type": "integer"},
+    "styles": {"type": "object",
+               "additionalProperties": {"type": "object", "required": ["count", "limit"],
+                                        "properties": {"count": {"type": "integer"},
+                                                       "limit": {"type": ["integer", "null"]}}}}
   }
 }

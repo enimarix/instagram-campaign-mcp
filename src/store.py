@@ -616,6 +616,51 @@ ALTER TABLE agent_runs ADD COLUMN pid INTEGER;
 ALTER TABLE agent_runs ADD COLUMN pid_started INTEGER;
 """
 
+# Migration 24: styles as buttons (138). ideas.style: the visual style the idea is made in
+# (src/studio/styles.py; NULL = not chosen yet, render_motion records the template's).
+# work_orders is rebuilt (new CHECK): style (NULL = Auto, the agent picks), origin (trend:
+# the Trending page, dm: a DM pick, create: « Créer une vidéo », change: « même vidéo,
+# autre style » of from_asset_id). A create order has neither a Reel nor a pick.
+STYLES_SCHEMA = """
+ALTER TABLE ideas ADD COLUMN style TEXT;
+CREATE TABLE work_orders_new (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    origin         TEXT NOT NULL CHECK (origin IN ('trend','dm','create','change')),
+    source_id      INTEGER REFERENCES sources(id),
+    pick_id        INTEGER UNIQUE REFERENCES dm_picks(id),
+    from_asset_id  INTEGER REFERENCES assets(id),
+    mode           TEXT NOT NULL CHECK (mode IN ('inspired','react','owner')),
+    style          TEXT,
+    instruction    TEXT,
+    own_reel       INTEGER NOT NULL DEFAULT 0,
+    status         TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN
+        ('needs_instruction','scheduled','in_production','in_feed','analysed','skipped')),
+    skip_reason    TEXT,
+    blocked_reason TEXT,
+    analysis       TEXT,
+    scheduled_at   TEXT,
+    idea_id        INTEGER REFERENCES ideas(id),
+    asset_id       INTEGER REFERENCES assets(id),
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    CHECK ((origin = 'trend' AND source_id IS NOT NULL) OR (origin = 'dm' AND pick_id IS NOT NULL)
+           OR origin = 'create' OR (origin = 'change' AND from_asset_id IS NOT NULL))
+);
+INSERT INTO work_orders_new (id, origin, source_id, pick_id, mode, instruction, own_reel,
+    status, skip_reason, blocked_reason, analysis, scheduled_at, idea_id, asset_id,
+    created_at, updated_at)
+SELECT id, CASE WHEN pick_id IS NULL THEN 'trend' ELSE 'dm' END, source_id, pick_id, mode,
+    instruction, own_reel, status, skip_reason, blocked_reason, analysis, scheduled_at,
+    idea_id, asset_id, created_at, updated_at
+FROM work_orders;
+DROP TABLE work_orders;
+ALTER TABLE work_orders_new RENAME TO work_orders;
+CREATE UNIQUE INDEX idx_work_orders_open ON work_orders(source_id)
+    WHERE origin = 'trend' AND status IN ('needs_instruction','scheduled','in_production');
+CREATE INDEX idx_work_orders_idea ON work_orders(idea_id);
+CREATE INDEX idx_work_orders_status ON work_orders(status, scheduled_at);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -625,7 +670,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
                          AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
-                         AGENT_RUN_PID_SCHEMA]
+                         AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -640,7 +685,7 @@ INSPIRATION_NOTE_MAX = 200
 _INSPIRATION_URL = re.compile(
     r"https://(?:www\.)?instagram\.com/(reel|p)/([A-Za-z0-9_-]+)/?(?:[?#].*)?")
 IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "citations",
-               "hypothesis", "strategy", "experiment", "batch_date")
+               "hypothesis", "strategy", "experiment", "batch_date", "style")
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
                 "caption", "audio_name", "recipe", "duration", "batch_date", "status",
                 "verdict", "qc", "self_score", "self_score_reason", "best_before",
@@ -1533,6 +1578,11 @@ class CampaignStore:
     def get_idea(self, idea_id: int) -> Dict[str, Any]:
         return self._get("ideas", idea_id)
 
+    def set_idea_style(self, idea_id: int, style: str) -> None:
+        """Record the style an idea was made in, once (render_motion, step 138)."""
+        with self._tx() as c:
+            c.execute("UPDATE ideas SET style=? WHERE id=? AND style IS NULL", (style, idea_id))
+
     def list_ideas(
         self, track: Optional[str] = None, batch_date: Optional[Any] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
@@ -1564,10 +1614,11 @@ class CampaignStore:
         rights_basis (None: no source) and dm_pick_sender (the pinned account that sent the
         source by DM, else None) for the inbox, and change_request: on a revised video, the
         owner's newest change request on the version it replaces {text, reason_codes}, and
-        work_order: the owner's work order (Trending or DM) its idea was made for {id, mode,
-        instruction, permalink, source (dm | trend)} (every version of that idea), else None."""
+        work_order: the owner's work order its idea was made for {id, mode, instruction,
+        permalink, source (its origin: trend | dm | create | change), style} (every version
+        of that idea), else None; style: the idea's (138)."""
         return self._select(
-            "SELECT a.*, i.track, i.strategy, i.experiment, s.rights_basis,"
+            "SELECT a.*, i.track, i.strategy, i.experiment, i.style, s.rights_basis,"
             " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
             "  ORDER BY d.id LIMIT 1) AS dm_pick_sender,"
             " (SELECT json_object('text', f.text, 'reason_codes', json(f.reason_codes))"
@@ -1575,7 +1626,7 @@ class CampaignStore:
             "  ORDER BY f.id DESC LIMIT 1) AS change_request,"
             " (SELECT json_object('id', w.id, 'mode', w.mode, 'instruction', w.instruction,"
             "  'permalink', COALESCE(ws.url, wp.reel_url),"
-            "  'source', CASE WHEN w.pick_id IS NULL THEN 'trend' ELSE 'dm' END)"
+            "  'source', w.origin, 'style', w.style)"
             "  FROM work_orders w"
             "  LEFT JOIN sources ws ON ws.id = w.source_id"
             "  LEFT JOIN dm_picks wp ON wp.id = w.pick_id"

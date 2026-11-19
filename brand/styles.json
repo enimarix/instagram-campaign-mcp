@@ -1,0 +1,68 @@
+{
+  "about": "Launch buttons, one per style (step 138, src/studio/styles.py). The style ids come from the templates (motion/src/registry.ts STYLES and the cinematic engine); an id here that no template has is ignored, a style missing here still shows with its registry label. preview: files under data/samples/ (a missing file = no preview). end_card: the end-card style (motion/src/endcards/schema.ts END_CARD_STYLES). address: tu or vous. enabled: the default, the owner changes it in Settings.",
+  "styles": {
+    "pixel": {
+      "label": "Pixel 8-bit",
+      "description": "Jeu vidéo rétro 8-bit : quiz, combats de boss, sketchs, pour l'humour et les mythes.",
+      "preview": {"clip": "137/factquest-with-pixel-endcard.mp4"},
+      "end_card": "pixel",
+      "address": "tu",
+      "enabled": true
+    },
+    "voxel": {
+      "label": "3D 8-bit",
+      "description": "Monde en cubes 3D (voxel) : un petit golem progresse grâce à l'appli.",
+      "preview": {"still": "130/voxelquest-cover.png", "clip": "130/voxelquest.mp4"},
+      "end_card": "voxel",
+      "address": "vous",
+      "enabled": true
+    },
+    "paper": {
+      "label": "Papier",
+      "description": "Papier découpé, le style maison : une petite histoire du quotidien et ses chiffres.",
+      "preview": {"still": "131/paperstory-cover.png", "clip": "131/paperstory-moyenne.mp4"},
+      "end_card": "paper",
+      "address": "vous",
+      "enabled": true
+    },
+    "cutaway": {
+      "label": "Pixel explicatif",
+      "description": "Vue en coupe pixel : on zoome dans le corps pour expliquer comment ça marche.",
+      "preview": {"still": "142/cutaway-cover.png", "clip": "148/cutaway-b-phone.mp4"},
+      "end_card": "cutaway",
+      "address": "vous",
+      "enabled": true
+    },
+    "editorial": {
+      "label": "Éditorial",
+      "description": "Magazine épuré : grands titres, chapitres et un chiffre clé, pour les explications calmes.",
+      "preview": {"still": "144/editorial-cover.png", "clip": "144/editorial-phone.mp4"},
+      "end_card": "editorial",
+      "address": "vous",
+      "enabled": true
+    },
+    "cinema": {
+      "label": "Pixel ciné",
+      "description": "Scènes pixel peintes et cinématiques, ambiance du soir, pour un moment qui marque.",
+      "preview": {"still": "143/pixelcinema-cover.png", "clip": "143/pixelcinema-phone.mp4"},
+      "end_card": "cinema",
+      "address": "vous",
+      "enabled": true
+    },
+    "macro3d": {
+      "label": "Macro 3D",
+      "description": "3D en gros plan avec Marco : on coupe les aliments pour voir ce qu'il y a dedans.",
+      "preview": {"still": "154/macro3d-cover.png", "clip": "154/macro3d-phone.mp4"},
+      "end_card": "macro3d",
+      "address": "tu",
+      "enabled": true
+    },
+    "blender": {
+      "label": "Blender",
+      "description": "Sketch 3D façon cinématique de jeu PS2, rendu par Blender, pour l'humour.",
+      "end_card": "live",
+      "address": "tu",
+      "enabled": true
+    }
+  }
+}

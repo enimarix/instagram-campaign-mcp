@@ -270,7 +270,7 @@ def test_inspired_order_lifecycle_to_the_feed(store, settings):
     assert row["work_order"] == {"id": order["id"], "mode": "inspired",
                                  "instruction": "Same joke, our macros",
                                  "permalink": "https://www.instagram.com/reel/A/",
-                                 "source": "trend"}
+                                 "source": "trend", "style": None}
     with pytest.raises(ValueError, match="only an open one"):
         work_orders.skip_order(store, order["id"], "late")
     other = store.add_asset(store.add_idea("motion", hook="x")["id"])

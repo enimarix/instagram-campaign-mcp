@@ -4,7 +4,7 @@
   "type": "object",
   "required": ["work_orders", "bible", "bible_note", "learnings", "feedback", "change_requests",
                "last_daily_report", "experiments", "quotas", "today", "recent_hooks",
-               "inspirations", "trend_taste", "bench", "mix"],
+               "inspirations", "trend_taste", "bench", "mix", "styles"],
   "properties": {
     "work_orders": {"type": "array", "maxItems": 50,
                     "items": {"type": "object",
@@ -30,6 +30,8 @@
                     "properties": {"liked": {"type": "array", "maxItems": 50},
                                    "disliked": {"type": "array", "maxItems": 50}}},
     "bench": {"type": "object", "required": ["count", "supply_days", "hooks"]},
+    "styles": {"type": ["array", "null"], "maxItems": 50,
+               "items": {"type": "object", "required": ["id", "label", "templates"]}},
     "mix": {"type": "object",
             "required": ["template", "hook_type", "pillar", "humour", "moved"],
             "additionalProperties": {"$ref": "#/$defs/mix_rows"},

@@ -40,7 +40,7 @@ describe('App', () => {
     const objects: Record<string, unknown> = { '/api/settings': { version: 0, fields: [] }, '/api/ads/presets': { presets: [] } }
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
       new Response(JSON.stringify(
-        ['/api/agent/schedule', '/api/reactions', '/api/pinned-accounts', '/api/dm-picks', '/api/permissions'].includes(url) || url.startsWith('/api/sources')
+        ['/api/agent/schedule', '/api/reactions', '/api/pinned-accounts', '/api/dm-picks', '/api/permissions', '/api/styles'].includes(url) || url.startsWith('/api/sources')
           ? [] : objects[url] ?? health))))
     render(
       <MemoryRouter initialEntries={['/settings']}>

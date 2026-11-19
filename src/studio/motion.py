@@ -35,7 +35,16 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore
-from . import cinematic, ffmpeg, gpu_lock, macro3d, media, recipe, render  # render.py imports us
+from . import (  # render.py imports us
+    cinematic,
+    ffmpeg,
+    gpu_lock,
+    macro3d,
+    media,
+    recipe,
+    render,
+    styles,
+)
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
 
@@ -354,6 +363,9 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     ready: a child asset). Runs TTS first when the template has a script and no voice yet."""
     if (idea_id is None) == (asset_id is None):
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
+    # 138: the template must be in the idea's style (one without takes the template's)
+    styles.check_template(store, store.get_idea(
+        idea_id if idea_id is not None else store.get_asset(asset_id)["idea_id"]), template)
     v = validate_props(template, props)  # before TTS: build_props needs well-formed props
     voiced = build_props(template, v["props"], settings, voice)
     if voiced is not v["props"]:

@@ -1,10 +1,16 @@
 """
-Work orders: Reels the owner sends the agent to make, each with a mode and, if they want,
-their exact instruction. Two sources:
+Work orders: videos the owner sends the agent to make, each with a mode, a style and, if
+they want, their exact instruction. Four origins:
 
 - trend (134): Reels from the Trending feed (research references), sent from the app;
 - dm (136): every Reel a pinned account sends the brand account by DM (dm_picks.py) is an
-  order (pick_id) in mode `owner`; the DM's note is its instruction.
+  order (pick_id) in mode `owner`; the DM's note is its instruction;
+- create (138): « Créer une vidéo », a topic or instruction and nothing else (mode owner);
+- change (138): « même vidéo, autre style » of one of our videos (from_asset_id, mode
+  owner): the same video remade in another style.
+
+style (138, src/studio/styles.py): the style button the owner pressed; None = Auto (the
+agent picks). The idea made for the order is in that style (check_idea, create_idea).
 
 Modes:
 - inspired: an original video on the same idea or format; nothing of the Reel is reused
@@ -29,7 +35,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, to_iso, utcnow
-from . import dm_picks
+from . import dm_picks, styles
 from .assets import InvalidTransition
 from .downloader import _same_post, permalink
 
@@ -38,20 +44,22 @@ STATUSES = ("needs_instruction", "scheduled", "in_production", "in_feed", "analy
             "skipped")
 OPEN = ("needs_instruction", "scheduled", "in_production")
 NOT_STARTED = ("needs_instruction", "scheduled")
-SOURCES = ("all", "dm", "trend")
+ORIGINS = ("trend", "dm", "create", "change")
+SOURCES = ("all", *ORIGINS, "mine")  # mine: what the owner sent himself (all but trend)
 INSTRUCTION_MAX = 500
 REASON_MAX = 300
 ANALYSIS_MAX = 600
 MAX_ITEMS = 20
 CAPTION_LINE = 120
 TRENDING_PROVIDER = "instagram"  # research.PROVIDER (research imports this module)
-AGENT_KEYS = ("id", "source", "source_id", "pick_id", "mode", "instruction", "status",
+AGENT_KEYS = ("id", "source", "source_id", "pick_id", "mode", "style", "instruction", "status",
               "permalink", "own_reel", "sender_username", "topic", "caption_quote", "likes",
-              "comments", "views", "created_at", "skip_reason", "idea_id", "asset_id")
+              "comments", "views", "created_at", "skip_reason", "idea_id", "asset_id",
+              "from_asset_id")
 _ROWS = ("SELECT w.*, COALESCE(s.url, p.reel_url) AS permalink, s.author, s.stats,"
          " p.sender_username, p.received_at FROM work_orders w"
          " LEFT JOIN sources s ON s.id = w.source_id LEFT JOIN dm_picks p ON p.id = w.pick_id")
-_IS_DM = "(w.pick_id IS NOT NULL)"  # a _select filter key: 1 = dm, 0 = trend
+_MINE = "(w.origin != 'trend')"  # a _select filter key: 1 = the owner's own sends
 
 
 def _view(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -63,7 +71,7 @@ def _view(row: Dict[str, Any]) -> Dict[str, Any]:
     stats = row.pop("stats") or {}
     caption = next((ln.strip() for ln in (stats.get("caption") or "").splitlines()
                     if ln.strip()), None)
-    return {**row, "source": "dm" if row["pick_id"] else "trend",
+    return {**row, "source": row["origin"],
             "own_reel": bool(row["own_reel"]), "embed_url": embed_url(row["permalink"]),
             "topic": row.pop("author") or stats.get("hashtag"),
             "caption_quote": caption and caption[:CAPTION_LINE],
@@ -81,15 +89,15 @@ def get_order(store: CampaignStore, order_id: int) -> Dict[str, Any]:
 def list_orders(store: CampaignStore, status: Optional[str] = None, limit: int = 100,
                 *, newest: bool = True, source: str = "all") -> List[Dict[str, Any]]:
     """Newest first for the owner; oldest first (the order they were sent) for the agent.
-    source: all, dm (DM picks) or trend (the Trending page)."""
+    source: all, an origin (dm, trend, create, change) or mine (all but trend)."""
     if status is not None and status not in STATUSES:
         raise ValueError(f"status must be one of {', '.join(STATUSES)}")
     if source not in SOURCES:
         raise ValueError(f"source must be one of {', '.join(SOURCES)}")
     order = "w.id DESC" if newest else "w.id"
-    dm = None if source == "all" else source == "dm"
-    return [_view(r) for r in store._select(_ROWS, {"w.status": status, _IS_DM: dm},
-                                            order, limit)]
+    filters = {"w.status": status, "w.origin": source if source in ORIGINS else None,
+               _MINE: 1 if source == "mine" else None}
+    return [_view(r) for r in store._select(_ROWS, filters, order, limit)]
 
 
 def _instruction(text: Optional[str]) -> Optional[str]:
@@ -101,10 +109,10 @@ def _instruction(text: Optional[str]) -> Optional[str]:
 
 def create_orders(store: CampaignStore, items: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Store the owner's Trending orders, all or none, scheduled at once:
-    [{source_id, mode (inspired | react), instruction?}]. ValueError
+    [{source_id, mode (inspired | react), instruction?, style? (None: Auto)}]. ValueError
     names the first problem: an empty list, an unknown source, one research did not find
     (not in the Trending feed) or with no permalink, a bad mode, an instruction too long,
-    a Reel twice or one with an open order already."""
+    a style unknown or turned off, a Reel twice or one with an open order already."""
     if not items:
         raise ValueError("pick at least one Reel")
     if len(items) > MAX_ITEMS:
@@ -123,28 +131,29 @@ def create_orders(store: CampaignStore, items: Sequence[Dict[str, Any]]) -> List
         if not source["url"]:
             raise ValueError(f"Reel {source_id} has no permalink")
         instruction = _instruction(item.get("instruction"))
+        style = styles.check_style(store, item.get("style"))
         if source_id in [r[0] for r in rows]:
             raise ValueError(f"Reel {source_id} is in the list twice")
-        rows.append((source_id, mode, instruction))
+        rows.append((source_id, mode, instruction, style))
     now = to_iso(utcnow())
     with store._tx() as c:  # one transaction: all or none
-        for source_id, mode, instruction in rows:
-            if c.execute("SELECT 1 FROM work_orders WHERE source_id=? AND pick_id IS NULL"
+        for source_id, *_ in rows:
+            if c.execute("SELECT 1 FROM work_orders WHERE source_id=? AND origin='trend'"
                          " AND status IN ('needs_instruction','scheduled','in_production')",
                          (source_id,)).fetchone():
                 raise ValueError(f"Reel {source_id} already has an open work order")
-        ids = [c.execute("INSERT INTO work_orders (source_id, mode, instruction, scheduled_at,"
-                         " created_at, updated_at) VALUES (?,?,?,?,?,?)",
-                         (source_id, mode, instruction, now, now, now)).lastrowid
-               for source_id, mode, instruction in rows]
+        ids = [c.execute("INSERT INTO work_orders (origin, source_id, mode, instruction, style,"
+                         " scheduled_at, created_at, updated_at)"
+                         " VALUES ('trend',?,?,?,?,?,?,?)", (*row, now, now, now)).lastrowid
+               for row in rows]
     return [get_order(store, i) for i in ids]
 
 
 def add_for_pick(c: Any, pick_id: int, note: Optional[str], own_reel: bool, now: str) -> None:
     """In the poll's transaction (connection c): a new DM pick's order, mode owner; its
     note is the instruction and schedules it, no note waits for one (needs_instruction)."""
-    c.execute("INSERT INTO work_orders (pick_id, mode, instruction, own_reel, status,"
-              " scheduled_at, created_at, updated_at) VALUES (?,'owner',?,?,?,?,?,?)",
+    c.execute("INSERT INTO work_orders (origin, pick_id, mode, instruction, own_reel, status,"
+              " scheduled_at, created_at, updated_at) VALUES ('dm',?,'owner',?,?,?,?,?,?)",
               (pick_id, note, int(own_reel), "scheduled" if note else "needs_instruction",
                now if note else None, now, now))
 
@@ -165,26 +174,81 @@ def late_note(c: Any, pick_id: int, note: str, now: str) -> None:
 
 
 def set_instruction(store: CampaignStore, order_id: int, instruction: str,
-                    mode: Optional[str] = None) -> Dict[str, Any]:
-    """The owner writes (or rewrites) an order's instruction, and its mode if given, while
-    it is needs_instruction or scheduled: the order is scheduled (now). InvalidTransition
-    once the agent started it; KeyError when there is none."""
+                    mode: Optional[str] = None, style: Any = ...) -> Dict[str, Any]:
+    """The owner writes (or rewrites) an order's instruction, and its mode and style if
+    given (style None: Auto), while it is needs_instruction or scheduled: the order is
+    scheduled (now). InvalidTransition once the agent started it; KeyError when there is
+    none."""
     text = _instruction(instruction)
     if not text:
         raise ValueError("write the instruction")
     if mode is not None and mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
     order = get_order(store, order_id)
+    style = order["style"] if style is ... else styles.check_style(store, style)
     now = to_iso(utcnow())
     with store._tx() as c:
         moved = c.execute(
-            "UPDATE work_orders SET instruction=?, mode=COALESCE(?, mode), status='scheduled',"
-            " scheduled_at=?, blocked_reason=NULL, updated_at=? WHERE id=? AND status IN"
-            " ('needs_instruction','scheduled')", (text, mode, now, now, order_id)).rowcount
+            "UPDATE work_orders SET instruction=?, mode=COALESCE(?, mode), style=?,"
+            " status='scheduled', scheduled_at=?, blocked_reason=NULL, updated_at=? WHERE id=?"
+            " AND status IN ('needs_instruction','scheduled')",
+            (text, mode, style, now, now, order_id)).rowcount
     if not moved:
         raise InvalidTransition(f"work order {order_id} is {order['status']}: the instruction"
                                 " can only change before the agent starts it")
     return get_order(store, order_id)
+
+
+def _insert_owner_order(store: CampaignStore, origin: str, instruction: str,
+                        style: Optional[str], from_asset_id: Optional[int] = None
+                        ) -> Dict[str, Any]:
+    now = to_iso(utcnow())
+    with store._tx() as c:
+        order_id = c.execute(
+            "INSERT INTO work_orders (origin, from_asset_id, mode, instruction, style,"
+            " scheduled_at, created_at, updated_at) VALUES (?,?,'owner',?,?,?,?,?)",
+            (origin, from_asset_id, instruction, style, now, now, now)).lastrowid
+    return get_order(store, order_id)
+
+
+def create_video(store: CampaignStore, instruction: str,
+                 style: Optional[str] = None) -> Dict[str, Any]:
+    """« Créer une vidéo »: a topic or instruction in the owner's words and a style (None:
+    Auto), scheduled at once (mode owner)."""
+    text = _instruction(instruction)
+    if not text:
+        raise ValueError("write the topic or the instruction")
+    return _insert_owner_order(store, "create", text, styles.check_style(store, style))
+
+
+def restyle(store: CampaignStore, asset_id: int, style: Optional[str],
+            note: Optional[str] = None) -> Dict[str, Any]:
+    """« Même vidéo, autre style »: an order to remake our video `asset_id` (same topic,
+    script and message) in `style` (None: another one the agent picks), with the owner's
+    optional note. ValueError when the video is already in that style; KeyError when there
+    is no such video."""
+    asset = store.get_asset(asset_id)
+    current = store.get_idea(asset["idea_id"])["style"]
+    style = styles.check_style(store, style)
+    if style is not None and style == current:
+        raise ValueError(f"video {asset_id} is already in style {style!r}: pick another one")
+    if style is None:
+        other = f" que {current}" if current else ""
+        how = f"dans un autre style{other}, au choix de l'IA"
+    else:
+        how = f"en style « {styles.get_style(store, style)['label']} » ({style})"
+    text = (f"Même vidéo, autre style : refais la vidéo {asset_id} (même sujet, même script,"
+            f" même message) {how}.")
+    note = (note or "").strip()
+    return _insert_owner_order(store, "change", _instruction(f"{text} {note}" if note else text),
+                               style, asset_id)
+
+
+def remade_idea(store: CampaignStore, order: Dict[str, Any]) -> Optional[int]:
+    """The idea of the video a change order remakes (its hook may come back), else None."""
+    if not order.get("from_asset_id"):
+        return None
+    return store.get_asset(order["from_asset_id"])["idea_id"]
 
 
 def delete_order(store: CampaignStore, order_id: int) -> Dict[str, Any]:
@@ -251,14 +315,19 @@ def _same_reel(url: Optional[str], other: Optional[str]) -> bool:
 
 
 def check_idea(store: CampaignStore, order_id: int, track: str,
-               source_id: Optional[int]) -> Dict[str, Any]:
+               source_id: Optional[int], style: Optional[str] = None) -> Dict[str, Any]:
     """Before create_idea(work_order_id=...) writes: the order is scheduled and has no idea
     yet; react -> a remix of the order's Reel; inspired -> nothing of the Reel reused;
-    owner -> the agent reads the instruction (the idea's own checks still apply)."""
+    owner -> the agent reads the instruction (the idea's own checks still apply); an order
+    with a style -> the idea is in that style."""
     order = get_order(store, order_id)
     if order["status"] != "scheduled":
         raise ValueError(f"work order {order_id} is {order['status']}: only a scheduled one"
                          " gets an idea")
+    if order["style"] and style and style != order["style"]:
+        raise ValueError(f"work order {order_id} asks for style {order['style']!r}, not"
+                         f" {style!r}: create_idea(style={order['style']!r}) and a template"
+                         " of that style")
     reel = order["source_id"]  # a DM order's Reel: the source download_reel made of it
     if reel is None and source_id is not None and _same_reel(
             store.get_source(source_id)["url"], order["permalink"]):
@@ -301,19 +370,29 @@ def open_by_source(store: CampaignStore, source_ids: Sequence[int]) -> Dict[int,
         return {}
     with store._tx() as c:
         rows = c.execute(
-            "SELECT id, source_id, mode, instruction, status FROM work_orders"
-            " WHERE pick_id IS NULL AND status IN ('needs_instruction','scheduled',"
+            "SELECT id, source_id, mode, instruction, status, style FROM work_orders"
+            " WHERE origin='trend' AND status IN ('needs_instruction','scheduled',"
             f"'in_production') AND source_id IN ({','.join('?' * len(source_ids))})",
             list(source_ids)).fetchall()
-    return {r["source_id"]: {k: r[k] for k in ("id", "mode", "instruction", "status")}
+    return {r["source_id"]: {k: r[k] for k in ("id", "mode", "instruction", "status", "style")}
             for r in rows}
 
 
 def for_agent(store: CampaignStore, status: Optional[str] = "scheduled",
               limit: int = 50) -> List[Dict[str, Any]]:
-    """What the agent sees of the orders (status None: all), oldest first."""
-    return [{k: o[k] for k in AGENT_KEYS}
-            for o in list_orders(store, status, limit, newest=False)]
+    """What the agent sees of the orders (status None: all), oldest first. A change order
+    carries from_video: the idea of the video to remake (its hook, script, template)."""
+    out = []
+    for o in list_orders(store, status, limit, newest=False):
+        row = {k: o[k] for k in AGENT_KEYS}
+        if o["from_asset_id"]:
+            asset = store.get_asset(o["from_asset_id"])
+            idea = store.get_idea(asset["idea_id"])
+            row["from_video"] = {**{k: idea[k] for k in ("id", "track", "pillar", "hook",
+                                                          "hook_type", "script", "style")},
+                                 "template": (asset["recipe"] or {}).get("template")}
+        out.append(row)
+    return out
 
 
 def set_blocked(store: CampaignStore, reason: Optional[str]) -> int:

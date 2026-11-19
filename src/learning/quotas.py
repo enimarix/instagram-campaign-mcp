@@ -21,16 +21,19 @@ brief (055) shows the same numbers to the agent.
 - reactions_plan (073): how many reactions a run still makes, DM picks first (picks `new`
   or `downloaded`, not made yet), then viral finds; limits.reactions grows as downloads
   land, the plan says how many to download.
+- styles (138): today's ideas per style, and for a style the owner gave a daily share
+  (Settings, src/studio/styles.py) a limit of ceil(batch x share), at least 1.
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
 from math import ceil
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, utcnow
+from ..studio import styles
 from ..studio.scheduling import bench
 from ..taxonomy import load_taxonomy
 
@@ -70,8 +73,9 @@ def effective_batch_size(settings: InstagramMCPSettings, bench_count: int) -> Di
 def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
                   day: Union[date, str], now: Optional[datetime] = None) -> Dict[str, Any]:
     """{date, limits, counts, humour_target, clips_available, reactions_plan, batch_size,
-    effective_batch_size, bench_surplus} for the batch of `day`; the bench is read at `now`.
-    limits and counts share the keys ideas, explore, humour, informative, reactions."""
+    effective_batch_size, bench_surplus, styles} for the batch of `day`; the bench is read
+    at `now`. limits and counts share the keys ideas, explore, humour, informative,
+    reactions; styles: {style: {count, limit (None: no share set)}}."""
     day = date.fromisoformat(day) if isinstance(day, str) else day
     ideas = store.list_ideas(batch_date=day, limit=100_000)
     humour = flagged_pillars("humour")
@@ -101,4 +105,18 @@ def todays_quotas(store: CampaignStore, settings: InstagramMCPSettings,
     return {"date": day.isoformat(), "limits": limits, "counts": counts,
             "humour_target": target, "clips_available": clips,
             "reactions_plan": reaction_plan(settings, counts["reactions"], picks),
-            "batch_size": settings.batch_size, **sizes}
+            "batch_size": settings.batch_size, **sizes,
+            "styles": style_quotas(store, ideas, batch)}
+
+
+def style_quotas(store: CampaignStore, ideas: List[Dict[str, Any]],
+                 batch: int) -> Dict[str, Dict[str, Any]]:
+    """{style: {count, limit}} for the styles used today or given a share by the owner."""
+    shares = {s: c["share"] for s, c in styles.owner_choices(store).items() if c.get("share")}
+    counts: Dict[str, int] = {}
+    for i in ideas:
+        if i["style"]:
+            counts[i["style"]] = counts.get(i["style"], 0) + 1
+    return {s: {"count": counts.get(s, 0),
+                "limit": max(1, ceil(round(batch * shares[s], 6))) if s in shares else None}
+            for s in {**counts, **shares}}

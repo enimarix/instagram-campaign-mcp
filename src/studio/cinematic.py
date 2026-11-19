@@ -124,7 +124,7 @@ DEFAULTS = {"hook": "POV: dad found out about meal prep",
 def template_info() -> Dict[str, Any]:
     """This template as motion.list_templates() lists the Remotion ones."""
     schema = Props.model_json_schema()
-    return {"id": TEMPLATE, "style": STYLE, "jsonSchema": schema,
+    return {"id": TEMPLATE, "style": STYLE, "styleLabel": STYLE_LABEL, "jsonSchema": schema,
             "defaultProps": Props.model_validate(DEFAULTS).model_dump(exclude_none=True),
             "description": schema.get("description")}
 

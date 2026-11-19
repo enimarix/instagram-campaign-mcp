@@ -43,9 +43,16 @@ Skip this step in a dry run, and when `work_orders.json` holds no orders. This r
 starts right after the owner sent them (a DM with a note, or an instruction written in
 the app): make every scheduled order before anything else (`get_creative_brief` once for
 the bible, owner rules and `quotas`). An order comes from the Trending page
-(`source: "trend"`) or by DM from a pinned account (`source: "dm"`, with
+(`source: "trend"`), by DM from a pinned account (`source: "dm"`, with
 `sender_username`, `permalink` and `own_reel`: true when the Reel is from our own
-account; every new DM pick is an order, so `dm_picks.json` only holds older picks).
+account; every new DM pick is an order, so `dm_picks.json` only holds older picks), from
+« Créer une vidéo » (`source: "create"`: the instruction only, an original motion video)
+or « même vidéo, autre style » (`source: "change"`: remake `from_video`, same topic,
+script and message, in the order's `style`).
+**The style**: `style` is the button the owner pressed (one of the brief's `styles`):
+`create_idea(…, work_order_id=<id>)` stores it and `render_motion` refuses a template of
+another style (its refusal names the right templates); null = Auto: pick the style that
+fits, `create_idea(style=…)`.
 1. **Follow the owner's `instruction` literally** ("change that, keep that" means exactly
    that), within the safety rules (never a health promise, never copying, never a plain
    re-upload or an evasion edit; the closest safe version and why, or skip).

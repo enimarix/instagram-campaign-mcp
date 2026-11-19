@@ -268,6 +268,8 @@ def test_preview_stills_default_frames(tmp_path, monkeypatch):
 
 def test_queue_motion_render_stores_recipe_and_enqueues(store, tmp_path, monkeypatch):
     monkeypatch.setattr(motion, "validate_props", lambda t, p: {**VALID, "props": p})
+    monkeypatch.setattr(motion, "list_templates",
+                        lambda: [{"id": "Hello", "style": "pixel"}])  # the style check (138)
     s = _settings(tmp_path)
     idea = store.add_idea("motion")
     out = motion.queue_motion_render(store, s, template="Hello", props={"title": "Hi"},
@@ -474,3 +476,17 @@ def test_macro3d_script_reads_each_scene_then_the_outro():
     assert lines[0] == "En déficit calorique, la nourriture n'est pas ton ennemie. C'est ton alliée."
     assert lines[-1] == "Mange mieux, pas moins : compte juste." and len(lines) == len(p["scenes"]) + 1
     assert motion.SCRIPTS["Macro3D"]({**p, "outro": None}) == lines[:-1]
+
+
+@needs_motion
+def test_schema_styles_are_the_buttons(store):
+    """138: the real registry's styles (registry.ts STYLES + the cinematic engine) each have
+    a brand/styles.json entry, and a template's style label comes through for the others."""
+    from src.studio import styles
+
+    templates = motion.list_templates()
+    assert all(t["styleLabel"] for t in templates)
+    listed = [s["id"] for s in styles.list_styles(store)]
+    assert listed == list(dict.fromkeys(t["style"] for t in templates))
+    assert set(listed) == set(styles._entries()) >= {
+        "pixel", "voxel", "paper", "cutaway", "editorial", "cinema", "macro3d", "blender"}

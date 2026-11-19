@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Scheduled work orders, oldest first (studio.work_orders.for_agent): Reels the owner sent to make, from the Trending page (source trend) or by DM (source dm)",
+  "title": "Scheduled work orders, oldest first (studio.work_orders.for_agent): videos the owner sent to make, from the Trending page (source trend), by DM (source dm), Créer une vidéo (source create) or même vidéo, autre style (source change: from_video); style: the style button pressed, null = Auto",
   "type": "object",
   "required": ["untrusted_captions", "orders"],
   "additionalProperties": false,
@@ -11,19 +11,20 @@
       "maxItems": 50,
       "items": {
         "type": "object",
-        "required": ["id", "source", "source_id", "pick_id", "mode", "instruction", "status",
+        "required": ["id", "source", "source_id", "pick_id", "mode", "style", "instruction", "status",
                      "permalink", "own_reel", "sender_username", "topic", "caption_quote",
-                     "likes", "comments", "views", "created_at"],
+                     "likes", "comments", "views", "created_at", "from_asset_id"],
         "additionalProperties": false,
         "properties": {
           "id": {"type": "integer"},
-          "source": {"enum": ["trend", "dm"]},
+          "source": {"enum": ["trend", "dm", "create", "change"]},
           "source_id": {"type": ["integer", "null"]},
           "pick_id": {"type": ["integer", "null"]},
           "mode": {"enum": ["inspired", "react", "owner"]},
+          "style": {"type": ["string", "null"]},
           "instruction": {"type": ["string", "null"], "maxLength": 500},
           "status": {"const": "scheduled"},
-          "permalink": {"type": "string", "pattern": "^https://"},
+          "permalink": {"type": ["string", "null"], "pattern": "^https://"},
           "own_reel": {"type": "boolean"},
           "sender_username": {"type": ["string", "null"]},
           "topic": {"type": ["string", "null"]},
@@ -34,7 +35,10 @@
           "created_at": {"type": "string"},
           "skip_reason": {"type": "null"},
           "idea_id": {"type": "null"},
-          "asset_id": {"type": "null"}
+          "asset_id": {"type": "null"},
+          "from_asset_id": {"type": ["integer", "null"]},
+          "from_video": {"type": "object",
+                         "required": ["id", "hook", "script", "style", "template"]}
         }
       }
     }
