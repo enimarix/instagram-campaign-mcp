@@ -1,0 +1,11 @@
+# The VoxCPM2 voice service (vendor/voxcpm_tts). Its own venv, never the studio's.
+# Install torch FIRST from PyTorch's CUDA index (the plain PyPI wheel has no CUDA on Windows):
+#   uv pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+# then: uv pip install -r requirements.txt   (README.md has the whole setup)
+voxcpm==2.0.3
+transformers==5.23.0
+soundfile==0.14.0
+numpy
+num2words==0.5.14
+fastapi
+uvicorn

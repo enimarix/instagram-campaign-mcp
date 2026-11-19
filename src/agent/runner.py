@@ -42,6 +42,7 @@ from . import packet
 
 REPO = Path(__file__).resolve().parents[2]
 AGENT_DIR = REPO / "agent"  # playbooks/ and skills/
+VOICES = REPO / "brand" / "voices" / "voices.json"  # copied: the agent picks a voice (038)
 SERVER = "studio"  # MCP server key: its tools are mcp__studio__<tool>
 BUILTIN_TOOLS = ("Read", "Glob", "Grep", "WebSearch", "WebFetch", "Skill", "ToolSearch")
 ALLOWED_TOOLS = (f"mcp__{SERVER}__*", "WebSearch", "WebFetch")
@@ -116,7 +117,7 @@ def _check_workspace(ws: Path) -> None:
 
 def prepare_workspace(settings: InstagramMCPSettings, playbook: str, *,
                       agent_dir: Path = AGENT_DIR) -> Path:
-    """(Re)build the workspace: playbook, project skills, settings, MCP config.
+    """(Re)build the workspace: playbook, project skills, voices.json, settings, MCP config.
     Returns the MCP config path."""
     source = _playbook_file(playbook, agent_dir)
     ws = Path(settings.agent_workspace).expanduser().resolve()
@@ -128,6 +129,8 @@ def prepare_workspace(settings: InstagramMCPSettings, playbook: str, *,
     books.mkdir()
     (claude / MARKER).write_text("made by ig-campaign agent run; replaced each run\n")
     shutil.copy2(source, books / source.name)
+    if VOICES.is_file():
+        shutil.copy2(VOICES, ws / VOICES.name)
     skills = agent_dir / "skills"
     for skill in sorted(skills.iterdir()) if skills.is_dir() else ():
         if skill.is_dir():

@@ -253,7 +253,16 @@ class InstagramMCPSettings(BaseSettings):
         None, description="Extra request header 'Name: value', e.g. 'Authorization: Bearer x'"
     )
     tts_voice: str = Field("", description="Voice id passed to the engine")
-    tts_timeout_s: float = Field(120.0, gt=0, description="TTS request timeout in seconds")
+    # The local VoxCPM2 service (vendor/voxcpm_tts) needs ~3.7 s of GPU per second of audio
+    # and up to 3 takes, one request at a time: a 40 s script can take ~8 min, and parallel
+    # render_motion calls queue behind each other. A hung local service is the only thing
+    # this cuts short, so it is generous.
+    tts_timeout_s: float = Field(3600.0, gt=0, description="TTS request timeout in seconds")
+    # Set to the python of the voice service's venv: `ig-campaign up` then starts
+    # vendor/voxcpm_tts/server.py on TTS_HTTP_URL's port, waits for it before the worker
+    # starts, and stops it on exit. TTS_SERVER_HF_HOME = its model cache (HF_HOME).
+    tts_server_python: Optional[str] = Field(None, description="Voice service venv python")
+    tts_server_hf_home: Optional[str] = Field(None, description="HF_HOME for the voice service")
     tts_cache_dir: str = Field(
         str(APP_HOME / "data" / "cache" / "tts"), description="Synthesized audio cache"
     )

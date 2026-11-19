@@ -136,6 +136,7 @@ def test_workspace_is_refreshed_with_playbook_skills_and_deny_rules(cfg, agent_d
     (ws / ".claude" / "skills" / "old-skill").mkdir()
     runner.prepare_workspace(cfg, "hello.md", agent_dir=agent_dir)
     assert (ws / "playbooks" / "hello.md").read_text() == "Say hello.\n"
+    assert json.loads((ws / "voices.json").read_text(encoding="utf-8"))["voices"]  # 038
     assert sorted(p.name for p in (ws / ".claude" / "skills").iterdir()) == ["hook-guide"]
     deny = json.loads((ws / ".claude" / "settings.json").read_text())["permissions"]["deny"]
     assert "Read(//**/.env)" in deny
