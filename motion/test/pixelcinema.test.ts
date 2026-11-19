@@ -6,7 +6,8 @@ import { test } from "node:test";
 import { bayer, dither, GH, GW, hash, ramp, toScreen, toWorld } from "../src/cinema/pixel.ts";
 import { ANCHORS, paint, SCENE_IDS, SETS, solidAt } from "../src/cinema/scenes.ts";
 import { CAMEOS, CARD_S } from "../src/endcards/schema.ts";
-import { beamOf, cameraAt, coverOf, hookTimes, openOf, segmentsOf, SPLIT_S } from "../src/templates/PixelCinema/layout.ts";
+import { speechSpans } from "../src/lib/duck.ts";
+import { beamOf, cameraAt, coverOf, hookTimes, openOf, segmentsOf, sfxGain, SPLIT_S, thunderAt } from "../src/templates/PixelCinema/layout.ts";
 import { beatLine, joinParts, pixelCinemaSchema, pixelCinemaScript, splitHighlight, timelineOf, titleOf } from "../src/templates/PixelCinema/schema.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
@@ -149,4 +150,15 @@ test("every view paints the same frame twice, darkens under dim, and has a white
     }
   }
   assert.deepEqual([...CAMEOS.cinema], [...SCENE_IDS]);
+});
+
+test("sound: the sfx duck under a spoken line, the thunder waits for the next gap", () => {
+  const spans = speechSpans([{ start_s: 1, end_s: 3 }, { start_s: 5, end_s: 6 }]);
+  assert.equal(sfxGain([], 2), 1);
+  assert.equal(sfxGain(spans, 4), 1);
+  assert.ok(Math.abs(20 * Math.log10(sfxGain(spans, 2)) + 10) < 0.01, "10 dB down under the voice");
+  assert.equal(thunderAt(spans, 0.5), 0.5);
+  assert.equal(thunderAt(spans, 2), 3.25);
+  assert.equal(thunderAt(spans, 4.9), 6.25);
+  assert.equal(thunderAt(spans, 4), 4);
 });

@@ -3,6 +3,7 @@
 // otherwise. Pure, so `node --test` checks it (test/pixelcinema.test.ts).
 import { CELL, type Camera, toScreen } from "../../cinema/pixel.ts";
 import { type AnchorId, SETS, type Shot, viewOf } from "../../cinema/scenes.ts";
+import { ATTACK_S, duckGain, GAP_DB, RELEASE_S, type Span } from "../../lib/duck.ts";
 import { easeInOut, easeOut, span } from "../../voxel/anim.ts";
 import type { Timeline } from "../../lib/timeline.ts";
 import { plain, type PixelCinemaProps } from "./schema.ts";
@@ -22,6 +23,18 @@ export const hookTimes = (p: PixelCinemaProps, len: number, fps: number) => {
 export const coverOf = (p: PixelCinemaProps, t: Timeline, fps: number) => {
   const hook = t.scenes[0];
   return hookTimes(p, hook.endFrame - hook.startFrame, fps).line + Math.round(0.4 * fps);
+};
+
+/**
+ * Sound effects under the voice (owner, round 3c): full in the gaps, down by the bed's duck depth
+ * (DUCK_DB - GAP_DB) while a line is spoken, with the bed's ramps. `spans` from speechSpans().
+ */
+export const sfxGain = (spans: readonly Span[], t: number) => Math.min(1, duckGain(spans, t) / 10 ** (GAP_DB / 20));
+
+/** The thunder rolls in after its lightning at `t` (s): moved to the first gap if a line is spoken then. */
+export const thunderAt = (spans: readonly Span[], t: number) => {
+  const s = spans.find((s) => t > s.start_s - ATTACK_S && t < s.end_s + RELEASE_S);
+  return s ? s.end_s + RELEASE_S : t;
 };
 
 /** A chip beat: the heading (when new) lands first, then the chip pops, then its leader line draws. */

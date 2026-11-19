@@ -203,9 +203,10 @@
   subject, sky, ground), a big counting stat, the app as a rounded card (ring + macro bars)
   floating in. Hook (the belief struck through, then the real line lands and the beam comes on),
   2–4 chips (the beam sweeps across on each; one may be the lightning: two white frames, then a
-  white / black silhouette with a bolt, thunder), 1–2 of stat / app over the darkened shot, then
-  the cinema end card (the set's card framing, in the rain, a beam swings onto the mB tile, the
-  clean stack). Props in `schema.ts` (examples `props/pixelcinema*.json`): `scene`, `hook`
+  white / black silhouette with a bolt, a distant thunder roll in the voice's next gap), 1–2 of
+  stat / app over the darkened shot, then the cinema end card (the set's card framing, in the
+  rain, a beam swings onto the mB tile, the clean stack). The bed and the sfx duck under the
+  voice (`layout.ts` `sfxGain`, `thunderAt`). Props in `schema.ts` (examples `props/pixelcinema*.json`): `scene`, `hook`
   {strike?, line}, `beats` [chip {title? (stays for the next chips), text, point?, flash} | stat
   {title, value, unit?, label?} | app {title, value, unit}], `tag?` (small bottom chip, e.g. the
   source), `outro?` (= the end card's tagline), `address`, `accent`, `citations`, `voice`

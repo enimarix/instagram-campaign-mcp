@@ -151,6 +151,22 @@ const sfx = (...tones: [atSeconds: number, Tone][]): Float64Array => {
   return buf;
 };
 
+/**
+ * A far rumble from `buf` (sfx-thunder): two one-pole low-passes (about 250 Hz, no crack), a swell
+ * over the first 0.4 s, then scaled so the loudest sample is `peak` (a hard ceiling for the mix).
+ */
+const rumble = (buf: Float64Array, peak: number): Float64Array => {
+  let a = 0;
+  let b = 0;
+  const out = buf.map((x, i) => {
+    a += 0.07 * (x - a);
+    b += 0.07 * (a - b);
+    return b * Math.min(1, i / (0.4 * RATE));
+  });
+  const max = out.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+  return out.map((v) => (v * peak) / max);
+};
+
 const sq = (from: number, seconds: number, extra: Partial<Tone> = {}): Tone => ({
   wave: "square", from, seconds, volume: 0.3, duty: 0.5, decay: true, ...extra,
 });
@@ -425,12 +441,13 @@ const effects: Record<string, Float64Array> = {
     [0.05, { wave: "noise", from: 300, to: 120, seconds: 0.4, volume: 0.18, decay: true }],
   ),
   "sfx-swish": sfx([0, { wave: "noise", from: 1200, to: 5000, seconds: 0.18, volume: 0.1 }], [0.18, { wave: "noise", from: 5000, to: 1500, seconds: 0.22, volume: 0.12, decay: true }]),
-  // Cinema (step 143): the lightning's crack, then the long low roll of the thunder.
-  "sfx-thunder": sfx(
-    [0, { wave: "noise", from: 3200, to: 700, seconds: 0.3, volume: 0.4, decay: true }],
-    [0.08, { wave: "noise", from: 260, to: 40, seconds: 2.4, volume: 0.55, decay: true }],
-    [0.3, { wave: "noise", from: 120, to: 30, seconds: 1.8, volume: 0.35, decay: true }],
-  ),
+  // Cinema (step 143): a distant thunder roll, no crack (owner, round 3c: the old crack was too
+  // violent): low noise bursts smoothed into a rumble, swelling in, peak-limited (rumble below).
+  "sfx-thunder": rumble(sfx(
+    [0, { wave: "noise", from: 420, to: 140, seconds: 3.4, volume: 0.6, decay: true }],
+    [0.5, { wave: "noise", from: 220, to: 70, seconds: 2.9, volume: 0.5, decay: true }],
+    [1.3, { wave: "noise", from: 160, to: 50, seconds: 2.1, volume: 0.4, decay: true }],
+  ), 0.5),
   "sfx-chime": sfx([0, mallet(698.46, 0.9)], [0.08, mallet(880, 0.9)], [0.16, mallet(1046.5, 0.9)], [0.24, mallet(1396.91, 1.1)]),
 };
 
