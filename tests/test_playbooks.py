@@ -172,3 +172,18 @@ def test_decline_motives_and_changes_are_learned():
                    "one → hypothesis", "repeated → `do` / `dont`", "owner_instruction=True",
                    "evidence_feedback_ids_to_add"):
         assert phrase in learn, phrase
+
+
+def test_a_change_request_is_never_parked():  # step 156
+    for name, title in (("daily-revise", "Step 2: change requests"),
+                        ("daily-produce", "Phase 3: new versions the owner asked for")):
+        part = _section(_book(name), title)
+        assert "Never leave a request without a decision" in part, name
+        for tool in ("decide_revision", "request_style", "render_motion"):
+            assert tool in part, (name, tool)
+    revise = _section(_book("daily-revise"), "Step 2: change requests")
+    assert '"restyled"' in revise and "invented" in revise and "`styles`" in revise
+    learn = _book("daily-learn")
+    weekly = _section(learn, "Step 6: this week's invented style")
+    assert "request_style(kind=\"invented\"" in weekly and "`invent_due`" in weekly
+    assert "breakdown" in weekly and "`request_style`" in _section(learn, "Dry run")

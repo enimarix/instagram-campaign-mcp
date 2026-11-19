@@ -8,6 +8,7 @@ import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { link, type Tone } from '../ui/styles'
 import { dateTime, playbookName } from './load'
+import StyleRequests from './StyleRequests'
 
 const POLL_MS = 10_000
 // The started process needs a moment to write its `running` row: keep polling meanwhile.
@@ -127,6 +128,8 @@ export default function Agent() {
           </ul>
         )}
       </Card>
+
+      <StyleRequests />
 
       <section aria-label="Runs" className="mt-8">
         <h2 className="text-lg font-semibold">Runs</h2>

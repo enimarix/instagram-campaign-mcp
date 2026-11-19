@@ -9,6 +9,7 @@ import src.instagram_mcp_server as srv
 from src.agent import packet
 from src.config import InstagramMCPSettings
 from src.learning import brief, report
+from src.studio import style_requests
 
 NOW = datetime(2026, 11, 17, 1, tzinfo=timezone.utc)  # 2026-11-17 in UTC
 DAY = "2026-11-16"
@@ -105,10 +106,17 @@ def test_brief_lists_the_proposed_experiments_of_the_last_summarised_report(fact
     assert last == {"report_date": DAY, "summary": "analysed", "proposed_experiments": [EXP]}
 
 
-@pytest.mark.parametrize("count, skip", [(0, True), (2, False)])
-def test_daily_learn_is_gated_by_the_facts(store, cfg, tmp_path, monkeypatch, count, skip):
+@pytest.mark.parametrize("count, invented, skip", [(0, True, True), (2, True, False),
+                                                   (0, False, False)])
+def test_daily_learn_is_gated_by_the_facts_and_the_weekly_style(
+        store, cfg, tmp_path, monkeypatch, count, invented, skip):
     real = packet.SECTIONS["facts"]  # valid facts of an empty day, counted as asked
     monkeypatch.setitem(packet.SECTIONS, "facts", lambda *a: (real(*a)[0], count))
+    if invented:  # this week's invented style is in: a quiet day has nothing to do (156)
+        style_requests.request_style(store, "invented", "Néon", "why", ["a", "b", "c"],
+                                     look="l", palette="p", motion="m", typography="t",
+                                     sound="s")
     out = packet.write_packet(store, cfg, "daily-learn", tmp_path)
-    assert set(out["manifest"]["sections"]) == {"facts", "brief"}
+    assert set(out["manifest"]["sections"]) == {"facts", "brief", "style_requests"}
     assert out["manifest"]["run_kind"] == "learn" and out["skip"] is skip
+    assert out["manifest"]["sections"]["style_requests"]["count"] == int(not invented)

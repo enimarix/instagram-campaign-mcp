@@ -125,6 +125,18 @@ def set_choice(store: CampaignStore, style: str, *, enabled: Optional[bool] = No
     return get_style(store, style)
 
 
+def capabilities(store: CampaignStore) -> Optional[Dict[str, List[str]]]:
+    """What the studio can make now (156): {enabled style: sorted templates}; None when the
+    templates cannot be listed (no Node). A style or template here that was not before is
+    new capability: it re-wakes the waiting videos (src/agent/schedule.py)."""
+    from .motion import MotionError  # here: motion pulls in most of the studio
+
+    try:
+        return {s["id"]: sorted(s["templates"]) for s in list_styles(store) if s["enabled"]}
+    except MotionError:
+        return None
+
+
 def check_template(store: CampaignStore, idea: Dict[str, Any], template: str) -> str:
     """Before render_motion: the template must be in the idea's style. An idea without a
     style (Auto, older ideas) takes the template's, if that style is on; it is recorded on

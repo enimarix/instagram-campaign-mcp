@@ -661,6 +661,32 @@ CREATE INDEX idx_work_orders_idea ON work_orders(idea_id);
 CREATE INDEX idx_work_orders_status ON work_orders(status, scheduled_at);
 """
 
+# Migration 25: the AI never parks a change request (156). assets.agent_decision: the
+# agent's latest decision on a video the owner sent back, JSON {kind remade | restyled |
+# style_requested | waiting, text (French, shown on the Inbox), why, style, order_id,
+# request_id, at} (src/studio/feedback.py). style_requests: styles the agent asks the
+# owner for (src/studio/style_requests.py): kind reference (a Reel / DM pick) | invented
+# (from imagination), concept JSON {look, palette, motion, typography, sound, scenes [3],
+# why, reference}, unblocks JSON {asset_ids, order_ids}; status proposed -> accepted |
+# declined (the owner) -> building -> live (the lead's dev loop).
+STYLE_REQUESTS_SCHEMA = """
+ALTER TABLE assets ADD COLUMN agent_decision TEXT;
+CREATE TABLE style_requests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind        TEXT NOT NULL CHECK (kind IN ('reference','invented')),
+    name        TEXT NOT NULL,
+    concept     TEXT NOT NULL,
+    unblocks    TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN
+        ('proposed','accepted','declined','building','live')),
+    owner_note  TEXT,
+    decided_at  TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX idx_style_requests_status ON style_requests(status, id);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -670,7 +696,8 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          DAILY_ANALYSIS_SCHEMA, EXPERIMENTS_SCHEMA, TRIAL_SCHEMA,
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
                          AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
-                         AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA]
+                         AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA,
+                         STYLE_REQUESTS_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -689,7 +716,7 @@ IDEA_FIELDS = ("track", "pillar", "hook", "hook_type", "script", "source_id", "c
 ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thumbnail_path",
                 "caption", "audio_name", "recipe", "duration", "batch_date", "status",
                 "verdict", "qc", "self_score", "self_score_reason", "best_before",
-                "poster_path", "description", "timeline")
+                "poster_path", "description", "timeline", "agent_decision")
 RENDER_JOB_FIELDS = ("state", "progress", "attempts", "failure", "started_at", "finished_at",
                      "render_ms", "heartbeat_at")
 FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
@@ -698,7 +725,8 @@ EXPERIMENT_FIELDS = ("hypothesis", "variable", "variants", "target_per_variant",
                      "status", "result", "learning_id", "report_date", "opened_at")
 JSON_FIELDS = ("stats", "citations", "recipe", "qc", "reason_codes", "scope", "evidence",
                "facts", "usage", "silences", "timeline", "analysis", "variants", "result",
-               "spec", "needed", "detail", "change_request", "work_order")
+               "spec", "needed", "detail", "change_request", "work_order", "agent_decision",
+               "concept", "unblocks")
 # Timestamp columns _insert() fills with "now"; tables not listed get created_at.
 _INSERT_STAMPS = {
     "assets": ("created_at", "updated_at"),
@@ -713,6 +741,7 @@ _INSERT_STAMPS = {
     "ad_tests": ("created_at", "updated_at"),
     "ads_audit": ("at",),
     "work_orders": ("created_at", "updated_at"),
+    "style_requests": ("created_at", "updated_at"),
 }
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")

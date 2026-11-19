@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Style requests so far, newest first, and whether this week's invented style is due (156, studio.style_requests.for_agent)",
+  "type": "object",
+  "required": [
+    "invent_due",
+    "last_invented_at",
+    "requests",
+    "styles",
+    "breakdown"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "invent_due": {
+      "type": "boolean"
+    },
+    "last_invented_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "styles": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "templates"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "breakdown": {
+      "type": "object",
+      "required": [
+        "groups"
+      ],
+      "properties": {
+        "groups": {
+          "type": "array",
+          "maxItems": 50
+        }
+      }
+    },
+    "requests": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "status",
+          "owner_note",
+          "concept"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "reference",
+              "invented"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "accepted",
+              "declined",
+              "building",
+              "live"
+            ]
+          },
+          "owner_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "concept": {
+            "type": "object",
+            "required": [
+              "why",
+              "scenes"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
-from ..store import CampaignStore
+from ..store import CampaignStore, to_iso, utcnow
+from . import styles, work_orders
 from .assets import InvalidTransition, transition
 
 
@@ -95,6 +96,74 @@ def edit_comment(store: CampaignStore, feedback_id: int, **fields: Any) -> Dict[
     if not fields.get("wants_changes"):
         return {"feedback": feedback, "asset": asset, "moved": False, "reason": None}
     return {"feedback": feedback, **_ask_for_changes(store, asset)}
+
+
+# --- the agent's decision on a video sent back (156) -------------------------------------
+# Never silence: every revision the agent reads gets one, shown on the Inbox.
+DECISIONS = ("remade", "restyled", "style_requested", "waiting")
+AGENT_DECISIONS = ("remade", "restyled", "waiting")  # style_requested: request_style sets it
+WHY_MAX = 300
+
+
+def set_decision(store: CampaignStore, asset_id: int, kind: str, why: Optional[str], *,
+                 style: Optional[str] = None, order_id: Optional[int] = None,
+                 request_id: Optional[int] = None, name: Optional[str] = None
+                 ) -> Dict[str, Any]:
+    """Store the agent's latest decision on a `revision_requested` video -> the asset.
+    text is what its Inbox card says: « Refaite en <style> », « Nouveau style demandé :
+    <name> » or « En attente : <why> »."""
+    asset = store.get_asset(asset_id)
+    if asset["status"] != "revision_requested":
+        raise ValueError(f"video {asset_id} is {asset['status']}: a decision is only for a"
+                         " video sent back for changes")
+    if kind not in DECISIONS:
+        raise ValueError(f"decision must be one of {', '.join(DECISIONS)}")
+    why = " ".join((why or "").split())[:WHY_MAX] or None
+    if not why:
+        raise ValueError("say why in one line")
+    label = None
+    if style:
+        try:
+            label = styles.get_style(store, style)["label"]
+        except (ValueError, RuntimeError):  # unknown, or no Node (MotionError): the id
+            label = style
+    text = {"remade": f"Refaite en {label}" if label else "Refaite",
+            "restyled": f"Refaite en {label}",
+            "style_requested": f"Nouveau style demandé : {name}",
+            "waiting": f"En attente : {why}"}[kind]
+    decision = {"kind": kind, "text": text, "why": why, "style": style,
+                "order_id": order_id, "request_id": request_id, "at": to_iso(utcnow())}
+    return store.update_asset(asset_id, agent_decision=decision)
+
+
+def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str,
+                    style: Optional[str] = None) -> Dict[str, Any]:
+    """The agent's decision on a video the owner sent back -> {asset, order}:
+    - remade: re-rendered in its own style (render_motion(asset_id=...)) as asked;
+    - restyled: the note cannot be met in its style: remade in `style` (an enabled one,
+      not its own) through a « même vidéo, autre style » work order (order; make it with
+      create_idea(work_order_id=...)); once that video is submitted the old one is
+      archived;
+    - waiting: it waits, and `why` says for what (a render pending, a non-motion video
+      for the night run). A missing style is not waiting: request_style.
+    ValueError names the problem; KeyError: no such video."""
+    if decision not in AGENT_DECISIONS:
+        raise ValueError(f"decision must be one of {', '.join(AGENT_DECISIONS)}"
+                         " (a new style: request_style)")
+    asset = store.get_asset(asset_id)
+    if asset["status"] != "revision_requested":
+        raise ValueError(f"video {asset_id} is {asset['status']}: only a video sent back for"
+                         " changes gets a decision")
+    order = None
+    if decision == "restyled":
+        if not style:
+            raise ValueError("restyled needs the style to remake it in")
+        order = work_orders.restyle(store, asset_id, style, why)
+    elif decision == "remade":
+        style = store.get_idea(asset["idea_id"])["style"]
+    asset = set_decision(store, asset_id, decision, why, style=style,
+                         order_id=order and order["id"])
+    return {"asset": asset, "order": order}
 
 
 def list_comments(store: CampaignStore, asset_id: int) -> List[Dict[str, Any]]:

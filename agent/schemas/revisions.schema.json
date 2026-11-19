@@ -1,31 +1,121 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Open revision requests, newest first (learnings.list_revision_requests)",
-  "type": "array",
-  "maxItems": 50,
-  "items": {
-    "type": "object",
-    "required": ["asset", "comments"],
-    "properties": {
-      "asset": {
+  "title": "Open revision requests, newest first (learnings.list_revision_requests), and the enabled styles to remake one in (156; null without Node)",
+  "type": "object",
+  "required": [
+    "styles",
+    "requests"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "styles": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 50,
+      "items": {
         "type": "object",
-        "required": ["id", "idea_id", "status", "hook", "track"],
+        "required": [
+          "id",
+          "label",
+          "templates"
+        ],
         "properties": {
-          "id": {"type": "integer"},
-          "idea_id": {"type": "integer"},
-          "status": {"const": "revision_requested"},
-          "template": {"type": ["string", "null"]},
-          "hook": {"type": ["string", "null"]},
-          "track": {"type": "string"}
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
-      },
-      "comments": {
-        "type": "array",
-        "maxItems": 50,
-        "items": {"type": "object", "required": ["id", "text", "reasons"],
-                  "properties": {"id": {"type": "integer"},
-                                 "text": {"type": ["string", "null"]},
-                                 "reasons": {"type": "array"}}}
+      }
+    },
+    "requests": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": [
+          "asset",
+          "comments"
+        ],
+        "properties": {
+          "asset": {
+            "type": "object",
+            "required": [
+              "id",
+              "idea_id",
+              "status",
+              "hook",
+              "track"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "idea_id": {
+                "type": "integer"
+              },
+              "status": {
+                "const": "revision_requested"
+              },
+              "template": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "hook": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "track": {
+                "type": "string"
+              }
+            }
+          },
+          "comments": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "text",
+                "reasons"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reasons": {
+                  "type": "array"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
