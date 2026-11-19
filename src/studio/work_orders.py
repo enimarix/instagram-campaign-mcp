@@ -149,6 +149,21 @@ def add_for_pick(c: Any, pick_id: int, note: Optional[str], own_reel: bool, now:
                now if note else None, now, now))
 
 
+def late_note(c: Any, pick_id: int, note: str, now: str) -> None:
+    """In the poll's transaction: a note found on a later poll for a pick stored without
+    one. Only while its order still waits for an instruction (needs_instruction): the pick
+    gets the note and the order is scheduled as add_for_pick would have done. An existing
+    note, an owner's instruction or an order that moved on is never touched."""
+    if not c.execute("UPDATE dm_picks SET sender_note=?, updated_at=? WHERE id=?"
+                     " AND sender_note IS NULL AND id IN (SELECT pick_id FROM work_orders"
+                     " WHERE status='needs_instruction' AND instruction IS NULL)",
+                     (note, now, pick_id)).rowcount:
+        return
+    c.execute("UPDATE work_orders SET instruction=?, status='scheduled', scheduled_at=?,"
+              " updated_at=? WHERE pick_id=? AND status='needs_instruction'"
+              " AND instruction IS NULL", (note, now, now, pick_id))
+
+
 def set_instruction(store: CampaignStore, order_id: int, instruction: str,
                     mode: Optional[str] = None) -> Dict[str, Any]:
     """The owner writes (or rewrites) an order's instruction, and its mode if given, while
