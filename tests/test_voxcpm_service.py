@@ -8,6 +8,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -17,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from src import scheduler
 from src.config import InstagramMCPSettings
-from src.studio import tts, tts_service
+from src.studio import gpu_lock, tts, tts_service
 from src.studio.tts import WordTiming
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,8 +114,15 @@ def test_voices_need_their_card_and_exactly_one_default(tmp_path):
 class FakeEngine:
     """Says `heard[n]` on take n; audio bytes name the take."""
 
-    def __init__(self, heard):
-        self.heard, self.texts, self.model = list(heard), [], object()
+    def __init__(self, heard, model=None):
+        self.heard, self.texts, self.model, self.loads = list(heard), [], model, 0
+
+    def load(self):
+        self.loads += 1
+        self.model = object()
+
+    def unload(self):
+        self.model = None
 
     def take(self, text, voice):
         self.texts.append((text, voice.id))
@@ -125,6 +134,12 @@ class FakeEngine:
 
     def vram_gb(self):
         return None
+
+
+@pytest.fixture(autouse=True)
+def _own_gpu_lock(monkeypatch, tmp_path):
+    """A loaded service holds its GPU lock until it unloads: one lock file per test's app."""
+    monkeypatch.setenv("GPU_LOCK_PATH", str(tmp_path / "gpu.lock"))
 
 
 GOOD = "Il reste trois cent huit calories. Une pomme ?"
@@ -156,10 +171,11 @@ def test_bad_takes_are_redone_and_the_best_is_kept():
 
 
 def test_settings_from_env_keep_the_approved_defaults(monkeypatch):
-    for k in ("VOXCPM_STEPS", "VOXCPM_CFG", "VOXCPM_MAX_TAKES", "VOXCPM_MIN_SCORE"):
+    for k in ("VOXCPM_STEPS", "VOXCPM_CFG", "VOXCPM_MAX_TAKES", "VOXCPM_MIN_SCORE",
+              "VOXCPM_IDLE_UNLOAD_S"):
         monkeypatch.delenv(k, raising=False)
     assert server.Settings.from_env().model_dump() == {
-        "steps": 30, "cfg": 1.6, "max_takes": 3, "min_score": 0.9}
+        "steps": 30, "cfg": 1.6, "max_takes": 3, "min_score": 0.9, "idle_unload_s": 120.0}
     monkeypatch.setenv("VOXCPM_MAX_TAKES", "0")
     assert server.Settings.from_env().max_takes == 1
 
@@ -169,7 +185,7 @@ def test_http_shape_default_voice_and_errors():
     app = server.create_app(engine, server.Settings(), server.load_voices())
     http = TestClient(app)
     health = http.get("/health").json()
-    assert health["loaded"] and health["default_voice"] == "conteur_grave"
+    assert not health["loaded"] and health["default_voice"] == "conteur_grave"
     assert health["voices"] == ["coach_energique", "conteur_grave", "douce_nuit"]
     body = http.post("/tts", json={"text": SCRIPT, "voice": ""}).json()
     assert set(body) == {"audio", "words", "take"} and body["take"]["voice"] == "conteur_grave"
@@ -177,6 +193,70 @@ def test_http_shape_default_voice_and_errors():
     r = http.post("/tts", json={"text": SCRIPT, "voice": "robot"})
     assert r.status_code == 400 and "conteur_grave" in r.json()["detail"]
     assert http.post("/tts", json={"text": " \n "}).status_code == 400
+    assert engine.loads == 1 and http.get("/health").json()["loaded"]
+
+
+def _gpu_free(path):
+    try:
+        with gpu_lock.hold("probe", path, timeout_s=0):
+            return True
+    except gpu_lock.LockTimeout:
+        return False
+
+
+def test_models_load_on_demand_hold_the_gpu_and_unload_when_idle(tmp_path):
+    lock, now = tmp_path / "gpu.lock", [1000.0]
+    engine = FakeEngine([GOOD] * 3)
+    app = server.create_app(engine, server.Settings(idle_unload_s=120), server.load_voices(),
+                            gpu_path=str(lock), clock=lambda: now[0])
+    http = TestClient(app)
+    assert not http.get("/health").json()["loaded"] and engine.loads == 0  # lazy
+    assert http.post("/tts", json={"text": SCRIPT}).status_code == 200
+    assert engine.loads == 1 and not _gpu_free(lock)  # loaded: no render may start
+    now[0] += 60
+    http.post("/tts", json={"text": SCRIPT})
+    assert engine.loads == 1  # still loaded: no second load
+    now[0] += 119
+    assert not app.state.unload_if_idle() and engine.model is not None
+    now[0] += 1
+    assert app.state.unload_if_idle() and engine.model is None
+    assert _gpu_free(lock) and not http.get("/health").json()["loaded"]
+    assert not app.state.unload_if_idle()  # nothing loaded: nothing to do
+    http.post("/tts", json={"text": SCRIPT})
+    assert engine.loads == 2 and not _gpu_free(lock)
+
+
+def test_a_voice_over_waits_for_a_render_holding_the_gpu(tmp_path):
+    lock = tmp_path / "gpu.lock"
+    engine = FakeEngine([GOOD])
+    http = TestClient(server.create_app(engine, server.Settings(), server.load_voices(),
+                                        gpu_path=str(lock)))
+    answers = []
+
+    def ask():
+        answers.append(http.post("/tts", json={"text": SCRIPT}))
+
+    with gpu_lock.hold("Blender render", lock):
+        t = threading.Thread(target=ask)
+        t.start()
+        time.sleep(0.8)
+        assert engine.loads == 0 and not answers  # waiting for the render
+        assert not http.get("/health").json()["loaded"]  # health still answers at once
+    t.join(10)
+    assert engine.loads == 1 and answers[0].status_code == 200
+
+
+def test_a_failed_load_releases_the_gpu(tmp_path):
+    lock = tmp_path / "gpu.lock"
+
+    class Broken(FakeEngine):
+        def load(self):
+            raise RuntimeError("CUDA out of memory")
+
+    app = server.create_app(Broken([GOOD]), server.Settings(), server.load_voices(),
+                            gpu_path=str(lock))
+    answer = TestClient(app, raise_server_exceptions=False).post("/tts", json={"text": SCRIPT})
+    assert answer.status_code == 500 and _gpu_free(lock)
 
 
 def test_the_studio_http_provider_reads_the_service_answer(tmp_path, monkeypatch):
@@ -209,7 +289,9 @@ def test_spawn_runs_the_server_on_the_url_port_with_hf_home(tmp_path):
         seen.update(cmd=cmd, **kw)
         return "proc"
 
-    assert tts_service.spawn(_cfg(), tmp_path / "tts.log", popen=popen) == "proc"
+    cfg = _cfg(gpu_lock_path="D:/locks/gpu.lock")
+    assert tts_service.spawn(cfg, tmp_path / "tts.log", popen=popen) == "proc"
+    assert seen["env"]["GPU_LOCK_PATH"] == "D:/locks/gpu.lock"  # the studio's .env value
     assert seen["cmd"] == ["py.exe", str(VENDOR / "server.py"), "--host", "127.0.0.1",
                            "--port", "8766", "--exit-with-pid", str(os.getpid())]
     assert seen["env"]["HF_HOME"] == "D:/hf" and seen["stdin"] == subprocess.DEVNULL

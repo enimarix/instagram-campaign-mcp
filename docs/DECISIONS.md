@@ -8,6 +8,20 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-19: One heavy GPU job at a time; one render at a time (145)
+A machine-wide OS file lock (`src/studio/gpu_lock.py`, `GPU_LOCK_PATH`, default
+`~/.ig-campaign/gpu.lock`) lets one heavy GPU job run at a time across processes: every
+Blender and Remotion render (worker, MCP previews, dev scratch studios) holds it while its
+renderer runs, and the voice service holds it for as long as VoxCPM2 is loaded. The voice
+service loads its models on the first request and drops them after `VOXCPM_IDLE_UNLOAD_S`
+(120 s) idle, so a render waits at most that long after the last voice-over; each voice-over
+after an idle spell pays a ~35 s load. `RENDER_CONCURRENCY` default goes from 2 (step 006a) to
+1; the setting stays for a bigger machine.
+Reason: the owner's laptop (RTX 3070 Laptop, 8 GB) froze hard on 2026-11-19 with the voice
+model resident (6.2 GB VRAM) and two Blender renders at once; owner: "safety first". Holding
+the lock while the model is loaded (not only during a take) is what keeps a render from
+starting next to 6 GB of resident model.
+
 ## 2026-11-19: The voice is VoxCPM2, local, at the owner's settings (038)
 The studio's voice-over is VoxCPM2 (OpenBMB, Apache-2.0) on the owner's GPU, served by
 `vendor/voxcpm_tts` and called through the `http` TTS provider. Settings chosen by ear in

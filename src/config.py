@@ -192,8 +192,15 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "data" / "media"),
         description="Asset files (<date>/<asset id>/...); the API serves them at /api/media",
     )
+    # 1: the 8 GB laptop froze with two Blender renders and the voice at once (step 145,
+    # docs/DECISIONS.md). Renders also share the machine's GPU lock with the voice service.
     render_concurrency: int = Field(
-        2, ge=1, description="Renders the worker runs at once (2 fit a laptop CPU, step 006a)"
+        1, ge=1, description="Renders the worker runs at once (more only on a bigger machine)"
+    )
+    # src/studio/gpu_lock.py; unset = ~/.ig-campaign/gpu.lock, the path every process (worker,
+    # MCP server, voice service) agrees on without config. Change it everywhere or nowhere.
+    gpu_lock_path: Optional[str] = Field(
+        None, description="File lock that lets one heavy GPU job run at a time"
     )
 
     # --- Housekeeping -----------------------------------------------------

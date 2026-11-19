@@ -25,7 +25,8 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from . import ffmpeg, media, recipe
+from ..config import get_settings
+from . import ffmpeg, gpu_lock, media, recipe
 from .ffmpeg import MediaInfo, PathLike
 from .tts import LineTiming, reading_timings
 
@@ -227,8 +228,10 @@ def _blender(p: Props, timings: Sequence[LineTiming], cues: List[Dict[str, Any]]
     cfg_path = out / "shot.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
     n = len(stills) if stills else frames
-    _run([find_blender(), "-b", "-P", ROOT / "engine" / "shot.py", "--", cfg_path],
-         "Blender", 120 + n * S_PER_FRAME)
+    blender = find_blender()
+    with gpu_lock.hold("Blender render", get_settings().gpu_lock_path):  # step 145
+        _run([blender, "-b", "-P", ROOT / "engine" / "shot.py", "--", cfg_path],
+             "Blender", 120 + n * S_PER_FRAME)
 
 
 def _voice_path(p: Props, media_root: PathLike) -> Optional[Path]:
