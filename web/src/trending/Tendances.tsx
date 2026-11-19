@@ -180,7 +180,7 @@ function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: 
   )
 }
 
-/** The watched topics (the watchlist): add, remove, and the one-tap starter hashtags. */
+/** The watched topics (the watchlist): add, remove, and the one-tap starter hashtags and accounts. */
 type TopicsProps = {
   watch: Watch[]
   suggested?: SuggestedTopics
@@ -211,6 +211,7 @@ function TopicsEditor({ watch, suggested, onChanged, kind, setKind, inputRef }: 
 
   const budget = suggested?.hashtag_budget
   const starters = suggested?.topics.filter((t) => !t.watched) ?? []
+  const accounts = suggested?.accounts.filter((a) => !a.watched) ?? []
   return (
     <div className="mt-3 space-y-3 text-sm">
       {watch.length === 0 ? (
@@ -246,6 +247,17 @@ function TopicsEditor({ watch, suggested, onChanged, kind, setKind, inputRef }: 
           </div>
         </div>
       )}
+      {accounts.length > 0 && (
+        <div>
+          <p className="font-medium">Comptes suggérés</p>
+          <div role="group" aria-label="Comptes suggérés" className="mt-1 flex flex-wrap gap-2">
+            {accounts.map((a) => (
+              <Chip key={a.username} pressed={false} onClick={() => void act(() => addWatch('account', a.username))}>+ @{a.username}</Chip>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-muted">Gratuits (pas de limite de la semaine), et ce sont eux qui apportent les Reels.</p>
+        </div>
+      )}
       {budget && (
         <p className="text-xs text-muted">
           Chaque nouveau hashtag utilise 1 des {budget.limit} recherches que Meta autorise par 7 jours
@@ -263,6 +275,8 @@ export default function Tendances() {
   const [feed, setFeed] = useState<FeedItem[]>()
   const [feedError, setFeedError] = useState<string | null>(null)
   const [feedKey, setFeedKey] = useState(0) // bumped to reload the feed
+  const [includeOld, setIncludeOld] = useState(false)
+  const [older, setOlder] = useState<{ days: number; hidden: number }>()
   const [watch, setWatch] = useState<Watch[]>()
   const [suggested, setSuggested] = useState<SuggestedTopics>()
   const [refreshing, setRefreshing] = useState(false)
@@ -285,13 +299,14 @@ export default function Tendances() {
 
   useEffect(() => {
     let live = true
-    getResearchFeed(topic, FEED_MAX).then((f) => {
+    getResearchFeed(topic, FEED_MAX, includeOld).then((f) => {
       if (!live) return
-      setFeed(f)
+      setFeed(f.items)
+      setOlder({ days: f.window_days, hidden: f.hidden_old })
       setFeedError(null)
     }, (e: unknown) => live && setFeedError(errorMessage(e)))
     return () => { live = false }
-  }, [topic, feedKey])
+  }, [topic, feedKey, includeOld])
   const reloadFeed = () => setFeedKey((k) => k + 1)
 
   const loadTopics = useCallback(() => Promise.all([listWatchlist(), getSuggestedTopics()]).then(([w, s]) => {
@@ -395,6 +410,15 @@ export default function Tendances() {
       )}
 
       {feedError && <p role="alert" className="mt-4 text-sm text-danger">{feedError}</p>}
+      {older && older.hidden > 0 && (
+        <p className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted">
+          {includeOld ? `Avec les ${older.hidden} publications de plus de ${older.days} jours.`
+            : `${older.hidden} publication${older.hidden > 1 ? 's' : ''} de plus de ${older.days} jours masquée${older.hidden > 1 ? 's' : ''}.`}
+          <Button size="sm" variant="ghost" aria-pressed={includeOld} onClick={() => setIncludeOld((v) => !v)}>
+            {includeOld ? 'Masquer les anciennes' : 'Afficher les anciennes'}
+          </Button>
+        </p>
+      )}
       {feed && feed.length > 0 && (
         <div role="group" aria-label="Type de média" className="mt-4 flex gap-2">
           <Chip pressed={reelsOnly} onClick={() => setReelsOnly(true)}>Reels ({feed.filter(isReel).length})</Chip>

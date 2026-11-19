@@ -84,9 +84,8 @@ export type Asset = {
   dm_pick_sender?: string | null
   // list rows of a revised video: the owner's newest change request on the version it replaces (133)
   change_request?: { text: string | null; reason_codes: string[] } | null
-  // list rows: the owner's work order its idea was made for (134; `source` from 136)
-  // (`source` is not sent yet: AssetCard falls back to the mode, see orderSource)
-  work_order?: { id: number; mode: WorkMode; instruction: string | null; permalink: string | null; source?: 'dm' | 'trend' } | null
+  // list rows: the owner's work order its idea was made for (134), from a DM pick or the Trending feed (140)
+  work_order?: { id: number; mode: WorkMode; instruction: string | null; permalink: string | null; source: 'dm' | 'trend' } | null
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -891,7 +890,7 @@ export const getAdsAudit = (offset = 0, limit = 20) => request<AdsAudit>(`/api/a
 /** owner: follow the owner's own instruction (DM orders, 136); Trending orders are inspired | react. */
 export type WorkMode = 'inspired' | 'react' | 'owner'
 export type TrendMode = Exclude<WorkMode, 'owner'>
-/** A Reel of GET /api/research/feed, best outlier first; caption_quote is other people's
+/** A Reel of GET /api/research/feed, hottest first (outlier x freshness); caption_quote is other people's
  * words (shown as a quote only). `work_order`: its open order, else null. */
 export type FeedItem = {
   id: number
@@ -913,6 +912,9 @@ export type FeedItem = {
   reaction: 'like' | 'dislike' | null
   work_order: { id: number; mode: WorkMode; instruction: string | null; status: OpenOrderStatus } | null
 }
+/** GET /api/research/feed: Reels posted within `window_days`; `hidden_old` older or undated
+ * ones are left out unless include_old (then listed too, still counted). */
+export type Feed = { items: FeedItem[]; window_days: number; hidden_old: number }
 export type HashtagBudget = { limit: number; used: number; left: number }
 /** POST /api/research/refresh (409 already_running, 503 instagram_not_configured). */
 export type RefreshResult = {
@@ -927,12 +929,15 @@ export type RefreshResult = {
 }
 export type SuggestedTopics = {
   topics: { tag: string; lang: string; watched: boolean }[]
+  /** Business accounts to watch: free (no hashtag budget), and they bring the Reels. */
+  accounts: { username: string; watched: boolean }[]
   hashtag_budget: HashtagBudget
   note: string
+  accounts_note: string
 }
 export const refreshResearch = () => post<RefreshResult>('/api/research/refresh')
-export const getResearchFeed = (topic?: string | null, limit = 50) =>
-  request<FeedItem[]>(`/api/research/feed?${new URLSearchParams({ ...(topic && { topic }), limit: String(limit) })}`)
+export const getResearchFeed = (topic?: string | null, limit = 50, includeOld = false) =>
+  request<Feed>(`/api/research/feed?${new URLSearchParams({ ...(topic && { topic }), limit: String(limit), ...(includeOld && { include_old: '1' }) })}`)
 export const getSuggestedTopics = () => request<SuggestedTopics>('/api/research/suggested-topics')
 export const setFeedReaction = (sourceId: number, reaction: 'like' | 'dislike' | 'none') =>
   post<{ id: number; reaction: FeedItem['reaction'] }>(`/api/research/feed/${sourceId}/reaction`, { reaction })

@@ -118,9 +118,12 @@ async def refresh(request: Request):
 
 
 @router.get("/research/feed")
-def feed(topic: Optional[str] = None, limit: int = Query(50, ge=1, le=research.FEED_MAX),
+def feed(request: Request, topic: Optional[str] = None,
+         limit: int = Query(50, ge=1, le=research.FEED_MAX), include_old: bool = False,
          store: CampaignStore = Depends(get_store)):
-    return research.trending_feed(store, topic=topic, limit=limit)
+    return research.trending_feed(
+        store, topic=topic, limit=limit, include_old=include_old,
+        max_age_days=request.app.state.settings.trending_max_age_days)
 
 
 @router.get("/research/suggested-topics")

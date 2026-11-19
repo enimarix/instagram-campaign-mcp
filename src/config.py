@@ -297,6 +297,12 @@ class InstagramMCPSettings(BaseSettings):
         "account, never the brand account; empty = logged out"
     )
 
+    # --- Trending ---------------------------------------------------------
+    # src/studio/research.py trending_feed: older Reels are hidden unless asked for.
+    trending_max_age_days: int = Field(
+        21, ge=1, le=365, description="Trending feed shows Reels posted within this many days"
+    )
+
     # --- Production tools -------------------------------------------------
     # src/studio/production.py (the agent's batch tools).
     best_before_default_days: int = Field(

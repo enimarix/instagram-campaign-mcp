@@ -109,8 +109,11 @@ def test_patch_sets_the_instruction_and_schedules(store, settings):
         assert (r.json()["instruction"], r.json()["mode"]) == ("Inspire-toi, nos macros",
                                                              "react")
         patch(instruction="Inspire-toi", mode="owner")
-        production.create_idea(store, settings, "motion", hook="Nos macros",
-                               pillar="everyday_humor", work_order_id=oid)
+        idea = production.create_idea(store, settings, "motion", hook="Nos macros",
+                                      pillar="everyday_humor", work_order_id=oid)
+        store.add_asset(idea["id"])  # the Inbox badge reads work_order.source (140)
+        [row] = store.list_assets()
+        assert (row["work_order"]["source"], row["work_order"]["mode"]) == ("dm", "owner")
         r = patch(instruction="too late")
         assert r.status_code == 409 and "in_production" in r.json()["message"]
     assert D.list_picks(store, "in_production")  # the pick follows its order

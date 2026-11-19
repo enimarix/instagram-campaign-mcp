@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-19: Trending means recent; Reels come from watched accounts (140)
+The Tendances feed shows only what was posted within `TRENDING_MAX_AGE_DAYS` (default 21,
+`.env`); older posts and posts without a date are hidden (counted in `hidden_old`) unless
+`?include_old=1` ("Afficher les anciennes"). Inside the window the order is the outlier
+score × freshness, 0.5^(age in days / 7) (half-life `FRESHNESS_HALF_LIFE_DAYS` = 7), then
+newest; the card still shows the raw outlier. The suggested topics now include business
+accounts Business Discovery answered for (2026-11-19): accounts spend no hashtag budget and
+bring the Reels, while hashtag search returned 155 carousels, 38 images and 1 video out of
+194 posts on the owner's live watchlist.
+Reason: live data, 2026-11-19: the feed's first card was a #recettefit post from 2020
+(2 272 days old) ranked on its outlier alone, and the owner asked for what is hot now.
+
 ## 2026-11-18: The AI runs the ads within the owner's caps (126)
 Owner's words: "Let's leave the ad management to the AI. The app will all just validate
 creations that gets to be published, and all the parameters … editable in the website."
