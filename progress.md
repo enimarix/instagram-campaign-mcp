@@ -290,6 +290,7 @@ The owner declined the first 8-bit FactQuest render ("not good at all") and aske
 ## Done
 
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 145 — One heavy GPU job at a time — https://github.com/enimarix/instagram-campaign-mcp/pull/152 (2026-11-19) — machine-wide OS file lock (~/.ig-campaign/gpu.lock) around Blender/Remotion renders and held by the voice service while its model is loaded; lazy load + unload after 120 s idle; render_concurrency default 1
 - [x] 141 — A DM Reel's text is always its instruction — https://github.com/enimarix/instagram-campaign-mcp/pull/150 (2026-11-19) — same-second share+text kept in real order, note before or after the share, late notes picked up on later polls while the order waits
 - [x] 038 — Local voice engine VoxCPM2 — https://github.com/enimarix/instagram-campaign-mcp/pull/149 (2026-11-19) — vendor/voxcpm_tts service (one take, 30 steps, cfg 1.6, cloned from voice cards; French number reading; Whisper check + up to 3 retakes; line timings) behind the http provider, started by `up` via TTS_SERVER_PYTHON; voices conteur_grave / coach_energique / douce_nuit; real PaperStory sample voiced in 1 take, score 1.000, 6.1 GB VRAM
 - [x] cinematic — Second engine: Blender `blender` style (owner request, outside team-up) — (2026-11-19) — template `CinematicSkit` (style `blender`, « Blender »): a PS2-cutscene skit rendered by Blender behind the motion door (same tools, recipes, TTS, QC, live end card); tools via `python cinematic/setup.py`; 138's style buttons should list it
