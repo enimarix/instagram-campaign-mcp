@@ -175,10 +175,8 @@ def harsh_jumps(momentary: Sequence[Tuple[float, float]], integrated: float,
     found: List[Tuple[float, float]] = []
     for i in range(back, len(momentary)):
         t, level = momentary[i]
-        before = min(m for _, m in momentary[i - back:i])
-        if before < -70:  # the meter is still filling (start of the video)
-            continue
-        jump = level - before
+        # -70: the meter's floor (it reads -120 while it fills, at the start of the video)
+        jump = level - max(min(m for _, m in momentary[i - back:i]), -70.0)
         if jump <= JUMP_LU or level - integrated <= JUMP_LU:
             continue
         if any(s - JUMP_S <= t <= e + JUMP_S for s, e in planned):
@@ -251,13 +249,16 @@ def checks(master: Path, voice: Optional[Path], timeline: Optional[Sequence[Dict
         if spans is None:
             out.append(("voice_above_bed", False, "the voice track is not heard in the mix"))
         elif spans:
-            worst = min(spans, key=lambda s: s["lu"])
-            low = [s for s in spans if s["lu"] < VOICE_ABOVE_LU]
-            out.append(("voice_above_bed", not low, "; ".join(
-                f"bed too loud under the voice by {VOICE_ABOVE_LU - s['lu']:.1f} LU at"
-                f" {s['t']:.1f} s ({s['lu']:g} LU under it)" for s in low)
-                or f"voice {worst['lu']:g} LU or more above the bed (want >= "
-                   f"{VOICE_ABOVE_LU:g}, closest at {worst['t']:.1f} s)"))
+            ranked = sorted(spans, key=lambda s: s["lu"])
+            low = [s for s in ranked if s["lu"] < VOICE_ABOVE_LU]
+            detail = "; ".join(
+                f"voice only {s['lu']:g} LU above the bed at {s['t']:.1f} s (bed"
+                f" {VOICE_ABOVE_LU - s['lu']:.1f} dB too loud)" for s in low[:3])
+            if len(low) > 3:
+                detail += f"; {len(low) - 3} more spans under {VOICE_ABOVE_LU:g} LU"
+            out.append(("voice_above_bed", not low, detail or (
+                f"voice {ranked[0]['lu']:g} LU or more above the bed (want >= "
+                f"{VOICE_ABOVE_LU:g}, closest at {ranked[0]['t']:.1f} s)")))
     if points:
         env = envelope(mixed)
         late = []

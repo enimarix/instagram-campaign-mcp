@@ -58,7 +58,7 @@ def test_checks_flag_the_buried_span(tmp_path):
     voice, master = voice_and_master(tmp_path, bed_db=(-15, -6))
     [(name, ok, detail)] = listen.checks(master, voice, None, {}, timeout_s=60)
     assert name == "voice_above_bed" and not ok
-    assert "bed too loud under the voice by" in detail and "at 4.0 s" in detail
+    assert detail.startswith("voice only ") and "LU above the bed at 4.0 s (bed " in detail
     assert "1.5 s" not in detail  # the first span is fine
 
     voice, master = voice_and_master(tmp_path, bed_db=(-16, -16))
@@ -85,6 +85,8 @@ def test_harsh_jumps():
     thunder = series(-20, -20, -20, -20, -12, -5, -6, -20, -20)
     assert listen.harsh_jumps(thunder, -14) == [(0.5, 15.0)]
     assert listen.harsh_jumps(thunder, -14, planned=[(0.4, 0.4)]) == []  # a planned BANG
+    after_silence = series(-14, -14, -14, -120, -120, -120, -4)  # counted from the floor
+    assert listen.harsh_jumps(after_silence, -14) == [(0.6, 66.0)]
     slow = series(-20, -18, -16, -14, -12, -10, -8, -6)  # a swell, not a jump
     assert listen.harsh_jumps(slow, -14) == []
 
