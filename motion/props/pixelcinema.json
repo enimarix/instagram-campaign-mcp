@@ -1,0 +1,20 @@
+{
+  "scene": "window",
+  "hook": { "strike": "Le problème, c'est pas le dîner.", "line": "C'est ce qui vient *après*." },
+  "beats": [
+    { "kind": "chip", "title": "À 21 h, tout se joue *là* :", "text": "le placard qui s'ouvre", "point": "subject" },
+    { "kind": "chip", "text": "30 g de cacahuètes : 180 kcal", "point": "light" },
+    { "kind": "chip", "text": "« juste un petit truc »", "point": "ground", "flash": true },
+    { "kind": "stat", "title": "Ce soir, il vous reste", "value": "308", "unit": "kcal", "label": "pas zéro, pas 800" },
+    { "kind": "app", "title": "macroBody vous le dit *avant* le placard.", "value": "308", "unit": "kcal restantes" }
+  ],
+  "tag": "Source : USDA FoodData Central",
+  "outro": "Envoyez ça à quelqu'un qui grignote le soir.",
+  "address": "vous",
+  "accent": "kcal",
+  "citations": [
+    { "url": "https://fdc.nal.usda.gov/", "title": "USDA FoodData Central: Peanuts, all types, dry-roasted, without salt (585 kcal / 100 g, so 30 g = about 176 kcal; salted roasted peanuts in Ciqual about 600 kcal / 100 g)" }
+  ],
+  "music": "music-nocturne",
+  "loop": false
+}

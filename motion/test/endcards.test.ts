@@ -14,7 +14,7 @@ import { PROPS } from "../src/voxel/models.ts";
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
 const ok = (props: object) => endCardSchema.safeParse(props).success;
 /** Minimal valid props per style. */
-const BASE = { voxel: {}, paper: {}, clean: {}, pixel: {}, live: { backdrop: "public/last-frame.jpg" }, editorial: {} } as const;
+const BASE = { voxel: {}, paper: {}, clean: {}, pixel: {}, live: { backdrop: "public/last-frame.jpg" }, cutaway: {}, editorial: {}, cinema: {} } as const;
 const PRICES = ["9,99 €", "29 $ / an", "5 euros par mois", "4.99"];
 
 test("every style parses with its example props and has a card of at least 2.5 s that holds 1 s", () => {

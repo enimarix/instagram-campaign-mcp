@@ -181,6 +181,37 @@
   minutes, never a price. Voice lines: hook (lead + key), each chapter (its caption, or title +
   key: `joinLine`), payoff, `outro?`. Music `music-lounge`. Examples `props/editorial*.json`.
   Still: `npm run still:editorial`.
+- `PixelCinema` (`src/templates/PixelCinema/`, style `cinema`, « Pixel ciné »): a macroBody story
+  told as a 20–30 s film over living pixel-art sets painted in code (`src/cinema/`: a 180 × 320
+  grid scaled 6×, seeded value noise, Bayer dithering between palette ramps, parallax per depth,
+  wide volumetric beams in three dithered amber steps; no image files). Each set is a handful of
+  views (`common.ts` = the view contract and shared painters: night sky, lightning sky, wet
+  bricks, the layered painterly sea, rain rings, the neon cross, a car and its headlights) and a
+  shot list (`scenes.ts`: view + camera move). `window.ts`: `block` (the city block in the storm,
+  a car's headlights), `facade` (the lit kitchen window filling the frame: lamp, open cupboard,
+  someone reaching in, steaming mug, curtains moving, rain on the glass, drips off the sill, the
+  neon cross on wet bricks), `interior` (close through the glass, the face lit by the phone),
+  `puddle` (street level, the window mirrored in a puddle broken by rain rings). `pier.ts`:
+  `wide`, `runner` (big against the sun), `waves` (breaking on the pilings, the lighthouse beam),
+  `horizon` (sun, gulls). `fridge.ts`: `kitchen`, `face` (profile lit by the fridge), `inside`
+  (from inside the fridge), `window` (the storm outside). Every scene cuts to the next shot of
+  the list (never the same view twice in a row; the lightning beat takes the set's flash shot)
+  and the camera moves in every beat, most of it in the first second (`layout.ts` `shotOf`,
+  `cameraAt`). The rain is drawn at full resolution over the cells (`Stage.tsx`), amber where it
+  crosses a beam. Type over the set (`type.tsx`): Inter Tight 900 white with one `*key word*` in
+  amber, a red strike-through, numbered chips with a leader line to an anchor of the view (light,
+  subject, sky, ground), a big counting stat, the app as a rounded card (ring + macro bars)
+  floating in. Hook (the belief struck through, then the real line lands and the beam comes on),
+  2–4 chips (the beam sweeps across on each; one may be the lightning: two white frames, then a
+  white / black silhouette with a bolt, a distant thunder roll in the voice's next gap), 1–2 of
+  stat / app over the darkened shot, then the cinema end card (the set's card framing, in the
+  rain, a beam swings onto the mB tile, the clean stack). The bed and the sfx duck under the
+  voice (`layout.ts` `sfxGain`, `thunderAt`). Props in `schema.ts` (examples `props/pixelcinema*.json`): `scene`, `hook`
+  {strike?, line}, `beats` [chip {title? (stays for the next chips), text, point?, flash} | stat
+  {title, value, unit?, label?} | app {title, value, unit}], `tag?` (small bottom chip, e.g. the
+  source), `outro?` (= the end card's tagline), `address`, `accent`, `citations`, `voice`
+  {audioSrc?, lines?: hook, each beat (title when new + chip; title + number + label), outro when
+  given}, `music` (`music-nocturne`|none), `loop`, `safeZone`. Still: `npm run still:pixelcinema`.
 - End cards (`src/endcards/`, steps 130, 137): `<EndCard style=…>` picks the style's animated
   card; every template ends on its style's card. Fixed base (`base.tsx`: mB tile, wordmark,
   « 7 jours gratuits », macrobody.fr) adapted per video by the props in `schema.ts`: `tagline?`,
@@ -195,7 +226,9 @@
   level-complete screen, the tile dithers in on the pixel grid beside a small running mechanism. `editorial`: black,
   pixel petals drifting, the stores chip, the tagline in duo type (last word pink italic), the
   tile with a pink rim beside its cameo (the tree or an anatomy character), the wordmark rises,
-  « 7 jours *gratuits* » pops in pink. Composition `EndCard`
+  « 7 jours *gratuits* » pops in pink. `cinema` (step 143): the story's pixel set (`cameo` = the
+  set; its card framing) darkened in the rain, a beam swings in from the bottom left onto the
+  tile, which glows, under the clean stack in light text. Composition `EndCard`
   (`EndCardClip`) renders one card alone; Track A recipes use it (src/studio/motion.py
   `render_end_card`). Stills: `npm run still:endcard`, `npm run still:endcards`.
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { NO_PRICE, noPrice } from "../lib/noPrice.ts";
 import { VIEW_IDS } from "../cutaway/views.ts";
 import { FORMS } from "../voxel/palette.ts";
+import { SCENE_IDS } from "../cinema/scenes.ts";
 import { CHARACTER_IDS as EDITORIAL_CHARACTERS } from "../editorial/palette.ts";
 
 /** Visible text: 1..max characters, never a price (owner rule). */
@@ -46,7 +47,7 @@ export const DEFAULT_TAGLINE = {
 } as const;
 
 /** One card per style; a template ends on its style's card. */
-export const END_CARD_STYLES = ["voxel", "paper", "clean", "pixel", "live", "cutaway", "editorial"] as const;
+export const END_CARD_STYLES = ["voxel", "paper", "clean", "pixel", "live", "cutaway", "editorial", "cinema"] as const;
 export type EndCardStyle = (typeof END_CARD_STYLES)[number];
 
 /**
@@ -54,7 +55,8 @@ export type EndCardStyle = (typeof END_CARD_STYLES)[number];
  * voxel the golem in a form or a food prop, paper a cut-out character or food, clean an app
  * card (the calorie ring), pixel a sprite of src/assets.ts, live nothing (the footage is the set),
  * cutaway a small running mechanism (src/cutaway/views.ts), editorial the blossom tree or an
- * anatomy character.
+ * anatomy character,
+ * cinema the pixel set the card's beam and rain play over (src/cinema/scenes.ts).
  */
 export const CAMEOS = {
   voxel: [...FORM_IDS, ...FOOD_IDS],
@@ -64,6 +66,7 @@ export const CAMEOS = {
   live: [],
   cutaway: VIEW_IDS,
   editorial: ["tree", ...EDITORIAL_CHARACTERS],
+  cinema: SCENE_IDS,
 } as const satisfies Record<EndCardStyle, readonly string[]>;
 
 /** The cameo a card shows: the one asked for, else its style's first. */
@@ -73,8 +76,8 @@ export const cameoOf = (style: EndCardStyle, cameo?: string): string => cameo ??
  * Each card's own length (a standalone clip, e.g. Track A recipes) and when its choreography
  * has settled: every card then holds at least 1 s on the finished picture.
  */
-export const CARD_S = { voxel: 3.5, paper: 3.5, clean: 3.5, pixel: 4, live: 4, cutaway: 4, editorial: 3.5 } as const satisfies Record<EndCardStyle, number>;
-export const SETTLE_S = { voxel: 2.3, paper: 2.3, clean: 2.1, pixel: 2.8, live: 2.6, cutaway: 2.8, editorial: 2.3 } as const satisfies Record<EndCardStyle, number>;
+export const CARD_S = { voxel: 3.5, paper: 3.5, clean: 3.5, pixel: 4, live: 4, cutaway: 4, editorial: 3.5, cinema: 3.5 } as const satisfies Record<EndCardStyle, number>;
+export const SETTLE_S = { voxel: 2.3, paper: 2.3, clean: 2.1, pixel: 2.8, live: 2.6, cutaway: 2.8, editorial: 2.3, cinema: 2.3 } as const satisfies Record<EndCardStyle, number>;
 
 /** Shortest end card (owner: a clean end card of 2 s or more; the reveal needs about 2 s). */
 export const END_CARD_MIN_S = 2.5;

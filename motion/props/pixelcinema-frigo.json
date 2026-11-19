@@ -1,0 +1,19 @@
+{
+  "scene": "fridge",
+  "hook": { "line": "23 h. Vous ouvrez le frigo *pour rien*." },
+  "beats": [
+    { "kind": "chip", "title": "Ce qui se passe *vraiment* :", "text": "c'est la fatigue qui a faim", "point": "subject" },
+    { "kind": "chip", "text": "la lumière du frigo", "point": "light", "flash": true },
+    { "kind": "chip", "text": "un vrai dîner, un peu plus tôt", "point": "ground" },
+    { "kind": "stat", "title": "Mal dormir, c'est en moyenne", "value": "385", "unit": "kcal", "label": "de plus le lendemain" }
+  ],
+  "tag": "Al Khatib et al. 2017",
+  "outro": "Envoyez ça à quelqu'un qui dîne deux fois.",
+  "address": "vous",
+  "accent": "protein",
+  "citations": [
+    { "url": "https://www.nature.com/articles/ejcn2016201", "title": "Al Khatib et al. 2017, Eur J Clin Nutr (meta-analysis): partial sleep deprivation, +385 kcal energy intake the next day" }
+  ],
+  "music": "music-nocturne",
+  "loop": false
+}
