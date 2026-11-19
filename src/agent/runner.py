@@ -39,6 +39,8 @@ from ..config import APP_HOME, ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
 from ..studio.power import keep_awake
 from . import packet
+from .proc import is_gone
+from .proc import started as process_started
 
 REPO = Path(__file__).resolve().parents[2]
 AGENT_DIR = REPO / "agent"  # playbooks/ and skills/
@@ -52,6 +54,7 @@ DISALLOWED_TOOLS = ("Bash", "PowerShell", "Monitor", "Edit", "Write", "NotebookE
                     "SendMessage", "SendUserFile", "PushNotification", "EnterWorktree")
 MARKER = ".ig-campaign-agent"  # in <ws>/.claude: the runner made it and may replace it
 PLAYBOOK_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+DEAD_RUN = "le studio a redémarré pendant la tâche"  # its runner process is gone (155)
 
 
 class AgentError(RuntimeError):
@@ -220,10 +223,24 @@ def _outcome(code: int, stdout: str) -> tuple[str, str, Optional[Dict[str, Any]]
     return ("succeeded" if ok else "failed"), summary, usage
 
 
+def close_dead_runs(store: CampaignStore, name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Close as failed every `running` run (of `name`, or all) whose runner process is gone
+    or whose pid another process has now (a studio restart, 155). Returns the closed rows.
+    Rows without a pid (before 155) are left to check_lock's 24 h rule."""
+    closed = []
+    for run in store.running_agent_runs(name):
+        if is_gone(run.get("pid"), run.get("pid_started")):
+            with suppress(ValueError):  # another process closed it first
+                closed.append(store.finish_agent_run(run["id"], "failed", summary=DEAD_RUN))
+    return closed
+
+
 def check_lock(store: CampaignStore, name: str, timeout_s: float) -> None:
-    """Raise AgentRunRefused while `name` runs. A run left `running` by a crash or power cut
-    would hold the lock forever: its own --timeout is unknown here, so past a day (or this
-    timeout) it is surely dead and gets closed as failed."""
+    """Raise AgentRunRefused while `name` runs. A run whose runner process is gone is closed
+    at once (close_dead_runs). One without a recorded pid, left `running` by a crash or power
+    cut, would hold the lock forever: its own --timeout is unknown here, so past a day (or
+    this timeout) it is surely dead and gets closed as failed."""
+    close_dead_runs(store, name)
     held = store.running_agent_run(name)
     if not held:
         return
@@ -245,7 +262,7 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     check_lock(store, name, timeout_s)
     log_dir = Path(settings.agent_log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
-    run = store.start_agent_run(name)
+    run = store.start_agent_run(name, os.getpid(), process_started(os.getpid()))
     log = log_dir / f"{run['id']}.log"
     status, summary, usage = "failed", "interrupted", None
     try:
