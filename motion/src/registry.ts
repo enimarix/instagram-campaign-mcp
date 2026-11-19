@@ -23,13 +23,16 @@ import { VoxelQuest } from "./templates/VoxelQuest/VoxelQuest";
 import { timelineOf as voxelQuestTimeline, voxelQuestSchema } from "./templates/VoxelQuest/schema";
 import { coverFrame as editorialCover, Editorial } from "./templates/Editorial/Editorial";
 import { cameoOf as editorialCameo, editorialSchema, timelineOf as editorialTimeline } from "./templates/Editorial/schema";
+import { PixelCinema } from "./templates/PixelCinema/PixelCinema";
+import { coverOf as pixelCinemaCover } from "./templates/PixelCinema/layout";
+import { pixelCinemaSchema, timelineOf as pixelCinemaTimeline } from "./templates/PixelCinema/schema";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -383,6 +386,42 @@ export const templates = {
       return [
         ...scriptEvents(timeline, FPS, ["hook card", ...p.chapters.map(chapter), "payoff over the tree in full bloom", "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (editorial): mB tile, macroBody, 7 jours gratuits, macrobody.fr; cameo ${editorialCameo(p)}` },
+      ];
+    },
+  }),
+  PixelCinema: template({
+    style: "cinema",
+    component: PixelCinema,
+    schema: pixelCinemaSchema,
+    defaultProps: {
+      scene: "window",
+      hook: { strike: "C'est pas le régime.", line: "C'est la *méthode*." },
+      beats: [
+        { kind: "chip", title: "À 21 h, tout se joue *ici* :", text: "la fenêtre de la cuisine", point: "light", flash: false },
+        { kind: "chip", text: "ce qu'il reste à manger", point: "subject", flash: false },
+        { kind: "chip", text: "le moment de décider", point: "sky", flash: true },
+        { kind: "stat", title: "Ce soir, il vous reste", value: "308", unit: "kcal", label: "à placer, pas à deviner" },
+      ],
+      outro: "Décidez avec vos chiffres, pas au hasard.",
+      address: "vous",
+      accent: "kcal",
+      citations: [],
+      music: "music-nocturne",
+      loop: false,
+    },
+    durationInFrames: (p) => pixelCinemaTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => pixelCinemaCover(p, pixelCinemaTimeline(p, FPS).timeline, FPS),
+    events: (p) => {
+      const { timeline, endStart } = pixelCinemaTimeline(p, FPS);
+      let n = 0;
+      const beat = (b: (typeof p.beats)[number]) => {
+        if (b.kind === "chip") return `chip ${++n}${b.point ? ` → ${b.point}` : ""}${b.flash ? " (lightning: silhouette frame, thunder)" : ""}`;
+        return b.kind === "stat" ? `stat ${b.value}${b.unit ? ` ${b.unit}` : ""} counts up over the darkened set` : `app card floats in (ring ${b.value} ${b.unit})`;
+      };
+      const total = timeline.totalFrames;
+      return [
+        ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (cinema): the beam sweeps onto the mB tile over the ${p.scene} set, macroBody, 7 jours gratuits, macrobody.fr` },
       ];
     },
   }),

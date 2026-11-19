@@ -60,7 +60,7 @@ def test_validate_props_uses_the_templates_own_message():
 
 @needs_motion
 @pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
-                                      "PixelSkit", "VoxelQuest", "PaperStory", "Editorial"])
+                                      "PixelSkit", "VoxelQuest", "PaperStory", "Editorial", "PixelCinema"])
 def test_schema_events_give_every_template_a_timeline(template):
     v = motion.validate_props(template, _example(template.lower()))
     timeline = recipe.compress_timeline(v["events"])
@@ -131,12 +131,13 @@ def test_schema_export_gives_every_template_a_style():
     out = motion._node("schemas.mjs", [], timeout_s=motion.SCHEMA_TIMEOUT_S)
     styles = {s["id"]: s["label"] for s in out["styles"]}
     assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier",
-                      "cutaway": "Pixel explicatif", "editorial": "Éditorial"}
+                      "cutaway": "Pixel explicatif", "editorial": "Éditorial", "cinema": "Pixel ciné"}
     by_id = {t["id"]: t["style"] for t in out["templates"]}
     assert set(by_id.values()) <= set(styles)
     assert by_id["VoxelQuest"] == "voxel" and by_id["FactQuest"] == "pixel"
     assert by_id["PaperStory"] == "paper"
     assert by_id["Cutaway"] == "cutaway" and by_id["Editorial"] == "editorial"
+    assert by_id["PixelCinema"] == "cinema"
 
 
 @needs_motion
@@ -419,3 +420,30 @@ def test_real_end_card_clip(tmp_path):
     info = motion.ffmpeg.probe(clip)
     assert (info.width, info.height) == (1080, 1920)
     assert info.duration == pytest.approx(2.5, abs=0.1)
+
+
+@needs_motion
+def test_validate_props_pixelcinema_examples_events_and_no_price():
+    for name in ("pixelcinema", "pixelcinema-aube", "pixelcinema-frigo"):
+        v = motion.validate_props("PixelCinema", _example(name))
+        assert 20 <= v["durationInFrames"] / v["fps"] <= 30, name
+        assert v["coverFrame"] <= 2.5 * v["fps"]  # the hook has landed by the cover
+        assert any(e["e"].startswith("end card (cinema)") for e in v["events"])
+        assert any("lightning" in e["e"] for e in v["events"])
+    bad = {**_example("pixelcinema"), "outro": "Seulement 4,99 € par mois"}
+    with pytest.raises(ValueError, match="no price on screen"):
+        motion.validate_props("PixelCinema", bad)
+
+
+def test_pixelcinema_script_reads_the_screen_without_the_stars():
+    # Same lines as pixelCinemaScript in motion/src/templates/PixelCinema/schema.ts
+    # (test/pixelcinema.test.ts).
+    lines = motion.SCRIPTS["PixelCinema"](_example("pixelcinema"))
+    assert lines[:3] == ["Le problème, c'est pas le dîner. C'est ce qui vient après.",
+                         "À 21 h, tout se joue là : le placard qui s'ouvre",
+                         "30 g de cacahuètes : 180 kcal"]
+    assert lines[4:] == ["Ce soir, il vous reste 308 kcal pas zéro, pas 800",
+                         "macroBody vous le dit avant le placard.",
+                         "Envoyez ça à quelqu'un qui grignote le soir."]
+    no_strike = motion.SCRIPTS["PixelCinema"](_example("pixelcinema-frigo"))
+    assert no_strike[0] == "23 h. Vous ouvrez le frigo pour rien."

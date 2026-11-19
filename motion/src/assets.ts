@@ -54,6 +54,8 @@ export const ASSETS = {
   "music-cutaway-a": { ...audio("music-cutaway-a", "music"), loopStart_s: 5.6 },
   "music-cutaway-b": { ...audio("music-cutaway-b", "music"), loopStart_s: 4.8 },
   "music-cutaway-c": { ...audio("music-cutaway-c", "music"), loopStart_s: 4.4 },
+  "music-nocturne": audio("music-nocturne", "music"),
+  "sfx-thunder": audio("sfx-thunder", "sfx"),
 } as const satisfies Record<string, Entry>;
 
 export type AssetId = keyof typeof ASSETS;

@@ -1,0 +1,22 @@
+{
+  "scene": "pier",
+  "hook": { "strike": "Courir à jeun brûle plus de gras.", "line": "Ça brûle *pareil*." },
+  "beats": [
+    { "kind": "chip", "title": "Ce qui compte *vraiment* :", "text": "y retourner demain", "point": "subject" },
+    { "kind": "chip", "text": "le total de la journée", "point": "light" },
+    { "kind": "chip", "text": "pas l'heure du petit-déj", "point": "sky", "flash": true },
+    { "kind": "chip", "text": "des protéines à chaque repas", "point": "ground" },
+    { "kind": "stat", "title": "30 minutes de footing, c'est environ", "value": "290", "unit": "kcal", "label": "à 70 kg et 8 km/h" },
+    { "kind": "app", "title": "macroBody les ajoute à *votre* journée.", "value": "290", "unit": "kcal brûlées" }
+  ],
+  "tag": "Schoenfeld 2014 · Compendium 2011",
+  "outro": "Envoyez ça à celui qui court le ventre vide.",
+  "address": "vous",
+  "accent": "brand",
+  "citations": [
+    { "url": "https://jissn.biomedcentral.com/articles/10.1186/s12970-014-0054-7", "title": "Schoenfeld et al. 2014, J Int Soc Sports Nutr: fasted vs fed aerobic exercise, same fat loss over 4 weeks with a calorie deficit" },
+    { "url": "https://pubmed.ncbi.nlm.nih.gov/21681120/", "title": "Ainsworth et al. 2011 Compendium of Physical Activities: running 8 km/h = 8.3 MET (8.3 x 70 kg x 0.5 h = about 290 kcal)" }
+  ],
+  "music": "music-nocturne",
+  "loop": false
+}

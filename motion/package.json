@@ -23,7 +23,8 @@
     "still:endcards": "node render.mjs --template EndCard --props props/paper-endcard.json --out out/paper-endcard.png --still --frame 90 && node render.mjs --template EndCard --props props/clean-endcard.json --out out/clean-endcard.png --still --frame 90 && node render.mjs --template EndCard --props props/pixel-endcard.json --out out/pixel-endcard.png --still --frame 100",
     "check:voxel": "node scripts/check-determinism.mjs",
     "still:cutaway": "node render.mjs --template Cutaway --props props/cutaway.json --out out/cutaway.png --still --frame 560 && node render.mjs --template EndCard --props props/cutaway-endcard.json --out out/cutaway-endcard.png --still --frame 100",
-    "still:editorial": "node render.mjs --template Editorial --props props/editorial.json --out out/editorial.png --still --frame 278 && node render.mjs --template EndCard --props props/editorial-endcard.json --out out/editorial-endcard.png --still --frame 90"
+    "still:editorial": "node render.mjs --template Editorial --props props/editorial.json --out out/editorial.png --still --frame 278 && node render.mjs --template EndCard --props props/editorial-endcard.json --out out/editorial-endcard.png --still --frame 90",
+    "still:pixelcinema": "node render.mjs --template PixelCinema --props props/pixelcinema.json --out out/pixelcinema.png --still --frame 330"
   },
   "dependencies": {
     "@react-three/fiber": "9.2.0",

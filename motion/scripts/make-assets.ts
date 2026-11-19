@@ -1,8 +1,8 @@
 // Builds our own (code-generated) assets into public/: sprite sheets from src/lib/sprites.ts as
 // SVG, chiptune loops and sound effects from a tiny square/triangle/noise synth as WAV, and a
-// warmer marimba bed (step 130) and the paper style's kalimba / glockenspiel bed (step 131)
-// from the same synth's sine-based voices, and the mastered stereo beds of scripts/beds.ts
-// (step 148).
+// warmer marimba bed (step 130), the paper style's kalimba / glockenspiel bed (step 131) and
+// the cinema style's night score in the rain (step 143) from the same synth's sine-based voices,
+// and the mastered stereo beds of scripts/beds.ts (step 148).
 // Run: `node scripts/make-assets.ts` (from motion/), then commit the files it writes.
 // Deterministic (no Math.random, no Math.sin: `sine` below is plain arithmetic): test/assets-licenses.test.ts checks the
 // committed files still match this script, so re-run it after editing art, songs or the palette.
@@ -370,6 +370,42 @@ const songs: Record<string, Song> = {
       },
     ],
   },
+  // The cinema style's bed (step 143): a night score in the rain. Slow kalimba arpeggios over
+  // Dm Bbmaj7 Gm7 A7sus, a far glockenspiel, a low sine bass and the rain itself (soft noise
+  // held over the whole loop). D minor, 72 bpm, 4 bars, no drums.
+  "music-nocturne": {
+    bpm: 72,
+    tracks: [
+      {
+        wave: "kalimba", volume: 0.16,
+        steps: [
+          "D4 - A4 - F4 - A4 - D5 - A4 - F4 - A4 -",
+          "A#3 - F4 - D4 - A4 - D5 - A4 - F4 - D4 -",
+          "G3 - D4 - A#3 - F4 - A#4 - F4 - D4 - A#3 -",
+          "A3 - E4 - D4 - G4 - C#5 - G4 - E4 - C#4 -",
+        ].join(" "),
+      },
+      {
+        wave: "glock", volume: 0.06,
+        steps: [
+          ". . . . . . . . A5 - - - - - F5 -",
+          ". . . . . . . . D5 - - - - - - -",
+          ". . . . . . . . F5 - - - G5 - - -",
+          ". . . . . . . . E5 - - - - - C#5 -",
+        ].join(" "),
+      },
+      {
+        wave: "bass", volume: 0.28,
+        steps: [
+          "D2 - - - - - - - - - - - A1 - - -",
+          "A#1 - - - - - - - - - - - F1 - - -",
+          "G1 - - - - - - - - - - - D2 - - -",
+          "A1 - - - - - - - - - - - E1 - - -",
+        ].join(" "),
+      },
+      { wave: "noise", volume: 0.035, steps: ["C8", ...Array(63).fill("-")].join(" ") },
+    ],
+  },
 };
 
 const effects: Record<string, Float64Array> = {
@@ -389,6 +425,12 @@ const effects: Record<string, Float64Array> = {
     [0.05, { wave: "noise", from: 300, to: 120, seconds: 0.4, volume: 0.18, decay: true }],
   ),
   "sfx-swish": sfx([0, { wave: "noise", from: 1200, to: 5000, seconds: 0.18, volume: 0.1 }], [0.18, { wave: "noise", from: 5000, to: 1500, seconds: 0.22, volume: 0.12, decay: true }]),
+  // Cinema (step 143): the lightning's crack, then the long low roll of the thunder.
+  "sfx-thunder": sfx(
+    [0, { wave: "noise", from: 3200, to: 700, seconds: 0.3, volume: 0.4, decay: true }],
+    [0.08, { wave: "noise", from: 260, to: 40, seconds: 2.4, volume: 0.55, decay: true }],
+    [0.3, { wave: "noise", from: 120, to: 30, seconds: 1.8, volume: 0.35, decay: true }],
+  ),
   "sfx-chime": sfx([0, mallet(698.46, 0.9)], [0.08, mallet(880, 0.9)], [0.16, mallet(1046.5, 0.9)], [0.24, mallet(1396.91, 1.1)]),
 };
 

@@ -78,6 +78,21 @@ def _editorial_script(p: Dict[str, Any]) -> List[str]:
             *([p["outro"]] if p.get("outro") else [])]
 
 
+def _cinema_line(parts: Sequence[str]) -> str:
+    """A PixelCinema scene's spoken line: its parts with the `*key word*` stars removed,
+    joined like `_paper_line` (= joinParts in motion/src/templates/PixelCinema/schema.ts)."""
+    return _paper_line([part.replace("*", "") for part in parts if part])
+
+
+def _cinema_beat(b: Dict[str, Any]) -> str:
+    if b["kind"] == "chip":  # the heading is read on the chip that brings it
+        return _cinema_line([b.get("title", ""), b["text"]])
+    if b["kind"] == "stat":
+        return _cinema_line([b["title"], " ".join(filter(None, [b["value"], b.get("unit")])),
+                             b.get("label", "")])
+    return _cinema_line([b["title"]])
+
+
 # Script lines (hook first) of templates with a voice, in the order of `voice.lines` (each
 # schema's refine). The voice reads the text the viewer sees, as is.
 SCRIPTS = {
@@ -99,6 +114,9 @@ SCRIPTS = {
                           for s in (p["hook"], *p["beats"], p["payoff"])]
                          + ([p["outro"]] if p.get("outro") else []),
     "Editorial": _editorial_script,
+    "PixelCinema": lambda p: [_cinema_line([p["hook"].get("strike", ""), p["hook"]["line"]]),
+                              *(_cinema_beat(b) for b in p["beats"]),
+                              *([p["outro"]] if p.get("outro") else [])],
 }
 
 
