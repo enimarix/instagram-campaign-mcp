@@ -290,6 +290,7 @@ The owner declined the first 8-bit FactQuest render ("not good at all") and aske
 ## Done
 
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 146 — The idle voice service gives its RAM back — https://github.com/enimarix/instagram-campaign-mcp/pull/153 (2026-11-19) — models in a worker process terminated at idle unload (service 41 MB idle, RAM fully returned), mimalloc purge, faster-whisper int8 check (worker 13.4 GB loaded vs 22.7 GB)
 - [x] 145 — One heavy GPU job at a time — https://github.com/enimarix/instagram-campaign-mcp/pull/152 (2026-11-19) — machine-wide OS file lock (~/.ig-campaign/gpu.lock) around Blender/Remotion renders and held by the voice service while its model is loaded; lazy load + unload after 120 s idle; render_concurrency default 1
 - [x] 141 — A DM Reel's text is always its instruction — https://github.com/enimarix/instagram-campaign-mcp/pull/150 (2026-11-19) — same-second share+text kept in real order, note before or after the share, late notes picked up on later polls while the order waits
 - [x] 038 — Local voice engine VoxCPM2 — https://github.com/enimarix/instagram-campaign-mcp/pull/149 (2026-11-19) — vendor/voxcpm_tts service (one take, 30 steps, cfg 1.6, cloned from voice cards; French number reading; Whisper check + up to 3 retakes; line timings) behind the http provider, started by `up` via TTS_SERVER_PYTHON; voices conteur_grave / coach_energique / douce_nuit; real PaperStory sample voiced in 1 take, score 1.000, 6.1 GB VRAM
@@ -450,6 +451,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - H9 — content language(s), target countries, what the account is for
 
 ## Follow-ups (parked from reviews)
+- (146) VoxCPM2 load still peaks ~16 GB RAM for a few seconds (fp32 build then bf16): build directly in bf16 after a bitwise check (-6 GB peak). `VOXCPM_*` values in .env do not reach the voice service (tts_service.spawn passes os.environ only): pass them through.
 - (live) A failed agent run is easy to miss: all 6 runs on 2026-11-18/19 failed on the workspace marker check; the alerts existed but were dismissed and the cause stayed. Make a run that fails the same way twice keep its alert (not dismissible until a run succeeds) and say what to do.
 - (038) Voice inside the render job: render_motion synthesises at queue time, so the agent's call blocks for minutes per voiced video and parallel calls queue on the GPU lock; move TTS into the job (render worker) and drop TTS_TIMEOUT_S back down.
 - (038) `render_remix` takes no `voice`: remix voice-overs always use the default voice.
@@ -518,4 +520,5 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - Reply drafts for audience comments: the agent drafts, the owner approves each one in the website before it is sent (never unattended, GOAL.md §5.2).
 - Installable website (PWA) with a notification when the daily batch is ready (needs HTTPS, gate H7).
 - The same video in a second language (new voice-over and captions on the same recipe).
-- In-app Remix briefs: the agent writes a reaction brief for Instagram's own Remix feature and the owner records it in the app; the published Remix is linked back for measurement. An extra source of reactions that needs no download, parked because downloaded reactions (063a, 063b) are the owner's chosen format.
+- In-app Remix briefs: the agent writes a reaction brief for Instagram's own Remix feature and the owner records it in the app; the published Remix is linked back for measurement. An extra source of reactions that needs no download, parked because downloaded reactions (063a, 063b) are the owner's chosen format.- [x] 146 — The idle voice service gives its RAM back (lead's live check of 145: 19.6 GB private RAM kept after unload, 2.6 GB free) — models in a child process terminated at idle unload, measure and trim RAM while loaded — deps: 145 · touches: `vendor/voxcpm_tts/`, `tests/test_voxcpm_service.py`
+

@@ -8,6 +8,19 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-19: The voice models run in a worker process; takes are checked by faster-whisper (146)
+The voice service keeps the HTTP API in a light process (no torch, ~40 MB) and runs VoxCPM2 +
+Whisper in a worker process it terminates at idle unload, so the OS gets all its memory back.
+A worker that dies or fails = HTTP 503, GPU lock released, a fresh worker on the next request.
+The take check (step 038's Whisper large-v3-turbo on the CPU) now runs through faster-whisper
+int8 (`mobiuslabsgmbh/faster-whisper-large-v3-turbo`, or `VOXCPM_WHISPER`) instead of the
+transformers fp32 pipeline: on the same take it heard the same words (score 1.0 both),
+word times within ~0.3 s, in 10 s instead of 22 s, with a ~4 GB peak instead of ~13 GB. The
+voice itself (VoxCPM2, settings, voices) is unchanged.
+Reason: after step 145's idle unload the one-process service still held 19.6 GB of committed
+RAM (torch's CPU allocator keeps freed memory) and the machine had 2.6 GB free; a take peaked
+at ~22 GB, most of it Whisper's word timestamps.
+
 ## 2026-11-19: One heavy GPU job at a time; one render at a time (145)
 A machine-wide OS file lock (`src/studio/gpu_lock.py`, `GPU_LOCK_PATH`, default
 `~/.ig-campaign/gpu.lock`) lets one heavy GPU job run at a time across processes: every
