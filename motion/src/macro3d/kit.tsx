@@ -22,8 +22,9 @@ export const Plate = ({ src }: { src?: string }) => (
       ) : (
         <OffthreadVideo src={src} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ))}
-    {/* the lens: a soft vignette, a touch of haze at the top */}
+    {/* the lens: a soft vignette; the top darkened so the captions read over a close-up */}
     <AbsoluteFill style={{ background: "radial-gradient(ellipse 95% 70% at 50% 52%, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
+    <AbsoluteFill style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.6) 0px, rgba(0,0,0,0.35) 420px, transparent 640px)" }} />
   </AbsoluteFill>
 );
 
@@ -43,8 +44,9 @@ const Selection = ({ k }: { k: number }) => (
 
 /**
  * The line read from `start` to `end` (s), at `t` (s): only the chunk being said, its words
- * appearing as they are said; the word being said white, the ones before it grey; the key word
- * white in its selection box once said.
+ * appearing as they are said (the line re-centres as it grows, like the reference); the word
+ * being said white, the ones before it grey; the key word (or words, one box) white in its
+ * selection box once said.
  */
 export const Caption = ({ line, keyWord, start, end, t, fps }: { line: string; keyWord?: string; start: number; end: number; t: number; fps: number }) => {
   const words = wordTimes(frenchSpaces(line), start, end);
@@ -53,21 +55,31 @@ export const Caption = ({ line, keyWord, start, end, t, fps }: { line: string; k
   const said = words.filter((w) => w.start <= t).length;
   if (!said) return null;
   const [from, to] = chunks.find(([a, b]) => said - 1 >= a && said - 1 < b) ?? chunks[chunks.length - 1];
+  const shown = words.slice(from, Math.min(to, said)).map((w, j) => ({ ...w, i: from + j }));
+  // consecutive key words share one selection box
+  const groups: (typeof shown)[] = [];
+  shown.forEach((w) => {
+    const last = groups[groups.length - 1];
+    if (last && keys.includes(w.i) && keys.includes(last[last.length - 1].i)) last.push(w);
+    else groups.push([w]);
+  });
+  const word = (w: (typeof shown)[number], key: boolean) => {
+    const appear = easeOut(span(t * fps, w.start * fps, 4));
+    const color = w.i === said - 1 || key ? "#FFFFFF" : "rgba(214,218,224,0.55)";
+    return <span key={w.i} style={{ position: "relative", color, opacity: appear, display: "inline-block", transform: `translateY(${(1 - appear) * 10}px)` }}>{w.text}</span>;
+  };
   return (
-    <div style={{ position: "absolute", top: CAPTION_Y, left: 120, right: 120, display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 16, rowGap: 6, fontFamily: SANS, fontWeight: 600, fontSize: 58, lineHeight: 1.16, letterSpacing: "-0.01em" }}>
-      {words.slice(from, to).map((w, j) => {
-        const i = from + j;
-        if (i >= said) return <span key={i} style={{ visibility: "hidden" }}>{w.text}</span>;
-        const appear = easeOut(span(t * fps, w.start * fps, 4));
-        const current = i === said - 1;
-        const key = keys.includes(i);
-        return (
-          <span key={i} style={{ position: "relative", color: current || key ? "#FFFFFF" : "rgba(214,218,224,0.55)", opacity: appear, transform: `translateY(${(1 - appear) * 10}px)`, textShadow: "0 2px 18px rgba(0,0,0,0.6)" }}>
-            {key && <Selection k={easeOut(span(t * fps, w.start * fps, 5))} />}
-            <span style={{ position: "relative" }}>{w.text}</span>
+    <div style={{ position: "absolute", top: CAPTION_Y, left: 120, right: 120, display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 16, rowGap: 6, fontFamily: SANS, fontWeight: 600, fontSize: 58, lineHeight: 1.16, letterSpacing: "-0.01em", textShadow: "0 0 4px rgba(0,0,0,0.8), 0 2px 18px rgba(0,0,0,0.7)" }}>
+      {groups.map((g) =>
+        keys.includes(g[0].i) ? (
+          <span key={g[0].i} style={{ position: "relative", display: "inline-flex", columnGap: 16 }}>
+            <Selection k={easeOut(span(t * fps, g[0].start * fps, 5))} />
+            {g.map((w) => word(w, true))}
           </span>
-        );
-      })}
+        ) : (
+          word(g[0], false)
+        ),
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 {
   "scenes": [
     {
-      "line": "En déficit, la nourriture n'est pas ton ennemie.",
+      "line": "En déficit calorique, la nourriture n'est pas ton ennemie. C'est ton alliée.",
       "key": "ennemie",
       "subject": "plate",
       "moves": [
@@ -11,7 +11,7 @@
       "pose": "stop"
     },
     {
-      "line": "Ce qui fait maigrir, c'est le total de ta journée.",
+      "line": "Ce qui te fait perdre du poids, c'est le total de ta journée, pas un repas sauté.",
       "key": "total",
       "subject": "apple",
       "look": "heat",
@@ -22,14 +22,14 @@
       }
     },
     {
-      "line": "Sauter des repas ? Souvent, ça finit en fringale le soir.",
+      "line": "Sauter des repas ? Souvent, la faim revient plus fort, et ça finit en fringale le soir.",
       "key": "fringale",
       "subject": "croissant",
       "cut": "cake",
       "pose": "shrug"
     },
     {
-      "line": "Les protéines, elles, calment la faim et protègent ton muscle.",
+      "line": "Les protéines, elles, calment la faim et protègent ton muscle pendant la perte de poids.",
       "key": "protègent",
       "subject": "egg",
       "look": "section",
@@ -37,7 +37,7 @@
       "callout": "Protéines"
     },
     {
-      "line": "Vise environ 1,6 g de protéines par kilo de poids, chaque jour.",
+      "line": "Vise environ 1,6 g de protéines par kilo de poids de corps, chaque jour.",
       "key": "1,6 g",
       "subject": "protein",
       "counter": {
@@ -48,15 +48,15 @@
       }
     },
     {
-      "line": "Les fibres et l'eau des fruits et légumes remplissent ton estomac.",
-      "key": "remplissent",
+      "line": "Les fibres et l'eau des fruits et des légumes prennent de la place dans ton estomac.",
+      "key": "de la place",
       "subject": "fibre",
       "cut": "stomach",
       "look": "section",
       "callout": "Fibres"
     },
     {
-      "line": "Une pomme, c'est à peine 50 kcal pour 100 g, et ça cale.",
+      "line": "Une pomme, c'est à peine 50 kcal pour 100 g, et ça cale vraiment.",
       "key": "ça cale",
       "subject": "apple",
       "moves": [
@@ -70,7 +70,7 @@
       }
     },
     {
-      "line": "Ton estomac est plein, ton déficit tient sans lutter.",
+      "line": "Résultat : ton estomac est plein, tu as moins faim, et ton déficit tient sans lutter.",
       "key": "tient",
       "subject": "stomach",
       "moves": [
@@ -80,11 +80,21 @@
       "pose": "thumbs"
     },
     {
-      "line": "Et avec assez de protéines, tu perds du gras, pas du muscle.",
+      "line": "Et avec assez de protéines, tu perds surtout du gras, pas ton muscle.",
       "key": "du gras",
       "subject": "fatcell",
       "cut": "muscle",
       "pose": "point"
+    },
+    {
+      "line": "Alors ne mange pas moins par peur : choisis mieux ce que tu mets dans ton assiette.",
+      "key": "choisis mieux",
+      "subject": "plate",
+      "moves": [
+        "rise",
+        "orbit"
+      ],
+      "pose": "explain"
     }
   ],
   "outro": "Mange mieux, pas moins : compte juste.",

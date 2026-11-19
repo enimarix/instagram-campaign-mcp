@@ -1,7 +1,7 @@
 {
   "scenes": [
     {
-      "line": "Tu as mangé salé hier, et ce matin la balance a pris un kilo ?",
+      "line": "Tu as mangé salé hier soir, et ce matin la balance affiche un kilo de plus ?",
       "key": "un kilo",
       "subject": "scale",
       "moves": [
@@ -16,13 +16,13 @@
       }
     },
     {
-      "line": "Rassure-toi : ce n'est pas du gras.",
+      "line": "Respire : ce kilo-là, ce n'est pas du gras.",
       "key": "pas du gras",
       "subject": "fatcell",
       "pose": "stop"
     },
     {
-      "line": "Le sel retient de l'eau dans ton corps.",
+      "line": "Le sel retient de l'eau dans ton corps, comme une éponge.",
       "key": "retient",
       "subject": "salt",
       "cut": "water",
@@ -33,7 +33,7 @@
       "callout": "Sel"
     },
     {
-      "line": "Ton corps garde cette eau pour diluer le sel en trop.",
+      "line": "Ton corps garde cette eau en plus pour diluer le sel que tu as mangé en trop.",
       "key": "diluer",
       "subject": "water",
       "moves": [
@@ -43,14 +43,14 @@
       "callout": "Eau"
     },
     {
-      "line": "Et un repas salé, c'est souvent un repas riche en glucides.",
+      "line": "Et un repas salé, c'est souvent aussi un repas riche en glucides : pizza, burger, frites.",
       "key": "glucides",
       "subject": "buns",
       "cut": "croissant",
       "pose": "temple"
     },
     {
-      "line": "Chaque gramme de glycogène stocké retient environ 3 g d'eau.",
+      "line": "Or chaque gramme de glycogène que tu stockes retient environ 3 g d'eau avec lui.",
       "key": "3 g d'eau",
       "subject": "glycogen",
       "counter": {
@@ -60,7 +60,7 @@
       }
     },
     {
-      "line": "Pour prendre un kilo de gras, il faudrait environ 7 700 kcal en trop.",
+      "line": "Pour prendre vraiment un kilo de gras, il te faudrait environ 7 700 kcal en trop.",
       "key": "7 700 kcal",
       "subject": "oil",
       "look": "heat",
@@ -80,7 +80,7 @@
       ]
     },
     {
-      "line": "Bois, mange normalement : en deux ou trois jours, l'eau repart.",
+      "line": "Bois de l'eau, mange normalement : en deux ou trois jours, l'eau repart toute seule.",
       "key": "l'eau repart",
       "subject": "scale",
       "moves": [
@@ -94,6 +94,16 @@
         "decimals": 1
       },
       "pose": "thumbs"
+    },
+    {
+      "line": "Alors ne juge jamais ton déficit sur une seule pesée du matin.",
+      "key": "une seule pesée",
+      "subject": "scale",
+      "moves": [
+        "slide",
+        "push"
+      ],
+      "pose": "stop"
     }
   ],
   "outro": "Regarde ta tendance, pas un seul matin.",

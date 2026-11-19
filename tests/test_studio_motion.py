@@ -471,6 +471,6 @@ def test_macro3d_script_reads_each_scene_then_the_outro():
     # Same lines as macro3dScript in motion/src/templates/Macro3D/schema.ts (test/macro3d.test.ts).
     p = _example("macro3d")
     lines = motion.SCRIPTS["Macro3D"](p)
-    assert lines[0] == "En déficit, la nourriture n'est pas ton ennemie."
+    assert lines[0] == "En déficit calorique, la nourriture n'est pas ton ennemie. C'est ton alliée."
     assert lines[-1] == "Mange mieux, pas moins : compte juste." and len(lines) == len(p["scenes"]) + 1
     assert motion.SCRIPTS["Macro3D"]({**p, "outro": None}) == lines[:-1]

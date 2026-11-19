@@ -451,7 +451,7 @@ def muscle(p, rng):
     for o in made:
         o.location += c
         o.rotation_euler.z = math.radians(55)
-    return c, 1.4 * r, True
+    return c, 2.0 * r, True  # framed on the bundle's length, not its width
 
 
 def fatcell(p, rng):
@@ -581,7 +581,7 @@ def camera(c, r, move, seed, frames, rng):
     s.camera = o
     w, h = s.render.resolution_x, s.render.resolution_y
     half = math.atan(18 * min(w, h) / max(w, h) / LENS)  # half the narrow (horizontal) field
-    d0 = r / (0.78 * math.tan(half))
+    d0 = r / (0.9 * math.tan(half))  # the subject fills about 90 % of the width
     a0 = rng.uniform(-40, 40)
     target = link(bpy.data.objects.new("target", None))
     k = o.constraints.new("TRACK_TO")
@@ -594,7 +594,8 @@ def camera(c, r, move, seed, frames, rng):
         az, el = math.radians(a0 + az), math.radians(el)
         out = Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el)))
         o.location = c + out * d0 * dist
-        target.location = c + out * r * near
+        # aimed a little below the centre: the subject sits in the upper middle, above Marco
+        target.location = c + out * r * near - Vector((0, 0, 0.35 * r * math.cos(el)))
         o.keyframe_insert("location", frame=f)
         target.keyframe_insert("location", frame=f)
     # depth of field: about half the subject sharp at its distance (a real macro lens)

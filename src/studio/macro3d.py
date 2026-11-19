@@ -62,9 +62,10 @@ def _blender(shots: List[Dict[str, Any]], out: Path, timeout_s: float) -> None:
                        max(timeout_s, 120 + n * S_PER_FRAME))
 
 
-def _job(shot: Dict[str, Any], key: str, stills: Sequence[int] = ()) -> Dict[str, Any]:
+def _job(shot: Dict[str, Any], key: str) -> Dict[str, Any]:
+    """The shot as macro.py reads it (`stills` None: every frame)."""
     return {"id": key, **{k: shot[k] for k in KEYS if k in shot},
-            "frames": shot["end"] - shot["start"], "stills": list(stills) or None}
+            "frames": shot["end"] - shot["start"], "stills": None}
 
 
 def render_plates(shots: List[Dict[str, Any]], media_root: PathLike, *, timeout_s: float) -> str:
@@ -91,8 +92,8 @@ def render_plates(shots: List[Dict[str, Any]], media_root: PathLike, *, timeout_
                            timeout_s=timeout_s)
                 part.replace(clips / f"{k}.mp4")
         listing = work / "concat.txt"
-        listing.write_text("".join(f"file '{(clips / f'{k}.mp4').as_posix()}'\n" for k in keys),
-                           encoding="utf-8")
+        quoted = [(clips / f"{k}.mp4").as_posix().replace("'", r"'\''") for k in keys]
+        listing.write_text("".join(f"file '{q}'\n" for q in quoted), encoding="utf-8")
         part = work / "track.mp4"
         ffmpeg.run(["-f", "concat", "-safe", "0", "-i", listing, "-c", "copy", part],
                    timeout_s=timeout_s)

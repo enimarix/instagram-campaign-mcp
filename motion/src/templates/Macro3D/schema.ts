@@ -5,7 +5,7 @@
 // the end card on top. Imports only zod and pure modules, so `node --test` runs it.
 import { z } from "zod";
 import { accentSchema, addressSchema, CARD_S, screenText } from "../../endcards/schema.ts";
-import { buildTimeline, fitEndCard, LINE_GAP_S, READ_CHARS_PER_S, type Timeline, type Timing } from "../../lib/timeline.ts";
+import { buildTimeline, fitEndCard, LINE_GAP_S, type Timeline, type Timing } from "../../lib/timeline.ts";
 import { POSES } from "../../macro3d/poses.ts";
 import { LABELS, LOOKS, MOVES, SUBJECTS } from "../../macro3d/subjects.ts";
 import { keyIndexes, wordTimes } from "../../macro3d/words.ts";
@@ -84,6 +84,9 @@ export const macro3dScript = ({ scenes, outro, voice }: Pick<Macro3DProps, "scen
   timings: voice?.lines,
 });
 
+/** Reading speed estimated without a voice: the studio voice reads about 20 characters a second (step-154 samples), faster than lib/timeline's caption estimate. */
+export const VOICE_CHARS_PER_S = 19;
+
 /** End card hold after the outro line is read (the card itself lasts at least CARD_S.macro3d). */
 export const END_HOLD_S = 1.2;
 
@@ -97,7 +100,7 @@ export const timelineOf = (p: Macro3DProps, fps: number) => {
   const timings: Timing[] =
     script.timings ??
     script.lines.map((text) => {
-      const read = Math.max(1.8, Array.from(text).length / READ_CHARS_PER_S);
+      const read = Math.max(1.8, Array.from(text).length / VOICE_CHARS_PER_S);
       const timing = { text, start_s: t, end_s: t + read };
       t += read + LINE_GAP_S;
       return timing;

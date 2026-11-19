@@ -43,8 +43,8 @@ test("bad props fail: scene count, key not in the line, still counters, unknown 
 
 test("the script is each scene's line, then the outro (= SCRIPTS in src/studio/motion.py)", () => {
   assert.deepEqual(macro3dScript({ ...EXAMPLES[0], voice: undefined }).lines.slice(0, 2), [
-    "En déficit, la nourriture n'est pas ton ennemie.",
-    "Ce qui fait maigrir, c'est le total de ta journée.",
+    "En déficit calorique, la nourriture n'est pas ton ennemie. C'est ton alliée.",
+    "Ce qui te fait perdre du poids, c'est le total de ta journée, pas un repas sauté.",
   ]);
   assert.equal(macro3dScript(EXAMPLES[0]).lines.at(-1), "Mange mieux, pas moins : compte juste.");
   assert.equal(macro3dScript({ ...EXAMPLES[0], outro: undefined }).lines.length, EXAMPLES[0].scenes.length);
