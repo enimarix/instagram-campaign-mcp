@@ -1,0 +1,106 @@
+{
+  "scenes": [
+    {
+      "line": "Un gramme de gras, c'est 9 kcal. Plus du double des glucides ou des protéines.",
+      "key": "9 kcal",
+      "subject": "oil",
+      "moves": [
+        "push",
+        "orbit"
+      ],
+      "counter": {
+        "from": 0,
+        "to": 9,
+        "unit": "kcal / g",
+        "big": true
+      },
+      "pose": "point"
+    },
+    {
+      "line": "Les protéines et les glucides, eux, n'en donnent que 4 par gramme.",
+      "key": "4",
+      "subject": "egg",
+      "cut": "sweet_potato",
+      "counter": {
+        "from": 0,
+        "to": 4,
+        "unit": "kcal / g"
+      }
+    },
+    {
+      "line": "Pourquoi autant ? Parce que le gras, c'est de l'énergie très concentrée.",
+      "key": "concentrée",
+      "subject": "oil",
+      "look": "heat",
+      "moves": [
+        "slide",
+        "rise"
+      ],
+      "pose": "think"
+    },
+    {
+      "line": "C'est la réserve préférée de ton corps : compacte, légère, presque sans eau.",
+      "key": "sans eau",
+      "subject": "fatcell",
+      "callout": "Cellules graisseuses"
+    },
+    {
+      "line": "Une seule cuillère à soupe d'huile, environ 10 g, c'est déjà 90 kcal.",
+      "key": "90 kcal",
+      "subject": "oil",
+      "moves": [
+        "top",
+        "whip"
+      ],
+      "counter": {
+        "from": 0,
+        "to": 90,
+        "unit": "kcal"
+      }
+    },
+    {
+      "line": "Attention : le gras n'est pas mauvais. Ton corps en a besoin, pour tes hormones aussi.",
+      "key": "besoin",
+      "subject": "egg",
+      "pose": "stop",
+      "look": "section"
+    },
+    {
+      "line": "Mais il monte vite. Un peu en plus partout, et ton déficit disparaît sans que tu le voies.",
+      "key": "disparaît",
+      "subject": "croissant",
+      "look": "heat",
+      "pose": "wow"
+    },
+    {
+      "line": "Un avocat, une poignée de noix, un filet d'huile : bons, mais à compter.",
+      "key": "à compter",
+      "subject": "avocado",
+      "moves": [
+        "push",
+        "slide"
+      ],
+      "pose": "point",
+      "look": "heat"
+    },
+    {
+      "line": "Garde-le, dose-le, pèse-le : c'est ça, compter juste.",
+      "key": "dose-le",
+      "subject": "plate",
+      "moves": [
+        "orbit",
+        "top"
+      ],
+      "pose": "thumbs"
+    }
+  ],
+  "outro": "9 kcal par gramme : compte-les, sans les craindre.",
+  "address": "tu",
+  "accent": "fat",
+  "citations": [
+    {
+      "url": "https://www.fao.org/3/y5022e/y5022e.pdf",
+      "title": "FAO 2003, Food energy: methods of analysis and conversion factors (Atwater 9 / 4 / 4 kcal per g)"
+    }
+  ]
+}

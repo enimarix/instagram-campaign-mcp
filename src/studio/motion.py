@@ -13,7 +13,8 @@ Node: `NODE_BIN` (a full path or a command name) overrides `node` on PATH.
 
 Template `CinematicSkit` (style `blender`) is not Remotion: Blender renders it
 (src/studio/cinematic.py). The functions below route it there, so callers treat it like any
-motion template.
+motion template. Template `Macro3D` (style `macro3d`) is Remotion over Blender plates: the
+plates are rendered first (src/studio/macro3d.py) and handed to it as `plate`.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore
-from . import cinematic, ffmpeg, gpu_lock, media, recipe, render  # render.py imports us back
+from . import cinematic, ffmpeg, gpu_lock, macro3d, media, recipe, render  # render.py imports us
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
 
@@ -117,6 +118,7 @@ SCRIPTS = {
     "PixelCinema": lambda p: [_cinema_line([p["hook"].get("strike", ""), p["hook"]["line"]]),
                               *(_cinema_beat(b) for b in p["beats"]),
                               *([p["outro"]] if p.get("outro") else [])],
+    macro3d.TEMPLATE: lambda p: [s["line"] for s in p["scenes"]] + ([p["outro"]] if p.get("outro") else []),
 }
 
 
@@ -264,13 +266,21 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     still_props = {**v["props"]}
     if "voice" in still_props:
         still_props["voice"] = {k: x for k, x in still_props["voice"].items() if k != "audioSrc"}
+    still_props.pop("plate", None)  # Macro3D: the studio's own plates only, never one from the props
     folder = Path(media_root) / "previews" / render.recipe_hash([template, still_props])
     folder.mkdir(parents=True, exist_ok=True)
+    plates = {}
+    if template == macro3d.TEMPLATE:
+        plates = macro3d.plate_stills(v["plates"], frames, folder, timeout_s=STILL_TIMEOUT_S)
     paths = []
     with tempfile.TemporaryDirectory(dir=folder) as work:
         for f in dict.fromkeys(frames):
             out = folder / f"frame-{f}.png"
-            _render(template, still_props, out, Path(work), timeout_s=STILL_TIMEOUT_S,
+            props = still_props
+            if f in plates:  # Macro3D: the Blender picture under this frame
+                props = {**still_props, "plate": macro3d.stage(
+                    bundle_dir(), plates[f], f"{folder.name}-{f}.png")}
+            _render(template, props, out, Path(work), timeout_s=STILL_TIMEOUT_S,
                     extra=["--still", "--frame", f])
             paths.append(media.relative(media_root, out))
     return paths
@@ -292,6 +302,10 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
         return cinematic.render_asset(props, out, media_root, timeout_s=timeout_s, end_card=card)
     v = validate_props(template, props)
     staged = _stage_audio(bundle_dir(), v["props"], media_root)
+    if template == macro3d.TEMPLATE:  # the Blender plates first, under the picture
+        track = media.resolve(media_root, macro3d.render_plates(v["plates"], media_root,
+                                                               timeout_s=timeout_s))
+        staged = {**staged, "plate": macro3d.stage(bundle_dir(), track, track.name)}
     with tempfile.TemporaryDirectory(prefix="motion-", dir=out.parent) as work:
         raw = Path(work) / "raw.mp4"
         _render(template, staged, raw, Path(work), timeout_s=timeout_s,

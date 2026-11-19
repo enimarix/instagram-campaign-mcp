@@ -337,7 +337,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:
    - **tagline**: one short line tied to the payoff, in the video's address (e.g. « Fini
-     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema), `cta`
+     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D), `cta`
      (QuizChest) or `tagline` (BossBattle, DialogStory, PixelSkit); no line = the app's own.
    - **accent**: the macro colour of the topic: `protein`, `carbs`, `fat`, `kcal`, or
      `brand` (emerald) when none fits; on the templates that take an `accent` prop.
@@ -349,7 +349,8 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 3. `preview_motion(template, props)` returns stills. Look at them: the hook readable in
    the first frame, no text cut off or overflowing, nothing hidden in the bottom third
    (Instagram's caption area), nothing crowded. Fix the props and preview again (at most
-   2 previews per idea).
+   2 previews per idea). Macro3D previews render Blender stills (about a minute): one is
+   enough.
 4. `render_motion(template=…, props=…, idea_id=…, caption=…)` for every idea; send them in
    parallel. Keep every returned job id in your wait list.
 

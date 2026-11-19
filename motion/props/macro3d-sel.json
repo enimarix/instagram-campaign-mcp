@@ -1,0 +1,122 @@
+{
+  "scenes": [
+    {
+      "line": "Tu as mangé salé hier soir, et ce matin la balance affiche un kilo de plus ?",
+      "key": "un kilo",
+      "subject": "scale",
+      "moves": [
+        "push",
+        "top"
+      ],
+      "counter": {
+        "from": 70,
+        "to": 71,
+        "unit": "kg",
+        "decimals": 1
+      }
+    },
+    {
+      "line": "Respire : ce kilo-là, ce n'est pas du gras.",
+      "key": "pas du gras",
+      "subject": "fatcell",
+      "pose": "stop"
+    },
+    {
+      "line": "Le sel retient de l'eau dans ton corps, comme une éponge.",
+      "key": "retient",
+      "subject": "salt",
+      "cut": "water",
+      "moves": [
+        "slide",
+        "orbit"
+      ],
+      "callout": "Sel"
+    },
+    {
+      "line": "Ton corps garde cette eau en plus pour diluer le sel que tu as mangé en trop.",
+      "key": "diluer",
+      "subject": "water",
+      "moves": [
+        "pull",
+        "rise"
+      ],
+      "callout": "Eau"
+    },
+    {
+      "line": "Et un repas salé, c'est souvent aussi un repas riche en glucides : pizza, burger, frites.",
+      "key": "glucides",
+      "subject": "buns",
+      "cut": "croissant",
+      "pose": "temple"
+    },
+    {
+      "line": "Or chaque gramme de glycogène que tu stockes retient environ 3 g d'eau avec lui.",
+      "key": "3 g d'eau",
+      "subject": "glycogen",
+      "counter": {
+        "from": 0,
+        "to": 3,
+        "unit": "g d'eau"
+      }
+    },
+    {
+      "line": "Pour prendre vraiment un kilo de gras, il te faudrait environ 7 700 kcal en trop.",
+      "key": "7 700 kcal",
+      "subject": "oil",
+      "look": "heat",
+      "counter": {
+        "from": 0,
+        "to": 7700,
+        "unit": "kcal"
+      }
+    },
+    {
+      "line": "En un seul repas, c'est presque impossible !",
+      "key": "impossible",
+      "subject": "cake",
+      "moves": [
+        "orbit",
+        "whip"
+      ]
+    },
+    {
+      "line": "Bois de l'eau, mange normalement : en deux ou trois jours, l'eau repart toute seule.",
+      "key": "l'eau repart",
+      "subject": "scale",
+      "moves": [
+        "rise",
+        "top"
+      ],
+      "counter": {
+        "from": 71,
+        "to": 70,
+        "unit": "kg",
+        "decimals": 1
+      },
+      "pose": "thumbs"
+    },
+    {
+      "line": "Alors ne juge jamais ton déficit sur une seule pesée du matin.",
+      "key": "une seule pesée",
+      "subject": "scale",
+      "moves": [
+        "slide",
+        "push"
+      ],
+      "pose": "stop"
+    }
+  ],
+  "outro": "Regarde ta tendance, pas un seul matin.",
+  "address": "tu",
+  "accent": "kcal",
+  "citations": [
+    {
+      "url": "https://doi.org/10.1007/s00421-015-3170-4",
+      "title": "Fernández-Elías et al. 2015, Eur J Appl Physiol: about 3 g of water stored per g of muscle glycogen"
+    },
+    {
+      "url": "https://doi.org/10.1038/sj.ijo.0803720",
+      "title": "Hall 2008, Int J Obes: energy content of weight change, about 7 700 kcal per kg of fat"
+    }
+  ]
+}

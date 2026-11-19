@@ -212,6 +212,29 @@
   source), `outro?` (= the end card's tagline), `address`, `accent`, `citations`, `voice`
   {audioSrc?, lines?: hook, each beat (title when new + chip; title + number + label), outro when
   given}, `music` (`music-nocturne`|none), `loop`, `safeZone`. Still: `npm run still:pixelcinema`.
+- `Macro3D` (`src/templates/Macro3D/`, style `macro3d`, « Macro 3D », step 154): a dark
+  photoreal 3D macro explainer. Blender renders the plates (`cinematic/engine/macro.py`, see
+  `cinematic/README.md`: food and body pieces in a black studio void, rim light, depth of field,
+  a slow macro move per shot, a hard cut every 1-3 s); `src/studio/macro3d.py` renders and
+  caches them before the Remotion pass and passes the track as `plate` (a still gets the
+  picture of its frame; without one the template draws the dark void). On top
+  (`src/macro3d/`): word-by-word captions top-centre (`words.ts`: each word's share of its
+  line's voice time, short chunks broken at punctuation; the word being said white, the ones
+  before it grey, the key word in a thin blue selection box with corner handles), the small
+  honest label bottom-left (« Illustration agrandie », « Énergie en couleur », « Vue en coupe »;
+  automatic from the subject and look), a callout tag with a leader line, a counter (kcal, g,
+  kg, days; small, or big and glowing), and Marco (`Presenter.tsx`), the macroBody coach drawn in code: white sweatband
+  with an emerald stripe over a short quiff, trimmed beard, emerald tee with the mB tile, a
+  whistle; 8 poses (`poses.ts`: explain, point, stop, think, temple, shrug, thumbs, wow) cut on
+  the beat (read from the line when not given, a reaction on a scene's second shot), a mouth
+  from the letter being said, blinks, a slight bob. Props in `schema.ts` (examples
+  `props/macro3d*.json`): `scenes` (4-10: `line`, `key?`, `subject`, `cut?`, `look`, `moves?`,
+  `label?`, `callout?`, `counter?` {from, to, unit, decimals, big (the scene's one big glowing
+  number in the middle, like the reference's « 18.2M »)}, `pose?`), `outro?` (= the end
+  card's tagline, read over it), `address` (tu), `accent`, `citations`, `voice` {audioSrc?,
+  lines?: each scene, then the outro}, `plate?` (set by the studio), `music`
+  (`music-cutaway-c` default, `-b`, `music-dusk`, `music-nocturne`, none), `loop`, `safeZone`.
+  Still: `npm run still:macro3d` (no plate: the void).
 - End cards (`src/endcards/`, steps 130, 137): `<EndCard style=…>` picks the style's animated
   card; every template ends on its style's card. Fixed base (`base.tsx`: mB tile, wordmark,
   « 7 jours gratuits », macrobody.fr) adapted per video by the props in `schema.ts`: `tagline?`,
@@ -228,7 +251,10 @@
   tile with a pink rim beside its cameo (the tree or an anatomy character), the wordmark rises,
   « 7 jours *gratuits* » pops in pink. `cinema` (step 143): the story's pixel set (`cameo` = the
   set; its card framing) darkened in the rain, a beam swings in from the bottom left onto the
-  tile, which glows, under the clean stack in light text. Composition `EndCard`
+  tile, which glows, under the clean stack in light text. `macro3d` (step 154): the black studio
+  void, a beam sweeps across onto the glossy mB tile (a specular glint runs over it), Marco's
+  thumbs-up beside it (`cameo` marco | none), the wordmark rises, the tagline, the emerald pill,
+  macrobody.fr underlined in the accent. Composition `EndCard`
   (`EndCardClip`) renders one card alone; Track A recipes use it (src/studio/motion.py
   `render_end_card`). Stills: `npm run still:endcard`, `npm run still:endcards`.
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).

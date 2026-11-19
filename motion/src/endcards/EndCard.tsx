@@ -12,8 +12,9 @@ import { PixelEndCard } from "./PixelEndCard";
 import { VoxelEndCard } from "./VoxelEndCard";
 import { CinemaEndCard } from "./CinemaEndCard";
 import { EditorialEndCard } from "./EditorialEndCard";
+import { Macro3dEndCard } from "./Macro3dEndCard";
 
-const CARDS = { voxel: VoxelEndCard, paper: PaperEndCard, clean: CleanEndCard, pixel: PixelEndCard, live: LiveEndCard, cutaway: CutawayEndCard, editorial: EditorialEndCard, cinema: CinemaEndCard } as const;
+const CARDS = { voxel: VoxelEndCard, paper: PaperEndCard, clean: CleanEndCard, pixel: PixelEndCard, live: LiveEndCard, cutaway: CutawayEndCard, editorial: EditorialEndCard, cinema: CinemaEndCard, macro3d: Macro3dEndCard } as const;
 
 export const EndCard = ({ style, ...props }: EndCardProps) => {
   const Card = CARDS[style];

@@ -60,7 +60,8 @@ def test_validate_props_uses_the_templates_own_message():
 
 @needs_motion
 @pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
-                                      "PixelSkit", "VoxelQuest", "PaperStory", "Editorial", "PixelCinema"])
+                                      "PixelSkit", "VoxelQuest", "PaperStory", "Editorial", "PixelCinema",
+                                      "Macro3D"])
 def test_schema_events_give_every_template_a_timeline(template):
     v = motion.validate_props(template, _example(template.lower()))
     timeline = recipe.compress_timeline(v["events"])
@@ -131,13 +132,14 @@ def test_schema_export_gives_every_template_a_style():
     out = motion._node("schemas.mjs", [], timeout_s=motion.SCHEMA_TIMEOUT_S)
     styles = {s["id"]: s["label"] for s in out["styles"]}
     assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier",
-                      "cutaway": "Pixel explicatif", "editorial": "Éditorial", "cinema": "Pixel ciné"}
+                      "cutaway": "Pixel explicatif", "editorial": "Éditorial", "cinema": "Pixel ciné",
+                      "macro3d": "Macro 3D"}
     by_id = {t["id"]: t["style"] for t in out["templates"]}
     assert set(by_id.values()) <= set(styles)
     assert by_id["VoxelQuest"] == "voxel" and by_id["FactQuest"] == "pixel"
     assert by_id["PaperStory"] == "paper"
     assert by_id["Cutaway"] == "cutaway" and by_id["Editorial"] == "editorial"
-    assert by_id["PixelCinema"] == "cinema"
+    assert by_id["PixelCinema"] == "cinema" and by_id["Macro3D"] == "macro3d"
 
 
 @needs_motion
@@ -447,3 +449,28 @@ def test_pixelcinema_script_reads_the_screen_without_the_stars():
                          "Envoyez ça à quelqu'un qui grignote le soir."]
     no_strike = motion.SCRIPTS["PixelCinema"](_example("pixelcinema-frigo"))
     assert no_strike[0] == "23 h. Vous ouvrez le frigo pour rien."
+
+
+@needs_motion
+def test_validate_props_macro3d_examples_plates_and_no_price():
+    for name in ("macro3d", "macro3d-muscle", "macro3d-gras", "macro3d-sel"):
+        v = motion.validate_props("Macro3D", _example(name))
+        assert 35 <= v["durationInFrames"] / v["fps"] <= 55, name
+        assert v["coverFrame"] <= 3 * v["fps"]
+        assert any(e["e"].startswith("end card (macro3d)") for e in v["events"])
+        shots = v["plates"]  # the Blender shots, frame 0 to the end card, a cut every 1-3 s
+        assert shots[0]["start"] == 0 and all(a["end"] == b["start"] for a, b in zip(shots, shots[1:]))
+        assert all(30 <= s["end"] - s["start"] <= 96 for s in shots)
+    bad = {**_example("macro3d"), "outro": "Seulement 4,99 € par mois"}
+    with pytest.raises(ValueError, match="no price on screen"):
+        motion.validate_props("Macro3D", bad)
+    assert "plates" not in motion.validate_props("FactQuest", FACTQUEST)
+
+
+def test_macro3d_script_reads_each_scene_then_the_outro():
+    # Same lines as macro3dScript in motion/src/templates/Macro3D/schema.ts (test/macro3d.test.ts).
+    p = _example("macro3d")
+    lines = motion.SCRIPTS["Macro3D"](p)
+    assert lines[0] == "En déficit calorique, la nourriture n'est pas ton ennemie. C'est ton alliée."
+    assert lines[-1] == "Mange mieux, pas moins : compte juste." and len(lines) == len(p["scenes"]) + 1
+    assert motion.SCRIPTS["Macro3D"]({**p, "outro": None}) == lines[:-1]

@@ -139,4 +139,5 @@ jobs:
       - run: npm run still:cutaway
       - run: npm run still:editorial
       - run: npm run still:pixelcinema
+      - run: npm run still:macro3d
       - run: npm run check:voxel
