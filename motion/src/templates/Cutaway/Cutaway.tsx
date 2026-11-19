@@ -84,17 +84,21 @@ const sceneState = (plan: Plan, i: number, frame: number) => {
   return { r, st, cam: camOf(plan.all[i], r.view, st) };
 };
 
-const Art = ({ plan, i, frame, fps }: { plan: Plan; i: number; frame: number; fps: number }) => {
+/** The camera at `frame`: within a view it glides from the last scene's framing over CAM_S. */
+const liveCam = (plan: Plan, i: number, frame: number) => {
+  const { r, st, cam } = sceneState(plan, i, frame);
+  if (!i || r.cut) return cam;
+  const prev = camOf(plan.all[i - 1], r.view, st);
+  const t = easeInOut(span(frame - plan.scenes[i].startFrame, 0, CAM_S * plan.fps));
+  return {
+    zoom: Math.exp(Math.log(prev.zoom) + (Math.log(cam.zoom) - Math.log(prev.zoom)) * t),
+    center: [prev.center[0] + (cam.center[0] - prev.center[0]) * t, prev.center[1] + (cam.center[1] - prev.center[1]) * t] as const,
+  };
+};
+
+const Art = ({ plan, i, frame }: { plan: Plan; i: number; frame: number }) => {
   const { r, st, cam } = sceneState(plan, i, frame);
   const f = frame - plan.scenes[i].startFrame;
-  if (i > 0 && !r.cut) {
-    // Same view: the camera glides from the last scene's framing.
-    const prev = camOf(plan.all[i - 1], r.view, st);
-    const t = easeInOut(span(f, 0, CAM_S * fps));
-    const zoom = Math.exp(Math.log(prev.zoom) + (Math.log(cam.zoom) - Math.log(prev.zoom)) * t);
-    const center = [prev.center[0] + (cam.center[0] - prev.center[0]) * t, prev.center[1] + (cam.center[1] - prev.center[1]) * t] as const;
-    return <Layer view={r.view} sky={r.sky} st={st} cam={{ zoom, center }} />;
-  }
   if (i > 0 && r.cut && f < CUT) {
     // A cut: the old picture zooms through (in to a deeper view, out to a shallower one) while the new one dithers in.
     const pr = plan.resolved[i - 1];
@@ -110,7 +114,7 @@ const Art = ({ plan, i, frame, fps }: { plan: Plan; i: number; frame: number; fp
       </>
     );
   }
-  return <Layer view={r.view} sky={r.sky} st={st} cam={cam} />;
+  return <Layer view={r.view} sky={r.sky} st={st} cam={liveCam(plan, i, frame)} />;
 };
 
 /** Mode chip (top left) with its dashes, and the « ×2 » badge. */
@@ -124,7 +128,7 @@ const Chip = ({ plan, i, frame, fps }: { plan: Plan; i: number; frame: number; f
   const rate = (plan.clock[Math.min(frame + 1, plan.clock.length - 1)] - plan.clock[Math.min(frame, plan.clock.length - 2)]) * fps;
   const lit = dashesOf(rate);
   const blink = changing && Math.floor(f / 4) % 2 === 1;
-  const w = typeSize(text, 4, true).w + 8 * 4 + 8;
+  const w = typeSize(text, 4, true).w + 4 * 4 + 8; // = Tag's box
   const x2 = plan.all[i].x2;
   return (
     <g>
@@ -200,19 +204,21 @@ const Steps = ({ items, current, view, st, y }: { items: string[]; current?: num
 };
 
 const CALLOUT_COLORS = [C.yellow, C.tealLight, C.white];
+/** When callout `k` of scene `i` pops in: the hook's first is up from frame 0 (the cover), the rest every half second, after a cut's dither. */
+const calloutStart = (i: number, k: number, cut: boolean, fps: number) => (i === 0 ? Math.round(0.5 * k * fps) - 3 : Math.round((0.35 + 0.5 * k) * fps) + (cut ? CUT : 0));
 
 /** The scene's callouts: boxed labels with an elbow leader line to their point, one after the other. */
 const Callouts = ({ plan, i, frame, fps, st, top }: { plan: Plan; i: number; frame: number; fps: number; st: ViewState; top: number }) => {
   const s = plan.all[i];
   const r = plan.resolved[i];
   const f = frame - plan.scenes[i].startFrame;
-  const { cam } = sceneState(plan, i, frame);
+  const cam = liveCam(plan, i, frame);
   const anchors = VIEW_COMPONENTS[r.view].anchors(st) as Record<string, readonly [number, number]>;
   const used: number[][] = [[], []];
   return (
     <g>
       {s.callouts.map((c, k) => {
-        const start = Math.round((0.35 + 0.5 * k) * fps) + (r.cut ? CUT : 0);
+        const start = calloutStart(i, k, r.cut, fps);
         if (f < start) return null;
         const [ax, ay] = toScreen(cam, anchors[c.at]).map((v, n) => Math.max(40, Math.min(n ? H - 300 : W - 40, v)));
         const right = ax >= 540;
@@ -275,7 +281,7 @@ const Picture = ({ plan, frame, fps }: { plan: Plan; frame: number; fps: number 
   const top = bottom + (s.steps ? 90 : 30);
   return (
     <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
-      <Art plan={plan} i={i} frame={frame} fps={fps} />
+      <Art plan={plan} i={i} frame={frame} />
       {bang >= 0 && bang < 6 && <DitherRect y={0} h={H} color={C.sun} level={0.75 - 0.25 * Math.floor(bang / 2)} />}
       <Chip plan={plan} i={i} frame={frame} fps={fps} />
       <Gauge r={plan.resolved[i]} f={f} fps={fps} />
@@ -296,7 +302,7 @@ const cuesOf = (plan: Plan, endStart: number, fps: number) => {
     cues.push([sc.startFrame, last ? "sfx-confirm" : "sfx-select", 0.35]);
     if (plan.resolved[i].cut) cues.push([sc.startFrame, "sfx-swish", 0.3]);
     if (s.bang) cues.push([sc.startFrame + bangStart(sc.endFrame - sc.startFrame), "sfx-hit", 0.45]);
-    s.callouts.forEach((_, k) => cues.push([sc.startFrame + Math.round((0.35 + 0.5 * k) * fps) + (plan.resolved[i].cut ? CUT : 0), "sfx-select", 0.15]));
+    s.callouts.forEach((_, k) => cues.push([sc.startFrame + calloutStart(i, k, plan.resolved[i].cut, fps), "sfx-select", 0.15]));
   });
   cues.push([endStart - 8, "sfx-swish", 0.35]);
   return cues;

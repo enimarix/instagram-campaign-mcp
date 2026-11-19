@@ -30,7 +30,9 @@ const Fibre = ({ shape, children }: { shape: FibreShape; children?: ReactNode })
     <g>
       <ellipse cx={X0} cy={0} rx={rx} ry={r} fill={C.copperDark} stroke={C.ink} {...LINE} />
       <rect x={X0} y={-r} width={X1 - X0} height={2 * r} fill={C.copperDark} />
+      <rect x={X0} y={r * 0.78} width={X1 - X0} height={r * 0.22} fill={C.ink} opacity={0.35} />
       <line x1={X0} y1={-r} x2={X1} y2={-r} stroke={C.cream} strokeWidth={12} />
+      <line x1={X0 + 20} y1={-r + 16} x2={X1 - 20} y2={-r + 16} stroke={C.copperLight} strokeWidth={8} />
       <line x1={X0} y1={r} x2={X1} y2={r} stroke={C.cream} strokeWidth={12} />
       {rodYs(shape).map((y, k) => {
         const fresh = k === rods - 1 && newRod < 1;
@@ -73,7 +75,7 @@ export const fibre: View<"fibre"> = {
     const s = fibreShape(phase);
     const ys = rodYs(s);
     const p = period(s.c);
-    return { fibre: [-150, -s.r], myofibrille: [120, ys[1]], sarcomere: [CENTRE + p / 2, ys[3]], noyau: [0, -s.r + 4] };
+    return { fibre: [-150, -s.r], myofibrille: [120, ys[1]], sarcomere: [CENTRE - 2.5 * p, ys[3]], noyau: [0, -s.r + 4] };
   },
 };
 

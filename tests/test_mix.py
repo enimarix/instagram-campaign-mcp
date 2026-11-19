@@ -39,10 +39,11 @@ def test_an_owner_rule_is_zero_and_outside_the_floor():
     assert _alloc(rules=set(ABC)) == dict.fromkeys(ABC, 0.0)
 
 
-def test_floors_that_would_sum_past_one_give_equal_shares():
-    options = [f"o{k}" for k in range(12)]  # 12 x 0.10 > 1
+def test_many_options_shrink_the_floors_to_half_the_batch():
+    options = [f"o{k}" for k in range(12)]  # 12 x 0.10 > 1: floors of 0.5 / 12 each
     s = _alloc(options, likes={"o0": 40})
-    assert all(v == pytest.approx(1 / 12) for v in s.values())
+    assert s["o0"] == max(s.values()) > 0.3 and min(s.values()) >= 0.5 / 12 - 1e-12
+    assert sum(s.values()) == pytest.approx(1)
 
 
 def test_no_data_gives_near_equal_shares():
@@ -106,7 +107,8 @@ def test_batch_mix_learns_from_verdicts_and_obeys_owner_rules(store, settings):
     t = _rows(mix, "template")
     assert t["PixelSkit"]["share"] == max(r["share"] for r in mix["template"])
     assert t["PixelSkit"]["likes"] == 12 and t["BossBattle"]["dislikes"] == 12
-    assert t["BossBattle"]["share"] == pytest.approx(0.10, abs=0.002)
+    floor = min(0.10, 0.5 / (len(t) - 1))  # QuizChest is ruled out
+    assert t["BossBattle"]["share"] == pytest.approx(floor, abs=0.002)
     assert t["QuizChest"]["share"] == 0 and t["QuizChest"]["why"] == "owner rule: never"
     assert t["DialogStory"]["share"] > 0  # only owner rules are hard zeros
     h = _rows(mix, "humour")

@@ -35,6 +35,8 @@ const Draw = ({ phase, stage, f }: ViewState) => {
     <g>
       <path d={`M-560 ${L[1] - 16}L${L[0] + 20} ${L[1] - 26}L${L[0] + 20} ${L[1] + 26}L-560 ${L[1] + 16}Z`} fill={C.white} stroke={C.ink} {...LINE} />
       <path d={body} fill={C.copper} stroke={C.ink} {...LINE} />
+      <path d={`M${L[0] + 30} ${L[1] + 8}Q${-190} ${R * 1.3} ${cx} ${R}L${cx} ${R * 0.55}Q${-190} ${R * 0.75} ${L[0] + 30} ${L[1] + 8}Z`} fill={C.copperDark} opacity={0.7} />
+      <path d={`M${L[0] + 60} ${L[1] - 12}Q${-190} ${-R * 1.12} ${cx - 20} ${-R * 0.86}`} fill="none" stroke={C.copperLight} strokeWidth={14} strokeLinecap="round" />
       {[0.12, 0.26, 0.4, 0.54, 0.68, 0.82].map((k) => (
         <path key={k} d={`M${L[0] + 10} ${L[1]}Q${-190} ${-R * 1.3 + 2.6 * R * k} ${cx} ${-R + 2 * R * k}`} fill="none" stroke={k % 0.28 < 0.1 ? C.copperLight : C.copperDark} strokeWidth={8} />
       ))}

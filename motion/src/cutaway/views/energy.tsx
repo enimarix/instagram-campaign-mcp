@@ -69,6 +69,7 @@ export const fat: View<"fat"> = {
         })}
         <circle cx={0} cy={0} r={R} fill={C.mauve} stroke={C.cream} strokeWidth={14} />
         <circle cx={-20} cy={10} r={rd} fill={C.orange} stroke={C.yellowDark} {...LINE} />
+        <path d={`M${-20 + rd} ${10}A${rd} ${rd} 0 0 1 ${-20 - rd} ${10}A${rd} ${rd * 0.55} 0 0 0 ${-20 + rd} ${10}Z`} fill={C.yellowDark} opacity={0.55} />
         <circle cx={-20 - rd * 0.35} cy={10 - rd * 0.4} r={rd * 0.28} fill={C.sun} />
         <Sparkles cx={-20} cy={10} rx={rd * 0.8} ry={rd * 0.8} n={30} seed={51} f={f} color={C.yellow} />
         <ellipse cx={nucleus[0]} cy={nucleus[1]} rx={52} ry={22} transform={`rotate(-40 ${nucleus[0]} ${nucleus[1]})`} fill={C.steel} stroke={C.ink} {...LINE} />
@@ -94,6 +95,8 @@ export const mito: View<"mito"> = {
     return (
       <g>
         <ellipse cx={0} cy={0} rx={390} ry={190} fill={C.copper} stroke={C.cream} strokeWidth={14} />
+        <path d="M-330 -60A390 190 0 0 1 330 -60" fill="none" stroke={C.copperLight} strokeWidth={14} strokeLinecap="round" />
+        <path d="M-300 120A390 190 0 0 0 300 120" fill="none" stroke={C.copperDark} strokeWidth={18} strokeLinecap="round" />
         <ellipse cx={0} cy={0} rx={352} ry={154} fill={C.copperDark} stroke={C.copperLight} strokeWidth={8} />
         {CRISTAE.map((x, k) => {
           const top = k % 2 === 0;
