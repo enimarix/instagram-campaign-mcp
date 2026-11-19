@@ -78,15 +78,15 @@ def _db(power: float) -> float:
 
 def speech_spans(env: Sequence[float]) -> List[Tuple[int, int]]:
     """Spans [start, end) in steps where the voice track speaks."""
-    if not env:
+    loud = sorted(env)[int(0.95 * (len(env) - 1))] if env else 0.0
+    if loud <= 0:
         return []
-    loud = sorted(env)[int(0.95 * (len(env) - 1))]
     on = loud * 10 ** (VOICE_ON_DB / 10)
     gap, least = round(SPAN_GAP_S * 100), round(SPAN_MIN_S * 100)
     spans: List[Tuple[int, int]] = []
     start = last = None
     for i, p in enumerate(env):
-        if p <= on or loud <= 0:
+        if p <= on:
             continue
         if start is None or i - last > gap:
             if start is not None:
@@ -98,14 +98,15 @@ def speech_spans(env: Sequence[float]) -> List[Tuple[int, int]]:
     return [(a, b) for a, b in spans if b - a >= least]
 
 
-def _find(ev: Sequence[float], em: Sequence[float], a: int, b: int, lo: int, hi: int
+def _find(rv: Sequence[float], rm: Sequence[float], a: int, b: int, lo: int, hi: int
           ) -> Optional[int]:
-    """The lag (steps) where voice span [a, b) best matches the master's envelope; None
-    when the span cannot fit in the master (a voice longer than the video is cut)."""
-    v = [math.sqrt(p) for p in ev[a:b]]
+    """The lag (steps) where voice span [a, b) best matches the master, on their RMS
+    envelopes; None when the span cannot fit in the master (a voice longer than the video
+    is cut)."""
+    v = rv[a:b]
     best, best_lag = -1.0, None
-    for lag in range(max(lo, -a), min(hi, len(em) - b) + 1):
-        m = [math.sqrt(p) for p in em[a + lag:b + lag]]
+    for lag in range(max(lo, -a), min(hi, len(rm) - b) + 1):
+        m = rm[a + lag:b + lag]
         score = sum(map(mul, v, m)) / (math.sqrt(sum(map(mul, m, m))) or 1.0)
         if score > best:
             best, best_lag = score, lag
@@ -150,13 +151,14 @@ def voice_above_bed(master: Sequence[float], voice: Sequence[float]
                     ) -> Optional[List[Dict[str, float]]]:
     """Per spoken span {t (master seconds), d, lu: voice above the rest of the mix}; [] when
     the voice track never speaks, None when it cannot be found in the master."""
-    ev, em = envelope(voice), envelope(master)
+    ev = envelope(voice)
     spans = speech_spans(ev)
     if not spans:
         return []
+    rv, rm = [math.sqrt(p) for p in ev], [math.sqrt(p) for p in envelope(master)]
     out, matches, prev = [], [], 0
     for a, b in spans:  # in order: pauses only push the voice later
-        lag = _find(ev, em, a, b, prev - 10, prev + round(MAX_SHIFT_S * 100))
+        lag = _find(rv, rm, a, b, prev - 10, prev + round(MAX_SHIFT_S * 100))
         if lag is None:
             break
         prev = lag
