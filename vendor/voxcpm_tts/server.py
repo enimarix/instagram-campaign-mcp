@@ -89,12 +89,14 @@ class Engine:
         self.model = self.asr = None
 
     def load(self) -> None:
-        import torch  # noqa: F401 - lazy: CI has no torch
+        import torch  # lazy: CI has no torch
         from transformers import pipeline
         from voxcpm import VoxCPM
 
         self.model = VoxCPM.from_pretrained(MODEL_ID, load_denoiser=False)
-        self.asr = pipeline("automatic-speech-recognition", model=WHISPER_ID, device="cpu")
+        # float32: the checkpoint's own fp16 runs ~16x slower on the CPU (190 s vs 12 s).
+        self.asr = pipeline("automatic-speech-recognition", model=WHISPER_ID, device="cpu",
+                            dtype=torch.float32)
 
     def take(self, text: str, voice: Voice):
         import numpy as np

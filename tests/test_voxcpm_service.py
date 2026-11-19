@@ -49,8 +49,8 @@ def test_speak_spells_out_what_is_read_as_digits(text, said):
 
 
 def test_one_take_closes_each_line_as_a_sentence():
-    assert speech.take_text(["Vingt-et-une heures", "Une pizza ?", " ", "Trop."]) == \
-        "Vingt-et-une heures. Une pizza ? Trop."
+    assert speech.take_text(["vingt et une heures", "Une pizza ?", " ", "trop."]) == \
+        "Vingt et une heures. Une pizza ? Trop."
 
 
 def test_score_compares_normalised_words():

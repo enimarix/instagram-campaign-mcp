@@ -81,10 +81,13 @@ def speak(text: str) -> str:
 
 
 def take_text(lines: Sequence[str]) -> str:
-    """One take for the whole script: lines joined, each closed as a sentence."""
+    """One take for the whole script: lines joined, each a capitalised, closed sentence.
+    (The capital matters: VoxCPM2 reads the card text + this text as one string, and
+    "…vraies.vingt" came out as « point vingt ».)"""
     out = []
     for line in (raw.strip() for raw in lines):
         if line:
+            line = line[0].upper() + line[1:]
             out.append(line if line[-1] in ".!?…:;," else line + ".")
     return " ".join(out)
 
