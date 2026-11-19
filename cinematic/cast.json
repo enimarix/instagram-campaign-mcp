@@ -1,0 +1,199 @@
+{
+ "_doc": "Characters of the cinematic style (MakeHuman system assets, CC0). Each sits at the dining table and plays `clip`.",
+ "dad": {
+  "label": "Papa",
+  "phenotype": {
+   "gender": 1.0,
+   "age": 0.72,
+   "muscle": 0.45,
+   "weight": 0.62,
+   "proportions": 0.5,
+   "height": 0.5,
+   "cupsize": 0.5,
+   "firmness": 0.5,
+   "race": {
+    "caucasian": 1.0,
+    "asian": 0.0,
+    "african": 0.0
+   }
+  },
+  "skin": "middleage_caucasian_male/middleage_caucasian_male.mhmat",
+  "hair": "short02/short02.mhclo",
+  "clothes": [
+   "male_casualsuit03/male_casualsuit03.mhclo"
+  ],
+  "name": "dad",
+  "location": [
+   0,
+   0.15,
+   0
+  ],
+  "clip": {
+   "glb": "anim/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb",
+   "action": "Sitting_Talking_Loop",
+   "skip": [
+    "LeftShoulder",
+    "RightShoulder"
+   ],
+   "offsets": {
+    "Head": [
+     -12,
+     0,
+     0
+    ],
+    "Neck": [
+     -6,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "mum": {
+  "label": "Maman",
+  "phenotype": {
+   "gender": 0.0,
+   "age": 0.68,
+   "muscle": 0.4,
+   "weight": 0.55,
+   "proportions": 0.5,
+   "height": 0.5,
+   "cupsize": 0.5,
+   "firmness": 0.5,
+   "race": {
+    "caucasian": 1.0,
+    "asian": 0.0,
+    "african": 0.0
+   }
+  },
+  "skin": "middleage_caucasian_female/middleage_caucasian_female.mhmat",
+  "hair": "ponytail01/ponytail01.mhclo",
+  "clothes": [
+   "female_casualsuit02/female_casualsuit02.mhclo"
+  ],
+  "name": "mum",
+  "location": [
+   0,
+   0.15,
+   0
+  ],
+  "clip": {
+   "glb": "anim/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb",
+   "action": "Sitting_Talking_Loop",
+   "skip": [
+    "LeftShoulder",
+    "RightShoulder"
+   ],
+   "offsets": {
+    "Head": [
+     -12,
+     0,
+     0
+    ],
+    "Neck": [
+     -6,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "grandma": {
+  "label": "Mamie",
+  "phenotype": {
+   "gender": 0.0,
+   "age": 0.92,
+   "muscle": 0.35,
+   "weight": 0.6,
+   "proportions": 0.5,
+   "height": 0.5,
+   "cupsize": 0.5,
+   "firmness": 0.5,
+   "race": {
+    "caucasian": 1.0,
+    "asian": 0.0,
+    "african": 0.0
+   }
+  },
+  "skin": "old_caucasian_female/old_caucasian_female.mhmat",
+  "hair": "bob02/bob02.mhclo",
+  "clothes": [
+   "female_elegantsuit01/female_elegantsuit01.mhclo"
+  ],
+  "name": "grandma",
+  "location": [
+   0,
+   0.15,
+   0
+  ],
+  "clip": {
+   "glb": "anim/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb",
+   "action": "Sitting_Talking_Loop",
+   "skip": [
+    "LeftShoulder",
+    "RightShoulder"
+   ],
+   "offsets": {
+    "Head": [
+     -12,
+     0,
+     0
+    ],
+    "Neck": [
+     -6,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "teen": {
+  "label": "Ado",
+  "phenotype": {
+   "gender": 1.0,
+   "age": 0.42,
+   "muscle": 0.4,
+   "weight": 0.45,
+   "proportions": 0.5,
+   "height": 0.5,
+   "cupsize": 0.5,
+   "firmness": 0.5,
+   "race": {
+    "caucasian": 1.0,
+    "asian": 0.0,
+    "african": 0.0
+   }
+  },
+  "skin": "young_caucasian_male/young_caucasian_male.mhmat",
+  "hair": "short04/short04.mhclo",
+  "clothes": [
+   "male_casualsuit01/male_casualsuit01.mhclo"
+  ],
+  "name": "teen",
+  "location": [
+   0,
+   0.15,
+   0
+  ],
+  "clip": {
+   "glb": "anim/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb",
+   "action": "Sitting_Talking_Loop",
+   "skip": [
+    "LeftShoulder",
+    "RightShoulder"
+   ],
+   "offsets": {
+    "Head": [
+     -12,
+     0,
+     0
+    ],
+    "Neck": [
+     -6,
+     0,
+     0
+    ]
+   }
+  }
+ }
+}

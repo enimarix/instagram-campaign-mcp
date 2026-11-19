@@ -463,3 +463,15 @@ when the agent preflight passes; otherwise the order waits for the next schedule
 its `blocked_reason` says why. DMs are read every DM_POLL_MINUTES (default 5, was 15).
 GOAL.md's 1-2 scheduled runs a day stay the default; these runs come on top.
 Reason: the owner's instruction of 2026-11-18; the cap bounds the agent's usage.
+
+## 2026-11-19: A second video engine: Blender for the `cinematic` style
+Owner's words (translated): "we are trying to have a second video generator like the 3D 8-bit
+engine, so the user generates videos using different styles", then "so that the app can use
+the 3D voxel engine and our new engine whenever". The `cinematic` style (« Cinématique 3D »,
+"PS2 cutscene" skits) renders with Blender 5.2 + free CC0 assets (`cinematic/`), not
+Remotion. It sits behind the motion door: template `CinematicSkit` in the same tools,
+recipes (`kind: motion`) and render queue, so step 138's style buttons pick it up from its
+`style`. The tools (about 1.6 GB) are downloaded by `cinematic/setup.py`, never committed.
+No AI video model: everything renders locally at no cost per video, about 1 minute of
+machine time per second of video.
+Reason: the owner's request; local rendering keeps the cost at zero and the result repeatable.

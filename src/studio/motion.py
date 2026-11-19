@@ -10,6 +10,10 @@ Python side of the Remotion templates in `motion/` (GOAL.md §3.1, §4.1, §5.6)
 Recipes store the voice audio as a media path (`voice.audioSrc`, relative to the media root);
 a render copies it into the bundle's `public/` and hands Remotion that URL instead.
 Node: `NODE_BIN` (a full path or a command name) overrides `node` on PATH.
+
+Template `CinematicSkit` (style `cinematic`) is not Remotion: Blender renders it
+(src/studio/cinematic.py). The functions below route it there, so callers treat it like any
+motion template.
 """
 
 from __future__ import annotations
@@ -32,7 +36,7 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
-from . import ffmpeg, media, recipe, render  # render.py imports this module back
+from . import cinematic, ffmpeg, media, recipe, render  # render.py imports this module back
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
 
@@ -73,6 +77,7 @@ SCRIPTS = {
     "PixelSkit": lambda p: [p["hook"], *(b["line"] for b in p["beats"])],
     "VoxelQuest": lambda p: [p["hook"], *(b["line"] for b in p["beats"]),
                              *([p["outro"]] if p.get("outro") else [])],
+    cinematic.TEMPLATE: lambda p: [line["text"] for line in p["lines"]],  # the hook is silent
     "PaperStory": lambda p: [_paper_line(p["hook"]["labels"]),
                              *(_paper_line(b["labels"]) for b in p["beats"]),
                              *([p["outro"]] if p.get("outro") else [])],
@@ -113,12 +118,15 @@ def _node(script: str, args: Sequence[Any], *, timeout_s: float,
 def list_templates() -> List[Dict[str, Any]]:
     """[{id, style, jsonSchema, defaultProps, description}] (cached: restart after editing
     motion/). `style`: the template's visual style id (motion/src/registry.ts STYLES)."""
-    return _node("schemas.mjs", [], timeout_s=SCHEMA_TIMEOUT_S)["templates"]
+    return [*_node("schemas.mjs", [], timeout_s=SCHEMA_TIMEOUT_S)["templates"],
+            cinematic.template_info()]
 
 
 def validate_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
     """{props (parsed, defaults filled), fps, durationInFrames, coverFrame, events}; ValueError
     with the template's own message for an unknown template or bad props."""
+    if template == cinematic.TEMPLATE:
+        return cinematic.validate(props)
     out = _node("schemas.mjs", ["--validate", template], timeout_s=SCHEMA_TIMEOUT_S,
                 stdin=json.dumps(props, ensure_ascii=False))
     if not out.pop("ok"):
@@ -231,6 +239,8 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     """Render a few PNG stills (default: the cover, then three spread over the video) into
     `<media root>/previews/<props hash>/` so the layout can be checked before a full render.
     Returns their media paths."""
+    if template == cinematic.TEMPLATE:
+        return cinematic.preview_stills(props, media_root, frames, render.recipe_hash)
     v = validate_props(template, props)
     last = v["durationInFrames"] - 1
     if frames is None:
@@ -260,6 +270,13 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
     audio). Returns its MediaInfo, the cover time in ms and its timeline (the template's own
     events, motion/src/lib/events.ts, compressed). ValueError for bad props."""
     out = Path(out)
+    if template == cinematic.TEMPLATE:
+        def card(props: Dict[str, Any], backdrop: Optional[Path]) -> Optional[Path]:
+            try:
+                return render_end_card(media_root, props, backdrop, timeout_s=timeout_s)
+            except MotionError:  # Remotion unavailable: the recipe draws the static card
+                return None
+        return cinematic.render_asset(props, out, media_root, timeout_s=timeout_s, end_card=card)
     v = validate_props(template, props)
     staged = _stage_audio(bundle_dir(), v["props"], media_root)
     with tempfile.TemporaryDirectory(prefix="motion-", dir=out.parent) as work:

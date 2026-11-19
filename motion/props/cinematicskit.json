@@ -1,0 +1,11 @@
+{
+  "hook": "POV : mamie découvre que tu pèses ton riz",
+  "character": "grandma",
+  "lines": [
+    {"text": "Tu pèses ton riz, maintenant ?"},
+    {"text": "De mon temps, on mangeait ce qu'il y avait."},
+    {"text": "Bon... montre-moi ton application."}
+  ],
+  "outro": "Tes macros, sans prise de tête",
+  "citations": []
+}

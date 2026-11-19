@@ -4,7 +4,7 @@ import pytest
 
 from src import scheduler
 from src.agent.runner import AgentError
-from src.studio import doctor, downloader_service, ffmpeg, motion
+from src.studio import cinematic, doctor, downloader_service, ffmpeg, motion
 
 
 def _not_found(*_a, **_k):
@@ -27,6 +27,7 @@ def mocked(monkeypatch, tmp_path, settings):
     monkeypatch.setattr(ffmpeg, "find_ffmpeg", lambda: "/bin/ffmpeg")
     monkeypatch.setattr(ffmpeg, "find_ffprobe", lambda: "/bin/ffprobe")
     monkeypatch.setattr(motion, "find_node", lambda: "/bin/node")
+    monkeypatch.setattr(cinematic, "find_blender", lambda: "/bin/blender")
     monkeypatch.setattr(doctor, "preflight", lambda s: "/bin/claude")
     return settings.model_copy(update={"web_dist": str(web)}), env, vendor
 
@@ -39,7 +40,7 @@ def test_all_present(mocked):
     settings, env, _ = mocked
     results = doctor.checks(settings, env_file=str(env))
     assert all(c["ok"] and c["fix"] == "" for c in results), results
-    assert len(results) == 8
+    assert len(results) == 9
 
 
 def test_failures_say_what_to_do(mocked, monkeypatch, tmp_path):
