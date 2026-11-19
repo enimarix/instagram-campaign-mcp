@@ -10,6 +10,8 @@ os.environ.setdefault("INSTAGRAM_BUSINESS_ACCOUNT_ID", "1789")
 os.environ["IG_MCP_ENV_FILE"] = "/nonexistent.env"
 # The worker's daily backup (render loop) must never write into the checkout's data/.
 os.environ.setdefault("BACKUP_DIR", tempfile.mkdtemp(prefix="ig-test-backups-"))
+# Tests never wait on (or block) the machine's real GPU lock held by a live studio (145).
+os.environ["GPU_LOCK_PATH"] = os.path.join(tempfile.mkdtemp(prefix="ig-test-gpu-"), "gpu.lock")
 
 from src.config import InstagramMCPSettings  # noqa: E402
 from src.instagram_client import InstagramClient  # noqa: E402

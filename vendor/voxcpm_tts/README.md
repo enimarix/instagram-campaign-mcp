@@ -8,7 +8,8 @@ voices. The studio calls it through its generic `http` TTS provider (`src/studio
   `{"audio": <base64 wav, 48 kHz>, "words": [{"text", "start_s", "end_s"}], "take": {...}}`.
   `words` holds one span per script line, its text as written, so captions match the voice.
   Empty voice = the default voice; an unknown voice = HTTP 400 listing the ids.
-- `GET /health` → model, voices, default voice, settings.
+- `GET /health` → model, `loaded` (true/false), voices, default voice, settings. Answers at
+  once, loaded or not.
 
 ## What it does per request
 
@@ -24,7 +25,15 @@ voices. The studio calls it through its generic `http` TTS provider (`src/studio
    to `VOXCPM_MAX_TAKES`; the best take wins. Takes and scores go to the log.
 4. Peak limited to 0.99 (never clips); loudness is the studio's loudnorm.
 
-One request at a time (a GPU lock); others wait.
+One request at a time; others wait.
+
+## Sharing the GPU (step 145)
+
+The models load on the first request (~35 s) and are dropped after `VOXCPM_IDLE_UNLOAD_S`
+without a request (VRAM freed, and Whisper's ~3 GB of RAM). While they are loaded the service
+holds the machine's GPU lock (`src/studio/gpu_lock.py`, file `GPU_LOCK_PATH`, default
+`~/.ig-campaign/gpu.lock`), the one Blender and Remotion renders take: a render waits until
+the voice is unloaded, and a voice-over waits for a running render. Waiters log who holds it.
 
 ## Voices
 
@@ -65,6 +74,8 @@ Its output goes to `data/logs/tts.log`. To run it by hand instead:
 | `VOXCPM_CFG` | 1.6 | guidance (approved) |
 | `VOXCPM_MAX_TAKES` | 3 | takes per request at most |
 | `VOXCPM_MIN_SCORE` | 0.9 | a take at or above this is kept at once |
+| `VOXCPM_IDLE_UNLOAD_S` | 120 | idle seconds before the models are dropped and the GPU freed |
+| `GPU_LOCK_PATH` | `~/.ig-campaign/gpu.lock` | the machine's GPU lock (`ig-campaign up` passes its own) |
 
 ## Cost (RTX 3070 Laptop 8 GB, i7-11800H)
 

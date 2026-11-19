@@ -21,7 +21,7 @@ from ..config import APP_HOME, InstagramMCPSettings
 
 SERVER = Path(__file__).resolve().parents[2] / "vendor" / "voxcpm_tts" / "server.py"
 LOG_PATH = APP_HOME / "data" / "logs" / "tts.log"
-READY_WAIT_S = 600.0  # model load: ~1 min warm, longer on a cold disk
+READY_WAIT_S = 120.0  # the service is up in seconds: its model loads on the first request
 
 
 def command(settings: InstagramMCPSettings) -> List[str]:
@@ -43,6 +43,8 @@ def spawn(settings: InstagramMCPSettings, log_path: Path = LOG_PATH,
     env = dict(os.environ)
     if settings.tts_server_hf_home:
         env["HF_HOME"] = settings.tts_server_hf_home
+    if settings.gpu_lock_path:  # the same GPU lock as this studio's renders (.env is ours)
+        env["GPU_LOCK_PATH"] = settings.gpu_lock_path
     cmd = command(settings)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab") as log:  # the child keeps its own handle
@@ -52,7 +54,8 @@ def spawn(settings: InstagramMCPSettings, log_path: Path = LOG_PATH,
 
 async def wait_ready(settings: InstagramMCPSettings, proc: subprocess.Popen, *,
                      timeout_s: float = READY_WAIT_S, poll_s: float = 2.0) -> bool:
-    """True once /health answers; False when the child died or timeout_s passed."""
+    """True once /health answers (the service is up; its model loads on the first request,
+    step 145); False when the child died or timeout_s passed."""
     deadline = time.monotonic() + timeout_s
     async with httpx.AsyncClient(timeout=5, trust_env=False) as http:
         while proc.poll() is None and time.monotonic() < deadline:

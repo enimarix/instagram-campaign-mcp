@@ -19,7 +19,6 @@ motion template.
 from __future__ import annotations
 
 import atexit
-import contextlib
 import functools
 import hashlib
 import json
@@ -30,20 +29,14 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..config import InstagramMCPSettings
+from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore
-from . import cinematic, ffmpeg, media, recipe, render  # render.py imports this module back
+from . import cinematic, ffmpeg, gpu_lock, media, recipe, render  # render.py imports us back
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
-
-if sys.platform == "win32":
-    import msvcrt
-else:
-    import fcntl
 
 MOTION_DIR = Path(__file__).resolve().parents[2] / "motion"
 SCHEMA_TIMEOUT_S = 60.0
@@ -166,35 +159,6 @@ _bundle: Optional[Path] = None
 BUNDLE_LOCK_FILE = MOTION_DIR / "node_modules" / ".growth-studio-bundle.lock"
 
 
-@contextlib.contextmanager
-def file_lock(path: Path, timeout_s: float, poll_s: float = 0.2) -> Iterator[None]:
-    """Hold an exclusive OS lock on `path` across processes (and across handles in one
-    process); the OS drops it when the holder dies, so a crash leaves no stale lock.
-    MotionError when another holder keeps it past `timeout_s`."""
-    with open(path, "a+b") as f:
-        deadline = time.monotonic() + timeout_s
-        while True:
-            try:
-                if sys.platform == "win32":
-                    f.seek(0)
-                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-                else:
-                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except OSError:
-                if time.monotonic() >= deadline:
-                    raise MotionError(f"{path.name} still locked after {timeout_s:g} s") from None
-                time.sleep(poll_s)
-        try:
-            yield
-        finally:
-            if sys.platform == "win32":
-                f.seek(0)
-                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(f, fcntl.LOCK_UN)
-
-
 def bundle_dir() -> Path:
     """This process's bundle, built on first use. ponytail: never rebuilt, so restart the
     worker after editing motion/; key it on a hash of motion/src if that bites."""
@@ -204,9 +168,12 @@ def bundle_dir() -> Path:
             path = Path(tempfile.gettempdir()) / f"growth-studio-motion-{os.getpid()}"
             find_node()  # clear error before touching node_modules/
             # Another process may be bundling: wait for it (up to one bundle's time).
-            with file_lock(BUNDLE_LOCK_FILE, timeout_s=BUNDLE_TIMEOUT_S):
-                _node("render.mjs", ["--bundle-only", "--bundle", path],
-                      timeout_s=BUNDLE_TIMEOUT_S)
+            try:
+                with gpu_lock.file_lock(BUNDLE_LOCK_FILE, timeout_s=BUNDLE_TIMEOUT_S):
+                    _node("render.mjs", ["--bundle-only", "--bundle", path],
+                          timeout_s=BUNDLE_TIMEOUT_S)
+            except gpu_lock.LockTimeout as e:
+                raise MotionError(str(e)) from None
             atexit.register(shutil.rmtree, path, True)
             _bundle = path
         return _bundle
@@ -230,8 +197,11 @@ def _render(template: str, props: Dict[str, Any], out: Path, work: Path, *, time
             extra: Sequence[Any] = ()) -> Dict[str, Any]:
     props_file = work / f"{out.stem}.props.json"
     props_file.write_text(json.dumps(props, ensure_ascii=False), encoding="utf-8")
-    return _node("render.mjs", ["--template", template, "--props", props_file, "--out", out,
-                                "--bundle", bundle_dir(), *extra], timeout_s=timeout_s)
+    bundle = bundle_dir()  # bundling is CPU work: before the GPU lock
+    # Chrome draws through the GPU (ANGLE): one heavy GPU job at a time (step 145)
+    with gpu_lock.hold(f"Remotion {template} render", get_settings().gpu_lock_path):
+        return _node("render.mjs", ["--template", template, "--props", props_file, "--out", out,
+                                    "--bundle", bundle, *extra], timeout_s=timeout_s)
 
 
 def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,

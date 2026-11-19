@@ -5,14 +5,20 @@ HTTP service the studio's `http` TTS provider calls (TTS_HTTP_RESPONSE=json).
   POST /tts {"text": "<one script line per line>", "voice": "<id>"}
        -> {"audio": <base64 wav>, "words": [{"text", "start_s", "end_s"}, ...], "take": {...}}
        `words` holds one span per script line, its text as written (speech.line_spans).
-  GET  /health -> {"model", "loaded", "voices", "default_voice", "settings"}
+  GET  /health -> {"model", "loaded", "voices", "default_voice", "settings"} (at once)
 
 The owner's approved settings (by ear): the whole script in ONE take, cfg 1.6, 30 steps,
 cloned from the voice card as continuation (prompt wav + text) AND reference. Each take is
 transcribed by Whisper (CPU, so VRAM stays under 8 GB with VoxCPM2 loaded) and compared to
 the text; under VOXCPM_MIN_SCORE the take is redone, up to VOXCPM_MAX_TAKES, and the best
-take is kept. One request at a time (GPU lock). torch / voxcpm / transformers are imported
-only by Engine.load(), so CI imports this module without them.
+take is kept. One request at a time.
+
+The GPU is shared (step 145): the models load on the first request, under the machine's GPU
+lock (src/studio/gpu_lock.py, the one Blender and Remotion renders take), and the lock is held
+while they are loaded. After VOXCPM_IDLE_UNLOAD_S without a request (default 120 s) both are
+dropped (VRAM and Whisper's ~3 GB of RAM) and the lock released, so a render can run. A load
+costs ~35 s. torch / voxcpm / transformers are imported only by Engine.load(), so CI imports
+this module without them.
 
 Run: python vendor/voxcpm_tts/server.py [--host 127.0.0.1] [--port 8766] (README.md).
 """
@@ -21,6 +27,9 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
+import gc
+import importlib.util
 import io
 import json
 import logging
@@ -29,7 +38,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -38,9 +47,15 @@ from speech import line_spans, score, speak, take_text
 
 log = logging.getLogger("voxcpm_tts")
 
+REPO = Path(__file__).resolve().parents[2]
+# The studio's lock, by path: this service runs in its own venv, without the studio package.
+_spec = importlib.util.spec_from_file_location("gpu_lock", REPO / "src" / "studio" / "gpu_lock.py")
+gpu_lock = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(gpu_lock)
+
 MODEL_ID = "openbmb/VoxCPM2"
 WHISPER_ID = "openai/whisper-large-v3-turbo"
-VOICES_DIR = Path(__file__).resolve().parents[2] / "brand" / "voices"
+VOICES_DIR = REPO / "brand" / "voices"
 PEAK = 0.99  # never clip; loudness is the studio's loudnorm (step 033)
 
 
@@ -49,13 +64,15 @@ class Settings(BaseModel):
     cfg: float = 1.6
     max_takes: int = 3
     min_score: float = 0.9
+    idle_unload_s: float = 120.0
 
     @classmethod
     def from_env(cls) -> "Settings":
         env = os.environ.get
         return cls(steps=int(env("VOXCPM_STEPS", 30)), cfg=float(env("VOXCPM_CFG", 1.6)),
                    max_takes=max(1, int(env("VOXCPM_MAX_TAKES", 3))),
-                   min_score=float(env("VOXCPM_MIN_SCORE", 0.9)))
+                   min_score=float(env("VOXCPM_MIN_SCORE", 0.9)),
+                   idle_unload_s=float(env("VOXCPM_IDLE_UNLOAD_S", 120)))
 
 
 class Voice(BaseModel):
@@ -97,6 +114,16 @@ class Engine:
         # float32: the checkpoint's own fp16 runs ~16x slower on the CPU (190 s vs 12 s).
         self.asr = pipeline("automatic-speech-recognition", model=WHISPER_ID, device="cpu",
                             dtype=torch.float32)
+
+    def unload(self) -> None:
+        """Drop both models: VRAM back to the driver, Whisper's RAM back to the OS."""
+        self.model = self.asr = None
+        gc.collect()
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:  # noqa: BLE001 - no torch / no CUDA: nothing cached
+            pass
 
     def take(self, text: str, voice: Voice):
         import numpy as np
@@ -160,10 +187,45 @@ class TTSRequest(BaseModel):
     voice: str = ""
 
 
-def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice]) -> FastAPI:
+def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice], *,
+               gpu_path: Optional[str] = None,
+               clock: Callable[[], float] = time.monotonic) -> FastAPI:
+    """The HTTP service. `app.state.unload_if_idle()` drops the models once idle (main() calls
+    it every few seconds); gpu_path None = gpu_lock.default_path()."""
     app = FastAPI(title="VoxCPM2 voice service")
-    gpu = threading.Lock()
+    busy = threading.Lock()  # one request (or unload) at a time
+    gpu = contextlib.ExitStack()  # holds the machine's GPU lock while the models are loaded
+    last_used = [clock()]
     default = next(v.id for v in voices.values() if v.default)
+
+    def load() -> None:
+        if engine.model is not None:
+            return
+        t0 = time.perf_counter()
+        gpu.enter_context(gpu_lock.hold(f"voice service {MODEL_ID}", gpu_path))
+        t1 = time.perf_counter()
+        try:
+            engine.load()
+        except BaseException:
+            engine.unload()
+            gpu.close()
+            raise
+        log.info("loaded %s + %s in %.0fs (waited %.0fs for the GPU)", MODEL_ID, WHISPER_ID,
+                 time.perf_counter() - t1, t1 - t0)
+
+    def unload_if_idle() -> bool:
+        with busy:
+            idle = clock() - last_used[0]
+            if engine.model is None or idle < settings.idle_unload_s:
+                return False
+            t0 = time.perf_counter()
+            engine.unload()
+            gpu.close()
+            log.info("idle %.0fs: models unloaded in %.1fs, GPU released", idle,
+                     time.perf_counter() - t0)
+            return True
+
+    app.state.unload_if_idle = unload_if_idle
 
     @app.get("/health")
     def health() -> Dict[str, Any]:
@@ -176,13 +238,27 @@ def create_app(engine: Engine, settings: Settings, voices: Dict[str, Voice]) -> 
         voice = voices.get(req.voice or default)
         if voice is None:
             raise HTTPException(400, f"unknown voice {req.voice!r}; voices: {sorted(voices)}")
-        try:
-            with gpu:
+        if not req.text.strip():  # before a ~35 s model load
+            raise HTTPException(400, "nothing to say: the text is empty")
+        with busy:
+            try:
+                load()
                 return synthesize(engine, settings, req.text, voice)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
+            except ValueError as e:
+                raise HTTPException(400, str(e)) from None
+            finally:
+                last_used[0] = clock()
 
     return app
+
+
+def _unload_when_idle(unload_if_idle: Callable[[], bool], every_s: float = 5.0) -> None:
+    while True:
+        time.sleep(every_s)
+        try:
+            unload_if_idle()
+        except Exception:  # noqa: BLE001 - keep watching; the next tick retries
+            log.exception("idle unload failed")
 
 
 def _exit_with(pid: int) -> None:
@@ -222,13 +298,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.exit_with_pid:
         threading.Thread(target=_exit_with, args=(args.exit_with_pid,), daemon=True).start()
     settings, voices = Settings.from_env(), load_voices(args.voices)
-    engine = Engine(settings)
-    t0 = time.perf_counter()
-    engine.load()
-    log.info("loaded %s + %s in %.0fs; voices %s; %s", MODEL_ID, WHISPER_ID,
-             time.perf_counter() - t0, sorted(voices), settings.model_dump())
-    uvicorn.run(create_app(engine, settings, voices), host=args.host, port=args.port,
-                log_level="warning")
+    app = create_app(Engine(settings), settings, voices)
+    threading.Thread(target=_unload_when_idle, args=(app.state.unload_if_idle,),
+                     daemon=True).start()
+    log.info("up; %s loads on the first request (GPU lock %s); voices %s; %s", MODEL_ID,
+             gpu_lock.default_path(), sorted(voices), settings.model_dump())
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

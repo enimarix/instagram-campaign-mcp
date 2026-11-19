@@ -2,8 +2,6 @@
 
 import json
 import shutil
-import threading
-import time
 from functools import partial
 from pathlib import Path
 
@@ -177,31 +175,6 @@ def test_every_voiced_template_has_a_script():
     voiced = {t["id"] for t in motion.list_templates()
               if "voice" in t["jsonSchema"].get("properties", {})}
     assert voiced == set(motion.SCRIPTS)  # a new voiced template needs a SCRIPTS entry
-
-
-def test_file_lock_makes_the_second_holder_wait(tmp_path):
-    lock = tmp_path / "bundle.lock"
-    held, order = threading.Event(), []
-
-    def first():
-        with motion.file_lock(lock, timeout_s=5):
-            held.set()
-            time.sleep(0.5)
-            order.append("first done")
-
-    t = threading.Thread(target=first)
-    t.start()
-    held.wait(5)
-    start = time.monotonic()
-    with motion.file_lock(lock, timeout_s=5, poll_s=0.05):  # another handle, like a process
-        order.append("second in")
-        waited = time.monotonic() - start
-    t.join()
-    assert order == ["first done", "second in"] and waited >= 0.3
-    with motion.file_lock(lock, timeout_s=1):  # released: free again
-        with pytest.raises(motion.MotionError, match="still locked"):
-            with motion.file_lock(lock, timeout_s=0.2, poll_s=0.05):
-                pass
 
 
 def test_stage_audio_copies_media_audio_into_the_bundle(tmp_path):
