@@ -8,7 +8,8 @@ one), it has no run started today, it isn't running and its file exists. Three c
 - `ig-campaign agent run-due` (the OS tasks' action): runs each due playbook in turn;
 - the `up` / `worker` process: catch_up() at start and every CATCH_UP_EVERY, starting due
   runs detached (a run missed while the PC was off starts at the next logon, same day),
-  and the light run the owner's scheduled work orders ask for (order_run, 136);
+  and the light run the owner's scheduled work orders (136) and change requests (147) ask
+  for (order_run);
 - the website's Settings page: overview() (next and last run per playbook).
 
 install_schedule() registers the OS side: on Windows a logon task for `up` and one daily
@@ -51,7 +52,16 @@ logger = structlog.get_logger(__name__)
 
 CATCH_UP_EVERY = 60.0  # s: a work order's run starts within a minute of its debounce
 ORDER_PLAYBOOK = "daily-revise"  # the light run (packet.RUNS)
-ORDER_READERS = tuple(p for p, (_, s) in RUNS.items() if s and "work_orders" in s)
+# the runs that see orders or change requests: one started after the newest has them
+ORDER_READERS = tuple(p for p, (_, s) in RUNS.items()
+                      if s and ("work_orders" in s or "revisions" in s))
+# the newest thing the light run is for: a scheduled order, or a wanting-changes comment on
+# an asset still `revision_requested` (147). MAX skips NULLs; both columns are to_iso().
+_NEWEST_WORK = (
+    "SELECT MAX(t) FROM (SELECT MAX(scheduled_at) AS t FROM work_orders"
+    " WHERE status = 'scheduled'"
+    " UNION ALL SELECT MAX(f.created_at) FROM feedback f JOIN assets a ON a.id = f.asset_id"
+    " WHERE f.wants_changes = 1 AND a.status = 'revision_requested')")
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
 AGENT_TASK = "IGCampaignAgent-"  # + playbook
@@ -153,16 +163,17 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
 def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
               start: Callable[..., Any], check: Optional[Callable[..., Any]] = None
               ) -> Optional[str]:
-    """136: the owner's scheduled work orders start the light run (ORDER_PLAYBOOK) at once.
-    Returns it when started, else None. It starts when the newest scheduled order is
-    ORDER_RUN_DEBOUNCE_MINUTES old (sends batch into one run), no run that reads work
-    orders started since (it has them) or still runs (one run at a time), fewer than
-    MAX_ORDER_RUNS_PER_DAY order runs started today (owner-local), and the agent preflight
-    passes (asked again ORDER_RETRY after a failure). Otherwise the orders keep waiting and
-    their blocked_reason says why when it is the cap, the preflight or the playbook."""
+    """The owner's scheduled work orders (136) and change requests (147) start the light
+    run (ORDER_PLAYBOOK) at once. Returns it when started, else None. It starts when the
+    newest of them (_NEWEST_WORK) is ORDER_RUN_DEBOUNCE_MINUTES old (sends batch into one
+    run), no run that reads them started since (it has them: a request it left waiting
+    wakes nothing until a newer one comes) or still runs (one run at a time), fewer than
+    MAX_ORDER_RUNS_PER_DAY at-once runs started today (owner-local), and the agent
+    preflight passes (asked again ORDER_RETRY after a failure). Otherwise they keep waiting
+    and the orders' blocked_reason says why when it is the cap, the preflight or the
+    playbook."""
     with store._tx() as c:
-        newest = c.execute("SELECT MAX(scheduled_at) FROM work_orders"
-                           " WHERE status='scheduled'").fetchone()[0]
+        newest = c.execute(_NEWEST_WORK).fetchone()[0]
     if newest is None:
         return None
     newest = parse_iso(newest)
