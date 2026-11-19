@@ -453,7 +453,7 @@ def test_pixelcinema_script_reads_the_screen_without_the_stars():
 
 @needs_motion
 def test_validate_props_macro3d_examples_plates_and_no_price():
-    for name in ("macro3d", "macro3d-sel", "macro3d-gras"):
+    for name in ("macro3d", "macro3d-muscle", "macro3d-gras", "macro3d-sel"):
         v = motion.validate_props("Macro3D", _example(name))
         assert 35 <= v["durationInFrames"] / v["fps"] <= 55, name
         assert v["coverFrame"] <= 3 * v["fps"]

@@ -7,9 +7,14 @@ export type Word = { text: string; start: number; end: number };
 /** Weight of a word in its line: its letters, plus a pause after punctuation. */
 const weight = (w: string) => Array.from(w.replace(/[^\p{L}\p{N}]/gu, "")).length + 1.5 + (/[.!?…]$/.test(w) ? 3 : /[,;:]$/.test(w) ? 1.5 : 0);
 
+/** A number's thousands stay one word (« 7 700 »). */
+const glue = (text: string) => text.replace(/(\d) (?=\d{3}(?!\d))/g, "$1\u00a0");
+/** Words split at plain spaces (not \s: a no-break space keeps « ? » and « 7 700 » whole). */
+const split = (text: string) => glue(text).split(/[ \t\n]+/).filter(Boolean);
+
 /** The words of `line` spoken from `start` to `end` (seconds), each with its own span. */
 export const wordTimes = (line: string, start: number, end: number): Word[] => {
-  const words = line.split(/[ \t\n]+/).filter(Boolean); // not \s: a no-break space keeps « ? » on its word
+  const words = split(line);
   const total = words.reduce((n, w) => n + weight(w), 0) || 1;
   let t = start;
   return words.map((text) => {
@@ -24,22 +29,24 @@ export const wordTimes = (line: string, start: number, end: number): Word[] => {
 export const CHUNK_CHARS = 26;
 
 /**
- * The line in on-screen chunks (word indexes [from, to)): a chunk ends after punctuation or
- * before it would pass CHUNK_CHARS; a lone short word joins the next chunk.
+ * The line in on-screen chunks (word indexes [from, to)): a chunk ends after punctuation (once
+ * it holds a few letters) or before it would pass CHUNK_CHARS, never inside the key phrase
+ * (`keep`: its word indexes).
  */
-export const chunksOf = (words: readonly { text: string }[]): [number, number][] => {
+export const chunksOf = (words: readonly { text: string }[], keep: readonly number[] = []): [number, number][] => {
   const out: [number, number][] = [];
   let from = 0;
   let chars = 0;
   words.forEach((w, i) => {
     const len = Array.from(w.text).length;
-    if (i > from && chars + 1 + len > CHUNK_CHARS) {
+    const inKey = keep.includes(i) && keep.includes(i - 1);
+    if (i > from && chars + 1 + len > CHUNK_CHARS && !inKey) {
       out.push([from, i]);
       from = i;
       chars = 0;
     }
     chars += (chars ? 1 : 0) + len;
-    if (/[.!?…,;:]$/.test(w.text) && i + 1 < words.length && chars > 6) {
+    if (/[.!?…,;:]$/.test(w.text) && i + 1 < words.length && chars > 6 && !(keep.includes(i) && keep.includes(i + 1))) {
       out.push([from, i + 1]);
       from = i + 1;
       chars = 0;
@@ -53,7 +60,7 @@ export const chunksOf = (words: readonly { text: string }[]): [number, number][]
 export const keyIndexes = (words: readonly { text: string }[], key?: string): number[] => {
   if (!key) return [];
   const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-  const want = key.split(/\s+/).map(norm).filter(Boolean);
+  const want = split(key).map(norm); // « % » stays a word of its own (norm "")
   for (let i = 0; i + want.length <= words.length; i++) {
     if (want.every((k, j) => norm(words[i + j].text) === k)) return want.map((_, j) => i + j);
   }

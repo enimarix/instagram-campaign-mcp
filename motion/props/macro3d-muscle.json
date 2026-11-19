@@ -1,0 +1,115 @@
+{
+  "scenes": [
+    {
+      "line": "Manger plus de protéines, ça suffit pour prendre du muscle ? Pas tout à fait.",
+      "key": "Pas tout à fait",
+      "subject": "egg",
+      "moves": [
+        "push",
+        "orbit"
+      ],
+      "pose": "shrug"
+    },
+    {
+      "line": "Suis une protéine, de ton assiette jusqu'à ton muscle.",
+      "key": "jusqu'à ton muscle",
+      "subject": "plate",
+      "cut": "egg",
+      "look": "plain",
+      "pose": "point"
+    },
+    {
+      "line": "Dans ton estomac, elle est découpée en petits morceaux : les acides aminés.",
+      "key": "acides aminés",
+      "subject": "stomach",
+      "look": "section",
+      "callout": "Acides aminés"
+    },
+    {
+      "line": "Ils traversent ton intestin, puis voyagent dans ton sang jusqu'aux muscles.",
+      "key": "ton sang",
+      "subject": "protein",
+      "moves": [
+        "whip",
+        "orbit"
+      ]
+    },
+    {
+      "line": "Après l'entraînement, tes fibres musculaires ont de petites lésions à réparer.",
+      "key": "réparer",
+      "subject": "muscle",
+      "moves": [
+        "slide",
+        "push"
+      ],
+      "callout": "Fibres"
+    },
+    {
+      "line": "Les acides aminés servent de briques pour les reconstruire, un peu plus fortes.",
+      "key": "briques",
+      "subject": "protein",
+      "cut": "muscle",
+      "pose": "explain"
+    },
+    {
+      "line": "Mais construire du muscle, ça coûte de l'énergie.",
+      "key": "de l'énergie",
+      "subject": "muscle",
+      "look": "heat",
+      "moves": [
+        "orbit",
+        "rise"
+      ],
+      "pose": "temple"
+    },
+    {
+      "line": "Sans assez de calories, ton corps répare, mais il construit peu.",
+      "key": "construit peu",
+      "subject": "plate",
+      "moves": [
+        "top",
+        "pull"
+      ],
+      "pose": "stop"
+    },
+    {
+      "line": "Vise environ 1,6 g de protéines par kilo de poids, chaque jour.",
+      "key": "1,6 g",
+      "subject": "egg",
+      "look": "section",
+      "counter": {
+        "from": 0,
+        "to": 1.6,
+        "unit": "g / kg",
+        "decimals": 1,
+        "big": true
+      }
+    },
+    {
+      "line": "Et mange un peu plus que tes besoins : environ 10 % de plus.",
+      "key": "10 % de plus",
+      "subject": "sweet_potato",
+      "cut": "buns",
+      "counter": {
+        "from": 0,
+        "to": 10,
+        "unit": "% en plus",
+        "big": true
+      },
+      "pose": "thumbs"
+    }
+  ],
+  "outro": "Protéines et énergie : voilà ce qui construit ton muscle.",
+  "address": "tu",
+  "accent": "protein",
+  "citations": [
+    {
+      "url": "https://doi.org/10.1136/bjsports-2017-097608",
+      "title": "Morton et al. 2018, Br J Sports Med: about 1.6 g of protein per kg per day for muscle gain"
+    },
+    {
+      "url": "https://doi.org/10.3390/sports7070154",
+      "title": "Iraki et al. 2019, Sports: a small energy surplus (about 10-20 %) for muscle gain"
+    }
+  ]
+}

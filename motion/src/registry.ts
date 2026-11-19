@@ -438,7 +438,7 @@ export const templates = {
         { line: "En déficit, la nourriture n'est pas l'ennemie.", key: "l'ennemie", subject: "plate", look: "plain", pose: "stop" },
         { line: "Les protéines gardent ton muscle.", key: "muscle", subject: "egg", cut: "muscle", look: "section" },
         { line: "Les fibres et l'eau remplissent ton estomac.", key: "remplissent", subject: "fibre", cut: "stomach", look: "plain" },
-        { line: "Le déficit vient du total de la journée.", key: "total", subject: "scale", look: "plain", counter: { from: 2400, to: 1900, unit: "kcal", decimals: 0 } },
+        { line: "Le déficit vient du total de la journée.", key: "total", subject: "scale", look: "plain", counter: { from: 2400, to: 1900, unit: "kcal", decimals: 0, big: true } },
       ],
       outro: "Mange bien, compte juste.",
       address: "tu",

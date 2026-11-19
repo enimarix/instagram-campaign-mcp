@@ -58,7 +58,7 @@ export const Macro3D = (props: Macro3DProps) => {
           {label !== "none" && <Label key={`l${i}`} text={LABELS[label]} f={f} />}
           {scene.callout && <Callout text={scene.callout} f={f} side={i % 2 ? 1 : -1} />}
           {scene.counter && (
-            <Counter value={counterText(scene.counter, easeOut(span(f, 6, Math.round((sceneEnd - sceneStart) * 0.7))))} unit={scene.counter.unit} color={ACCENTS[props.accent]} f={f} />
+            <Counter value={counterText(scene.counter, easeOut(span(f, 6, Math.round((sceneEnd - sceneStart) * 0.7))))} unit={scene.counter.unit} color={ACCENTS[props.accent]} f={f} big={scene.counter.big} />
           )}
           <div style={{ position: "absolute", ...MARCO, height: MARCO.width * 1.3, transform: `translateY(${4 * Math.sin(t * 2.4) + (1 - pop) * 14}px) scale(${0.97 + 0.03 * pop})`, transformOrigin: "50% 100%", filter: "drop-shadow(0 18px 30px rgba(0,0,0,0.55))" }}>
             <Marco pose={pose} mouth={mouth} blink={blinking(frame, fps)} />

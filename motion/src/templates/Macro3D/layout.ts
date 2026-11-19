@@ -76,6 +76,6 @@ export const poseAt = (p: Macro3DProps, shots: readonly Shot[], frame: number): 
 export const coverOf = (p: Macro3DProps, timings: readonly Timing[], fps: number) => {
   const words = wordTimes(p.scenes[0].line, timings[0].start_s, timings[0].end_s);
   const key = keyIndexes(words, p.scenes[0].key);
-  const at = key.length ? words[key[key.length - 1]].start : words[chunksOf(words)[0][1] - 1].start;
+  const at = key.length ? words[key[key.length - 1]].start : words[chunksOf(words, key)[0][1] - 1].start;
   return Math.round(Math.min(3, Math.max(0.6, at + 0.3)) * fps);
 };

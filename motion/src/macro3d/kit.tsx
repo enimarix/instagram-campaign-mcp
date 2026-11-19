@@ -51,7 +51,7 @@ const Selection = ({ k }: { k: number }) => (
 export const Caption = ({ line, keyWord, start, end, t, fps }: { line: string; keyWord?: string; start: number; end: number; t: number; fps: number }) => {
   const words = wordTimes(frenchSpaces(line), start, end);
   const keys = keyIndexes(words, keyWord);
-  const chunks = chunksOf(words);
+  const chunks = chunksOf(words, keys);
   const said = words.filter((w) => w.start <= t).length;
   if (!said) return null;
   const [from, to] = chunks.find(([a, b]) => said - 1 >= a && said - 1 < b) ?? chunks[chunks.length - 1];
@@ -105,9 +105,20 @@ export const Callout = ({ text, f, side }: { text: string; f: number; side: 1 | 
   );
 };
 
-/** The counter left of the subject: digits in fixed widths, the unit small, an accent rule. */
-export const Counter = ({ value, unit, color, f }: { value: string; unit: string; color: string; f: number }) => {
+/**
+ * The counter: small left of the subject (digits in fixed widths, the unit small, an accent rule),
+ * or `big`: glowing white in the middle of the frame, the unit under it, rolling up.
+ */
+export const Counter = ({ value, unit, color, f, big }: { value: string; unit: string; color: string; f: number; big?: boolean }) => {
   const k = easeOut(span(f, 3, 8));
+  if (big) {
+    return (
+      <div style={{ position: "absolute", left: 0, right: 0, top: 760, display: "flex", flexDirection: "column", alignItems: "center", opacity: k, transform: `scale(${0.9 + 0.1 * k})` }}>
+        <span style={{ fontFamily: DISPLAY, fontWeight: 800, fontSize: 200, lineHeight: 1, color: "#FFFFFF", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.03em", textShadow: `0 0 24px rgba(255,255,255,0.75), 0 0 70px ${color}, 0 4px 30px rgba(0,0,0,0.6)` }}>{value}</span>
+        <span style={{ marginTop: 14, fontFamily: SANS, fontWeight: 700, fontSize: 34, letterSpacing: "0.14em", color: "rgba(255,255,255,0.88)", textShadow: "0 2px 14px rgba(0,0,0,0.8)" }}>{unit.toUpperCase()}</span>
+      </div>
+    );
+  }
   return (
     <div style={{ position: "absolute", left: 72, top: 1066, opacity: k, transform: `translateY(${(1 - k) * 16}px)`, display: "flex", alignItems: "baseline", gap: 12 }}>
       <span style={{ fontFamily: DISPLAY, fontWeight: 800, fontSize: 76, color: "#FFFFFF", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em", textShadow: "0 2px 18px rgba(0,0,0,0.6)" }}>{value}</span>

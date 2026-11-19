@@ -3,7 +3,6 @@
 // quiff, trimmed beard, emerald tee with the mB tile, a whistle on a cord. Bust in the corner,
 // he reacts to every line with a pose (cut on the beat), talks while the voice speaks, blinks
 // and breathes.
-import type { ReactNode } from "react";
 import { MbTile } from "../endcards/base";
 import type { Pose } from "./poses.ts";
 import type { Mouth } from "./words.ts";
@@ -112,8 +111,8 @@ const MouthShape = ({ mouth, smile }: { mouth: Mouth; smile: boolean }) => {
   );
 };
 
-/** Marco at `pose`, mouth `mouth`, eyes shut when `blink`; `children` is drawn on the tee. */
-export const Marco = ({ pose, mouth, blink, children }: { pose: Pose; mouth: Mouth; blink: boolean; children?: ReactNode }) => {
+/** Marco at `pose`, mouth `mouth`, eyes shut when `blink`. */
+export const Marco = ({ pose, mouth, blink }: { pose: Pose; mouth: Mouth; blink: boolean }) => {
   const rig = RIGS[pose];
   const lift = rig.lift ?? 0;
   const [lx, ly] = rig.look;
@@ -149,7 +148,6 @@ export const Marco = ({ pose, mouth, blink, children }: { pose: Pose; mouth: Mou
         <rect x={26} y={3} width={14} height={8} rx={2} fill="#AEB8C1" stroke="#6B7680" strokeWidth={2} />
         <circle cx={9} cy={8} r={3} fill="#6B7680" />
       </g>
-      {children}
       {/* head */}
       <g>
         <path d="M120 150 Q 112 86 136 62 Q 150 30 186 34 Q 200 14 222 30 Q 262 26 272 62 Q 290 90 280 150 Z" fill={HAIR} />

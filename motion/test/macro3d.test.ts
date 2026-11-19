@@ -11,7 +11,7 @@ import { counterText, coverOf, poseAt, SHOT_S, shotAt, shotsOf } from "../src/te
 import { macro3dSchema, macro3dScript, timelineOf } from "../src/templates/Macro3D/schema.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
-const NAMES = ["macro3d", "macro3d-sel", "macro3d-gras"];
+const NAMES = ["macro3d", "macro3d-muscle", "macro3d-gras", "macro3d-sel"];
 const EXAMPLES = NAMES.map((n) => macro3dSchema.parse(read(n)));
 const scene = (line: string, extra = {}) => ({ line, subject: "apple", ...extra });
 const base = { scenes: [scene("Un."), scene("Deux."), scene("Trois."), scene("Quatre.")], citations: [] };
@@ -73,7 +73,7 @@ test("shots cover frame 0 to the end card, cut every 1-3 s, cut away halfway and
   assert.ok(shotsOf(p, timeline, endStart, 30).length >= 4);
   assert.ok(SHOT_S * 30 <= 3 * 30);
   // the scale shows the counter's target on its display
-  const sel = EXAMPLES[1];
+  const sel = EXAMPLES[3];
   const t = timelineOf(sel, 30);
   assert.equal(shotsOf(sel, t.timeline, t.endStart, 30)[0].text, "71,0");
 });
@@ -93,6 +93,15 @@ test("captions: word times fill the line, chunks stay short, the key word is fou
   assert.deepEqual(keyIndexes(words, "Fringale"), [8]);
   assert.deepEqual(keyIndexes(wordTimes("C'est 1,6 g par kilo.", 0, 1), "1,6 g"), [1, 2]);
   assert.deepEqual(keyIndexes(words, "absent"), []);
+  assert.deepEqual(keyIndexes(wordTimes("environ 10 % de plus.", 0, 1), "10 % de plus"), [1, 2, 3, 4]);
+  // thousands stay one word; a key phrase is never split between two chunks
+  const big = wordTimes("Pour prendre un kilo de gras, il faudrait environ 7 700 kcal en trop.", 0, 1);
+  const k = keyIndexes(big, "7 700 kcal");
+  assert.deepEqual(k.map((i) => big[i].text), ["7\u00a0700", "kcal"]);
+  assert.ok(chunksOf(big, k).some(([a, b]) => a <= k[0] && b > k[1]));
+  const neg = wordTimes("Respire : ce kilo-là, ce n'est pas du gras.", 0, 1);
+  const nk = keyIndexes(neg, "pas du gras");
+  assert.ok(chunksOf(neg, nk).some(([a, b]) => a <= nk[0] && b > nk[2]));
   // a no-break space before « ? » keeps it on its word
   assert.equal(wordTimes("Combien ? Assez.", 0, 1).length, 2);
 });
@@ -131,6 +140,9 @@ test("labels and counters", () => {
   assert.equal(autoLabel("apple", "section"), "none");
   assert.equal(counterText({ from: 0, to: 1.6, decimals: 1 }, 0.5), "0,8");
   assert.equal(counterText({ from: 2400, to: 1900, decimals: 0 }, 1), "1900");
+  assert.equal(macro3dSchema.parse(base).scenes[0].counter, undefined);
+  const counter = macro3dSchema.parse({ ...base, scenes: [scene("Un.", { counter: { from: 0, to: 9, unit: "kcal" } }), ...base.scenes.slice(1)] }).scenes[0].counter;
+  assert.deepEqual([counter?.big, counter?.decimals], [false, 0]);
   assert.deepEqual([...CAMEOS.macro3d], ["marco"]);
 });
 

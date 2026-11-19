@@ -32,9 +32,13 @@ const scene = z.strictObject({
   label: z.enum([...(Object.keys(LABELS) as (keyof typeof LABELS)[]), "none"]).optional(),
   /** A small uppercase tag with a leader line onto the subject (« PROTÉINES »). */
   callout: screenText(22).optional(),
-  /** A number that counts while the scene plays (kcal, g, kg, jours); `decimals` 0-1. */
+  /**
+   * A number that counts while the scene plays (kcal, g, kg, jours); `decimals` 0-1. `big`: the
+   * scene's one big number, glowing white in the middle over the plate (the reference's « 18.2M »);
+   * else small, left of the subject.
+   */
   counter: z
-    .strictObject({ from: z.number(), to: z.number(), unit: screenText(10), decimals: z.number().int().min(0).max(1).default(0) })
+    .strictObject({ from: z.number(), to: z.number(), unit: screenText(10), decimals: z.number().int().min(0).max(1).default(0), big: z.boolean().default(false) })
     .optional(),
   /** Marco's pose; none = read from the line (question: shrug, number: point, « pas »: stop…). */
   pose: z.enum(POSES).optional(),
