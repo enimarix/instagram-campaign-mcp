@@ -1,0 +1,107 @@
+{
+  "scenes": [
+    {
+      "line": "En déficit, la nourriture n'est pas ton ennemie.",
+      "key": "ennemie",
+      "subject": "plate",
+      "moves": [
+        "push",
+        "top"
+      ],
+      "pose": "stop"
+    },
+    {
+      "line": "Ce qui fait maigrir, c'est le total de ta journée.",
+      "key": "total",
+      "subject": "apple",
+      "look": "heat",
+      "counter": {
+        "from": 2400,
+        "to": 1900,
+        "unit": "kcal/jour"
+      }
+    },
+    {
+      "line": "Sauter des repas ? Souvent, ça finit en fringale le soir.",
+      "key": "fringale",
+      "subject": "croissant",
+      "cut": "cake",
+      "pose": "shrug"
+    },
+    {
+      "line": "Les protéines, elles, calment la faim et protègent ton muscle.",
+      "key": "protègent",
+      "subject": "egg",
+      "look": "section",
+      "cut": "muscle",
+      "callout": "Protéines"
+    },
+    {
+      "line": "Vise environ 1,6 g de protéines par kilo de poids, chaque jour.",
+      "key": "1,6 g",
+      "subject": "protein",
+      "counter": {
+        "from": 0,
+        "to": 1.6,
+        "unit": "g / kg",
+        "decimals": 1
+      }
+    },
+    {
+      "line": "Les fibres et l'eau des fruits et légumes remplissent ton estomac.",
+      "key": "remplissent",
+      "subject": "fibre",
+      "cut": "stomach",
+      "look": "section",
+      "callout": "Fibres"
+    },
+    {
+      "line": "Une pomme, c'est à peine 50 kcal pour 100 g, et ça cale.",
+      "key": "ça cale",
+      "subject": "apple",
+      "moves": [
+        "orbit",
+        "slide"
+      ],
+      "counter": {
+        "from": 0,
+        "to": 52,
+        "unit": "kcal/100 g"
+      }
+    },
+    {
+      "line": "Ton estomac est plein, ton déficit tient sans lutter.",
+      "key": "tient",
+      "subject": "stomach",
+      "moves": [
+        "rise",
+        "orbit"
+      ],
+      "pose": "thumbs"
+    },
+    {
+      "line": "Et avec assez de protéines, tu perds du gras, pas du muscle.",
+      "key": "du gras",
+      "subject": "fatcell",
+      "cut": "muscle",
+      "pose": "point"
+    }
+  ],
+  "outro": "Mange mieux, pas moins : compte juste.",
+  "address": "tu",
+  "accent": "protein",
+  "citations": [
+    {
+      "url": "https://doi.org/10.1136/bjsports-2017-097608",
+      "title": "Morton et al. 2018, Br J Sports Med: protein 1.6 g/kg/day for lean mass"
+    },
+    {
+      "url": "https://doi.org/10.3945/ajcn.114.084038",
+      "title": "Leidy et al. 2015, Am J Clin Nutr: protein, satiety and weight loss"
+    },
+    {
+      "url": "https://ciqual.anses.fr/",
+      "title": "Ciqual (ANSES): pomme crue, about 52 kcal / 100 g"
+    }
+  ]
+}

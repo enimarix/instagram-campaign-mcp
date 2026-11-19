@@ -337,7 +337,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:
    - **tagline**: one short line tied to the payoff, in the video's address (e.g. « Fini
-     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema), `cta`
+     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D), `cta`
      (QuizChest) or `tagline` (BossBattle, DialogStory, PixelSkit); no line = the app's own.
    - **accent**: the macro colour of the topic: `protein`, `carbs`, `fat`, `kcal`, or
      `brand` (emerald) when none fits; on the templates that take an `accent` prop.

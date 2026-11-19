@@ -3,8 +3,9 @@
 //   node schemas.mjs                       {"templates": [{id, style, jsonSchema, defaultProps, description}],
 //                                           "styles": [{id, label}]}  (styles: the launch buttons, step 138)
 //   node schemas.mjs --validate <id>       props JSON on stdin ->
-//     {"ok": true, props, fps, durationInFrames, coverFrame, events} | {"ok": false, "error": <Zod's message>}
+//     {"ok": true, props, fps, durationInFrames, coverFrame, events[, plates]} | {"ok": false, "error": <Zod's message>}
 //     events: [{t, d (seconds), e, text?}], what happens when (src/lib/events.ts, step 110)
+//     plates (Macro3D only): the shots Blender renders first (src/studio/macro3d.py)
 // Same parse and message as src/Root.tsx, without bundling for Chrome (a fraction of a second).
 // The registry imports .tsx components, so it is bundled for Node first with esbuild (from
 // @remotion/bundler); the font loader is stubbed: only schemas and timings run here.
@@ -74,7 +75,7 @@ try {
       const props = parsed.data;
       const durationInFrames = t.durationInFrames(props);
       const events = t.events?.(props) ?? [{ t: 0, d: durationInFrames / FPS, e: a.validate }];
-      print({ ok: true, props, fps: FPS, durationInFrames, coverFrame: t.coverFrame?.(props) ?? null, events });
+      print({ ok: true, props, fps: FPS, durationInFrames, coverFrame: t.coverFrame?.(props) ?? null, events, ...(t.plates ? { plates: t.plates(props) } : {}) });
     }
   }
 } catch (e) {

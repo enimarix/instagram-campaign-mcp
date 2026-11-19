@@ -26,13 +26,16 @@ import { cameoOf as editorialCameo, editorialSchema, timelineOf as editorialTime
 import { PixelCinema } from "./templates/PixelCinema/PixelCinema";
 import { coverOf as pixelCinemaCover } from "./templates/PixelCinema/layout";
 import { pixelCinemaSchema, timelineOf as pixelCinemaTimeline } from "./templates/PixelCinema/schema";
+import { Macro3D } from "./templates/Macro3D/Macro3D";
+import { coverOf as macro3dCover, shotsOf as macro3dShots, type Shot } from "./templates/Macro3D/layout";
+import { macro3dSchema, timelineOf as macro3dTimeline } from "./templates/Macro3D/schema";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné", macro3d: "Macro 3D" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -46,6 +49,8 @@ export type Template<S extends z.ZodType> = {
   coverFrame?: (props: z.infer<S>) => number;
   /** What happens when (assets.timeline, step 110); none = the whole video as one event. */
   events?: (props: z.infer<S>) => Event[];
+  /** Shots another engine renders before the template (Macro3D: the Blender plates, src/studio/macro3d.py). */
+  plates?: (props: z.infer<S>) => Shot[];
 };
 
 /** What the 8-bit templates' end card shows (step 137), for their timelines. */
@@ -422,6 +427,40 @@ export const templates = {
       return [
         ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (cinema): the beam sweeps onto the mB tile over the ${p.scene} set, macroBody, 7 jours gratuits, macrobody.fr` },
+      ];
+    },
+  }),  Macro3D: template({
+    style: "macro3d",
+    component: Macro3D,
+    schema: macro3dSchema,
+    defaultProps: {
+      scenes: [
+        { line: "En déficit, la nourriture n'est pas l'ennemie.", key: "l'ennemie", subject: "plate", look: "plain", pose: "stop" },
+        { line: "Les protéines gardent ton muscle.", key: "muscle", subject: "egg", cut: "muscle", look: "section" },
+        { line: "Les fibres et l'eau remplissent ton estomac.", key: "remplissent", subject: "fibre", cut: "stomach", look: "plain" },
+        { line: "Le déficit vient du total de la journée.", key: "total", subject: "scale", look: "plain", counter: { from: 2400, to: 1900, unit: "kcal", decimals: 0 } },
+      ],
+      outro: "Mange bien, compte juste.",
+      address: "tu",
+      accent: "kcal",
+      citations: [],
+      music: "music-cutaway-c",
+      loop: false,
+    },
+    durationInFrames: (p) => macro3dTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: (p) => macro3dCover(p, macro3dTimeline(p, FPS).timings, FPS),
+    plates: (p) => {
+      const { timeline, endStart } = macro3dTimeline(p, FPS);
+      return macro3dShots(p, timeline, endStart, FPS);
+    },
+    events: (p) => {
+      const { timeline, endStart } = macro3dTimeline(p, FPS);
+      const scene = (s: (typeof p.scenes)[number], i: number) =>
+        i === 0 ? "hook card" : `scene: ${s.subject}${s.cut ? ` then ${s.cut}` : ""}${s.look !== "plain" ? ` (${s.look})` : ""}${s.counter ? `, counter ${s.counter.from} → ${s.counter.to} ${s.counter.unit}` : ""}`;
+      const total = timeline.totalFrames;
+      return [
+        ...scriptEvents(timeline, FPS, [...p.scenes.map(scene), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        { t: endStart / FPS, d: (total - endStart) / FPS, e: "end card (macro3d): a beam lands on the mB tile, Marco's thumbs-up, macroBody, 7 jours gratuits, macrobody.fr" },
       ];
     },
   }),

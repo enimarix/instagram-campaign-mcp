@@ -1,0 +1,94 @@
+{
+  "scenes": [
+    {
+      "line": "Un gramme de gras, c'est 9 kcal. Plus du double des glucides.",
+      "key": "9 kcal",
+      "subject": "oil",
+      "moves": [
+        "push",
+        "orbit"
+      ],
+      "counter": {
+        "from": 0,
+        "to": 9,
+        "unit": "kcal / g"
+      },
+      "pose": "point"
+    },
+    {
+      "line": "Les protéines et les glucides, eux, en donnent 4.",
+      "key": "4",
+      "subject": "egg",
+      "cut": "sweet_potato",
+      "counter": {
+        "from": 0,
+        "to": 4,
+        "unit": "kcal / g"
+      }
+    },
+    {
+      "line": "Pourquoi autant ? Le gras, c'est de l'énergie très concentrée.",
+      "key": "concentrée",
+      "subject": "oil",
+      "look": "heat",
+      "moves": [
+        "slide",
+        "rise"
+      ],
+      "pose": "think"
+    },
+    {
+      "line": "C'est la réserve préférée de ton corps : compacte, presque sans eau.",
+      "key": "sans eau",
+      "subject": "fatcell",
+      "callout": "Cellules graisseuses"
+    },
+    {
+      "line": "Une cuillère à soupe d'huile, environ 10 g, c'est déjà 90 kcal.",
+      "key": "90 kcal",
+      "subject": "oil",
+      "moves": [
+        "top",
+        "whip"
+      ],
+      "counter": {
+        "from": 0,
+        "to": 90,
+        "unit": "kcal"
+      }
+    },
+    {
+      "line": "Le gras n'est pas mauvais : ton corps en a besoin.",
+      "key": "besoin",
+      "subject": "avocado",
+      "cut": "egg",
+      "pose": "stop"
+    },
+    {
+      "line": "Mais il monte vite. Un peu en plus partout, et ton déficit disparaît.",
+      "key": "disparaît",
+      "subject": "croissant",
+      "look": "heat",
+      "pose": "wow"
+    },
+    {
+      "line": "Garde-le, dose-le : c'est ça, compter juste.",
+      "key": "dose-le",
+      "subject": "plate",
+      "moves": [
+        "orbit",
+        "top"
+      ],
+      "pose": "thumbs"
+    }
+  ],
+  "outro": "9 kcal par gramme : compte-les, sans les craindre.",
+  "address": "tu",
+  "accent": "fat",
+  "citations": [
+    {
+      "url": "https://www.fao.org/3/y5022e/y5022e.pdf",
+      "title": "FAO 2003, Food energy: methods of analysis and conversion factors (Atwater 9 / 4 / 4 kcal per g)"
+    }
+  ]
+}
