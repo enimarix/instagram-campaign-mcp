@@ -206,7 +206,8 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
         info, files = render_fn(asset, media_root,
                                 lambda p: store.update_render_job(job_id, progress=p))
         notes = files.pop("render_warnings", [])
-        qc = qc_fn(asset, idea, files["file_path"], media_root, settings or get_settings())
+        qc = qc_fn({**asset, "timeline": files.get("timeline")}, idea, files["file_path"],
+                   media_root, settings or get_settings())  # this render's timeline (149)
         if notes:
             qc = {**qc, "warnings": [*qc.get("warnings", []), *notes]}
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason

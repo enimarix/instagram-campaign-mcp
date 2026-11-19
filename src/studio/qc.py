@@ -10,6 +10,9 @@ drawn on screen (never a price, owner rule; screen_texts()). Motion
 renders (`recipe.kind == "motion"`) get a longer freeze limit: their hook and end cards are
 still on purpose (`qc_max_freeze_s_motion`). Health, medical or income promises are only
 warnings: the owner can overrule them in review.
+The QC also listens (src/studio/listen.py, step 149): true peak, sudden jumps, the voice
+above the bed, point sounds on their cut. Those checks carry `"blocking": false`: a failing
+one is a warning ("audio: ...") for the owner to judge by ear, never a failed render.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from typing import Any, Dict, List, Optional
 
 from ..config import InstagramMCPSettings
 from ..instagram_client import caption_problem
-from . import ffmpeg, media
+from . import ffmpeg, listen, media
 from .brand import has_price
 from .ffmpeg import PathLike
 from .recipe import FPS, HEIGHT, LOUDNESS_I, WIDTH, Recipe
@@ -88,21 +91,27 @@ def screen_texts(recipe: Optional[Dict[str, Any]]) -> List[str]:
 def analyze(path: PathLike, *, max_black_s: float, max_freeze_s: float, has_audio: bool,
             timeout_s: float = ANALYSIS_TIMEOUT_S) -> Dict[str, Any]:
     """One ffmpeg pass over the video: black stretches at least `max_black_s` long
-    [(start, end)], starts of frozen stretches at least `max_freeze_s` long, and the
-    integrated loudness in LUFS (None without audio)."""
+    [(start, end)], starts of frozen stretches at least `max_freeze_s` long, the integrated
+    loudness in LUFS and the true peak in dBTP (None without audio), and the momentary
+    loudness [(t, LUFS)] every 100 ms ([] without audio)."""
     args = ["-i", path, "-vf", f"blackdetect=d={max_black_s},freezedetect=d={max_freeze_s}"]
-    if has_audio:
-        args += ["-af", "ebur128=framelog=verbose"]  # per-frame lines stay out of the log
+    if has_audio:  # framelog=verbose: ebur128's own per-frame lines stay out of the log
+        args += ["-af", "ebur128=framelog=verbose:peak=true:metadata=1,"
+                        "ametadata=mode=print:key=lavfi.r128.M"]
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "qc.log"
         ffmpeg.run([*args, "-f", "null", "-"], timeout_s=timeout_s, log_path=log)
         text = log.read_text(encoding="utf-8")
     loudness = re.search(r"Integrated loudness:\s+I:\s+(\S+) LUFS", text)
+    peak = re.search(r"True peak:\s+Peak:\s+(\S+) dBFS", text)
     return {
         "black": [(float(a), float(b))
                   for a, b in re.findall(r"black_start:(\S+) black_end:(\S+)", text)],
         "freeze": [float(s) for s in re.findall(r"freeze_start: (\S+)", text)],
         "loudness": float(loudness.group(1)) if loudness else None,
+        "true_peak": float(peak.group(1)) if peak else None,
+        "momentary": [(float(t), float(m)) for t, m in re.findall(
+            r"pts_time:(\S+)\s+\[[^\]]*\]\s*lavfi\.r128\.M=(\S+)", text)],
     }
 
 
@@ -144,11 +153,23 @@ def run_qc(asset: Dict[str, Any], idea: Optional[Dict[str, Any]], master_path: s
     priced = [t for t in screen_texts(asset.get("recipe")) if has_price(t)]
     check("price", not priced, "; ".join(f"a price on screen: {t!r}" for t in priced)
           or "no price on screen")
+    blocking = list(checks)
     idea = idea or {}
+    warnings = claim_warnings(asset.get("caption"), idea.get("hook"), idea.get("script"))
+    if info.has_audio:  # the listening checks flag for the owner, they never fail a render
+        try:
+            heard = listen.checks(path, listen.voice_track(asset.get("recipe"), media_root),
+                                  asset.get("timeline"), found, timeout_s=ANALYSIS_TIMEOUT_S)
+        except Exception as e:  # noqa: BLE001 - a listening failure must not fail the render
+            heard = [("listen", False, f"could not listen: {type(e).__name__}: {e}"[:200])]
+        for name, ok, detail in heard:
+            checks.append({"name": name, "ok": ok, "detail": detail, "blocking": False})
+            if not ok:
+                warnings.append(f"audio: {detail}")
     return {
-        "passed": all(c["ok"] for c in checks),
+        "passed": all(c["ok"] for c in blocking),
         "checks": checks,
-        "reasons": [c["detail"] for c in checks if not c["ok"]],  # what the asset page shows
-        "warnings": claim_warnings(asset.get("caption"), idea.get("hook"), idea.get("script")),
+        "reasons": [c["detail"] for c in blocking if not c["ok"]],  # what the asset page shows
+        "warnings": warnings,
         "loudness_lufs": lufs,
     }
