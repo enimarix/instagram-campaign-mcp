@@ -21,7 +21,10 @@ import os
 from typing import Any, Callable, Optional
 
 MODEL_ID = "openbmb/VoxCPM2"
-WHISPER_ID = "openai/whisper-large-v3-turbo"
+# Whisper large-v3-turbo for faster-whisper (CTranslate2), run int8 on the CPU: the same words
+# and score as the transformers fp32 pipeline, in half the time, ~3 GB RAM instead of ~13 GB at
+# peak (step 146). VOXCPM_WHISPER: another hub id or a local converted folder.
+WHISPER_ID = os.environ.get("VOXCPM_WHISPER", "mobiuslabsgmbh/faster-whisper-large-v3-turbo")
 PEAK = 0.99  # never clip; loudness is the studio's loudnorm (step 033)
 
 
@@ -37,14 +40,11 @@ class Engine:
         self.model = self.asr = None
 
     def load(self) -> None:
-        import torch  # lazy: CI has no torch
-        from transformers import pipeline
+        from faster_whisper import WhisperModel  # lazy: CI has neither
         from voxcpm import VoxCPM
 
         self.model = VoxCPM.from_pretrained(MODEL_ID, load_denoiser=False)
-        # float32: the checkpoint's own fp16 runs ~16x slower on the CPU (190 s vs 12 s).
-        self.asr = pipeline("automatic-speech-recognition", model=WHISPER_ID, device="cpu",
-                            dtype=torch.float32)
+        self.asr = WhisperModel(WHISPER_ID, device="cpu", compute_type="int8")
 
     def take(self, text: str, card: str, card_text: str):
         import numpy as np
@@ -58,15 +58,15 @@ class Engine:
         peak = float(np.abs(wav).max()) if wav.size else 0.0
         if peak > PEAK:
             wav *= PEAK / peak
-        out = self.asr({"raw": wav, "sampling_rate": sr}, return_timestamps="word",
-                       generate_kwargs={"language": "french"}, chunk_length_s=30)
-        words = [{"text": c["text"].strip(), "start_s": float(c["timestamp"][0]),
-                  "end_s": float(c["timestamp"][1] if c["timestamp"][1] is not None
-                                 else len(wav) / sr)}
-                 for c in out["chunks"] if c["text"].strip()]
         buf = io.BytesIO()
         sf.write(buf, wav, sr, format="WAV", subtype="PCM_16")
-        return buf.getvalue(), len(wav) / sr, words
+        audio = buf.getvalue()
+        # faster-whisper decodes (and resamples to 16 kHz) the wav it is given
+        segments, _ = self.asr.transcribe(io.BytesIO(audio), language="fr",
+                                          word_timestamps=True)
+        words = [{"text": w.word.strip(), "start_s": float(w.start), "end_s": float(w.end)}
+                 for seg in segments for w in seg.words if w.word.strip()]
+        return audio, len(wav) / sr, words
 
     def vram_gb(self) -> Optional[float]:
         try:
