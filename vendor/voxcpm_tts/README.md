@@ -43,8 +43,8 @@ request); the HTTP service itself imports no torch and stays around 60 MB. Unloa
 models gave the VRAM back but torch's CPU allocator kept ~17 GB of committed RAM.
 
 - A worker that dies, or whose load or take fails: HTTP 503, the GPU lock released, and the
-  next request starts a new worker. If the service dies, the worker exits at its next pipe
-  read (after the take it is on).
+  next request starts a new worker. If the service dies (even killed), the worker exits
+  at once, mid-take or mid-load: the OS has already released the service's GPU lock.
 - The worker sets `MIMALLOC_PURGE_DELAY=0` (torch's CPU allocator on Windows gives freed
   pages back at once) and checks takes with faster-whisper int8 instead of the transformers
   fp32 pipeline (same words and score on the same take, half the time; its word timestamps

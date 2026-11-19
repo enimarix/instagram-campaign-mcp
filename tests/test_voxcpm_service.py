@@ -6,6 +6,7 @@ import base64
 import functools
 import importlib.util
 import json
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -265,12 +266,15 @@ class ChildEngine:
     """Built in the worker process by engine_worker.serve: its audio names that process.
     Text with "crash" kills the process mid-take."""
 
-    def __init__(self, fail_load=False):
-        self.fail_load = fail_load
+    def __init__(self, fail_load=False, hang_holding=None):
+        self.fail_load, self.hang_holding = fail_load, hang_holding
 
     def load(self):
         if self.fail_load:
             raise RuntimeError("CUDA out of memory")
+        if self.hang_holding:  # a load that does not end, holding a lock while we live
+            with gpu_lock.file_lock(self.hang_holding):
+                time.sleep(60)
 
     def take(self, text, card, card_text):
         if "crash" in text.lower():
@@ -324,6 +328,37 @@ def test_a_worker_whose_load_fails_is_a_503_that_frees_the_gpu(tmp_path):
     answer = http.post("/tts", json={"text": SCRIPT})
     assert answer.status_code == 503 and "CUDA out of memory" in answer.json()["detail"]
     assert worker.model is None and _gpu_free(lock)
+
+
+def _service_whose_worker_hangs_loading(lock):
+    server.Worker(functools.partial(ChildEngine, hang_holding=lock)).load()
+
+
+def _lock_free(path):
+    try:
+        with gpu_lock.file_lock(path, timeout_s=0):
+            return True
+    except gpu_lock.LockTimeout:
+        return False
+
+
+def _until(condition, timeout_s=30):
+    deadline = time.monotonic() + timeout_s
+    while not condition():
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+
+
+def test_the_worker_exits_at_once_when_the_service_dies(tmp_path):
+    # the dead service's GPU lock is free at once: its worker must not keep the GPU
+    lock = str(tmp_path / "worker-alive.lock")
+    service = multiprocessing.get_context("spawn").Process(
+        target=_service_whose_worker_hangs_loading, args=(lock,))
+    service.start()
+    _until(lambda: not _lock_free(lock))  # the worker is loading
+    service.kill()
+    service.join(10)
+    _until(lambda: _lock_free(lock))  # the worker is gone, mid-load
 
 
 def test_the_studio_http_provider_reads_the_service_answer(tmp_path, monkeypatch):

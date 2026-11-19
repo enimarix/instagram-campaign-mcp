@@ -18,6 +18,7 @@ from __future__ import annotations
 import io
 import multiprocessing
 import os
+import threading
 from typing import Any, Callable, Optional
 
 MODEL_ID = "openbmb/VoxCPM2"
@@ -49,6 +50,8 @@ class Engine:
     def take(self, text: str, card: str, card_text: str):
         import numpy as np
         import soundfile as sf
+        import torch
+        import torchaudio
 
         wav = self.model.generate(text=text, prompt_wav_path=card, prompt_text=card_text,
                                   reference_wav_path=card, cfg_value=self.cfg,
@@ -58,15 +61,15 @@ class Engine:
         peak = float(np.abs(wav).max()) if wav.size else 0.0
         if peak > PEAK:
             wav *= PEAK / peak
-        buf = io.BytesIO()
-        sf.write(buf, wav, sr, format="WAV", subtype="PCM_16")
-        audio = buf.getvalue()
-        # faster-whisper decodes (and resamples to 16 kHz) the wav it is given
-        segments, _ = self.asr.transcribe(io.BytesIO(audio), language="fr",
-                                          word_timestamps=True)
+        # Whisper hears 16 kHz. An array, not the wav: faster-whisper 1.2.1's own decoding
+        # passes PyAV 19 an argument it no longer takes.
+        heard = torchaudio.functional.resample(torch.from_numpy(wav), sr, 16000).numpy()
+        segments, _ = self.asr.transcribe(heard, language="fr", word_timestamps=True)
         words = [{"text": w.word.strip(), "start_s": float(w.start), "end_s": float(w.end)}
                  for seg in segments for w in seg.words if w.word.strip()]
-        return audio, len(wav) / sr, words
+        buf = io.BytesIO()
+        sf.write(buf, wav, sr, format="WAV", subtype="PCM_16")
+        return buf.getvalue(), len(wav) / sr, words
 
     def vram_gb(self) -> Optional[float]:
         try:
@@ -79,7 +82,9 @@ class Engine:
 def serve(conn, make_engine: Callable[[], Any]) -> None:
     """The worker process: load, say ("ready", None), then answer each (text, card,
     card_text) with ("ok", (audio, duration_s, words, vram_gb)) or ("error", why). Returns
-    (the process exits) when the service closes the pipe or dies."""
+    (the process exits) when the service closes the pipe; exits at once if the service dies
+    (its GPU lock is then gone: this worker must not keep the GPU through a load or a take)."""
+    threading.Thread(target=_exit_with_parent, daemon=True).start()
     # mimalloc (torch's CPU allocator on Windows) gives freed pages back at once instead of
     # keeping them: ~9.7 GB committed after the VoxCPM2 load instead of ~21 GB. Read when
     # torch loads, so before the first import.
@@ -101,6 +106,13 @@ def serve(conn, make_engine: Callable[[], Any]) -> None:
         except BaseException as e:  # noqa: BLE001 - the service drops this worker
             conn.send(("error", f"take failed: {type(e).__name__}: {e}"))
             return
+
+
+def _exit_with_parent() -> None:
+    parent = multiprocessing.parent_process()
+    if parent is not None:
+        parent.join()
+        os._exit(0)
 
 
 class Worker:
