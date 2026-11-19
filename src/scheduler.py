@@ -15,6 +15,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler facts [--date D]    # yesterday's (or D's) daily facts as JSON
   python -m src.scheduler serve               # studio REST API on 127.0.0.1:8765
   python -m src.scheduler up                  # website + API + worker in one process
+                                              # (+ the voice service: TTS_SERVER_PYTHON)
   python -m src.scheduler dev seed --days 3   # fake demo batch for website work
   python -m src.scheduler token status        # access token validity and expiry
   python -m src.scheduler token refresh       # new 60-day token (needs app id/secret)
@@ -47,6 +48,7 @@ from .config import InstagramMCPSettings, get_settings
 from .instagram_client import InstagramAPIError, InstagramClient
 from .logging_setup import configure_logging
 from .store import CampaignStore, to_iso, utcnow
+from .studio import downloader_service, tts_service
 
 NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
                   "and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env)")
@@ -97,13 +99,35 @@ async def _up(host: str, port: int) -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     server = uvicorn.Server(uvicorn.Config(create_app(settings), host=host, port=port))
-    task = asyncio.create_task(_worker(settings))
+    voice = _start_voice(settings)
+    task = asyncio.create_task(_worker_after_voice(settings, voice))
     try:
         await server.serve()
     finally:
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+        if voice is not None:
+            downloader_service.stop(voice)
+
+
+def _start_voice(settings: InstagramMCPSettings):
+    """The voice service child (TTS_SERVER_PYTHON, step 038), or None."""
+    if not settings.tts_server_python:
+        return None
+    try:
+        return tts_service.spawn(settings)
+    except (OSError, ValueError) as e:
+        print(f"voice service not started: {e}", file=sys.stderr, flush=True)
+        return None
+
+
+async def _worker_after_voice(settings: InstagramMCPSettings, voice) -> None:
+    """The worker, once the voice service answers (it voices renders and agent runs)."""
+    if voice is not None and not await tts_service.wait_ready(settings, voice):
+        print(f"voice service not ready (see {tts_service.LOG_PATH}); voiced renders will"
+              " fail until it is", file=sys.stderr, flush=True)
+    await _worker(settings)
 
 
 async def _run(args: argparse.Namespace) -> int:

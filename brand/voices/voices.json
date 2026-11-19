@@ -1,0 +1,30 @@
+{
+  "_note": "Voices of the studio's voice-over (step 038, owner's casting 2026-11-19). <id>.wav is the voice card: every script is cloned from it (vendor/voxcpm_tts). card_text is what the card says. styles = the video styles the voice suits (motion/src/registry.ts STYLES, plus clean and live); address = tu / vous it suits (brand.json address).",
+  "voices": [
+    {
+      "id": "conteur_grave",
+      "label": "Conteur grave",
+      "description": "French man in his fifties, deep warm storyteller, gentle humour. The default voice.",
+      "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
+      "styles": ["paper", "clean", "voxel", "pixel", "blender"],
+      "address": ["vous"],
+      "default": true
+    },
+    {
+      "id": "coach_energique",
+      "label": "Coach énergique",
+      "description": "Young French woman, bright energetic fitness coach, friendly and motivating, upbeat. For humour, tips and challenges said with tu.",
+      "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
+      "styles": ["pixel", "voxel", "live"],
+      "address": ["tu"]
+    },
+    {
+      "id": "douce_nuit",
+      "label": "Douce nuit",
+      "description": "French woman, soft intimate late-night voice, calm, close to the microphone. For evening stories, cravings at night, sleep, calm moments.",
+      "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
+      "styles": ["paper", "clean", "blender"],
+      "address": ["vous", "tu"]
+    }
+  ]
+}

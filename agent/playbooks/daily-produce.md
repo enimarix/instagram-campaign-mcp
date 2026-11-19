@@ -326,7 +326,13 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 1. `list_motion_templates` (once per run): each template's props schema and defaults.
 2. For each new idea, build the props from the idea: the hook, the script split into the
    template's parts, the citations in the template's `citations` prop when it has one.
-   Voice-over is added by the studio; do not pass `voice` unless the schema asks for it.
+   Voice-over is added by the studio: never put a `voice` prop in the props.
+   **Pick the voice, per video.** Read `voices.json` in your working directory (once per
+   run) and pass the chosen `id` as `render_motion(..., voice=<id>)`: a voice whose
+   `styles` holds the template's `style` and whose `address` holds the video's tu / vous
+   (match the script's tone to its `description`). When several fit, or none, use the
+   `default` voice (`conteur_grave`). Write numbers, units and times as the viewer should
+   read them (308 kcal, 21 h, macrobody.fr): the studio spells them out for the voice.
    **The end card, per video.** Every template ends on its style's animated end card (the
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:

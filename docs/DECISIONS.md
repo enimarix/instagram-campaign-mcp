@@ -8,6 +8,22 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-19: The voice is VoxCPM2, local, at the owner's settings (038)
+The studio's voice-over is VoxCPM2 (OpenBMB, Apache-2.0) on the owner's GPU, served by
+`vendor/voxcpm_tts` and called through the `http` TTS provider. Settings chosen by ear in
+two casting rounds ("we use the computing power necessary to generate the best quality
+audios"): the whole script in one take, `cfg_value` 1.6, 30 inference steps, cloned from a
+voice card as continuation (card + its text) and as reference. Never lower by default; never
+split below whole script lines (short takes garble short words). Each take is checked by
+Whisper large-v3-turbo on the CPU (keeps VRAM under 8 GB) and redone up to 3 times under a
+0.9 word-match score, best take kept. Voices: `conteur_grave` (default), `coach_energique`,
+`douce_nuit` (`brand/voices/`); the agent picks one per video from `voices.json`. Numbers,
+units, times and the brand are spelled out for speech only; "kcal" is said "calories".
+OmniVoice was rejected; default VoxCPM2 settings were judged "really bad". `TTS_TIMEOUT_S`
+default goes from 120 s to 3600 s: ~3.7 s of GPU per second of audio and up to 3 takes, one
+request at a time, so parallel render_motion calls queue for minutes.
+Reason: the owner's choice (H3, 2026-11-19) after listening to both engines and 8 voices.
+
 ## 2026-11-19: Trending means recent; Reels come from watched accounts (140)
 The Tendances feed shows only what was posted within `TRENDING_MAX_AGE_DAYS` (default 21,
 `.env`); older posts and posts without a date are hidden (counted in `hidden_old`) unless
