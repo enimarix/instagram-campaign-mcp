@@ -55,8 +55,9 @@ for every shot not cached yet). Example: `shotlists/proof.json`.
 - Each shot renders at 720x1280 24 fps (EEVEE, the skit's look), is graded like the skit, held
   for its freeze and cached under `<media root>/troupe/shots/<key>.mp4` (the key hashes the
   resolved shot and the engine's files); the shots end to end are the track
-  (`<media root>/troupe/tracks/`). Cost: see the step-163 PR (about 10 s to build each actor,
-  then ~2.5-4 s per frame).
+  (`<media root>/troupe/tracks/`). Cost: `shotlists/proof.json` (8 shots, 28 actors built,
+  11 s of video) took 18.6 min, about 1.7 minutes per second of video (a one-actor 1 s shot:
+  ~1.1 min). Cached shots cost nothing on a re-render.
 
 | Piece | Source | License |
 |---|---|---|
