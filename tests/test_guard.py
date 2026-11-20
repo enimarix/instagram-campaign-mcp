@@ -242,7 +242,7 @@ def test_process_table_has_this_process():
     table = {pid: (ppid, name) for pid, ppid, name in guard.processes()}
     if not table:
         pytest.skip("no process table on this OS")
-    assert "python" in table[os.getpid()][1]
+    assert any(n in table[os.getpid()][1].lower() for n in ("python", "pytest"))  # Linux CI: "pytest"
 
 
 async def test_watchdog_loop_raises_an_alert_and_resumes_on_stop(store):
