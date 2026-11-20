@@ -107,3 +107,15 @@ export const fitEndCard = (build: (outroSeconds: number) => Timeline, outroSecon
   const short = Math.round(seconds * fps) + (t.loop ? t.loopFrames : 0) - (t.totalFrames - cardStart(t));
   return short > 0 ? build((t.totalFrames - t.outroStart + short) / fps) : t;
 };
+
+/** Longest a shot stays on screen (owner: a new shot / camera change at least every 3 s). */
+export const MAX_SHOT_S = 3;
+
+/** Frames (from a scene's start) where a scene of `len` frames cuts to its next shot: evenly, none when it fits in one. */
+export const shotCuts = (len: number, fps: number): number[] => {
+  const n = Math.ceil(len / (MAX_SHOT_S * fps));
+  return Array.from({ length: Math.max(0, n - 1) }, (_, k) => Math.round((len * (k + 1)) / n));
+};
+
+/** Index of the shot `f` frames into a scene of `len` frames (0 = its first). */
+export const shotIndex = (f: number, len: number, fps: number) => shotCuts(len, fps).filter((c) => f >= c).length;

@@ -68,6 +68,18 @@ const G: Record<string, string> = {
   "▶": "#... ##.. ###. #### ###. ##.. #...",
   "‖": "#.# #.# #.# #.# #.# #.# #.#",
   "₂": "... ... ### ..# ### #.. ###",
+  "²": "##. ..# .#. ### ... ... ...",
+  "→": "..... ..#.. ...#. ##### ...#. ..#.. .....",
+  "←": "..... ..#.. .#... ##### .#... ..#.. .....",
+  "~": "..... ..... .#... #.#.# ...#. ..... .....",
+  "≈": "..... .#... #.#.# ...#. .#... #.#.# ...#.",
+  "€": "..### .#... ####. .#... ####. .#... ..###",
+  "÷": "..... ..#.. ..... ##### ..... ..#.. .....",
+  "&": ".##.. #..#. #.#.. .#... #.#.# #..#. .##.#",
+  "*": "..... #.#.# .###. ##### .###. #.#.# .....",
+  "#": ".#.#. .#.#. ##### .#.#. ##### .#.#. .#.#.",
+  "@": ".###. #...# #.### #.#.# #.### #.... .####",
+  _: "..... ..... ..... ..... ..... ..... #####",
 };
 
 /** Marks of decomposed letters (NFD): rows drawn above the capital (cedilla: below). */
@@ -76,11 +88,12 @@ const MARKS: Record<string, string> = {
   "̀": ".#... ..#..", // grave
   "̂": "..#.. .#.#.", // circumflex
   "̈": "..... .#.#.", // diaeresis
+  "̃": ".##.# #.##.", // tilde
 };
 const CEDILLA = "..#.. .##..";
 
 /** Letters spelled out (no glyph of their own). */
-const SPELL: Record<string, string> = { Œ: "OE", Æ: "AE", "’": "'", "…": "...", " ": " ", " ": " ", "–": "-", "—": "-", "·": "." };
+const SPELL: Record<string, string> = { Œ: "OE", Æ: "AE", "’": "'", "‘": "'", "“": '"', "”": '"', "−": "-", "…": "...", " ": " ", " ": " ", "–": "-", "—": "-", "·": "." };
 
 const rows = (s: string) => s.split(" ");
 
@@ -107,6 +120,13 @@ const bitmapOf = (ch: string): Bitmap => {
   cache.set(ch, b);
   return b;
 };
+
+/** The characters of `text` this font has no glyph for (they would draw as « ? »); [] = all drawable. */
+export const missingGlyphs = (text: string) =>
+  [...new Set(glyphText(text))].filter((c) => {
+    const [base, ...marks] = Array.from(c.normalize("NFD"));
+    return !G[base] || marks.some((m) => m !== "̧" && !MARKS[m]);
+  });
 
 /** The characters actually drawn: capitals, spelled-out ligatures, unknown -> "?". */
 export const glyphText = (text: string) =>

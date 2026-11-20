@@ -1,8 +1,8 @@
 // The cinema style's three sets (step 143) and their shot lists. Each set is a handful of
 // views painted cell by cell (common.ts: the contract), each view one framing of the story
 // with its own wide light; a shot = a view plus a camera move (zoom and focus, from → to).
-// The template cuts to the next shot of the list on every scene (and halfway through a long
-// one), so no two consecutive shots share a view, and the camera moves in every beat
+// The template cuts to the next shot of the list on every scene (and every 3 s of a longer
+// one, MAX_SHOT_S), so no two consecutive shots share a view, and the camera moves in every beat
 // (src/templates/PixelCinema/layout.ts).
 // - window: a rainy city at 21 h, the lit kitchen window as the hero (window.ts).
 // - pier: dawn on the coast, a runner backlit by the sun, the lighthouse (pier.ts).

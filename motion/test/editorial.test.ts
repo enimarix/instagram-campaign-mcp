@@ -6,7 +6,7 @@ import { CAMEOS, CARD_S } from "../src/endcards/schema.ts";
 import { gustOf, makeTree, petalsAt, PX, snap, TREE } from "../src/editorial/blossom.ts";
 import { captionLines } from "../src/editorial/caption.ts";
 import { CHARACTER_IDS } from "../src/editorial/palette.ts";
-import { cameraOf, payoffCamera } from "../src/templates/Editorial/layout.ts";
+import { cameraOf, payoffCamera, recut, typeShot } from "../src/templates/Editorial/layout.ts";
 import { bloomOf, cameoOf, compositionOf, editorialSchema, editorialScript, joinLine, TREE_ACTIONS, timelineOf } from "../src/templates/Editorial/schema.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
@@ -129,6 +129,13 @@ test("every example alternates its compositions; every shot has a camera move", 
   assert.ok(cameraOf("petals", 0.5).z > 2, "petals is a close-up");
   assert.equal(cameraOf("frame", 0.3).z, 1); // wide while the viewfinder closes, then the zoom
   assert.ok(cameraOf("frame", 0.9).z > 1.4);
+  // A long scene's cuts (step 162): in closer elsewhere on the crown, then back out; type never grows past the safe area.
+  const cam = cameraOf("wind", 0.5);
+  assert.equal(recut(cam, 0), cam);
+  assert.ok(recut(cam, 1).z > cam.z && recut(cam, 1).u !== cam.u && recut(cam, 2).z < cam.z);
+  assert.ok(moved(recut(cam, 1), recut(cam, 3)));
+  assert.deepEqual(typeShot(0), { scale: 1, dy: 0 });
+  for (const k of [1, 2, 3]) assert.ok(typeShot(k).scale < 1 && moved(typeShot(k), typeShot(k - 1)));
 });
 
 test("pixel captions keep French accents (142's bitmap font) and split the highlight across lines", () => {

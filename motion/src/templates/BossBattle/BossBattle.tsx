@@ -35,6 +35,8 @@ const WIPE = 12;
 const TYPE_CPS = 30;
 /** Frames from a scene's start to its hit: the wipe has uncovered the arena, the attacker dashed. */
 const HIT = WIPE / 2 + 12;
+/** The hit's level from the voice's (Sfx `db`). */
+const HIT_DB = -1;
 /** Frames of the attacker's dash in (and back out after the hit). */
 const DASH = 8;
 const FLASH = 8;
@@ -185,11 +187,12 @@ export const BossBattle = (props: BossBattleProps) => {
           color={s.index % 2 ? c.accent : c.secondary}
         />
       ))}
-      {/* A hit per round, and the knockout; the verdict jingle after it (at once for a draw). */}
+      {/* A hit per round, and the knockout; the verdict jingle after it (at once for a draw). The hit
+          lands on a spoken line: 1 dB under the other cues keeps the voice 12 LU over it (step 161). */}
       {scenes.slice(1, knockout ? undefined : -1).map((s) => (
         <Fragment key={s.index}>
           <Flash startFrame={s.startFrame + HIT} duration={FLASH} color={c.text} />
-          <Sfx id="sfx-hit" at={s.startFrame + HIT} lines={lines} />
+          <Sfx id="sfx-hit" at={s.startFrame + HIT} db={HIT_DB} lines={lines} />
         </Fragment>
       ))}
       <Sfx id="sfx-confirm" at={last.startFrame + HIT + (knockout ? JINGLE : 0)} lines={lines} />
