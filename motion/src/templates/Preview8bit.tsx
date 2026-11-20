@@ -1,12 +1,14 @@
-import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 import { assetById } from "../assets";
 import { safeArea } from "../brand";
 import { CRTOverlay } from "../components/CRTOverlay";
 import { DialogBox } from "../components/DialogBox";
 import { HUD } from "../components/HUD";
+import { MusicBed } from "../components/MusicBed";
 import { PixelText } from "../components/PixelText";
 import { SafeZoneGuide } from "../components/SafeZoneGuide";
+import { Sfx } from "../components/Sfx";
 import { Sprite } from "../components/Sprite";
 import { Flash, Wipe } from "../components/Transitions";
 import { colors, palette } from "../lib/palette";
@@ -94,10 +96,8 @@ export const Preview8bit = ({ title, text, name, dialog, speed, safeZone, hud, s
         </>
       )}
       {/* Music bed loops seamlessly; the coin sound plays when the one-shot coin spins (1 s). Stills are silent. */}
-      <Html5Audio src={assetById("music-overworld").src} loop volume={0.5} />
-      <Sequence from={fps} layout="none">
-        <Html5Audio src={assetById("sfx-coin").src} />
-      </Sequence>
+      <MusicBed id="music-overworld" />
+      <Sfx id="sfx-coin" at={fps} />
       <CRTOverlay show={crt} flicker={0.08} seed={7} />
       <SafeZoneGuide show={safeZone} />
     </AbsoluteFill>

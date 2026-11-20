@@ -1,6 +1,7 @@
 // Music ducking (step 148): the bed steps down while the voice speaks, so the voice sits clearly
 // on top after the studio's -14 LUFS loudnorm, and comes back up in the gaps. Pure functions
-// (no imports), used by components/MusicBed.tsx and unit-tested in test/duck.test.ts.
+// (no imports), used by components/MusicBed.tsx and components/Sfx.tsx (the sound effects'
+// levels, step 159), unit-tested in test/duck.test.ts and test/sfx.test.ts.
 
 export type Span = { start_s: number; end_s: number };
 
@@ -42,16 +43,82 @@ const smooth = (x: number) => {
  * else GAP_DB between lines and DUCK_DB while one is spoken, an S-curve in dB over ATTACK_S
  * before it and RELEASE_S after it.
  */
-export const duckGain = (spans: readonly Span[], t: number): number => {
-  if (!spans.length) return 1;
+export const duckGain = (spans: readonly Span[], t: number): number =>
+  spans.length ? 10 ** ((GAP_DB + (DUCK_DB - GAP_DB) * speechDepth(spans, t)) / 20) : 1;
+
+/** How far into a spoken line `t` is: 0 in the gaps, 1 while a line plays, the S-curve ramps between. */
+export const speechDepth = (spans: readonly Span[], t: number): number => {
   let depth = 0;
   for (const s of spans) {
     const down = (t - (s.start_s - ATTACK_S)) / ATTACK_S;
     const up = (s.end_s + RELEASE_S - t) / RELEASE_S;
     depth = Math.max(depth, smooth(Math.min(down, up)));
   }
-  return 10 ** ((GAP_DB + (DUCK_DB - GAP_DB) * depth) / 20);
+  return depth;
 };
+
+/**
+ * Integrated loudness (LUFS, ffmpeg ebur128) of every music bed in motion/public/audio. The
+ * levels above were set on the step-148 beds (about -17 LUFS); the 8-bit loops are about 4 LU
+ * louder and buried the voice (10 LU over the bed, step 159), so a bed louder than BED_LUFS
+ * comes down to it. A quieter bed is left as it is (the soft beds were chosen by ear).
+ */
+export const MUSIC_LUFS = {
+  "music-overworld": -13.1,
+  "music-cave": -13.4,
+  "music-marimba": -19.7,
+  "music-kalimba": -19.2,
+  "music-lounge": -23.5,
+  "music-dusk": -19.4,
+  "music-cutaway-a": -17.8,
+  "music-cutaway-b": -16.9,
+  "music-cutaway-c": -17.1,
+  "music-nocturne": -23.9,
+} as const;
+export const BED_LUFS = -17;
+/** Gain that brings bed `id` down to BED_LUFS when it is louder (1 otherwise). */
+export const bedLevel = (id: keyof typeof MUSIC_LUFS) => Math.min(1, 10 ** ((BED_LUFS - MUSIC_LUFS[id]) / 20));
+
+// Sound effects (steps 158-159): every sound is set against the voice from its measured peak,
+// never by a hand-set file volume (a coin at full volume peaked 21 LU over the speech once the
+// studio's -14 LUFS finish lifted the quiet voice).
+
+/**
+ * Peak momentary loudness (LUFS, ffmpeg ebur128 over the whole sound) of every sound effect in
+ * motion/public/audio (mono). A new sound is measured before it is played (test/sfx.test.ts).
+ */
+export const SFX_PEAK_LUFS = {
+  "sfx-pop": -20.9,
+  "sfx-select": -24.6,
+  "sfx-confirm": -16.7,
+  "sfx-coin": -13.2,
+  "sfx-chime": -15.2,
+  "sfx-hit": -17.3,
+  "sfx-jump": -19.7,
+  "sfx-rip": -18.1,
+  "sfx-swish": -25.7,
+  "sfx-thunder": -17.9,
+} as const;
+export type SfxId = keyof typeof SFX_PEAK_LUFS;
+/**
+ * The level sounds are set against: the quietest approved voice's own (conteur_grave, about
+ * -29 LUFS integrated in a template's mix); a louder voice leaves every sound further under it.
+ */
+export const VOICE_LUFS = -29;
+/** A body sound peaks this far further down while a line is spoken (in the gaps: its own level). */
+export const SPEECH_SFX_DB = -12;
+/** A planned « BANG » beat stays this close under a spoken line (it is the beat's point). */
+export const BANG_SPEECH_DB = -6;
+
+/** Volume that puts sound `id`'s peak `db` from VOICE_LUFS (0 = at the voice's level), never past full. */
+export const sfxVolume = (id: SfxId, db = 0) => Math.min(1, 10 ** ((VOICE_LUFS + db - SFX_PEAK_LUFS[id]) / 20));
+
+/**
+ * A body sound's volume at `t` seconds: sfxVolume(id, db) in the gaps, `speech` dB lower while a
+ * line of `spans` (speechSpans()) is spoken, with the bed's ramps.
+ */
+export const sfxGain = (spans: readonly Span[], id: SfxId, t: number, db = 0, speech = SPEECH_SFX_DB) =>
+  sfxVolume(id, db + speech * speechDepth(spans, t));
 
 /**
  * Voice line timings (audio time) on the video's clock when the template pauses the voice:

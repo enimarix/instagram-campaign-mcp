@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { AbsoluteFill, Freeze, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
-import { type AssetId, assetById } from "../../assets";
+import { assetById } from "../../assets";
 import { scriptAreas } from "../../brand";
 import { CRTOverlay } from "../../components/CRTOverlay";
 import { DialogBox } from "../../components/DialogBox";
@@ -8,6 +8,7 @@ import { HookCard } from "../../components/HookCard";
 import { MusicBed } from "../../components/MusicBed";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
@@ -124,13 +125,6 @@ const Stage = ({ p, area, act, opacity }: { p: PixelSkitProps; area: Area; act?:
   );
 };
 
-/** One sound from `from` on (stills are silent). */
-const Sfx = ({ id, from }: { id: AssetId; from: number }) => (
-  <Sequence from={from} layout="none">
-    <Html5Audio src={assetById(id).src} />
-  </Sequence>
-);
-
 const sfxId = (name: (typeof SFX)[number]) => `sfx-${name}` as const;
 
 export const PixelSkit = (props: PixelSkitProps) => {
@@ -148,6 +142,7 @@ export const PixelSkit = (props: PixelSkitProps) => {
   const cover = frame < scenes[0].endFrame ? 1 : fade;
   const note = props.citations.length ? props.sourcesNote : undefined;
   const voice = props.voice?.audioSrc;
+  const lines = useMemo(() => pausedLines(spokenLines(props.voice) ?? [], pauses, fps), [props.voice, pauses, fps]);
   return (
     <AbsoluteFill style={{ backgroundColor: c.background }}>
       {/* The cast under the hook, part of the cover; fades back in with it when looping. */}
@@ -196,10 +191,10 @@ export const PixelSkit = (props: PixelSkitProps) => {
       {freezeEnd > freezeStart && <Flash startFrame={freezeStart} duration={FLASH} color={c.text} />}
       {scenes.slice(1).map((s) => {
         const sfx = props.beats[s.index - 1].sfx;
-        return sfx && <Sfx key={s.index} id={sfxId(sfx)} from={s.startFrame + BEAT} />;
+        return sfx && <Sfx key={s.index} id={sfxId(sfx)} at={s.startFrame + BEAT} db={-3} lines={lines} />;
       })}
-      {props.sting !== "none" && <Sfx id={sfxId(props.sting)} from={land} />}
-      <MusicBed id={props.music} lines={pausedLines(spokenLines(props.voice) ?? [], pauses, fps)} />
+      {props.sting !== "none" && <Sfx id={sfxId(props.sting)} at={land} lines={lines} />}
+      <MusicBed id={props.music} lines={lines} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {/* The voice pauses through the hold and the freeze: plain audio in parts around them. */}

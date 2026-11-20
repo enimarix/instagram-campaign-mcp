@@ -9,6 +9,7 @@ import { HUD } from "../../components/HUD";
 import { MusicBed } from "../../components/MusicBed";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
@@ -132,13 +133,6 @@ const Arena = (p: BossBattleProps & { scene: number; start: number; steps: Healt
   );
 };
 
-/** One sound from `from` on (stills are silent). */
-const Sfx = ({ id, from }: { id: "sfx-hit" | "sfx-confirm"; from: number }) => (
-  <Sequence from={from} layout="none">
-    <Html5Audio src={assetById(id).src} />
-  </Sequence>
-);
-
 export const BossBattle = (props: BossBattleProps) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -154,6 +148,7 @@ export const BossBattle = (props: BossBattleProps) => {
   const versus = frame < scenes[0].endFrame ? 1 : fade;
   const knockout = props.verdict.winner !== "draw";
   const note = props.citations.length ? props.sourcesNote : undefined;
+  const lines = spokenLines(props.voice);
   return (
     <AbsoluteFill style={{ backgroundColor: c.background }}>
       {scene && scene.index > 0 && <Arena {...props} scene={scene.index} start={scene.startFrame} steps={steps} opacity={1 - fade} c={c} />}
@@ -194,11 +189,11 @@ export const BossBattle = (props: BossBattleProps) => {
       {scenes.slice(1, knockout ? undefined : -1).map((s) => (
         <Fragment key={s.index}>
           <Flash startFrame={s.startFrame + HIT} duration={FLASH} color={c.text} />
-          <Sfx id="sfx-hit" from={s.startFrame + HIT} />
+          <Sfx id="sfx-hit" at={s.startFrame + HIT} lines={lines} />
         </Fragment>
       ))}
-      <Sfx id="sfx-confirm" from={last.startFrame + HIT + (knockout ? JINGLE : 0)} />
-      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
+      <Sfx id="sfx-confirm" at={last.startFrame + HIT + (knockout ? JINGLE : 0)} lines={lines} />
+      <MusicBed id={props.music} lines={lines} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}

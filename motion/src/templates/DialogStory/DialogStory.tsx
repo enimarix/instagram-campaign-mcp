@@ -8,6 +8,7 @@ import { HookCard } from "../../components/HookCard";
 import { MusicBed } from "../../components/MusicBed";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { Sprite } from "../../components/Sprite";
 import { Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
@@ -105,13 +106,6 @@ const Cast = ({ p, area, talk, opacity, c }: { p: DialogStoryProps; area: Area; 
   );
 };
 
-/** One sound from `from` on (stills are silent). */
-const Sfx = ({ id, from }: { id: "sfx-select" | "sfx-confirm"; from: number }) => (
-  <Sequence from={from} layout="none">
-    <Html5Audio src={assetById(id).src} />
-  </Sequence>
-);
-
 export const DialogStory = (props: DialogStoryProps) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -132,6 +126,7 @@ export const DialogStory = (props: DialogStoryProps) => {
       : undefined;
   const cover = frame < scenes[0].endFrame ? 1 : fade;
   const note = props.citations.length ? props.sourcesNote : undefined;
+  const lines = spokenLines(props.voice);
   return (
     <AbsoluteFill style={{ backgroundColor: c.background }}>
       {/* The cast under the hook, part of the cover; fades back in with it when looping. */}
@@ -182,9 +177,13 @@ export const DialogStory = (props: DialogStoryProps) => {
           />
         ))}
       {scenes.slice(1).map((s) => (
-        <Sfx key={s.index} id={roles[s.index].kind === "moral" ? "sfx-confirm" : "sfx-select"} from={s.startFrame + BEAT} />
+        roles[s.index].kind === "moral" ? (
+          <Sfx key={s.index} id="sfx-confirm" at={s.startFrame + BEAT} lines={lines} />
+        ) : (
+          <Sfx key={s.index} id="sfx-select" at={s.startFrame + BEAT} db={-4} lines={lines} />
+        )
       ))}
-      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
+      <MusicBed id={props.music} lines={lines} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}

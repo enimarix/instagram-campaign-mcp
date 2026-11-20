@@ -6,10 +6,10 @@
 // area, the scene below it, so they never overlap.
 import { type ReactNode, useMemo } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
-import { assetById } from "../../assets";
 import { brand, safeArea } from "../../brand";
 import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { EndCard } from "../../endcards/EndCard";
 import { BACKGROUND } from "../../endcards/VoxelEndCard";
 import { ACCENTS, type FormId, TEXT_ACCENT } from "../../endcards/schema";
@@ -291,12 +291,6 @@ const Pins = ({ frame, story, pose }: { frame: number; story: Story; pose: Pose 
   return <>{out}</>;
 };
 
-const Sfx = ({ at, id, volume = 0.6 }: { at: number; id: "sfx-pop" | "sfx-chime"; volume?: number }) => (
-  <Sequence from={Math.round(at)} durationInFrames={45} layout="none">
-    <Html5Audio src={assetById(id).src} volume={volume} />
-  </Sequence>
-);
-
 export const VoxelQuest = (props: VoxelQuestProps) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -309,15 +303,16 @@ export const VoxelQuest = (props: VoxelQuestProps) => {
   const scene = sceneAt(scenes, frame);
   const flashOpacity = frame >= flash ? 0.85 * (1 - span(frame, flash, 9)) : 0;
   // Sound cues: food pops, the phone's ring completing, the level-up chime.
-  const cues: { at: number; id: "sfx-pop" | "sfx-chime" }[] = [];
+  const cues: { at: number; id: "sfx-pop" | "sfx-chime"; db?: number }[] = [];
   props.beats.forEach((b, i) => {
     const s = scenes[i + 1];
     const { k, length } = beatClock(s.startFrame, s, fps);
-    b.foods?.forEach((_, j) => cues.push({ at: s.startFrame + (IN_BEAT.food + j * IN_BEAT.foodGap) * k, id: "sfx-pop" }));
-    if (b.kind === "app") cues.push({ at: s.startFrame + IN_BEAT.phone, id: "sfx-pop" }, { at: s.startFrame + IN_BEAT.fill * k + length * 0.55, id: "sfx-pop" });
+    b.foods?.forEach((_, j) => cues.push({ at: s.startFrame + (IN_BEAT.food + j * IN_BEAT.foodGap) * k, id: "sfx-pop", db: -2 }));
+    if (b.kind === "app") cues.push({ at: s.startFrame + IN_BEAT.phone, id: "sfx-pop", db: -2 }, { at: s.startFrame + IN_BEAT.fill * k + length * 0.55, id: "sfx-pop", db: -2 });
   });
   cues.push({ at: flash, id: "sfx-chime" });
   const loop = loopFade(frame, timeline);
+  const lines = spokenLines(props.voice);
   return (
     <AbsoluteFill style={{ background: BACKGROUND }}>
       {frame < endStart ? (
@@ -348,9 +343,9 @@ export const VoxelQuest = (props: VoxelQuestProps) => {
         </AbsoluteFill>
       )}
       {cues.map((c, i) => (
-        <Sfx key={i} at={c.at} id={c.id} />
+        <Sfx key={i} at={c.at} id={c.id} db={c.db} lines={lines} />
       ))}
-      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
+      <MusicBed id={props.music} lines={lines} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

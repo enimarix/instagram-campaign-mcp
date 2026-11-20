@@ -8,6 +8,7 @@ import { HookCard } from "../../components/HookCard";
 import { MusicBed } from "../../components/MusicBed";
 import { PixelText } from "../../components/PixelText";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
@@ -194,13 +195,6 @@ const Answer = ({ choices, answer, start, c }: { choices: Choice[]; answer: numb
   );
 };
 
-/** One sound from `from` on (stills are silent). */
-const Sfx = ({ id, from }: { id: "sfx-select" | "sfx-confirm" | "sfx-coin"; from: number }) => (
-  <Sequence from={from} layout="none">
-    <Html5Audio src={assetById(id).src} />
-  </Sequence>
-);
-
 export const QuizChest = (props: QuizChestProps) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -208,6 +202,10 @@ export const QuizChest = (props: QuizChestProps) => {
   const c = { ...colors, ...props.palette };
   const [, question, explanation, cta] = timeline.scenes;
   const voice = props.voice?.audioSrc;
+  const lines = useMemo(
+    () => pausedLines(spokenLines(props.voice) ?? [], [{ at: countdownStart, frames: gap }], fps),
+    [props.voice, countdownStart, gap, fps],
+  );
   return (
     <AbsoluteFill style={{ backgroundColor: c.background }}>
       {frame >= question.startFrame && frame < question.endFrame && (
@@ -238,12 +236,12 @@ export const QuizChest = (props: QuizChestProps) => {
         />
       ))}
       {countdownTicks(countdownStart, props.countdownSeconds, fps).map((t) => (
-        <Sfx key={t} id="sfx-select" from={t} />
+        <Sfx key={t} id="sfx-select" at={t} db={-4} lines={lines} />
       ))}
       <Flash startFrame={reveal} duration={FLASH} color={c.text} />
-      <Sfx id="sfx-confirm" from={reveal} />
-      <Sfx id="sfx-coin" from={reveal + COIN_DELAY} />
-      <MusicBed id={props.music} lines={pausedLines(spokenLines(props.voice) ?? [], [{ at: countdownStart, frames: gap }], fps)} />
+      <Sfx id="sfx-confirm" at={reveal} lines={lines} />
+      <Sfx id="sfx-coin" at={reveal + COIN_DELAY} db={-2} lines={lines} />
+      <MusicBed id={props.music} lines={lines} />
       <CRTOverlay />
       <SafeZoneGuide show={!!props.safeZone} />
       {/* The voice pauses through the countdown and reveal: its first part up to the end of the
