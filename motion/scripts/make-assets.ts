@@ -422,6 +422,53 @@ const songs: Record<string, Song> = {
       { wave: "noise", volume: 0.035, steps: ["C8", ...Array(63).fill("-")].join(" ") },
     ],
   },
+  // The sitcom style's bed (step 164): a bouncy TV-sitcom groove. A walking sine bass, marimba
+  // stabs on the off-beats over C Am F G, a cheeky glockenspiel riff, kick, snare and hats.
+  // C major, 116 bpm, 4 bars.
+  "music-sitcom": {
+    bpm: 116,
+    tracks: [
+      {
+        wave: "bass", volume: 0.3,
+        steps: [
+          "C2 . C3 . G2 . A2 . C2 . C3 . G2 . E2 .",
+          "A1 . A2 . E2 . G2 . A1 . A2 . E2 . C2 .",
+          "F1 . F2 . C2 . E2 . F1 . F2 . C2 . A1 .",
+          "G1 . G2 . D2 . B1 . G1 . G2 . D2 . B1 .",
+        ].join(" "),
+      },
+      {
+        wave: "marimba", volume: 0.16,
+        steps: [
+          ". . E4 . . . E4 . . . E4 . . . G4 .",
+          ". . C4 . . . C4 . . . E4 . . . C4 .",
+          ". . A3 . . . C4 . . . A3 . . . C4 .",
+          ". . B3 . . . D4 . . . B3 . . . D4 .",
+        ].join(" "),
+      },
+      {
+        wave: "marimba", volume: 0.12,
+        steps: [
+          ". . G4 . . . G4 . . . G4 . . . C5 .",
+          ". . E4 . . . E4 . . . A4 . . . E4 .",
+          ". . C5 . . . F4 . . . C5 . . . F4 .",
+          ". . D5 . . . G4 . . . D5 . . . G4 .",
+        ].join(" "),
+      },
+      {
+        wave: "glock", volume: 0.06,
+        steps: [
+          "G5 . E5 . G5 . A5 . G5 . . . E5 . C5 .",
+          ". . . . . . . . E5 . D5 . C5 . . .",
+          "A5 . F5 . A5 . C6 . A5 . . . F5 . A5 .",
+          "G5 . . . B5 . . . D6 . . . B5 . G5 .",
+        ].join(" "),
+      },
+      { wave: "kick", volume: 0.2, steps: "C2 . . . . . . . C2 . . C2 . . . . ".repeat(4).trim() },
+      { wave: "noise", volume: 0.07, steps: ". . . . x . . . . . . . x . . . ".repeat(4).trim() },
+      { wave: "noise", volume: 0.02, steps: "x . x . x . x . x . x . x . x x ".repeat(4).trim() },
+    ],
+  },
 };
 
 const effects: Record<string, Float64Array> = {
@@ -449,6 +496,30 @@ const effects: Record<string, Float64Array> = {
     [1.3, { wave: "noise", from: 160, to: 50, seconds: 2.1, volume: 0.4, decay: true }],
   ), 0.5),
   "sfx-chime": sfx([0, mallet(698.46, 0.9)], [0.08, mallet(880, 0.9)], [0.16, mallet(1046.5, 0.9)], [0.24, mallet(1396.91, 1.1)]),
+  // Sitcom foley (step 164): a cartoon spring (a sine bending up, then wobbling down), forks
+  // clattering on a plate (bright bell hits and ticks, uneven), a breathy gasp (rising noise).
+  "sfx-boing": sfx(
+    [0, { wave: "bass", from: 140, to: 560, seconds: 0.12, volume: 0.5 }],
+    [0.12, { wave: "bass", from: 560, to: 330, seconds: 0.1, volume: 0.45 }],
+    [0.22, { wave: "bass", from: 330, to: 470, seconds: 0.1, volume: 0.4 }],
+    [0.32, { wave: "bass", from: 470, to: 360, seconds: 0.12, volume: 0.32 }],
+    [0.44, { wave: "bass", from: 360, to: 410, seconds: 0.16, volume: 0.22 }],
+  ),
+  "sfx-clatter": sfx(
+    [0, { wave: "glock", from: 2637, seconds: 0.35, volume: 0.22 }],
+    [0, { wave: "noise", from: 7000, seconds: 0.03, volume: 0.25, decay: true }],
+    [0.07, { wave: "glock", from: 3136, seconds: 0.3, volume: 0.18 }],
+    [0.07, { wave: "noise", from: 6000, seconds: 0.025, volume: 0.2, decay: true }],
+    [0.16, { wave: "glock", from: 2794, seconds: 0.3, volume: 0.15 }],
+    [0.16, { wave: "noise", from: 6500, seconds: 0.02, volume: 0.18, decay: true }],
+    [0.21, { wave: "glock", from: 3520, seconds: 0.35, volume: 0.12 }],
+    [0.3, { wave: "noise", from: 5000, seconds: 0.02, volume: 0.12, decay: true }],
+    [0.31, { wave: "glock", from: 2349, seconds: 0.4, volume: 0.1 }],
+  ),
+  "sfx-gasp": sfx(
+    [0, { wave: "noise", from: 700, to: 1900, seconds: 0.22, volume: 0.07 }],
+    [0.12, { wave: "noise", from: 1900, to: 3400, seconds: 0.34, volume: 0.13, decay: true }],
+  ),
 };
 
 /** Every generated file: path under motion/ → contents. */

@@ -1,0 +1,26 @@
+{
+  "hook": "Jour 12 de sèche, la salle",
+  "scenes": [
+    {
+      "set": "gym",
+      "cast": [
+        {"who": "teen", "role": "Toi", "at": "floor", "action": "Idle_Loop"},
+        {"who": "coach", "at": "stand0", "action": "cheer"},
+        {"who": "gym_girl", "role": "Jade", "at": "stand1", "action": "shout"},
+        {"who": "uncle", "role": "Ton pote", "at": "stand2", "action": "cheer"},
+        {"who": "cousin", "at": "bench", "action": "curl"}
+      ],
+      "beats": [
+        {"line": "Ta barre d'hier te paraît soudain beaucoup plus lourde.", "key": "plus lourde", "who": "teen", "action": "PickUp_Table", "react": "jaw_drop", "sfx": "whoosh"},
+        {"line": "Trois potes hurlent, chacun sous un angle différent.", "key": "Trois potes", "who": "coach", "action": "cheer", "face": "shout", "say": {"who": "coach", "text": "ALLEZ, ALLEZ !"}},
+        {"line": "Garde tes protéines hautes et baisse un peu la charge, sans honte.", "key": "protéines", "who": "teen", "action": "Hit_Chest", "react": "outraged", "say": {"who": "gym_girl", "text": "Pousse !"}},
+        {"line": "Trop tard. La barre a gagné, au ralenti.", "key": "La barre a gagné", "who": "teen", "action": "Death01", "speed": "slowmo", "sfx": "hit"}
+      ]
+    }
+  ],
+  "outro": "Envoie ça à ton pote de salle en sèche.",
+  "address": "tu",
+  "accent": "protein",
+  "citations": [],
+  "music": "music-sitcom"
+}

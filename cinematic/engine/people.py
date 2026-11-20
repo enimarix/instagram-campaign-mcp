@@ -14,6 +14,8 @@ import kit
 import retarget
 
 ACTIONS = json.load(open(os.path.join(kit.ENGINE, "..", "actions.json"), encoding="utf-8"))
+GARMENTS = json.load(open(os.path.join(kit.ENGINE, "..", "cast.json"), encoding="utf-8"))["_garments"]
+TOP_SIZE = 512  # the recoloured garment texture (crush_textures caps clothes there anyway)
 LIBRARY = os.path.join(kit.TOOLS, "anim", "Animation Library[Standard]", "Godot",
                        "AnimationLibrary_Godot_Standard.glb")
 PHENOTYPE = {"gender": 0.5, "age": 0.5, "muscle": 0.5, "weight": 0.5, "proportions": 0.5,
@@ -47,6 +49,71 @@ def build(ch, name=None):
                                       load_arkit_faceunits=True)
     services.FaceService.interpolate_targets(body)
     return body, body.parent
+
+
+def _pixels(img):
+    """The image at TOP_SIZE as a (rows bottom-up, columns, RGBA) array (its stored values)."""
+    import numpy as np
+    small = img.copy()
+    small.scale(TOP_SIZE, TOP_SIZE)
+    a = np.empty(TOP_SIZE * TOP_SIZE * 4, np.float32)
+    small.pixels.foreach_get(a)
+    bpy.data.images.remove(small)
+    return a.reshape(TOP_SIZE, TOP_SIZE, 4)
+
+
+def _recolour(img, path, spec, top, name):
+    """`img` (a garment's diffuse texture) with its top in the colour `top`: flat = the garment's
+    AO shading (no logo, no print) in it, pattern = its own luminance (stripes) in it; the
+    `keep` regions (jeans, skirts) untouched."""
+    import numpy as np
+    src = _pixels(img)
+    n = TOP_SIZE
+    keep = np.zeros((n, n), bool)
+    for x0, y0, x1, y1 in spec.get("keep", ()):  # fractions from the top left; rows are bottom-up
+        keep[n - round(y1 * n):n - round(y0 * n), round(x0 * n):round(x1 * n)] = True
+    if spec.get("denim"):
+        keep &= src[..., 2] > src[..., 0]
+    tint = np.array(top, np.float32)
+    if spec["mode"] == "flat":
+        ao = _pixels(bpy.data.images.load(path.replace("_diffuse.png", "_ao.png"), check_existing=True))[..., 0]
+        rgb = tint * (0.35 + 0.65 * ao)[..., None]
+    else:
+        lum = src[..., :3] @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+        lit = lum[~keep & (lum > 0.02)]
+        rgb = tint * np.clip(lum / max(float(np.percentile(lit, 95)) if lit.size else 1.0, 1e-3), 0, 1)[..., None]
+    out = src.copy()
+    out[~keep, :3] = rgb[~keep]
+    new = bpy.data.images.new(name, n, n, alpha=True)
+    new.pixels.foreach_set(out.ravel())
+    return new
+
+
+def dress(rig, look, who):
+    """The character's own top (cast.json `top`, step 164): every garment texture listed in
+    `_garments` repainted in its colour, so no MakeHuman logo shows and no two characters in a
+    shot wear the same top. A look without `top` keeps its textures."""
+    if not look.get("top"):
+        return
+    done = {}
+    for o in rig.children_recursive:
+        if o.type != "MESH":
+            continue
+        for slot in o.material_slots:
+            m = slot.material
+            if not (m and m.use_nodes):
+                continue
+            for node in m.node_tree.nodes:
+                img = getattr(node, "image", None)
+                if node.type != "TEX_IMAGE" or img is None:
+                    continue
+                path = bpy.path.abspath(img.filepath)
+                base = os.path.basename(path)
+                garment = base[:-len("_diffuse.png")] if base.endswith("_diffuse.png") else None
+                if garment in GARMENTS:
+                    if path not in done:
+                        done[path] = _recolour(img, path, GARMENTS[garment], look["top"], f"{garment}_{who}")
+                    node.image = done[path]
 
 
 def decimate(body, rig):

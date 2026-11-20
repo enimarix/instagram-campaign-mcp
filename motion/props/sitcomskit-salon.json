@@ -1,0 +1,38 @@
+{
+  "hook": "Cent crunchs par jour pour l'été",
+  "scenes": [
+    {
+      "set": "living",
+      "cast": [
+        {"who": "gym_mum", "role": "Maman", "at": "floor", "action": "crunch"},
+        {"who": "dad", "at": "sofa0", "action": "Sitting_Talking_Loop"},
+        {"who": "kid_boy", "at": "sofa1", "action": "Sitting_Idle_Loop"},
+        {"who": "kid_girl", "at": "stand0", "action": "Idle_Loop"},
+        {"who": "grandpa", "at": "stand1", "action": "Idle_Loop"}
+      ],
+      "beats": [
+        {"line": "Maman enchaîne ses cent crunchs, tous les soirs.", "key": "cent crunchs", "who": "gym_mum", "action": "crunch", "speed": "x10", "number": {"from": 0, "value": 100, "unit": "crunchs"}, "sfx": "boing"},
+        {"line": "Pendant ce temps, le canapé finit les chips.", "key": "chips", "who": "dad", "action": "Sitting_Talking_Loop", "face": "smile", "say": {"who": "kid_boy", "text": "Encore un paquet ?"}},
+        {"line": "Les crunchs ne brûlent pas le gras du ventre : c'est le total de ta journée qui compte.", "key": "total de ta journée", "who": "gym_mum", "action": "crunch", "speed": "x10", "react": "disgust"}
+      ]
+    },
+    {
+      "set": "beach",
+      "label": "L'été",
+      "cast": [
+        {"who": "gym_mum", "role": "Maman", "at": "stand0"},
+        {"who": "dad", "at": "stand1", "action": "Idle_Talking_Loop"},
+        {"who": "kid_boy", "at": "stand2", "action": "Jump_Loop"},
+        {"who": "kid_girl", "at": "towel0", "action": "Idle_Loop"}
+      ],
+      "beats": [
+        {"line": "Résultat : des abdos en béton… toujours bien cachés.", "key": "bien cachés", "who": "gym_mum", "action": "Idle_Loop", "face": "disgust", "react": "smile", "sfx": "boing"}
+      ]
+    }
+  ],
+  "outro": "Envoie ça à celle qui fait 100 crunchs par jour.",
+  "address": "tu",
+  "accent": "kcal",
+  "citations": [{"url": "https://pubmed.ncbi.nlm.nih.gov/21804427/", "title": "Vispute et al. 2011, The effect of abdominal exercise on abdominal fat, J Strength Cond Res"}],
+  "music": "music-sitcom"
+}

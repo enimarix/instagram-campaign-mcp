@@ -1,0 +1,28 @@
+{
+  "hook": "Tu photographies même le gratin ?",
+  "scenes": [
+    {
+      "set": "dinner",
+      "cast": [
+        {"who": "teen", "role": "Toi", "at": "stand1", "action": "phone_photo"},
+        {"who": "dad", "at": "seat1", "action": "fork_up"},
+        {"who": "mum", "at": "seat3", "action": "fork_up"},
+        {"who": "uncle", "role": "Tonton Karim", "at": "seat2", "action": "fork_up"},
+        {"who": "kid_girl", "at": "seat5", "action": "fork_up"},
+        {"who": "aunt", "at": "seat6", "action": "fork_up"},
+        {"who": "grandma", "role": "Mamie", "at": "stand0", "action": "Idle_Loop"}
+      ],
+      "beats": [
+        {"line": "Chaque plat passe en photo avant la première bouchée.", "key": "Chaque plat", "who": "teen", "action": "phone_photo", "react": "outraged", "sfx": "clatter"},
+        {"line": "Sept personnes attendent, la fourchette en l'air.", "key": "fourchette", "who": "dad", "action": "fork_up", "face": "outraged", "say": {"who": "dad", "text": "Ça refroidit, là !"}},
+        {"line": "Le gratin, la sauce, le pain… tout y passe.", "key": "tout", "who": "teen", "action": "phone_photo", "react": "jaw_drop", "say": {"who": "uncle", "text": "Même le pain ?!"}},
+        {"line": "Et Mamie n'a pas tenu jusqu'au dessert.", "key": "Mamie", "who": "grandma", "action": "faint", "speed": "slowmo", "sfx": "gasp"}
+      ]
+    }
+  ],
+  "outro": "Envoie ça à celui qui photographie tout.",
+  "address": "tu",
+  "accent": "brand",
+  "citations": [],
+  "music": "music-sitcom"
+}

@@ -30,9 +30,9 @@ TEMPLATES = [
     ("VoxelQuest", "voxel", "3D 8-bit"), ("PaperStory", "paper", "Papier"),
     ("Cutaway", "cutaway", "Pixel explicatif"), ("Editorial", "editorial", "Éditorial"),
     ("PixelCinema", "cinema", "Pixel ciné"), ("Macro3D", "macro3d", "Macro 3D"),
-    ("CinematicSkit", "blender", "Blender"),
+    ("SitcomSkit", "sitcom", "Sitcom 3D"), ("CinematicSkit", "blender", "Blender"),
 ]
-ALL = ["pixel", "voxel", "paper", "cutaway", "editorial", "cinema", "macro3d", "blender"]
+ALL = ["pixel", "voxel", "paper", "cutaway", "editorial", "cinema", "macro3d", "sitcom", "blender"]
 
 
 def _fake_registry(monkeypatch, extra=()):

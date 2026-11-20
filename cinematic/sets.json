@@ -1,11 +1,15 @@
 {
- "_doc": "The set library of the cinematic engine. Each set is built by engine/<module>.py; spots are where the troupe stands or sits (x, y on the floor in metres, facing in degrees: 0 looks at -Y, the camera side; 90 looks at +X). A seat spot needs a sitting action (actions.json), any other spot a standing one; z raises a seat (bar stools). wide: the set's establishing camera; center: what `top` looks down on. lights: warm saturated presets (sun = key colour, its azimuth / elevation in degrees when the set has no sky of its own, fill = the soft camera-side light, ambient = the flat world light).",
+ "_doc": "The set library of the cinematic engine. Each set is built by engine/<module>.py; spots are where the troupe stands or sits (x, y on the floor in metres, facing in degrees: 0 looks at -Y, the camera side; 90 looks at +X). A seat spot needs a sitting action (actions.json), any other spot a standing one; z raises a seat (bar stools). wide: the set's establishing camera; center: what `top` looks down on. lights: warm saturated presets (sun = key colour, its azimuth / elevation in degrees when the set has no sky of its own, fill = the soft camera-side light, ambient = the flat world light; rim, rim_energy, rim_dir = a coloured side light, the sitcom presets).",
  "lights": {
   "sunset": {"sun": [1.0, 0.56, 0.3], "sun_energy": 5.0, "sun_dir": [112, 8], "fill": [1.0, 0.78, 0.6], "fill_energy": 60, "ambient": [0.55, 0.36, 0.25], "ambient_strength": 0.25},
   "night": {"sun": [0.45, 0.55, 1.0], "sun_energy": 1.5, "sun_dir": [60, 25], "fill": [1.0, 0.62, 0.32], "fill_energy": 35, "ambient": [0.2, 0.18, 0.35], "ambient_strength": 0.08},
   "gym": {"sun": [1.0, 0.86, 0.68], "sun_energy": 3.5, "sun_dir": [120, 55], "fill": [1.0, 0.8, 0.6], "fill_energy": 90, "ambient": [0.6, 0.45, 0.35], "ambient_strength": 0.35},
   "bistro": {"sun": [1.0, 0.5, 0.25], "sun_energy": 2.0, "sun_dir": [70, 20], "fill": [1.0, 0.62, 0.35], "fill_energy": 70, "ambient": [0.5, 0.3, 0.2], "ambient_strength": 0.2},
-  "beach": {"sun": [1.0, 0.7, 0.45], "sun_energy": 6.0, "sun_dir": [100, 12], "fill": [1.0, 0.8, 0.65], "fill_energy": 50, "ambient": [0.6, 0.48, 0.4], "ambient_strength": 0.45}
+  "beach": {"sun": [1.0, 0.7, 0.45], "sun_energy": 6.0, "sun_dir": [100, 12], "fill": [1.0, 0.8, 0.65], "fill_energy": 50, "ambient": [0.6, 0.48, 0.4], "ambient_strength": 0.45},
+  "sitcom": {"sun": [1.0, 0.55, 0.25], "sun_energy": 6.0, "sun_dir": [112, 14], "fill": [1.0, 0.58, 0.72], "fill_energy": 120, "ambient": [0.55, 0.35, 0.35], "ambient_strength": 0.26, "rim": [0.2, 0.95, 0.9], "rim_energy": 5.0, "rim_dir": [15, 22]},
+  "sitcom_night": {"sun": [0.3, 0.85, 0.9], "sun_energy": 2.2, "sun_dir": [60, 25], "fill": [1.0, 0.5, 0.7], "fill_energy": 45, "ambient": [0.2, 0.15, 0.3], "ambient_strength": 0.08, "rim": [1.0, 0.55, 0.2], "rim_energy": 3.0, "rim_dir": [165, 25]},
+  "sitcom_gym": {"sun": [1.0, 0.72, 0.42], "sun_energy": 4.5, "sun_dir": [120, 50], "fill": [1.0, 0.6, 0.8], "fill_energy": 90, "ambient": [0.55, 0.4, 0.4], "ambient_strength": 0.28, "rim": [0.15, 0.95, 0.75], "rim_energy": 5.0, "rim_dir": [15, 25]},
+  "sitcom_beach": {"sun": [1.0, 0.6, 0.35], "sun_energy": 7.0, "sun_dir": [100, 12], "fill": [1.0, 0.6, 0.7], "fill_energy": 55, "ambient": [0.6, 0.45, 0.45], "ambient_strength": 0.4, "rim": [0.3, 0.9, 1.0], "rim_energy": 3.5, "rim_dir": [15, 20]}
  },
  "sets": {
   "dinner": {"label": "Family dinner", "module": "dining", "light": "sunset", "seats": 8,
