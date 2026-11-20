@@ -3,6 +3,7 @@ Website password (step 008): sessions, login lockout, origin check, bind guard.
 
 Pure logic here; `app.py` wires it as a middleware plus thin login routes.
 With no UI_PASSWORD everything is open to loopback Host names only; the origin check always runs.
+Sessions survive a restart (168): their keyed digests live in the store's `ui_sessions` state.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from urllib.parse import urlsplit
 from ..config import InstagramMCPSettings
 
 COOKIE = "studio_session"
+SESSIONS_KEY = "ui_sessions"  # worker_state key: {sha256-HMAC digest: expiry}
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
@@ -28,14 +30,12 @@ class Locked(Exception):
         self.retry_after = retry_after
 
 
-def _digest(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
 class Auth:
-    # ponytail: sessions and the failure counter live in memory: a restart logs everyone out
-    # and clears the lock. One global counter is fine for a single-owner studio.
-    def __init__(self, settings: InstagramMCPSettings, clock: Callable[[], float] = time.time):
+    # ponytail: the failure counter lives in memory (a restart clears the lock); one global
+    # counter is fine for a single-owner studio. Sessions go to `store` when one is attached
+    # (app.py's lifespan does), else to memory (tests, no store).
+    def __init__(self, settings: InstagramMCPSettings, clock: Callable[[], float] = time.time,
+                 store: Any = None):
         secret = settings.ui_password.get_secret_value() if settings.ui_password else ""
         self.required = bool(secret)
         self._password_hash = hashlib.sha256(secret.encode("utf-8")).digest()
@@ -43,7 +43,8 @@ class Auth:
         self.max_failures = settings.login_max_failures
         self.lockout = settings.login_lockout_minutes * 60
         self.clock = clock
-        self._sessions: Dict[str, float] = {}  # sha256(token) -> expiry
+        self.store = store
+        self._sessions: Dict[str, float] = {}  # _digest(token) -> expiry
         self._failures: List[float] = []
         self._locked_until = 0.0
 
@@ -66,19 +67,40 @@ class Auth:
             self._locked_until = now + self.lockout
         return False
 
-    def new_session(self) -> str:
+    def _digest(self, token: str) -> str:
+        # Keyed by the password hash: a changed UI_PASSWORD makes every old session unknown, and
+        # the database never holds the token nor anything to guess the password from.
+        return hmac.new(self._password_hash, token.encode(), hashlib.sha256).hexdigest()
+
+    def _load(self) -> Dict[str, float]:
+        if self.store is None:
+            return dict(self._sessions)
+        saved = self.store.get_state(SESSIONS_KEY)
+        return dict(saved) if isinstance(saved, dict) else {}
+
+    def _save(self, sessions: Dict[str, float]) -> None:
         now = self.clock()
-        self._sessions = {h: exp for h, exp in self._sessions.items() if exp > now}
+        sessions = {h: exp for h, exp in sessions.items() if exp > now}  # prune expired
+        if self.store is None:
+            self._sessions = sessions
+        else:
+            self.store.set_state(SESSIONS_KEY, sessions)
+
+    def new_session(self) -> str:
         token = secrets.token_urlsafe(32)
-        self._sessions[_digest(token)] = now + self.ttl
+        sessions = self._load()
+        sessions[self._digest(token)] = self.clock() + self.ttl
+        self._save(sessions)
         return token
 
     def valid(self, token: Optional[str]) -> bool:
-        return bool(token) and self._sessions.get(_digest(token), 0) > self.clock()
+        return bool(token) and self._load().get(self._digest(token), 0) > self.clock()
 
     def logout(self, token: Optional[str]) -> None:
         if token:
-            self._sessions.pop(_digest(token), None)
+            sessions = self._load()
+            sessions.pop(self._digest(token), None)
+            self._save(sessions)
 
 
 def reauth_error(auth: Auth, password: Any) -> Optional[Tuple[int, Dict[str, Any]]]:

@@ -91,11 +91,16 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.store = store or CampaignStore(settings.database_path)
+        attach = auth.store is None  # sessions survive a restart (168)
+        if attach:
+            auth.store = app.state.store
         app.state.client = (client_factory(settings, store=app.state.store)
                             if settings.instagram_configured else None)
         try:
             yield
         finally:
+            if attach:
+                auth.store = None
             if store is None:
                 app.state.store.close()
             if app.state.client is not None:

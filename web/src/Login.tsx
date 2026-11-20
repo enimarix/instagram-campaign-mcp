@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { ApiError, getSession, login } from './api/client'
+import { ApiError, getSession, login, onLoggedOut } from './api/client'
 import { buttonClass, card, field } from './ui/styles'
 
 const ERRORS: Record<string, string> = {
@@ -17,6 +17,12 @@ export default function Login({ children }: { children: ReactNode }) {
     getSession()
       .then((s) => setState(!s.password_required || s.authenticated ? 'in' : 'out'))
       .catch(() => setState('in')) // ponytail: server down → let the pages show their own errors
+  }, [])
+
+  useEffect(() => {
+    // Any API call answered 401 brings the form back; signing in shows the app again, no reload.
+    onLoggedOut(() => setState('out'))
+    return () => onLoggedOut(null)
   }, [])
 
   async function submit(e: FormEvent) {
