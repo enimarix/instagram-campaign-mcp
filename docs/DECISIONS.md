@@ -31,7 +31,7 @@ block quiet while the post still goes out the same day once access returns.
 Every heavy child the studio starts (Blender, Remotion's node and Chrome, ffmpeg, the voice
 service and its model worker, agent CLI runs) runs at low priority (Windows
 BELOW_NORMAL_PRIORITY_CLASS, POSIX nice 10). A heavy GPU job, once it holds the GPU lock (145),
-also waits until free RAM >= `GUARD_MIN_FREE_RAM_GB` (8), free VRAM >= its need (voice 7 GB,
+also waits until free RAM >= `GUARD_MIN_FREE_RAM_GB` (8), free VRAM >= its need (voice 6 GB (measured ~5.8; 7 never fit beside the desktop apps, step 170),
 Blender 3 GB, Remotion 1.5 GB; when nvidia-smi answers) and no other program (a game, a Blender
 started by hand) uses more than 1 GB of VRAM; it logs "waiting for RAM / VRAM / a game". A
 watchdog in the worker of `up` checks free RAM and the GPU temperature every 10 s: under 3 GB
