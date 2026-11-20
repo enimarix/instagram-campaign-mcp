@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from src.studio import ffmpeg, recipe
+from src.studio import ffmpeg, listen, recipe
 from src.studio.recipe import FitVertical, Music, MuteOriginal, Recipe, VoiceOver, render
 from tests.test_studio_ffmpeg import H264, needs_ffmpeg
 
@@ -105,6 +105,89 @@ def test_the_encoded_master_stays_under_the_true_peak_ceiling(tmp_path):
     assert peak <= recipe.TRUE_PEAK_MAX
     assert lufs == pytest.approx(recipe.LOUDNESS_I, abs=0.5)
     assert ffmpeg.probe(out).duration == pytest.approx(4.0, abs=0.1)
+
+
+def make_voice(tmp_path):
+    """A quiet speech-like voice: 4 Hz vowels with a short plosive each, in phrases, -30
+    LUFS with peaks 19 dB over it, like the VoxCPM2 voices."""
+    raw = tmp_path / "voice.wav"
+    syllables = ("0.072*sin(2*PI*220*t)*pow(sin(PI*4*t),2)"
+                 "+if(lt(mod(t,0.25),0.0025),0.24*sin(2*PI*1500*t),0)")
+    ffmpeg.run(["-f", "lavfi", "-i", f"aevalsrc='lt(mod(t,1.5),1.1)*({syllables})':d=6:s=48000",
+                raw], timeout_s=60)
+    return raw
+
+
+def make_mix(tmp_path, voice, *, bed_db=-17.0):
+    """`voice` over a steady bed `bed_db` dB, about 15 LU under it."""
+    mix = tmp_path / f"mix-{voice.stem}.mp4"
+    ffmpeg.run(["-f", "lavfi", "-i", f"testsrc2=size={SMALL}:rate=30:duration=6", "-i", voice,
+                "-f", "lavfi", "-i", "sine=frequency=220:duration=6", "-filter_complex",
+                f"[2:a]volume={bed_db}dB[b];[1:a][b]amix=inputs=2:normalize=0[a]",
+                "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "256k", "-shortest", *H264,
+                mix], timeout_s=60)
+    return mix
+
+
+def voice_margins(path, voice):
+    spans = listen.voice_above_bed(listen.pcm(path, timeout_s=60), listen.pcm(voice, timeout_s=60))
+    return [s["lu"] for s in spans]
+
+
+@needs_ffmpeg
+def test_dialogue_voice_tames_the_peaks_and_keeps_the_loudness(tmp_path):
+    raw = make_voice(tmp_path)
+    voice = recipe.dialogue_voice(raw, timeout_s=60)
+    (lufs, peak), (lufs2, peak2) = (recipe.loudness(p, timeout_s=60) for p in (raw, voice))
+    assert peak - lufs > 17 and peak2 - lufs2 < peak - lufs - 4
+    assert lufs2 == pytest.approx(lufs, abs=0.3)
+    assert ffmpeg.probe(voice).duration == pytest.approx(6.0, abs=0.05)
+    assert recipe.dialogue_voice(raw) == voice  # once
+    silent = make_tone(tmp_path / "silent.m4a", duration=1, tone=0)
+    assert recipe.dialogue_voice(silent) == silent
+
+
+@needs_ffmpeg
+def test_a_voiced_mix_is_normalised_by_its_dialogue(tmp_path):
+    """Step 161: the voice is mixed as dialogue_voice(), the finish raises the whole mix by
+    one gain that puts it at -14 LUFS, then limits; the voice keeps its margin over the bed
+    (the mix's own loudnorm squeezed the raw voice into it)."""
+    raw = make_voice(tmp_path)
+    voice = recipe.dialogue_voice(raw, timeout_s=60)
+    mix = make_mix(tmp_path, voice)
+    before = voice_margins(mix, voice)
+    assert 14 <= min(before) <= 17
+    out = tmp_path / "out.mp4"
+    recipe.normalize_loudness(mix, out, timeout_s=120, log_path=tmp_path / "ln.log", voice=voice)
+    lufs, peak = recipe.loudness(out, timeout_s=60)
+    assert peak <= recipe.TRUE_PEAK_MAX
+    assert lufs == pytest.approx(recipe.LOUDNESS_I, abs=1.0)
+    after = voice_margins(out, voice)
+    assert len(after) == len(before) and min(after) >= listen.VOICE_ABOVE_LU
+    assert min(after) >= min(before) - 2
+    assert ffmpeg.probe(out).duration == pytest.approx(6.0, abs=0.1)
+    old = tmp_path / "old.mp4"  # before 161: the raw voice, the mix's own loudnorm
+    recipe.normalize_loudness(make_mix(tmp_path, raw), old, timeout_s=120,
+                              log_path=tmp_path / "ln.log")
+    assert min(voice_margins(old, raw)) < min(after) - 1
+
+
+@needs_ffmpeg
+def test_voice_over_renders_are_normalised_by_the_voice(tmp_path, monkeypatch):
+    seen = {}
+    real = recipe.normalize_loudness
+
+    def spy(src, out, **kw):
+        seen.update(kw)
+        real(src, out, **kw)
+
+    monkeypatch.setattr(recipe, "normalize_loudness", spy)
+    src = make_clip(tmp_path / "in.mp4", duration=3)
+    voice = make_tone(tmp_path / "voice.m4a", duration=2, tone=1500)
+    go(tmp_path, [VoiceOver(gain_db=3)], {"source": src, "voice": voice})
+    assert (seen["voice"], seen["voice_gain_db"]) == (recipe.dialogue_voice(voice), 3)
+    go(tmp_path, [FitVertical()], {"source": src})  # no voice: today's loudnorm
+    assert seen["voice"] is None
 
 
 @needs_ffmpeg
