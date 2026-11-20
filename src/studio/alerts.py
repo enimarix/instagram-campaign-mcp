@@ -168,7 +168,8 @@ def _graph_blocked(store: CampaignStore, settings: InstagramMCPSettings) -> List
     s = breaker.state()
     if s is None:
         return []
-    then = f"Posts wait and publish by themselves when access returns. Next try "            f"{breaker.hhmm(s['until'])}."
+    then = ("Posts wait and publish by themselves when access returns. Next try "
+            f"{breaker.hhmm(s['until'])}.")
     since = to_iso(datetime.fromtimestamp(s["since"], timezone.utc))
     if s.get("code") == INVALID_TOKEN_CODE:
         return [_alert("graph_blocked", None, "error", "Meta refused the studio's token",
