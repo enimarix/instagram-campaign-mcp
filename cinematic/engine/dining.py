@@ -1,6 +1,7 @@
 """Dining room at sunset: long clothed table, roast dinner, chairs, curtained window with a
 pixelated photo sky and billboard trees outside. Coordinates: back wall/window at +Y,
-camera side at -Y, table centered at (0, -0.5), top at z 0.76."""
+camera side at -Y, table centered at (0, -0.5), top at z 0.76. The skit's table seats 5; the
+troupe's family dinner (sets.json `dinner`) is a 3 m table with a chair on each seat spot."""
 import math
 
 import bpy
@@ -33,7 +34,7 @@ def materials():
     }
 
 
-def room(M):
+def room(M, sideboard_y=-0.5):
     # back wall with a 1.8 x 1.4 window opening (x -0.9..0.9, z 0.9..2.3)
     for name, size, loc in [("wall_l", (1.6, 0.12, 2.8), (-1.7, 1.3, 1.4)), ("wall_r", (1.6, 0.12, 2.8), (1.7, 1.3, 1.4)),
                             ("wall_b", (1.8, 0.12, 0.9), (0, 1.3, 0.45)), ("wall_t", (1.8, 0.12, 0.5), (0, 1.3, 2.55))]:
@@ -57,16 +58,16 @@ def room(M):
     # side wall: framed picture and a sideboard with a lamp
     plane("art", (0.6, 0.45), (-2.43, -0.3, 1.7), M["art"], rot=(math.radians(90), 0, math.radians(90)))
     box("art_frame", (0.03, 0.68, 0.53), (-2.44, -0.3, 1.7), M["trim"])
-    box("sideboard", (0.45, 1.4, 0.82), (-2.2, -0.5, 0.41), M["wood"])
-    cyl("side_lamp_base", 0.05, 0.3, (-2.2, -0.2, 0.97), M["ceramic"], verts=8, r2=0.09)
-    cyl("side_lamp_shade", 0.1, 0.18, (-2.2, -0.2, 1.2), M["shade"], verts=8, r2=0.16)
+    box("sideboard", (0.45, 1.4, 0.82), (-2.2, sideboard_y, 0.41), M["wood"])
+    cyl("side_lamp_base", 0.05, 0.3, (-2.2, sideboard_y + 0.3, 0.97), M["ceramic"], verts=8, r2=0.09)
+    cyl("side_lamp_shade", 0.1, 0.18, (-2.2, sideboard_y + 0.3, 1.2), M["shade"], verts=8, r2=0.16)
 
 
-def table(M):
+def table(M, width=TABLE_W):
     top_z = TABLE_Z
-    x0, x1 = -TABLE_W / 2, TABLE_W / 2
+    x0, x1 = -width / 2, width / 2
     y0, y1 = TABLE_Y - TABLE_D / 2, TABLE_Y + TABLE_D / 2
-    box("table_top", (TABLE_W, TABLE_D, 0.04), (0, TABLE_Y, top_z - 0.02), M["cloth"])
+    box("table_top", (width, TABLE_D, 0.04), (0, TABLE_Y, top_z - 0.02), M["cloth"])
     drop = top_z - 0.38
     folded("skirt_front", (x0, y0), (x1, y0), top_z, drop, (0, -1), M["cloth"], folds=9, amp=0.012, flare=0.04)
     folded("skirt_back", (x1, y1), (x0, y1), top_z, drop, (0, 1), M["cloth"], folds=9, amp=0.012, flare=0.04)
@@ -101,6 +102,19 @@ def place_setting(M, x, y, face):
     # food on the plate: slice of roast + mash
     ellipsoid("plate_roast", (0.05, 0.035, 0.025), (x + 0.03, y, TABLE_Z + 0.04), M["roast"], segs=8, rings=5)
     blob("plate_mash", (0.04, 0.04, 0.025), (x - 0.04, y + 0.01, TABLE_Z + 0.035), M["mash"])
+
+
+def setting(M, chair_empty):
+    """A plate of dinner, fork, knife and glass in front of a chair (its local -Y)."""
+    def at(x, y, z):
+        return (x, y, TABLE_Z + z)
+    e = chair_empty
+    cyl("plate", 0.14, 0.022, at(0, -0.52, 0.011), M["ceramic"], verts=12, r2=0.1, parent=e)
+    cyl("plate_roast", 0.05, 0.03, at(0.03, -0.52, 0.035), M["roast"], verts=8, parent=e)
+    cyl("plate_mash", 0.04, 0.035, at(-0.04, -0.5, 0.035), M["mash"], verts=8, r2=0.05, parent=e)
+    box("fork", (0.018, 0.17, 0.006), at(-0.18, -0.52, 0.004), M["steel"], parent=e)
+    box("knife", (0.016, 0.19, 0.005), at(0.18, -0.52, 0.004), M["steel"], parent=e)
+    cyl("glass", 0.036, 0.13, at(0.2, -0.68, 0.065), M["juice"], verts=10, r2=0.03, parent=e)
 
 
 def dinner(M):
@@ -240,8 +254,18 @@ def sky(cfg):
     return Vector((math.cos(want_az) * math.cos(elev), math.sin(want_az) * math.cos(elev), math.sin(elev))).normalized()
 
 
-def build(cfg):
+def build(cfg, spec=None):
     M = materials()
+    if spec:  # the troupe's family dinner
+        room(M, sideboard_y=0.55)
+        table(M, 3.0)
+        for sp in spec["spots"].values():
+            if sp.get("seat"):
+                setting(M, chair(M, *sp["at"], sp["facing"]))
+        dinner(M)
+        lamp(M)
+        outside(M, cfg)
+        return sky(cfg)
     room(M)
     table(M)
     # chairs: three on the far side facing the camera, two on the near side (backs to camera)

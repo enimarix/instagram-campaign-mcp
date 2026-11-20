@@ -22,31 +22,47 @@ for _s, _side in (("L", "Left"), ("R", "Right")):
 
 def sample(glb, action, n_frames):
     """Import the library, play `action` (looping) and record world matrices per frame."""
+    def frames(act):
+        f0, f1 = (int(x) for x in act.frame_range)
+        return [f0 + i % max(1, f1 - f0) for i in range(n_frames)]  # loops repeat their first frame at the end
+    return sample_many(glb, [(action, frames)])[0]
+
+
+def sample_many(glb, jobs):
+    """Import the library once and, for each (action, frames) job, play the action and record
+    world matrices at those (fractional) clip frames (or at frames(action), a callable of the
+    bpy action). Returns [(rest, frames)] in order."""
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=glb)
     new = [o for o in bpy.data.objects if o not in before]
     arm = next(o for o in new if o.type == "ARMATURE")
-    act = bpy.data.actions[action]
     arm.animation_data_create()
-    arm.animation_data.action = act
-    if getattr(act, "slots", None):
-        arm.animation_data.action_slot = act.slots[0]
-    f0, f1 = (int(x) for x in act.frame_range)
-    span = max(1, f1 - f0)                       # loops repeat their first frame at the end
     rest = {b.name: arm.matrix_world @ b.matrix_local for b in arm.data.bones if b.name in MAP}
-    frames = []
     sc = bpy.context.scene
-    for i in range(n_frames):
-        sc.frame_set(f0 + i % span)
-        frames.append({n: arm.matrix_world @ arm.pose.bones[n].matrix for n in rest})
+    out = []
+    for action, at in jobs:
+        act = bpy.data.actions[action]
+        arm.animation_data.action = act
+        if getattr(act, "slots", None):
+            arm.animation_data.action_slot = act.slots[0]
+        frames = []
+        for f in (at(act) if callable(at) else at):
+            sc.frame_set(int(f), subframe=f - int(f))
+            frames.append({n: arm.matrix_world @ arm.pose.bones[n].matrix for n in rest})
+        out.append((rest, frames))
     for o in new:
         bpy.data.objects.remove(o, do_unlink=True)
-    return rest, frames
+    return out
 
 
-def apply(rig, rest_s, frames, start=1, skip=(), offsets=None):
-    """skip: target bones left at rest. offsets: {bone: [x, y, z] degrees} added on top, local space."""
-    offsets = {k: Euler([math.radians(v) for v in r]).to_quaternion() for k, r in (offsets or {}).items()}
+def _quat(degrees):
+    return Euler([math.radians(v) for v in degrees]).to_quaternion()
+
+
+def apply(rig, rest_s, frames, start=1, skip=(), offsets=None, keyed=None):
+    """Works in world space: run it on an upright rig facing -Y (move / turn the rig after). skip: target bones left at rest. offsets: {bone: [x, y, z] degrees} added on top, local space.
+    keyed: per frame, more {bone: degrees} on top (hand-keyed moves)."""
+    offsets = {k: _quat(r) for k, r in (offsets or {}).items()}
     mw = rig.matrix_world
     scale = mw.to_scale()
     def short(b):
@@ -96,6 +112,8 @@ def apply(rig, rest_s, frames, start=1, skip=(), offsets=None):
             loc_b, rot_b, _ = basis.decompose()
             if short(b) in offsets:
                 rot_b = rot_b @ offsets[short(b)]
+            if keyed and short(b) in keyed[i]:
+                rot_b = rot_b @ _quat(keyed[i][short(b)])
             if b.name in prev and prev[b.name].dot(rot_b) < 0:
                 rot_b.negate()                   # keep quaternions continuous between keys
             prev[b.name] = rot_b

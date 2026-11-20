@@ -1,0 +1,30 @@
+{
+ "_doc": "What the troupe can do. library: the Quaternius Universal Animation Library clips (CC0), retargeted on demand (`_Loop` clips loop, the others hold their last frame). moves: hand-keyed actions on top of a library `base`: `keys` add bone rotations (local degrees; on the mixamo rig an arm's Z raises it, -Z for the right arm, and a forearm's X bends the elbow) at times in seconds, or at phases 0..1 of `cycle` seconds when the move loops; `prop` puts an object in the right hand; `lie` lays the body on its back on the floor (head toward the spot's facing + 90 degrees); `face` is its default face. faces: ARKit face units (MPFB faceunits01) weights. seated: what every sitting clip adds (shoulders stay at rest, head a little down to the plate).",
+ "library": ["A_TPose", "Crouch_Fwd_Loop", "Crouch_Idle_Loop", "Dance_Loop", "Death01", "Driving_Loop", "Fixing_Kneeling", "Hit_Chest", "Hit_Head", "Idle_Loop", "Idle_Talking_Loop", "Idle_Torch_Loop", "Interact", "Jog_Fwd_Loop", "Jump_Land", "Jump_Loop", "Jump_Start", "PickUp_Table", "Pistol_Aim_Down", "Pistol_Aim_Neutral", "Pistol_Aim_Up", "Pistol_Idle_Loop", "Pistol_Reload", "Pistol_Shoot", "Punch_Cross", "Punch_Enter", "Punch_Jab", "Push_Loop", "Roll", "Roll_RM", "Sitting_Enter", "Sitting_Exit", "Sitting_Idle_Loop", "Sitting_Talking_Loop", "Spell_Simple_Enter", "Spell_Simple_Exit", "Spell_Simple_Idle_Loop", "Spell_Simple_Shoot", "Sprint_Loop", "Swim_Fwd_Loop", "Swim_Idle_Loop", "Sword_Attack", "Sword_Attack_RM", "Sword_Idle", "Walk_Formal_Loop", "Walk_Loop"],
+ "seated": {"skip": ["LeftShoulder", "RightShoulder"], "offsets": {"Head": [-12, 0, 0], "Neck": [-6, 0, 0]}},
+ "moves": {
+  "crunch": {"base": "Sitting_Idle_Loop", "lie": true, "cycle": 1.2,
+   "keys": {"Spine": [[0, [0, 0, 0]], [0.5, [18, 0, 0]], [1, [0, 0, 0]]], "Spine1": [[0, [0, 0, 0]], [0.5, [18, 0, 0]], [1, [0, 0, 0]]],
+    "Spine2": [[0, [0, 0, 0]], [0.5, [14, 0, 0]], [1, [0, 0, 0]]], "Neck": [[0, [0, 0, 0]], [0.5, [12, 0, 0]], [1, [0, 0, 0]]]}},
+  "fork_up": {"base": "Sitting_Idle_Loop", "prop": "fork",
+   "keys": {"RightArm": [[0, [0, 0, 0]], [0.35, [0, 0, -110]]], "RightForeArm": [[0, [0, 0, 0]], [0.35, [-80, 0, 0]]]}},
+  "faint": {"base": "Death01", "speed": 0.6, "face": "jaw_drop"},
+  "cheer": {"base": "Idle_Loop", "cycle": 0.7, "face": "shout",
+   "keys": {"RightArm": [[0, [0, 0, -140]], [0.5, [0, 0, -165]], [1, [0, 0, -140]]], "LeftArm": [[0, [0, 0, 140]], [0.5, [0, 0, 165]], [1, [0, 0, 140]]],
+    "RightForeArm": [[0, [-60, 0, 0]], [0.5, [-20, 0, 0]], [1, [-60, 0, 0]]], "LeftForeArm": [[0, [-60, 0, 0]], [0.5, [-20, 0, 0]], [1, [-60, 0, 0]]]}},
+  "shout": {"base": "Idle_Talking_Loop", "face": "shout"},
+  "phone_photo": {"base": "Idle_Loop", "prop": "phone",
+   "keys": {"RightArm": [[0, [0, 0, -130]]], "RightForeArm": [[0, [20, 0, 0]]]}},
+  "carry_plate": {"base": "Walk_Formal_Loop", "prop": "plate",
+   "keys": {"RightArm": [[0, [0, 0, -40]]], "RightForeArm": [[0, [70, 0, 0]]]}},
+  "curl": {"base": "Sitting_Idle_Loop", "prop": "dumbbell", "cycle": 1.6,
+   "keys": {"RightForeArm": [[0, [0, 0, 0]], [0.5, [110, 0, 0]], [1, [0, 0, 0]]]}}
+ },
+ "faces": {
+  "jaw_drop": {"jawOpen": 0.9, "browInnerUp": 1.0, "browOuterUpLeft": 0.8, "browOuterUpRight": 0.8, "eyeWideLeft": 1.0, "eyeWideRight": 1.0},
+  "outraged": {"browDownLeft": 1.0, "browDownRight": 1.0, "mouthFrownLeft": 1.0, "mouthFrownRight": 1.0, "noseSneerLeft": 0.7, "noseSneerRight": 0.7, "jawOpen": 0.25, "eyeSquintLeft": 0.5, "eyeSquintRight": 0.5},
+  "shout": {"jawOpen": 1.0, "mouthStretchLeft": 0.6, "mouthStretchRight": 0.6, "browDownLeft": 0.7, "browDownRight": 0.7, "eyeSquintLeft": 0.4, "eyeSquintRight": 0.4},
+  "smile": {"mouthSmileLeft": 1.0, "mouthSmileRight": 1.0, "cheekSquintLeft": 0.6, "cheekSquintRight": 0.6},
+  "disgust": {"noseSneerLeft": 1.0, "noseSneerRight": 1.0, "mouthUpperUpLeft": 0.8, "mouthUpperUpRight": 0.8, "browDownLeft": 0.6, "browDownRight": 0.6, "mouthFrownLeft": 0.5, "mouthFrownRight": 0.5}
+ }
+}

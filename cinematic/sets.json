@@ -1,0 +1,41 @@
+{
+ "_doc": "The set library of the cinematic engine. Each set is built by engine/<module>.py; spots are where the troupe stands or sits (x, y on the floor in metres, facing in degrees: 0 looks at -Y, the camera side; 90 looks at +X). A seat spot needs a sitting action (actions.json), any other spot a standing one; z raises a seat (bar stools). wide: the set's establishing camera; center: what `top` looks down on. lights: warm saturated presets (sun = key colour, its azimuth / elevation in degrees when the set has no sky of its own, fill = the soft camera-side light, ambient = the flat world light).",
+ "lights": {
+  "sunset": {"sun": [1.0, 0.56, 0.3], "sun_energy": 5.0, "sun_dir": [112, 8], "fill": [1.0, 0.78, 0.6], "fill_energy": 60, "ambient": [0.55, 0.36, 0.25], "ambient_strength": 0.25},
+  "night": {"sun": [0.45, 0.55, 1.0], "sun_energy": 1.5, "sun_dir": [60, 25], "fill": [1.0, 0.62, 0.32], "fill_energy": 35, "ambient": [0.2, 0.18, 0.35], "ambient_strength": 0.08},
+  "gym": {"sun": [1.0, 0.86, 0.68], "sun_energy": 3.5, "sun_dir": [120, 55], "fill": [1.0, 0.8, 0.6], "fill_energy": 90, "ambient": [0.6, 0.45, 0.35], "ambient_strength": 0.35},
+  "bistro": {"sun": [1.0, 0.5, 0.25], "sun_energy": 2.0, "sun_dir": [70, 20], "fill": [1.0, 0.62, 0.35], "fill_energy": 70, "ambient": [0.5, 0.3, 0.2], "ambient_strength": 0.2},
+  "beach": {"sun": [1.0, 0.7, 0.45], "sun_energy": 6.0, "sun_dir": [100, 12], "fill": [1.0, 0.8, 0.65], "fill_energy": 50, "ambient": [0.6, 0.48, 0.4], "ambient_strength": 0.45}
+ },
+ "sets": {
+  "dinner": {"label": "Family dinner", "module": "dining", "light": "sunset", "seats": 8,
+   "wide": {"pos": [2.95, -0.5, 1.75], "look_at": [-0.6, -0.5, 0.85], "lens": 20}, "center": [0, -0.5, 0.76],
+   "spots": {"seat0": {"at": [-1.0, 0.25], "facing": 0, "seat": true}, "seat1": {"at": [0.0, 0.25], "facing": 0, "seat": true},
+    "seat2": {"at": [1.0, 0.25], "facing": 0, "seat": true}, "seat3": {"at": [-1.78, -0.5], "facing": 90, "seat": true},
+    "seat4": {"at": [1.78, -0.5], "facing": -90, "seat": true}, "seat5": {"at": [-1.0, -1.28], "facing": 180, "seat": true},
+    "seat6": {"at": [0.0, -1.28], "facing": 180, "seat": true}, "seat7": {"at": [1.0, -1.28], "facing": 180, "seat": true},
+    "stand0": {"at": [-0.5, 0.85], "facing": 0}, "stand1": {"at": [0.5, 0.85], "facing": 0}, "door": {"at": [2.3, -1.6], "facing": 60}}},
+  "living": {"label": "Living room", "module": "living", "light": "sunset",
+   "wide": {"pos": [0.4, -4.2, 1.5], "look_at": [0, -0.3, 0.6], "lens": 24}, "center": [0, -0.6, 0],
+   "spots": {"sofa0": {"at": [-0.45, 0.95], "facing": 0, "seat": true}, "sofa1": {"at": [0.45, 0.95], "facing": 0, "seat": true},
+    "floor": {"at": [0.1, -1.1], "facing": 90}, "stand0": {"at": [1.5, -0.4], "facing": -20}, "stand1": {"at": [-1.5, -0.4], "facing": 20}}},
+  "gym": {"label": "Gym", "module": "gym", "light": "gym",
+   "wide": {"pos": [0.8, -4.2, 1.6], "look_at": [0, -0.2, 0.8], "lens": 24}, "center": [0, -0.3, 0],
+   "spots": {"bench": {"at": [0.0, -0.5], "facing": 0, "seat": true}, "floor": {"at": [-0.4, -1.5], "facing": 90},
+    "stand0": {"at": [1.1, -0.9], "facing": -15}, "stand1": {"at": [-1.3, 0.3], "facing": 15}, "stand2": {"at": [0.7, 0.6], "facing": 0}}},
+  "kitchen": {"label": "Night kitchen", "module": "kitchen", "light": "night",
+   "wide": {"pos": [0.9, -3.6, 1.7], "look_at": [0, 0.1, 0.9], "lens": 24}, "center": [0, -0.2, 0],
+   "spots": {"stool0": {"at": [-0.45, 0.3], "facing": 0, "seat": true, "z": 0.38}, "stool1": {"at": [0.45, 0.3], "facing": 0, "seat": true, "z": 0.38},
+    "fridge": {"at": [1.5, 0.55], "facing": -60}, "stand0": {"at": [-1.5, -0.6], "facing": 20}, "stand1": {"at": [0.9, -1.0], "facing": -10}}},
+  "restaurant": {"label": "Restaurant", "module": "restaurant", "light": "bistro",
+   "wide": {"pos": [0.5, -4.6, 1.9], "look_at": [0, -0.1, 0.8], "lens": 22}, "center": [0, -0.2, 0.75],
+   "spots": {"t0a": {"at": [-1.45, 1.25], "facing": 0, "seat": true}, "t0b": {"at": [-1.45, 0.05], "facing": 180, "seat": true},
+    "t1a": {"at": [1.45, 1.25], "facing": 0, "seat": true}, "t1b": {"at": [1.45, 0.05], "facing": 180, "seat": true},
+    "t2a": {"at": [-0.6, -1.2], "facing": 90, "seat": true}, "t2b": {"at": [0.6, -1.2], "facing": -90, "seat": true},
+    "waiter": {"at": [2.4, -1.0], "facing": 60}, "stand0": {"at": [0.0, 0.7], "facing": 0}}},
+  "beach": {"label": "Beach", "module": "beach", "light": "beach",
+   "wide": {"pos": [0.3, -4.0, 1.4], "look_at": [0, 1.0, 0.7], "lens": 24}, "center": [0, 0.2, 0],
+   "spots": {"towel0": {"at": [-0.7, 0.2], "facing": 90}, "towel1": {"at": [0.8, 0.4], "facing": -90},
+    "stand0": {"at": [-1.2, -0.8], "facing": 10}, "stand1": {"at": [1.2, -0.6], "facing": -10}, "stand2": {"at": [0.0, 1.2], "facing": 0}}}
+ }
+}

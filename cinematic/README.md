@@ -8,20 +8,56 @@ cuts between a close and a wide shot. It is a second engine next to the Remotion
 TTS voice, QC and end card (`src/studio/cinematic.py`).
 
 - Setup (once, about 1.6 GB, git-ignored): `python cinematic/setup.py` downloads everything
-  below into `cinematic/tools/`. `ig-campaign doctor` checks it.
+  below into `cinematic/tools/`. `ig-campaign doctor` checks it. `CINEMATIC_TOOLS=<folder>`
+  points the engine (and setup.py) at tools elsewhere: a git worktree sets it to the main
+  checkout's `cinematic/tools` and never links to them (removing a worktree follows a link and
+  deletes its target). The engine enables MPFB for each run itself (`kit.mpfb()`), so the
+  portable Blender needs no saved preferences.
 - Props (`CinematicSkit`): `hook` (the silent "POV: ..." text, on screen from frame 0 for
-  `hookSeconds`), `character` (a preset of `cast.json`: dad, mum, grandma, teen), `lines`
+  `hookSeconds`), `character` (any of the troupe in `cast.json`), `lines`
   (1-6, spoken by the character), `shots` (auto | close | wide), `captions`, `outro` (end card
   tagline), `accent`, `citations`, `voice`.
 - A render: TTS voice → Rhubarb mouth cues (phonetic, any language; mouth flaps without
   audio) → Blender (`engine/shot.py`, EEVEE, 720x1280 at 24 fps) → ffmpeg grade (bloom, warm
   balance, S-curve, vignette) → the shared recipe ops (hook text, captions, live end card,
   loudness). About 2.5 s per frame: a 15 s video takes about 15 minutes.
-- Engine: `engine/kit.py` (shared PS2 materials and low-poly shapes), `engine/dining.py` (the
-  set: room, table, dinner, chairs, curtains, lamp, billboard trees, pixelated sunset sky),
-  `engine/retarget.py` (CC0 clip onto the MPFB rig), `engine/shot.py` (character, lip-sync,
-  cameras, render). A new set is a new file like `dining.py`; `engine/make_assets.py` redraws
-  the small set textures in `engine/assets/`.
+- Engine: `engine/kit.py` (shared PS2 materials, low-poly shapes, model props, rooms),
+  `engine/dining.py` (the set: room, table, dinner, chairs, curtains, lamp, billboard trees,
+  pixelated sunset sky), `engine/retarget.py` (CC0 clip onto the MPFB rig), `engine/people.py`
+  (characters, lip-sync, faces, actions), `engine/stage.py` (render settings, lights, cameras),
+  `engine/shot.py` (the skit's run). `engine/make_assets.py` redraws the small set textures in
+  `engine/assets/`.
+
+## The troupe: shot lists (step 163)
+
+The shared engine of the troupe styles (164 « Sitcom 3D absurde », 165 « Toon Chaos 3D »):
+`src/studio/troupe.py` validates a shot list and renders it (`engine/troupe.py`, one Blender run
+for every shot not cached yet). Example: `shotlists/proof.json`.
+
+- **Troupe** (`cast.json`): 16 looks from child to grandparent, skins, bodies, hair, outfits
+  (gym outfits tagged `gym`). Any 1-8 per shot.
+- **Sets** (`sets.json`, one `engine/<module>.py` each): `dinner` (a 3 m table, 8 seats),
+  `living` (sofa, rug floor spot), `gym` (Polytoon: bench, rack, treadmill, bag...),
+  `kitchen` (night: counters, glowing fridge, stools), `restaurant` (three tables for two, a
+  waiter spot), `beach` (sunset sea, umbrella, towels). Each lists its named spots (seats,
+  standing marks, floor), an establishing `wide` camera and a light preset (`sunset`, `night`,
+  `gym`, `bistro`, `beach`; a shot may pick another).
+- **Actions** (`actions.json`): every library clip by name (retargeted on demand; `_Loop` clips
+  loop, others hold their end), and hand-keyed moves on top of a clip: `crunch` (lying on the
+  floor), `fork_up` (fork frozen in the air), `faint` (slow fall), `cheer`, `shout`,
+  `phone_photo`, `carry_plate`, `curl` (dumbbell). Faces: `jaw_drop`, `outraged`, `shout`,
+  `smile`, `disgust` (MPFB face units), landing at `face_at`. Each actor's clock starts at its
+  own offset, so a crowd never moves in sync. Sitting actions only go on seat spots.
+- **Shot**: `set`, `cast` [{`who`, `at` (spot or [x, y]), `facing`, `to` (walk to a spot),
+  `action`, `face`, `face_at`, `offset`}], `camera` {`kind`: wide | close | top | whip | crash |
+  dolly, `on`: the actor it lands on}, `duration` (0.3-6 s), `speed` (x0.1-x10, or a [from, to]
+  ramp), `freeze` (the last frame held, s), `seed`.
+- Each shot renders at 720x1280 24 fps (EEVEE, the skit's look), is graded like the skit, held
+  for its freeze and cached under `<media root>/troupe/shots/<key>.mp4` (the key hashes the
+  resolved shot and the engine's files); the shots end to end are the track
+  (`<media root>/troupe/tracks/`). Cost: `shotlists/proof.json` (8 shots, 28 actors built,
+  11 s of video) took 18.6 min, about 1.7 minutes per second of video (a one-actor 1 s shot:
+  ~1.1 min). Cached shots cost nothing on a re-render.
 
 | Piece | Source | License |
 |---|---|---|

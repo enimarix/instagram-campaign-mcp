@@ -1,0 +1,37 @@
+{
+ "shots": [
+  {"set": "dinner", "duration": 1.5, "freeze": 0.6, "camera": {"kind": "wide"}, "cast": [
+    {"who": "dad", "at": "seat1", "action": "fork_up", "face": "jaw_drop", "face_at": 0.4},
+    {"who": "mum", "at": "seat3", "action": "fork_up", "face": "jaw_drop", "face_at": 0.5},
+    {"who": "grandma", "at": "seat0", "action": "fork_up", "face": "jaw_drop", "face_at": 0.45},
+    {"who": "teen", "at": "seat2", "action": "fork_up", "face": "jaw_drop", "face_at": 0.6},
+    {"who": "kid_girl", "at": "seat5", "action": "fork_up", "face": "jaw_drop", "face_at": 0.5},
+    {"who": "aunt", "at": "seat6", "action": "fork_up", "face": "jaw_drop", "face_at": 0.55},
+    {"who": "uncle", "at": "seat7", "action": "fork_up", "face": "jaw_drop", "face_at": 0.4}]},
+  {"set": "dinner", "duration": 1.2, "camera": {"kind": "crash", "on": "grandma"}, "cast": [
+    {"who": "grandma", "at": "seat0", "action": "fork_up", "face": "jaw_drop"},
+    {"who": "dad", "at": "seat1", "action": "fork_up", "face": "jaw_drop"},
+    {"who": "uncle", "at": "seat7", "action": "fork_up", "face": "jaw_drop"}]},
+  {"set": "dinner", "duration": 1.2, "camera": {"kind": "dolly", "on": "dad"}, "cast": [
+    {"who": "dad", "at": "seat1", "action": "Sitting_Talking_Loop", "face": "outraged", "face_at": 0.2},
+    {"who": "grandma", "at": "seat0", "action": "fork_up", "face": "jaw_drop"},
+    {"who": "teen", "at": "seat2", "action": "fork_up", "face": "jaw_drop"}]},
+  {"set": "dinner", "duration": 1.0, "camera": {"kind": "whip", "on": "teen"}, "cast": [
+    {"who": "teen", "at": "seat2", "action": "Sitting_Talking_Loop", "face": "shout"},
+    {"who": "dad", "at": "seat1", "action": "fork_up", "face": "outraged"},
+    {"who": "kid_girl", "at": "seat5", "action": "fork_up", "face": "jaw_drop"}]},
+  {"set": "dinner", "duration": 1.0, "camera": {"kind": "top"}, "cast": [
+    {"who": "dad", "at": "seat1", "action": "fork_up"}, {"who": "mum", "at": "seat3", "action": "fork_up"},
+    {"who": "grandma", "at": "seat0", "action": "fork_up"}, {"who": "teen", "at": "seat2", "action": "fork_up"},
+    {"who": "kid_girl", "at": "seat5", "action": "fork_up"}, {"who": "aunt", "at": "seat6", "action": "fork_up"},
+    {"who": "uncle", "at": "seat7", "action": "fork_up"}]},
+  {"set": "living", "duration": 1.5, "speed": 10, "camera": {"kind": "wide"}, "cast": [
+    {"who": "gym_mum", "at": "floor", "action": "crunch"},
+    {"who": "dad", "at": "sofa1", "action": "Sitting_Idle_Loop", "face": "jaw_drop"}]},
+  {"set": "living", "duration": 1.0, "speed": 10, "camera": {"kind": "top"}, "cast": [
+    {"who": "gym_mum", "at": "floor", "action": "crunch"}]},
+  {"set": "gym", "duration": 2.0, "speed": [1.0, 0.3], "camera": {"kind": "dolly", "on": "coach"}, "cast": [
+    {"who": "coach", "at": "bench", "action": "curl", "face": "shout", "face_at": 1.0},
+    {"who": "gym_girl", "at": "stand0", "action": "cheer"}]}
+ ]
+}
