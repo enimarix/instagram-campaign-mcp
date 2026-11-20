@@ -66,7 +66,7 @@ LOUDNORM = f"loudnorm=I={LOUDNESS_I}:TP={LOUDNESS_TP}:LRA={LOUDNESS_LRA}"
 # 4x-oversampled limiter (a true-peak estimate) at LIMIT_DB, the encoded file measured, and
 # encoded again with the limiter lower by the overshoot, and the gain into it up by what the
 # limiting took off, while it is out (at most LIMIT_TRIES encodes).
-TRUE_PEAK_MAX, LOUDNESS_TOL, LIMIT_DB, LIMIT_TRIES = -1.0, 0.5, -2.0, 3
+TRUE_PEAK_MAX, LOUDNESS_TOL, LIMIT_DB, LIMIT_TRIES = -1.0, 0.5, -2.0, 4
 AUDIO_FORMAT = f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo"
 
 # End of every video filtergraph: square pixels, output frame rate and pixel format.
