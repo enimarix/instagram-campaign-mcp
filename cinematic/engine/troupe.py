@@ -25,6 +25,8 @@ import stage  # noqa: E402
 
 
 def render_shot(cfg, shot):
+    # ponytail: every shot rebuilds its set and actors (~10 s an actor); group the shots that
+    # share a set and cast into one build if build time ever matters next to render time.
     s = stage.reset(cfg)
     fps, frames = cfg["fps"], shot["frames"]
     spec = stage.SETS["sets"][shot["set"]]
