@@ -938,10 +938,11 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
     the encoded file. The video is copied. The audio is cut back to the source's length
     (loudnorm flushes ~0.1 s more than it was given).
 
-    A voiced mix (`voice`: the voice track, mixed in at `voice_gain_db`) is normalised by its
-    dialogue (step 161): one linear gain puts the voice's gated loudness at LOUDNESS_I, then
-    the limiter; the gain goes up by what the limiter took off the mix. A dynamic loudnorm
-    there squeezed the quiet voice into the bed (7-11 LU over it instead of 14-15).
+    A voiced mix (`voice`: the voice track as mixed, dialogue_voice(), at `voice_gain_db`) is
+    normalised by its dialogue (step 161): one linear gain puts the voice's gated loudness at
+    LOUDNESS_I (the mix's kept within DIALOGUE_SPREAD of it), then the limiter; the gain goes
+    up by what the limiter took off the mix. A dynamic loudnorm there squeezed the quiet voice
+    into the bed (7-11 LU over it instead of 14-15).
     Otherwise: two-pass loudnorm, measure, then apply with the measured values (linear gain
     when the true-peak target allows it). Digital silence (integrated loudness -inf) passes
     through unchanged."""
@@ -987,8 +988,7 @@ def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
     card clips (none: the static card). Every output gets a final loudness pass
     (LOUDNESS_*), by the voice when there is one: `voice`, the voice the source already
     carries at unity gain (its dialogue_voice()), else the voice_over op's input. Returns the
-    output's MediaInfo.
-    `timeout_s` applies to each ffmpeg run."""
+    output's MediaInfo. `timeout_s` applies to each ffmpeg run."""
     paths = {k: Path(v) for k, v in inputs.items()}
     if "source" not in paths:
         raise ValueError("inputs must contain 'source'")
