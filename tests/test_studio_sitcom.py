@@ -78,6 +78,7 @@ def test_speeds_freeze_reactions_and_close_ups():
     assert crunch and all(s["speed"] == 10.0 for s in crunch)  # x10 on the repeated gesture
     last = [s for s in shots if s["set"] == "living"][-1]
     assert last["freeze"] == pytest.approx(0.9, abs=1 / 24)  # the punchline frozen
+    assert last["camera"]["kind"] in ("wide", "top")  # on the whole action, not a face
     slow = [s for s in shots if s["speed"] in ([1.0, 0.3], 0.3)]
     assert slow[0]["speed"] == [1.0, 0.3]  # a ramp into the slow motion
     said = [s for s in shots if s["camera"] == {"kind": "dolly", "on": "dad"}]  # the speaker's line
@@ -174,13 +175,23 @@ def test_characters_speak_in_another_approved_voice_than_the_narrator():
     assert sitcom.say_voice("grandma", "douce_nuit") == "conteur_grave"
 
 
-def test_voice_says_fills_each_character_line_once(tmp_path):
+def test_voice_says_fills_each_character_line_once(tmp_path, monkeypatch):
     s = InstagramMCPSettings(_env_file=None, instagram_access_token=None, database_path=":memory:",
                              media_root=str(tmp_path))  # tts none: estimated lengths, no audio
     filled = sitcom.voice_says(PROPS, s, None)
     say = filled["scenes"][0]["beats"][1]["say"]
     assert say["seconds"] > 0 and "audioSrc" not in say
     assert sitcom.voice_says(filled, s, None) is filled  # nothing left to fill
+    heard = []
+
+    class Provider:
+        def synthesize(self, text, voice):
+            heard.append(voice)
+            return type("S", (), {"duration_s": 1.2, "audio_path": None})()
+
+    monkeypatch.setattr(sitcom, "get_provider", lambda settings: Provider())
+    sitcom.voice_says(PROPS, s.model_copy(update={"tts_voice": "conteur_grave"}), None)
+    assert heard == ["douce_nuit"]  # the default narrator voice is never a character's
     assert motion.SCRIPTS["SitcomSkit"](PROPS) == [
         PROPS["hook"], "Chaque plat en photo.", "Tout le monde attend.", "Cent crunchs.", "Et elle tombe."]
 

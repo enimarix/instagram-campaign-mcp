@@ -52,6 +52,12 @@ for every shot not cached yet). Example: `shotlists/proof.json`.
   `action`, `face`, `face_at`, `offset`}], `camera` {`kind`: wide | close | top | whip | crash |
   dolly, `on`: the actor it lands on}, `duration` (0.3-6 s), `speed` (x0.1-x10, or a [from, to]
   ramp), `freeze` (the last frame held, s), `seed`.
+- **Wardrobe** (step 164): each character has its own `top` colour in `cast.json`;
+  `engine/people.py` `dress()` repaints its garment's texture (`_garments`: `flat` = the
+  logo-free AO shading of the garment in that colour, for the MakeHuman tees whose print shows
+  the MakeHuman logo; `pattern` = the garment's own stripes in it; the `keep` regions, jeans and
+  skirts, stay as they are). No MakeHuman logo shows, and `troupe.py` refuses a shot where two
+  actors wear the same top.
 - Each shot renders at 720x1280 24 fps (EEVEE, the skit's look), is graded like the skit, held
   for its freeze and cached under `<media root>/troupe/shots/<key>.mp4` (the key hashes the
   resolved shot and the engine's files); the shots end to end are the track
@@ -76,6 +82,20 @@ Props library (for new sets): `kit.prop("<path under tools/models>", loc, rot_z,
 a model (.glb/.gltf/.fbx), stands it on `loc` and scales it to `height` m (Kenney models come
 small: give them a height), and finds FBX textures moved inside their pack. The lists are in
 `setup.py` (`POLYHAVEN`, `KENNEY`, `ITCH`): add a name there and re-run it.
+
+## Sitcom 3D (style `sitcom`, step 164)
+
+« Sitcom 3D absurde », the style the content agent invented (style request #2): the troupe in
+absurd skits under a French voice-over. Remotion template `SitcomSkit` (`motion/README.md`)
+times the skit; `src/studio/sitcom.py` turns its parts into a shot list: a cut every 1-2 s, at
+least three angles a scene (the scene opens wide, the skit on a crash zoom into the first
+action; then reaction close-ups on the others, top-down, wide, close, whip, dolly), x10 for
+repeated gestures, a slow-mo ramp into falls, the punchline's last frame held, a close-up built
+with its actor and the two nearest only. The light is a `sitcom*` preset of `sets.json`
+(saturated warm key, pink fill, a turquoise / emerald side light) and the grade adds
+saturation to the PS2 look (`sitcom.GRADE`). The characters' lines get their own approved
+voice (`say_voice`: by gender, never the narrator's). Cost: about 1.7 min of Blender per second
+of video, cached per shot.
 
 ## Macro 3D plates (style `macro3d`, step 154)
 

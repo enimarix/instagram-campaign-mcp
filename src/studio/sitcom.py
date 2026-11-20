@@ -64,6 +64,7 @@ def voice_says(props: Dict[str, Any], settings: InstagramMCPSettings,
     """`props` with each character line's `seconds` (and `audioSrc` when the provider makes
     audio) filled, one TTS call per line in the character's own voice. Props whose lines are
     all filled come back unchanged (the same object)."""
+    narrator = narrator or settings.tts_voice or None  # the voice the narrator gets
     provider, out, changed = get_provider(settings), [], False
     for scene in props["scenes"]:
         beats = []
@@ -170,6 +171,7 @@ def shot_list(props: Dict[str, Any], parts: Sequence[Dict[str, Any]]) -> Dict[st
         speaker = beat["say"]["who"] if part["part"] == "say" and beat.get("say") else None
         lead = speaker or beat["who"]
         others = [m["who"] for m in scene["cast"] if m["who"] != beat["who"]]
+        frozen = i + 1 < len(parts) and parts[i + 1]["part"] == "freeze"
         for k in range(n):
             frames = cuts[k + 1] - cuts[k]
             if frames < 2:
@@ -180,6 +182,9 @@ def shot_list(props: Dict[str, Any], parts: Sequence[Dict[str, Any]]) -> Dict[st
                 kind, on = ("crash", lead) if si == 0 else ("wide", None)
             elif speaker and k == 0:
                 kind, on = "dolly", speaker
+            elif k == n - 1 and frozen:  # the frozen punchline shows the whole action
+                kind = "top" if shots and shots[-1]["camera"]["kind"] == "wide" else "wide"
+                on = None
             else:
                 kind = ROTATION[(j - 1) % len(ROTATION)]
                 on = lead
