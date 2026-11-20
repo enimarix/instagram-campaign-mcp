@@ -2,7 +2,7 @@
 
     python cinematic/setup.py
 
-Skips what is already there, so it is safe to re-run. Sources and licences: cinematic/README.md.
+CINEMATIC_TOOLS=<folder> installs (or completes) the tools there instead. Skips what is already there, so it is safe to re-run. Sources and licences: cinematic/README.md.
 ponytail: Windows builds only (the studio machine); add the Linux Blender / Rhubarb archives
 if the worker ever runs elsewhere.
 """
@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import http.cookiejar
 import json
+import os
 import re
 import shutil
-import subprocess
 import sys
 import tarfile
 import urllib.parse
@@ -20,9 +20,10 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-TOOLS = Path(__file__).resolve().parent / "tools"
+TOOLS = Path(os.environ.get("CINEMATIC_TOOLS") or Path(__file__).resolve().parent / "tools")
 DL = TOOLS / "dl"
 BLENDER = TOOLS / "blender-5.2.4-windows-x64"
+# MPFB and its assets in its user-data folder; the engine enables it there (kit.mpfb()).
 MPFB = BLENDER / "portable" / "extensions" / ".user" / "user_default" / "mpfb"
 MH = "https://files.makehumancommunity.org"
 TEXTURES = ("WoodFloor051", "Wood049", "Fabric061", "Wallpaper001A")
@@ -150,9 +151,6 @@ def main() -> None:
         for url in (f"{MH}/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip",
                     f"{MH}/functional/visemes02.zip", f"{MH}/functional/faceunits01.zip"):
             unzip(fetch(url, url.rsplit("/", 1)[1]), MPFB / "data")
-        subprocess.run([str(BLENDER / "blender.exe"), "-b", "--python-expr",
-                        "import bpy; bpy.ops.preferences.addon_enable(module='bl_ext.user_default.mpfb');"
-                        " bpy.ops.wm.save_userpref()"], check=True)
     if not (TOOLS / "Rhubarb-Lip-Sync-1.14.0-Windows").is_dir():
         unzip(fetch("https://github.com/DanielSWolf/rhubarb-lip-sync/releases/download/v1.14.0/"
                     "Rhubarb-Lip-Sync-1.14.0-Windows.zip", "rhubarb.zip"), TOOLS)

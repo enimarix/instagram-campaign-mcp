@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -33,11 +34,25 @@ from .tts import LineTiming, reading_timings
 TEMPLATE = "CinematicSkit"
 STYLE, STYLE_LABEL = "blender", "Blender"
 ROOT = Path(__file__).resolve().parents[2] / "cinematic"
-TOOLS = ROOT / "tools"
+# The tools (cinematic/setup.py, git-ignored): CINEMATIC_TOOLS points elsewhere, so a worktree
+# renders with the main checkout's tools, never through a link (a removed worktree's link once
+# deleted them). Blender gets the same path (_run), for the engine's kit.py.
+TOOLS = Path(os.environ.get("CINEMATIC_TOOLS") or ROOT / "tools")
 BLENDER = TOOLS / "blender-5.2.4-windows-x64" / "blender.exe"
 RHUBARB = TOOLS / "Rhubarb-Lip-Sync-1.14.0-Windows" / "rhubarb.exe"
-CAST: Dict[str, Dict[str, Any]] = {k: v for k, v in json.loads(
-    (ROOT / "cast.json").read_text(encoding="utf-8")).items() if not k.startswith("_")}
+
+
+def _registry(name: str) -> Dict[str, Any]:
+    return {k: v for k, v in json.loads((ROOT / name).read_text(encoding="utf-8")).items()
+            if not k.startswith("_")}
+
+
+CAST: Dict[str, Dict[str, Any]] = _registry("cast.json")  # the troupe's looks
+ACTIONS: Dict[str, Any] = _registry("actions.json")
+# The skit's character sits at the far side of the dining table, talking (a CC0 library clip).
+SKIT_SEAT = {"location": [0, 0.15, 0], "clip": {
+    "glb": "anim/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb",
+    "action": "Sitting_Talking_Loop", **ACTIONS["seated"]}}
 
 FPS = recipe.FPS  # the output; Blender renders at BLENDER_FPS, the PS2 cutscene rate
 BLENDER_FPS = 24
@@ -201,7 +216,8 @@ def find_blender() -> str:
 def _run(cmd: Sequence[Any], what: str, timeout_s: float) -> None:
     try:  # low priority (166); guard.Stopped when the resource guard killed it
         done = guard.run([str(c) for c in cmd], capture_output=True, text=True,
-                         encoding="utf-8", errors="replace", timeout=timeout_s)
+                         encoding="utf-8", errors="replace", timeout=timeout_s,
+                         env={**os.environ, "CINEMATIC_TOOLS": str(TOOLS)})
     except subprocess.TimeoutExpired:
         raise CinematicError(f"{what} ran past {timeout_s:g} s") from None
     if done.returncode != 0:
@@ -223,7 +239,7 @@ def mouth_cues(audio: Optional[Path], timings: Sequence[LineTiming], work: Path,
 def _blender(p: Props, timings: Sequence[LineTiming], cues: List[Dict[str, Any]],
              frames: int, out: Path, stills: Optional[List[int]] = None) -> None:
     cfg = {"out": str(out), "fps": BLENDER_FPS, "frames": frames, "size": list(RENDER_SIZE),
-           "cues": cues, "character": CAST[p.character], "cameras": cameras(p, timings),
+           "cues": cues, "character": {**CAST[p.character], **SKIT_SEAT}, "cameras": cameras(p, timings),
            "stills": stills}
     cfg_path = out / "shot.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")

@@ -12,12 +12,32 @@ from mathutils import Vector
 
 ENGINE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(ENGINE, "assets")
-TEX = os.path.join(ENGINE, "..", "tools", "tex")
-MODELS = os.path.join(ENGINE, "..", "tools", "models")  # cinematic/setup.py
+TOOLS = os.environ.get("CINEMATIC_TOOLS") or os.path.join(ENGINE, "..", "tools")  # cinematic/setup.py
+TEX = os.path.join(TOOLS, "tex")
+MODELS = os.path.join(TOOLS, "models")
 
 
 def asset(name):
     return os.path.join(ASSETS, name)
+
+
+def mpfb():
+    """MPFB's services. setup.py unpacks MPFB into its user-data folder (extensions/.user/
+    user_default/mpfb) and the portable Blender has no saved prefs: point the user repo there
+    and enable it for this run only (nothing is saved)."""
+    try:
+        from bl_ext.user_default.mpfb import services
+        return services
+    except ModuleNotFoundError:
+        pass
+    import addon_utils
+    bpy.context.preferences.use_preferences_save = False
+    repo = next(r for r in bpy.context.preferences.extensions.repos if r.module == "user_default")
+    repo.use_custom_directory = True
+    repo.custom_directory = os.path.join(bpy.utils.user_resource("EXTENSIONS"), ".user", "user_default")
+    addon_utils.enable("bl_ext.user_default.mpfb", default_set=True)
+    from bl_ext.user_default.mpfb import services
+    return services
 
 
 def _image(path, px, colorspace):
@@ -185,10 +205,11 @@ def empty(name, loc, rot_z=0.0):
     return e
 
 
-def prop(rel, loc=(0, 0, 0), rot_z=0.0, height=None):
+def prop(rel, loc=(0, 0, 0), rot_z=0.0, height=None, scale=None, center=False):
     """Import a downloaded model (`tools/models/<rel>`: .glb/.gltf or .fbx) under one empty,
-    standing on `loc` and scaled so it is `height` m tall (None: as modelled). Kenney models
-    come small (a fridge is 0.92), so give them a height. Returns the empty."""
+    standing on `loc` and scaled so it is `height` m tall (or by `scale`; neither: as modelled).
+    Kenney models come small (a fridge is 0.92), so give them a height. center: its footprint's
+    centre on `loc` (packs whose origin is a corner). Returns the empty."""
     path = os.path.join(MODELS, rel)
     before = set(bpy.data.objects)
     if path.lower().endswith(".fbx"):
@@ -214,8 +235,47 @@ def prop(rel, loc=(0, 0, 0), rot_z=0.0, height=None):
     bpy.context.view_layer.update()
     corners = [o.matrix_world @ Vector(c) for o in new if o.type == "MESH" for c in o.bound_box]
     lo = min(c.z for c in corners)
-    k = height / (max(c.z for c in corners) - lo) if height else 1.0
+    k = height / (max(c.z for c in corners) - lo) if height else scale or 1.0
     root.scale = (k, k, k)
-    root.location = (loc[0], loc[1], loc[2] - lo * k)
+    cx, cy = ((min(c.x for c in corners) + max(c.x for c in corners)) / 2 * k,
+              (min(c.y for c in corners) + max(c.y for c in corners)) / 2 * k) if center else (0, 0)
+    cos, sin = math.cos(rot_z), math.sin(rot_z)
+    root.location = (loc[0] - cx * cos + cy * sin, loc[1] - cx * sin - cy * cos,
+                     (loc[2] if len(loc) > 2 else 0.0) - lo * k)
     root.rotation_euler.z = rot_z
     return root
+
+
+KENNEY_SCALE = 1.95  # Kenney's furniture kit at real size (its fridge is 0.92 tall)
+
+
+def kenney(name, loc, rot_deg=0, scale=KENNEY_SCALE):
+    """A Kenney Furniture Kit model (`name`.glb) at real size."""
+    return prop(f"kenney/furniture-kit/Models/GLTF format/{name}.glb", loc, math.radians(rot_deg), scale=scale, center=True)
+
+
+def gym(name, loc, rot_deg=0, height=None):
+    """A Polytoon Gym model (`name`.FBX), `height` m tall."""
+    return prop(f"polytoon-gym/Assets/Polytoon Gym/Gym/Models/{name}.FBX", loc, math.radians(rot_deg), height, center=True)
+
+
+def room(wall, floor, ceiling=None, back=1.5, left=-2.6, right=None, h=2.8):
+    """A room open toward the camera (-Y): floor, back wall at y=back, side wall(s) at x=left
+    (and x=right), maybe a ceiling."""
+    box("floor", (12, 12, 0.1), (0, -2, -0.05), floor)
+    box("wall_back", (12, 0.12, h), (0, back + 0.06, h / 2), wall)
+    for side, x in (("left", left), ("right", right)):
+        if x is not None:
+            box(f"wall_{side}", (0.12, 12, h), (x + math.copysign(0.06, x), back - 6, h / 2), wall)
+    if ceiling:
+        box("ceiling", (12, 12, 0.1), (0, -2, h + 0.05), ceiling)
+
+
+def lamp(name, loc, color=(1.0, 0.68, 0.38), energy=60, radius=0.2):
+    """A warm point light (a practical: pendant, fridge glow, candle)."""
+    light = bpy.data.lights.new(name, "POINT")
+    light.color, light.energy, light.shadow_soft_size = color, energy, radius
+    o = bpy.data.objects.new(name, light)
+    o.location = loc
+    bpy.context.collection.objects.link(o)
+    return o
