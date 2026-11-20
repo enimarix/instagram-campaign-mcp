@@ -241,7 +241,7 @@ def _voice_path(p: Props, media_root: PathLike) -> Optional[Path]:
     path = media.resolve(media_root, src)
     if not path.is_file():
         raise ValueError(f"voice audio {src!r} is missing")
-    return path
+    return recipe.dialogue_voice(path)  # as every render mixes it (step 161)
 
 
 def render_asset(props: Dict[str, Any], out: PathLike, media_root: PathLike, *,
@@ -266,7 +266,8 @@ def render_asset(props: Dict[str, Any], out: PathLike, media_root: PathLike, *,
                     f"{frames / BLENDER_FPS:.3f}", "-c:v", "libx264", "-crf", "17",
                     "-c:a", "aac", "-b:a", "192k", raw], timeout_s=timeout_s)
         inputs = {"source": raw, **({"music": AUDIO / f"{p.music}.wav"} if p.music != "none" else {})}
-        info = recipe.render(rec, inputs, out, timeout_s=timeout_s, end_card=end_card)
+        info = recipe.render(rec, inputs, out, timeout_s=timeout_s, end_card=end_card,
+                             voice=audio)
     return (info, round(COVER_S * 1000), recipe.recipe_timeline(rec, info.duration),
             listen.VOICE_FROM_START)
 

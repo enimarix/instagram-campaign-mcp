@@ -14,6 +14,7 @@ rewrite the sound; render() then brings every output to the same loudness.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -67,6 +68,12 @@ LOUDNORM = f"loudnorm=I={LOUDNESS_I}:TP={LOUDNESS_TP}:LRA={LOUDNESS_LRA}"
 # encoded again with the limiter lower by the overshoot, and the gain into it up by what the
 # limiting took off, while it is out (at most LIMIT_TRIES encodes).
 TRUE_PEAK_MAX, LOUDNESS_TOL, LIMIT_DB, LIMIT_TRIES = -1.0, 0.5, -2.0, 4
+# Step 161: a voiced mix gets the gain that puts its voice at LOUDNESS_I, as long as the mix
+# itself lands within this of LOUDNESS_I (so within LOUDNESS_TOL more of it once encoded).
+DIALOGUE_SPREAD = 0.5
+# dialogue_voice(): the voice is limited at VOICE_REF_LUFS + VOICE_PEAK_LU once brought to
+# VOICE_REF_LUFS (alimiter's ceiling must lie in -24..0 dB).
+VOICE_REF_LUFS, VOICE_PEAK_LU = -20.0, 10.0
 AUDIO_FORMAT = f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo"
 
 # End of every video filtergraph: square pixels, output frame rate and pixel format.
@@ -269,7 +276,7 @@ class VoiceOver(Op):
             f"[ducked];[floor][ducked][voice]amix=inputs=3:normalize=0[a]"
         )
         remix_audio(src, out, filter_complex=graph, timeout_s=timeout_s,
-                    extra_inputs=["-i", inputs[self.input]])
+                    extra_inputs=["-i", dialogue_voice(inputs[self.input], timeout_s=timeout_s)])
 
     def events(self, length):
         return [{"t": 0, "d": length, "e": "voice-over over the clip"}]
@@ -898,31 +905,74 @@ def loudness(path: PathLike, *, timeout_s: float) -> Tuple[Optional[float], Opti
     return tuple(v if math.isfinite(v) and v > -70 else None for v in values)
 
 
-def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path) -> None:
-    """Two-pass loudnorm to LOUDNESS_*: measure, then apply with the measured values
-    (linear gain when the true-peak target allows it), then the true-peak ceiling (see
-    TRUE_PEAK_MAX), checked on the encoded file. The video is copied. Digital silence
-    (integrated loudness -inf) passes through unchanged. The audio is cut back to the
-    source's length: loudnorm flushes ~0.1 s more than it was given."""
+def dialogue_voice(src: PathLike, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> Path:
+    """The voice as every render mixes it (step 161): its peaks limited to VOICE_PEAK_LU over
+    its loudness, then brought back to that loudness. The TTS voices peak ~19 dB over their
+    loudness, so a -14 LUFS voice would need -1 dBTP + 5 dB: limited in the mix, the
+    limiter would ride the bed with every syllable. Written once next to `src`
+    (`<stem>.dialogue-<chain hash>.wav`); `src` itself when it is silent."""
+    src = Path(src)
+    chain = f"volume={{gain:.2f}}dB,{_limiter(VOICE_REF_LUFS + VOICE_PEAK_LU)}"
+    out = src.with_name(f"{src.stem}.dialogue-{hashlib.sha256(chain.encode()).hexdigest()[:8]}"
+                        ".wav")
+    if out.is_file():
+        return out
+    level = loudness(src, timeout_s=timeout_s)[0]
+    if level is None:
+        return src
+    with tempfile.TemporaryDirectory(dir=src.parent) as work:
+        limited, final = Path(work) / "limited.wav", Path(work) / "voice.wav"
+        pcm = ["-ar", str(SAMPLE_RATE), "-c:a", "pcm_s16le"]
+        ffmpeg.run(["-i", src, "-map", "0:a:0", "-af",
+                    chain.format(gain=VOICE_REF_LUFS - level), *pcm, limited], timeout_s=timeout_s)
+        back = level - loudness(limited, timeout_s=timeout_s)[0]
+        ffmpeg.run(["-i", limited, "-af", f"volume={back:.2f}dB", *pcm, final],
+                   timeout_s=timeout_s)
+        os.replace(final, out)  # atomic: two renders of the same voice write the same file
+    return out
+
+
+def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path,
+                       voice: Optional[Path] = None, voice_gain_db: float = 0.0) -> None:
+    """The finish: to LOUDNESS_*, then the true-peak ceiling (see TRUE_PEAK_MAX), checked on
+    the encoded file. The video is copied. The audio is cut back to the source's length
+    (loudnorm flushes ~0.1 s more than it was given).
+
+    A voiced mix (`voice`: the voice track as mixed, dialogue_voice(), at `voice_gain_db`) is
+    normalised by its dialogue (step 161): one linear gain puts the voice's gated loudness at
+    LOUDNESS_I (the mix's kept within DIALOGUE_SPREAD of it), then the limiter; the gain goes
+    up by what the limiter took off the mix. A dynamic loudnorm there squeezed the quiet voice
+    into the bed (7-11 LU over it instead of 14-15).
+    Otherwise: two-pass loudnorm, measure, then apply with the measured values (linear gain
+    when the true-peak target allows it). Digital silence (integrated loudness -inf) passes
+    through unchanged."""
     duration = ffmpeg.probe(src).duration
-    ffmpeg.run(["-i", src, "-map", "0:a:0", "-af", f"{LOUDNORM}:print_format=json",
-                "-f", "null", "-"], timeout_s=timeout_s, log_path=log_path)
-    text = log_path.read_text(encoding="utf-8")
-    m = json.loads(text[text.rindex("{"):text.rindex("}") + 1])
-    if math.isfinite(float(m["input_i"])):
-        af = (f"{LOUDNORM}:measured_I={m['input_i']}:measured_TP={m['input_tp']}"
-              f":measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}"
-              f":offset={m['target_offset']}:linear=true")
+    spoken = loudness(voice, timeout_s=timeout_s)[0] if voice else None
+    mixed = loudness(src, timeout_s=timeout_s)[0] if spoken is not None else None
+    if mixed is not None:  # the dialogue's gain, kept to a mix within DIALOGUE_SPREAD of I
+        expect = min(max(mixed + LOUDNESS_I - spoken - voice_gain_db,
+                         LOUDNESS_I - DIALOGUE_SPREAD), LOUDNESS_I + DIALOGUE_SPREAD)
+        af, gain = "anull", expect - mixed
     else:
-        af = "anull"
-    gain, ceiling = 0.0, LIMIT_DB
+        ffmpeg.run(["-i", src, "-map", "0:a:0", "-af", f"{LOUDNORM}:print_format=json",
+                    "-f", "null", "-"], timeout_s=timeout_s, log_path=log_path)
+        text = log_path.read_text(encoding="utf-8")
+        m = json.loads(text[text.rindex("{"):text.rindex("}") + 1])
+        if math.isfinite(float(m["input_i"])):
+            af = (f"{LOUDNORM}:measured_I={m['input_i']}:measured_TP={m['input_tp']}"
+                  f":measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}"
+                  f":offset={m['target_offset']}:linear=true")
+        else:
+            af = "anull"
+        gain, expect = 0.0, LOUDNESS_I
+    ceiling = LIMIT_DB
     for _ in range(LIMIT_TRIES):
         ffmpeg.run(["-i", src, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af",
                     f"{af},volume={gain:.2f}dB,{_limiter(ceiling)},{AUDIO_FORMAT},"
                     f"{_fit(duration)}", *AUDIO_ARGS, *CONTAINER_ARGS, out], timeout_s=timeout_s)
         lufs, peak = loudness(out, timeout_s=timeout_s)
         over = 0.0 if peak is None else max(peak - TRUE_PEAK_MAX, 0.0)
-        short = 0.0 if lufs is None else LOUDNESS_I - lufs
+        short = 0.0 if lufs is None else expect - lufs
         if over == 0 and abs(short) <= LOUDNESS_TOL:
             return
         ceiling, gain = ceiling - (over + 0.2 if over else 0.0), gain + short
@@ -931,11 +981,14 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
 
 def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
            timeout_s: float = DEFAULT_TIMEOUT_S, preset: str = DEFAULT_PRESET,
-           end_card: Optional[CardRenderer] = None) -> MediaInfo:
+           end_card: Optional[CardRenderer] = None, voice: Optional[PathLike] = None
+           ) -> MediaInfo:
     """Run `recipe` on `inputs["source"]` and write `out`. Other named inputs (music,
     voice-over, reaction) are for the ops that use them; `end_card` renders the animated end
     card clips (none: the static card). Every output gets a final loudness pass
-    (LOUDNESS_*). Returns the output's MediaInfo. `timeout_s` applies to each ffmpeg run."""
+    (LOUDNESS_*), by the voice when there is one: `voice`, the voice the source already
+    carries at unity gain (its dialogue_voice()), else the voice_over op's input. Returns the
+    output's MediaInfo. `timeout_s` applies to each ffmpeg run."""
     paths = {k: Path(v) for k, v in inputs.items()}
     if "source" not in paths:
         raise ValueError("inputs must contain 'source'")
@@ -958,7 +1011,12 @@ def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,
                      preset=preset, **extra)
             current = nxt
         loud = Path(work) / "loudnorm.mp4"
+        over = next((op for op in recipe.ops if isinstance(op, VoiceOver)), None)
+        gain = 0.0
+        if voice is None and over:
+            voice, gain = dialogue_voice(paths[over.input], timeout_s=timeout_s), over.gain_db
         normalize_loudness(current, loud, timeout_s=timeout_s,
-                           log_path=Path(work) / "loudnorm.log")
+                           log_path=Path(work) / "loudnorm.log",
+                           voice=Path(voice) if voice else None, voice_gain_db=gain)
         os.replace(loud, out)
     return ffmpeg.probe(out)

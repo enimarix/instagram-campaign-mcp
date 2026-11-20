@@ -235,13 +235,15 @@ def bundle_dir() -> Path:
 
 
 def _stage_audio(bundle: Path, props: Dict[str, Any], media_root: PathLike) -> Dict[str, Any]:
-    """Props for Remotion: a media-path `voice.audioSrc` becomes a file in the bundle."""
+    """Props for Remotion: a media-path `voice.audioSrc` becomes a file in the bundle (as
+    every render mixes it: recipe.dialogue_voice)."""
     src = (props.get("voice") or {}).get("audioSrc")
     if not src or "://" in src:
         return props
     path = media.resolve(media_root, src)
     if not path.is_file():
         raise ValueError(f"voice audio {src!r} is missing")
+    path = recipe.dialogue_voice(path)
     dest = bundle / "public" / "voice" / path.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(path, dest)
@@ -321,9 +323,11 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
         raw = Path(work) / "raw.mp4"
         _render(template, staged, raw, Path(work), timeout_s=timeout_s,
                 extra=["--concurrency", RENDER_CONCURRENCY])
-        if ffmpeg.probe(raw).has_audio:
+        if ffmpeg.probe(raw).has_audio:  # a voiced video is normalised by its voice (161)
+            voice = listen.voice_track({"kind": "motion", "props": v["props"]}, media_root)
             recipe.normalize_loudness(raw, out, timeout_s=timeout_s,
-                                      log_path=Path(work) / "loudnorm.log")
+                                      log_path=Path(work) / "loudnorm.log",
+                                      voice=voice and recipe.dialogue_voice(voice))
         else:  # nothing to normalise; QC reports the missing audio
             os.replace(raw, out)
     return (ffmpeg.probe(out), round((v["coverFrame"] or 0) * 1000 / v["fps"]),

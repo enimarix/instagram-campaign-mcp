@@ -8,6 +8,21 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-20: A voiced video is loudness-normalised by its voice, and the voice is peak-limited before the mix (161)
+The target stays -14 LUFS integrated, true peak <= -1 dBTP. A video with a voice (motion
+templates, Blender skits, remixes with a voice-over) no longer goes through the mix's two-pass
+`loudnorm`: one linear gain puts the voice's gated loudness at -14 LUFS (the mix may land up
+to 0.5 LU off it), then the true-peak limiter. Every render mixes the voice as
+`recipe.dialogue_voice()`: its peaks limited to 10 LU over its loudness, at the same loudness
+(a `<voice>.dialogue-<hash>.wav` next to the TTS file). The QC hears that same file. Videos
+without a voice keep the loudnorm finish.
+Reason: the VoxCPM2 voices peak ~19-22 dB over their loudness. At -14 LUFS that is 5+ dB over
+the -1 dBTP ceiling: `loudnorm` went dynamic and squeezed the voice into the bed (voice 7-11 LU
+over it after the finish, 14-15 before), and a linear gain with the mix limiter rode the bed
+with every syllable and still ended at -14.4 to -14.9 LUFS. Limiting the voice alone keeps the
+bed steady: measured on all 10 Remotion templates, the finish now takes at most 0.5 LU off the
+voice's margin (it took up to 4.1), at -14.2 to -14.6 LUFS and <= -1.8 dBTP.
+
 ## 2026-11-20: The agent never parks a change request; it asks for styles, invented ones too (156)
 Every video the owner sends back gets a decision the Inbox shows (`assets.agent_decision`):
 remade in its style, restyled (a « même vidéo, autre style » work order the agent makes at

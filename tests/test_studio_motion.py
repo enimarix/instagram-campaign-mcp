@@ -254,17 +254,40 @@ def test_every_voiced_template_has_a_script():
     assert voiced == set(motion.SCRIPTS)  # a new voiced template needs a SCRIPTS entry
 
 
+@needs_ffmpeg
 def test_stage_audio_copies_media_audio_into_the_bundle(tmp_path):
     (tmp_path / "voice").mkdir()
-    (tmp_path / "voice" / "a.wav").write_bytes(b"RIFF")
+    voice = tmp_path / "voice" / "a.wav"
+    recipe.ffmpeg.run(["-f", "lavfi", "-i", "sine=frequency=300:duration=1", voice],
+                      timeout_s=60)
     bundle = tmp_path / "bundle"
     props = {"voice": {"audioSrc": "voice/a.wav", "lines": []}}
     staged = motion._stage_audio(bundle, props, tmp_path)
-    assert staged["voice"] == {"audioSrc": "public/voice/a.wav", "lines": []}
-    assert (bundle / "public" / "voice" / "a.wav").is_file()
+    mixed = recipe.dialogue_voice(voice).name  # the voice as every render mixes it (161)
+    assert staged["voice"] == {"audioSrc": f"public/voice/{mixed}", "lines": []}
+    assert (bundle / "public" / "voice" / mixed).is_file()
     assert motion._stage_audio(bundle, {"x": 1}, tmp_path) == {"x": 1}
     with pytest.raises(ValueError):
         motion._stage_audio(bundle, {"voice": {"audioSrc": "../a.wav"}}, tmp_path)
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("voiced", [True, False])
+def test_a_voiced_render_is_finished_by_its_voice(tmp_path, monkeypatch, voiced):
+    (tmp_path / "voice").mkdir()
+    voice = tmp_path / "voice" / "a.wav"
+    recipe.ffmpeg.run(["-f", "lavfi", "-i", "sine=frequency=300:duration=1", voice],
+                      timeout_s=60)
+    props = {"title": "Hi", **({"voice": {"audioSrc": "voice/a.wav"}} if voiced else {})}
+    seen = {}
+    monkeypatch.setattr(motion, "validate_props", lambda t, p: {**VALID, "props": p, "events": []})
+    monkeypatch.setattr(motion, "bundle_dir", lambda: tmp_path / "bundle")
+    monkeypatch.setattr(motion, "_render", lambda t, p, out, w, **kw: make_clip(out, "108x192"))
+    monkeypatch.setattr(recipe, "normalize_loudness",
+                        lambda src, out, **kw: (seen.update(kw), shutil.copyfile(src, out)))
+    motion.render_motion_asset("FactQuest", props, tmp_path / "video.mp4", tmp_path,
+                               timeout_s=60)
+    assert seen["voice"] == (recipe.dialogue_voice(voice) if voiced else None)
 
 
 def test_preview_stills_default_frames(tmp_path, monkeypatch):

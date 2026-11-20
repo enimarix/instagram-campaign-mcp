@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from . import ffmpeg, media
 from .ffmpeg import PathLike
-from .recipe import TRUE_PEAK_MAX
+from .recipe import TRUE_PEAK_MAX, dialogue_voice
 
 SR = 16_000
 HOP = SR // 100  # 10 ms envelope steps
@@ -251,8 +251,9 @@ def checks(master: Path, voice: Optional[Path], timeline: Optional[Sequence[Dict
     if not voice and not points:
         return out
     mixed = pcm(master, timeout_s=timeout_s)
-    if voice:
-        spans = voice_above_bed(mixed, pcm(voice, timeout_s=timeout_s), voice_parts)
+    if voice:  # heard as every render mixes it (step 161)
+        spans = voice_above_bed(mixed, pcm(dialogue_voice(voice, timeout_s=timeout_s),
+                                           timeout_s=timeout_s), voice_parts)
         if spans is None:
             out.append(("voice_above_bed", False, "the voice track is not heard in the mix"))
         elif spans:
