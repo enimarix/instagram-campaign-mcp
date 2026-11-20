@@ -31,6 +31,10 @@ export class ApiError extends Error {
   }
 }
 
+let loggedOut: (() => void) | null = null
+/** The Login gate listens here (168): a 401 means the session ended (expired, password changed). */
+export const onLoggedOut = (fn: (() => void) | null) => { loggedOut = fn }
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: 'same-origin', // session cookie (step 008)
@@ -38,6 +42,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { Accept: 'application/json', ...init?.headers },
   })
   const body: unknown = await res.json().catch(() => null)
+  if (res.status === 401 && path !== '/api/login') loggedOut?.() // login's 401 = wrong password
   if (!res.ok) {
     const code =
       body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'

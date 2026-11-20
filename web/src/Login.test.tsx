@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getAccount } from './api/client'
 import Login from './Login'
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
@@ -29,5 +30,20 @@ describe('Login', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(await screen.findByText('studio')).toBeTruthy()
     expect(fetch).toHaveBeenLastCalledWith('/api/login', expect.objectContaining({ method: 'POST', body: '{"password":"pw"}' }))
+  })
+
+  it('shows the form again when any API call answers 401, then the studio without a reload', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(json(200, { authenticated: true, password_required: true }))
+      .mockResolvedValueOnce(json(401, { error: 'login_required' }))
+      .mockResolvedValueOnce(json(200, { authenticated: true }))
+    vi.stubGlobal('fetch', fetch)
+    render(<Login><p>studio</p></Login>)
+    expect(await screen.findByText('studio')).toBeTruthy()
+    await expect(getAccount()).rejects.toThrow('401')
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'pw' } })
+    expect(screen.queryByText('studio')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByText('studio')).toBeTruthy()
   })
 })

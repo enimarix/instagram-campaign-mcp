@@ -158,3 +158,41 @@ def test_bind_guard():
         assert "UI_PASSWORD" in bind_error(host, open_)
         assert bind_error(host, locked) is None
     assert bind_error("0.0.0.0", _settings(password="")) is not None
+
+
+def test_sessions_survive_a_restart(store):
+    """168: a session made by one Auth is valid in the next one on the same store."""
+    clock = Clock()
+    token = Auth(_settings(), clock, store=store).new_session()
+    assert token not in str(store.get_state("ui_sessions"))  # only keyed digests are stored
+    again = Auth(_settings(), clock, store=store)
+    assert again.valid(token)
+    again.logout(token)
+    assert not Auth(_settings(), clock, store=store).valid(token)
+    assert store.get_state("ui_sessions") == {}
+
+
+def test_stored_sessions_expire_and_are_pruned(store):
+    clock = Clock()
+    auth = Auth(_settings(), clock, store=store)
+    old = auth.new_session()
+    clock.now += auth.ttl
+    assert not auth.valid(old)
+    auth.new_session()
+    assert len(store.get_state("ui_sessions")) == 1  # the expired one was dropped on write
+
+
+def test_password_change_ends_stored_sessions(store):
+    clock = Clock()
+    token = Auth(_settings(), clock, store=store).new_session()
+    assert not Auth(_settings(password="new password"), clock, store=store).valid(token)
+
+
+def test_app_keeps_sessions_across_restarts(store):
+    s = _settings()
+    with TestClient(create_app(s, store=store), base_url="http://127.0.0.1") as tc:
+        assert _login(tc).status_code == 200
+        cookie = tc.cookies.get("studio_session")
+    with TestClient(create_app(s, store=store), base_url="http://127.0.0.1") as tc:
+        tc.cookies.set("studio_session", cookie)
+        assert tc.get("/api/account").status_code == 200
