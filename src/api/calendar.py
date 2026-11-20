@@ -33,6 +33,12 @@ def get_calendar(request: Request, start: date = Query(alias="from"),
     return call(run)
 
 
+@router.get("/calendar/hot-hours")
+def hot_hours(request: Request, days: int = calendar.MAX_HOT_DAYS,
+              store: CampaignStore = Depends(get_store)):
+    return call(calendar.hot_hours, store, request.app.state.settings, days)
+
+
 @router.post("/posts/{post_id}/reschedule")
 def reschedule(post_id: int, body: RescheduleIn, store: CampaignStore = Depends(get_store)):
     return call(calendar.reschedule, store, post_id, body.publish_at)
