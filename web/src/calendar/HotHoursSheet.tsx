@@ -43,7 +43,7 @@ export default function HotHoursSheet({ post, onSaved, onClose }: Props) {
       {grid && (
         <p className="mt-1 text-xs text-muted">
           {grid.has_data
-            ? '🔥 hot = most followers online (last 4 weeks). Darker = more followers online.'
+            ? '🔥 hot = most followers online (last 4 weeks). The stronger the colour, the more followers online.'
             : `No audience data yet: 🔥 marks the planner's posting windows (${grid.posting_windows}).`}
         </p>
       )}
@@ -81,10 +81,7 @@ export default function HotHoursSheet({ post, onSaved, onClose }: Props) {
       </label>
       <div className="mt-3 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Close</Button>
-        <Button variant="primary" disabled={!when}
-          onClick={save}>
-          Save
-        </Button>
+        <Button variant="primary" disabled={!when} onClick={save}>Save</Button>
       </div>
     </Sheet>
   )
