@@ -1,6 +1,7 @@
 """Step 048: Python bridge to the motion templates (src/studio/motion.py) and its MCP tools."""
 
 import json
+import os
 import shutil
 from functools import partial
 from pathlib import Path
@@ -22,6 +23,9 @@ from tests.test_studio_render import FAR_PAST
 needs_motion = pytest.mark.skipif(
     not (shutil.which("node") and (motion.MOTION_DIR / "node_modules").is_dir()),
     reason="node or motion/node_modules missing (npm ci in motion/)")
+# Real Remotion renders use the GPU (one heavy job at a time on the owner's laptop): opt-in.
+needs_real_render = pytest.mark.skipif(
+    os.environ.get("IG_RUN_REAL_RENDER") != "1", reason="real render: set IG_RUN_REAL_RENDER=1")
 
 def _example(name):
     return json.loads((motion.MOTION_DIR / "props" / f"{name}.json").read_text("utf-8"))
@@ -319,6 +323,7 @@ def test_render_queue_motion_branch_writes_all_files(store, tmp_path, monkeypatc
     assert all((tmp_path / f).is_file() for f in files.values())
 
 
+@needs_real_render
 @needs_motion
 @needs_ffmpeg
 @pytest.mark.parametrize("template", ["FactQuest", "BossBattle"])
@@ -430,6 +435,7 @@ def test_ffmpeg_render_uses_the_motion_end_card_or_warns(store, tmp_path, monkey
         assert warning.startswith("static end card (fallback)") and "Node.js" in warning
 
 
+@needs_real_render
 @needs_motion
 @needs_ffmpeg
 def test_real_end_card_clip(tmp_path):
