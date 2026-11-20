@@ -8,11 +8,14 @@ a dev's scratch studio) and the voice service (vendor/voxcpm_tts, in its own ven
 this file by path, so stdlib only) for as long as its model is loaded. A real OS lock, not a
 pid file: the OS releases it when the holder dies, even killed. Its path needs no config:
 GPU_LOCK_PATH, else ~/.ig-campaign/gpu.lock. A waiter logs who holds it every LOG_EVERY_S.
+Once it has the lock, a job also waits for free RAM and VRAM and for no game on the GPU
+(guard.admit, step 166).
 """
 
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import logging
 import os
 import sys
@@ -24,6 +27,13 @@ if sys.platform == "win32":
     import msvcrt
 else:
     import fcntl
+
+try:
+    from . import guard
+except ImportError:  # loaded by path (the voice service, in its own venv): guard.py by path too
+    _spec = importlib.util.spec_from_file_location("guard", Path(__file__).with_name("guard.py"))
+    guard = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(guard)
 
 log = logging.getLogger("gpu_lock")
 DEFAULT_PATH = Path.home() / ".ig-campaign" / "gpu.lock"
@@ -82,9 +92,12 @@ def file_lock(path: Union[str, Path], *, timeout_s: Optional[float] = None,
 
 @contextlib.contextmanager
 def hold(what: str, path: Union[str, Path, None] = None, *, timeout_s: Optional[float] = None,
-         poll_s: float = 0.5, log_every_s: float = LOG_EVERY_S) -> Iterator[None]:
+         poll_s: float = 0.5, log_every_s: float = LOG_EVERY_S, need_vram_gb: float = 0.0,
+         min_free_ram_gb: Optional[float] = None) -> Iterator[None]:
     """Hold the machine's GPU lock for `what` (shown to waiters, with this pid). Waits as
-    long as it takes unless timeout_s is given, logging who holds it meanwhile."""
+    long as it takes unless timeout_s is given, logging who holds it meanwhile; then, still
+    holding it, as long as guard.admit says (need_vram_gb free, min_free_ram_gb free RAM:
+    None = GUARD_MIN_FREE_RAM_GB), whatever timeout_s."""
     path = Path(path).expanduser() if path else default_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     holder = path.with_name(path.name + ".holder")
@@ -105,4 +118,5 @@ def hold(what: str, path: Union[str, Path, None] = None, *, timeout_s: Optional[
         holder.write_text(f"pid {os.getpid()}: {what}", encoding="utf-8")
         if next_log is not None:
             log.warning("%s: got the GPU after waiting %.0f s", what, time.monotonic() - start)
+        guard.admit(what, need_vram_gb, min_free_ram_gb)
         yield

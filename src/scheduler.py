@@ -41,6 +41,7 @@ import subprocess
 import sys
 from contextlib import nullcontext, suppress
 from datetime import date
+from typing import Awaitable, Callable, Optional
 
 from . import settings_overrides, worker
 from .campaign import collect_insights, rank, run_due
@@ -54,19 +55,37 @@ NOT_CONFIGURED = ("Instagram not configured (set INSTAGRAM_ACCESS_TOKEN "
                   "and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env)")
 
 
+async def _after_grace(settings: InstagramMCPSettings, start: Callable[[], Awaitable[None]],
+                       ) -> None:
+    """start() once the startup grace is over (166: the PC froze twice when heavy work began
+    within a minute of logon)."""
+    await asyncio.sleep(settings.guard_startup_grace_min * 60)
+    await start()
+
+
 async def _worker(settings: InstagramMCPSettings, interval: int = 60,
-                  stories_every: int = 60) -> None:
+                  stories_every: int = 60,
+                  voice_pid: Callable[[], Optional[int]] = lambda: None) -> None:
     """The worker of `up` and `worker`: the render loop, the agent catch-up and the Reel
-    downloader service always (none needs Instagram), publishing when Instagram is configured. Setup mode: say so
-    once; renders still run."""
+    downloader service always (none needs Instagram), publishing when Instagram is
+    configured, the resource guard's watchdog (166). Renders and agent runs wait for the
+    startup grace. Setup mode: say so once; renders still run."""
     try:
         from .agent.schedule import catch_up_loop
+        from .studio.guard import watchdog_loop
 
         store = CampaignStore(settings.database_path)
-        renders = asyncio.create_task(worker.render_loop(store, settings))
-        agents = asyncio.create_task(catch_up_loop(store, settings))
+        if settings.guard_startup_grace_min:
+            print(f"startup grace: no render or agent run for {settings.guard_startup_grace_min:g}"
+                  " min", file=sys.stderr, flush=True)
+        renders = asyncio.create_task(_after_grace(
+            settings, lambda: worker.render_loop(store, settings)))
+        agents = asyncio.create_task(_after_grace(
+            settings, lambda: catch_up_loop(store, settings)))
         downloader = asyncio.create_task(worker.downloader_loop(store, settings))
         fresh = asyncio.create_task(settings_overrides.refresh_loop(store, settings))
+        guard = asyncio.create_task(watchdog_loop(store, voice_pid) if settings.guard_watchdog
+                                    else asyncio.sleep(0))
         try:
             if settings.instagram_configured:
                 async with InstagramClient(settings, store=store) as client:
@@ -80,7 +99,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                     await asyncio.wait({renders}, timeout=interval)
                 await renders
         finally:
-            for task in (renders, agents, downloader, fresh):
+            for task in (renders, agents, downloader, fresh, guard):
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task
@@ -144,7 +163,7 @@ async def _worker_after_voice(settings: InstagramMCPSettings, voice) -> None:
     if voice is not None and not await tts_service.wait_ready(settings, voice):
         print(f"voice service not ready (see {tts_service.LOG_PATH}); voiced renders will"
               " fail until it is", file=sys.stderr, flush=True)
-    await _worker(settings)
+    await _worker(settings, voice_pid=lambda: voice and tts_service.worker_pid(settings))
 
 
 async def _run(args: argparse.Namespace) -> int:

@@ -5,7 +5,8 @@ HTTP service the studio's `http` TTS provider calls (TTS_HTTP_RESPONSE=json).
   POST /tts {"text": "<one script line per line>", "voice": "<id>"}
        -> {"audio": <base64 wav>, "words": [{"text", "start_s", "end_s"}, ...], "take": {...}}
        `words` holds one span per script line, its text as written (speech.line_spans).
-  GET  /health -> {"model", "loaded", "voices", "default_voice", "settings"} (at once)
+  GET  /health -> {"model", "loaded", "worker_pid", "voices", "default_voice", "settings"}
+       (at once)
 
 The owner's approved settings (by ear): the whole script in ONE take, cfg 1.6, 30 steps,
 cloned from the voice card as continuation (prompt wav + text) AND reference. Each take is
@@ -15,11 +16,13 @@ take is kept. One request at a time.
 
 The GPU is shared (step 145): the models load on the first request, under the machine's GPU
 lock (src/studio/gpu_lock.py, the one Blender and Remotion renders take), and the lock is held
-while they are loaded. The models live in a worker process (engine_worker.py, step 146):
-after VOXCPM_IDLE_UNLOAD_S without a request (default 120 s) it is terminated, so the OS
-takes back all its VRAM and RAM, and the lock released, so a render can run. A worker that
-dies or fails = HTTP 503, the lock released, and the next request starts a new one. A load
-costs ~35 s. This process imports no torch (~60 MB), and CI imports it without torch.
+while they are loaded; the load also waits for free RAM / VRAM and no game (guard.admit, step
+166), and everything runs at low priority. The models live in a worker process
+(engine_worker.py, step 146): after VOXCPM_IDLE_UNLOAD_S without a request (default 120 s)
+it is terminated, so the OS takes back all its VRAM and RAM, and the lock released, so a
+render can run. A worker that dies or fails = HTTP 503, the lock released, and the next
+request starts a new one. A load costs ~35 s. This process imports no torch (~60 MB), and
+CI imports it without torch.
 
 Run: python vendor/voxcpm_tts/server.py [--host 127.0.0.1] [--port 8766] (README.md).
 """
@@ -146,7 +149,8 @@ def create_app(engine: Worker, settings: Settings, voices: Dict[str, Voice], *,
         if engine.model is not None:
             return
         t0 = time.perf_counter()
-        gpu.enter_context(gpu_lock.hold(f"voice service {MODEL_ID}", gpu_path))
+        gpu.enter_context(gpu_lock.hold(f"voice service {MODEL_ID}", gpu_path,  # + admission (166)
+                                        need_vram_gb=gpu_lock.guard.VRAM_GB["voice"]))
         t1 = time.perf_counter()
         try:
             engine.load()
@@ -172,6 +176,7 @@ def create_app(engine: Worker, settings: Settings, voices: Dict[str, Voice], *,
     @app.get("/health")
     def health() -> Dict[str, Any]:
         return {"model": MODEL_ID, "loaded": engine.model is not None,
+                "worker_pid": getattr(engine.model, "pid", None),  # the studio's watchdog (166)
                 "voices": sorted(voices), "default_voice": default,
                 "settings": settings.model_dump()}
 
@@ -242,6 +247,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--exit-with-pid", type=int, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    gpu_lock.guard.lower_self()  # step 166: so is the model worker, its child
     if args.exit_with_pid:
         threading.Thread(target=_exit_with, args=(args.exit_with_pid,), daemon=True).start()
     settings, voices = Settings.from_env(), load_voices(args.voices)

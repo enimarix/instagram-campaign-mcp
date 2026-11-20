@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
+from . import guard
+
 PathLike = Union[str, Path]
 
 # Always passed to ffmpeg by run(): no banner noise in the log, never wait for keyboard
@@ -130,8 +132,8 @@ def probe(path: PathLike, *, timeout_s: float = 30.0) -> MediaInfo:
     cmd = [find_ffprobe(), "-v", "error", "-print_format", "json",
            "-show_streams", "-show_format", str(path)]
     try:
-        proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True,
-                              timeout=timeout_s)
+        proc = guard.run(cmd, stdin=subprocess.DEVNULL, capture_output=True,
+                         timeout=timeout_s)
     except subprocess.TimeoutExpired as e:
         raise FFmpegTimeout(f"ffprobe timed out after {timeout_s}s on {path}",
                             stderr_tail=_tail(_decode(e.stderr))) from None
@@ -175,8 +177,9 @@ def run(args: Sequence[PathLike], *, timeout_s: float,
     try:
         # On timeout subprocess.run kills the child and waits for it (no orphan:
         # ffmpeg spawns no children of its own).
-        proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                              stderr=subprocess.PIPE, timeout=timeout_s)
+        # Low priority (166): guard.Stopped when the resource guard killed it.
+        proc = guard.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.PIPE, timeout=timeout_s)
         returncode, stderr = proc.returncode, _decode(proc.stderr)
     except subprocess.TimeoutExpired as e:
         timed_out, returncode, stderr = True, -1, _decode(e.stderr)

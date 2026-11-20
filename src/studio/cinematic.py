@@ -19,14 +19,14 @@ import json
 import math
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from ..config import get_settings
-from . import ffmpeg, gpu_lock, listen, media, recipe
+from . import ffmpeg, guard, listen, media, recipe
 from .ffmpeg import MediaInfo, PathLike
 from .tts import LineTiming, reading_timings
 
@@ -199,9 +199,9 @@ def find_blender() -> str:
 
 
 def _run(cmd: Sequence[Any], what: str, timeout_s: float) -> None:
-    try:
-        done = subprocess.run([str(c) for c in cmd], capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=timeout_s)
+    try:  # low priority (166); guard.Stopped when the resource guard killed it
+        done = guard.run([str(c) for c in cmd], capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", timeout=timeout_s)
     except subprocess.TimeoutExpired:
         raise CinematicError(f"{what} ran past {timeout_s:g} s") from None
     if done.returncode != 0:
@@ -228,10 +228,18 @@ def _blender(p: Props, timings: Sequence[LineTiming], cues: List[Dict[str, Any]]
     cfg_path = out / "shot.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
     n = len(stills) if stills else frames
-    blender = find_blender()
-    with gpu_lock.hold("Blender render", get_settings().gpu_lock_path):  # step 145
-        _run([blender, "-b", "-P", ROOT / "engine" / "shot.py", "--", cfg_path],
-             "Blender", 120 + n * S_PER_FRAME)
+    blender(["-b", "-P", ROOT / "engine" / "shot.py", "--", cfg_path], "Blender render",
+            120 + n * S_PER_FRAME)
+
+
+def blender(args: Sequence[Any], what: str, timeout_s: float) -> None:
+    """THE way to launch Blender (studio renders, previews, macro plates, dev scripts:
+    `python -m src.studio.cinematic <blender args>`): under the machine's GPU lock, admitted
+    for free RAM / VRAM and no game (145, 166), at low priority. tests/test_guard.py fails on
+    a launch anywhere else."""
+    exe = find_blender()
+    with guard.gpu(what, "blender"):
+        _run([exe, *args], "Blender", timeout_s)
 
 
 def _voice_path(p: Props, media_root: PathLike) -> Optional[Path]:
@@ -298,3 +306,7 @@ def preview_stills(props: Dict[str, Any], media_root: PathLike,
             shutil.copyfile(work / f"still_{b}.png", dest)
             paths.append(media.relative(media_root, dest))
     return paths
+
+
+if __name__ == "__main__":  # a dev's Blender run, the same way as the studio's
+    blender(sys.argv[1:], f"Blender (dev) {' '.join(sys.argv[1:])[:80]}", 24 * 3600)

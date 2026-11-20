@@ -33,12 +33,13 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..config import InstagramMCPSettings, get_settings
+from ..config import InstagramMCPSettings
 from ..store import CampaignStore
 from . import (  # render.py imports us
     cinematic,
     ffmpeg,
     gpu_lock,
+    guard,
     listen,
     macro3d,
     media,
@@ -153,8 +154,8 @@ def _node(script: str, args: Sequence[Any], *, timeout_s: float,
     """Run a motion/ script; its last stdout line is JSON."""
     cmd = [find_node(), str(MOTION_DIR / script), *map(str, args)]
     try:
-        done = subprocess.run(cmd, cwd=MOTION_DIR, input=stdin, capture_output=True,
-                              text=True, encoding="utf-8", timeout=timeout_s)
+        done = guard.run(cmd, cwd=MOTION_DIR, input=stdin, capture_output=True, text=True,
+                         encoding="utf-8", timeout=timeout_s)  # low priority (166)
     except subprocess.TimeoutExpired:
         raise MotionError(f"{script} ran past {timeout_s:g} s") from None
     if done.returncode != 0:
@@ -256,7 +257,7 @@ def _render(template: str, props: Dict[str, Any], out: Path, work: Path, *, time
     props_file.write_text(json.dumps(props, ensure_ascii=False), encoding="utf-8")
     bundle = bundle_dir()  # bundling is CPU work: before the GPU lock
     # Chrome draws through the GPU (ANGLE): one heavy GPU job at a time (step 145)
-    with gpu_lock.hold(f"Remotion {template} render", get_settings().gpu_lock_path):
+    with guard.gpu(f"Remotion {template} render", "remotion"):  # admitted (166)
         return _node("render.mjs", ["--template", template, "--props", props_file, "--out", out,
                                     "--bundle", bundle, *extra], timeout_s=timeout_s)
 
