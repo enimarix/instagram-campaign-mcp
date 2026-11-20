@@ -9,7 +9,7 @@ import { fonts } from "../lib/font";
 import { Marco } from "../macro3d/Presenter";
 import { backOut, easeInOut, easeOut, span } from "../voxel/anim.ts";
 import { MbTile, taglineOf, TRIAL, URL, Wordmark } from "./base";
-import { ACCENTS, type CardProps, cameoOf } from "./schema.ts";
+import { ACCENTS, type CardProps, cameoOf, cardVolume } from "./schema.ts";
 
 /** Frames (from the card's start) at which each piece comes in. */
 const AT = { beam: 0, tile: 8, glint: 18, cameo: 20, word: 24, tagline: 34, pill: 42, url: 50, line: 54 };
@@ -71,7 +71,7 @@ export const Macro3dEndCard = ({ tagline, accent, address, cameo }: Omit<CardPro
         </div>
       </div>
       <Sequence from={AT.pill} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-pop").src} volume={0.35} />
+        <Html5Audio src={assetById("sfx-pop").src} volume={cardVolume("sfx-pop")} />
       </Sequence>
     </AbsoluteFill>
   );

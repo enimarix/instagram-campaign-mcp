@@ -9,11 +9,12 @@ part (`measure`: LUFS, true peak, envelope) is what ffmpeg already gives us. So 
 are built here, on what the render has: the master and the voice track it was mixed from.
 
 Voice above the bed: both are decoded K-weighted (the BS.1770 filter, so power ratios read as
-LU), mono, 16 kHz. The voice track's own activity gives the spoken spans; each span is found
-in the master (10 ms loudness envelopes, so a voice split around pauses is found too), the
-master's gain on the voice is measured on the loudest spans (sample-exact, the voice plays
-at a fixed level and loudnorm is one linear gain), and what remains of the master's power
-in a span, once the voice is taken out, is the bed: music, sound effects, original sound.
+LU), mono, 16 kHz. The voice track's own activity gives the spoken spans; each span is
+placed in the master where the template plays that part of the voice (`parts`: PixelSkit and
+QuizChest pause the voice, step 158; everything else plays it from 0), matched to the sample
+there, the master's gain on the voice is measured span by span, and what remains of the
+master's power in a span, once the voice is taken out, is the bed: music, sound effects,
+original sound.
 """
 
 from __future__ import annotations
@@ -25,10 +26,11 @@ import tempfile
 from array import array
 from operator import mul
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from . import ffmpeg, media
 from .ffmpeg import PathLike
+from .recipe import TRUE_PEAK_MAX
 
 SR = 16_000
 HOP = SR // 100  # 10 ms envelope steps
@@ -36,7 +38,6 @@ HOP = SR // 100  # 10 ms envelope steps
 K_WEIGHT = "highpass=f=38:poles=2,highshelf=f=1681:g=4"
 
 VOICE_ABOVE_LU = 12.0  # the bed sits at least this far under the voice while it speaks
-TRUE_PEAK_MAX = -1.0  # dBTP
 JUMP_LU, JUMP_S = 6.0, 0.3  # a jump of more than JUMP_LU within JUMP_S ...
 # ... that lands more than JUMP_LU above the video's integrated loudness (the voice level):
 # speech onsets jump 10-20 LU in momentary loudness but land near it.
@@ -45,7 +46,6 @@ ONSET_DB = 6.0  # a sound "starts" where the 10 ms power rises this much over th
 
 VOICE_ON_DB = -30.0  # voice activity: within this of the voice track's loud level
 SPAN_GAP_S, SPAN_MIN_S = 0.25, 0.4  # shorter pauses stay in a span; shorter spans are dropped
-MAX_SHIFT_S = 5.0  # a span starts at most this much later in the master than in the voice
 FINE_S, FINE_CHUNK_S = 0.02, 0.2  # sample-exact match: lag search on a span's loudest chunk
 WINDOW_STEPS = 40  # 400 ms, the momentary loudness window
 MAX_LU = 40.0  # nothing else heard
@@ -98,25 +98,10 @@ def speech_spans(env: Sequence[float]) -> List[Tuple[int, int]]:
     return [(a, b) for a, b in spans if b - a >= least]
 
 
-def _find(rv: Sequence[float], rm: Sequence[float], a: int, b: int, lo: int, hi: int
-          ) -> Optional[int]:
-    """The lag (steps) where voice span [a, b) best matches the master, on their RMS
-    envelopes; None when the span cannot fit in the master (a voice longer than the video
-    is cut)."""
-    v = rv[a:b]
-    best, best_lag = -1.0, None
-    for lag in range(max(lo, -a), min(hi, len(rm) - b) + 1):
-        m = rm[a + lag:b + lag]
-        score = sum(map(mul, v, m)) / (math.sqrt(sum(map(mul, m, m))) or 1.0)
-        if score > best:
-            best, best_lag = score, lag
-    return best_lag
-
-
 def _match(v: Sequence[float], m: Sequence[float], ev: Sequence[float], a: int, b: int,
            lag: int) -> Tuple[float, float]:
     """(correlation of the voice with the master on the span's loudest FINE_CHUNK_S, the
-    voice's LU above the rest of the master in span [a, b)), the envelope lag refined to the
+    voice's LU above the rest of the master in span [a, b)), `lag` (steps) refined to the
     sample on that chunk. Over the span the master is the voice at its gain there (its
     projection, so a dynamic loudnorm is followed span by span) plus the rest; the span's
     figure is the median over 400 ms windows (momentary loudness), so a short sound effect
@@ -147,24 +132,42 @@ def _match(v: Sequence[float], m: Sequence[float], ev: Sequence[float], a: int, 
     return corr(at), lu
 
 
-def voice_above_bed(master: Sequence[float], voice: Sequence[float]
-                    ) -> Optional[List[Dict[str, float]]]:
-    """Per spoken span {t (master seconds), d, lu: voice above the rest of the mix}; [] when
-    the voice track never speaks, None when it cannot be found in the master."""
+Parts = Sequence[Mapping[str, float]]  # [{audio_s, at_s}]: the voice from audio_s plays at at_s
+VOICE_FROM_START: Parts = [{"audio_s": 0.0, "at_s": 0.0}]  # the whole voice file from 0
+
+
+def placed(spans: Sequence[Tuple[int, int]], parts: Optional[Parts]
+           ) -> List[Tuple[int, int, int]]:
+    """(start, end, lag) in steps: `spans` (voice time) cut where a part of the voice starts,
+    each piece with its part's lag (video minus voice time). No parts: the voice from 0."""
+    edges = sorted((round(p["audio_s"] * 100), round(p["at_s"] * 100) - round(p["audio_s"] * 100))
+                   for p in parts or VOICE_FROM_START)
+    out = []
+    for a, b in spans:
+        for k, (start, lag) in enumerate(edges):
+            stop = edges[k + 1][0] if k + 1 < len(edges) else b
+            lo, hi = max(a, start), min(b, stop)
+            if hi - lo >= round(SPAN_MIN_S * 100):  # a piece too short to measure is left out
+                out.append((lo, hi, lag))
+    return out
+
+
+def voice_above_bed(master: Sequence[float], voice: Sequence[float],
+                    parts: Optional[Parts] = None) -> Optional[List[Dict[str, float]]]:
+    """Per spoken span {t (master seconds), d, lu: voice above the rest of the mix}, the
+    voice placed by `parts` (see placed()); [] when the voice track never speaks, None when
+    it is not heard where it should play."""
     ev = envelope(voice)
     spans = speech_spans(ev)
     if not spans:
         return []
-    rv, rm = [math.sqrt(p) for p in ev], [math.sqrt(p) for p in envelope(master)]
-    out, matches, prev = [], [], 0
-    for a, b in spans:  # in order: pauses only push the voice later
-        lag = _find(rv, rm, a, b, prev - 10, prev + round(MAX_SHIFT_S * 100))
-        if lag is None:
-            break
-        prev = lag
-        match, lu = _match(voice, master, ev, a, b, prev)
+    out, matches, steps = [], [], len(master) // HOP
+    for a, b, lag in placed(spans, parts):
+        if not 0 <= a + lag < steps:  # a voice longer than the video is cut
+            continue
+        match, lu = _match(voice, master, ev, a, b, lag)
         matches.append(match)
-        out.append({"t": (a + prev) / 100, "d": (b - a) / 100, "lu": round(lu, 1)})
+        out.append({"t": (a + lag) / 100, "d": (b - a) / 100, "lu": round(lu, 1)})
     return out if matches and statistics.median(matches) >= MIN_MATCH else None
 
 
@@ -225,9 +228,11 @@ def voice_track(recipe: Optional[Dict[str, Any]], media_root: PathLike) -> Optio
 
 
 def checks(master: Path, voice: Optional[Path], timeline: Optional[Sequence[Dict[str, Any]]],
-           analysis: Dict[str, Any], *, timeout_s: float) -> List[Tuple[str, bool, str]]:
+           analysis: Dict[str, Any], *, timeout_s: float, voice_parts: Optional[Parts] = None
+           ) -> List[Tuple[str, bool, str]]:
     """The listening checks (name, ok, detail) for a master with audio. `analysis` is
-    qc.analyze()'s result (true peak, momentary loudness, integrated loudness)."""
+    qc.analyze()'s result (true peak, momentary loudness, integrated loudness);
+    `voice_parts` where the template plays the voice (voice_above_bed())."""
     out: List[Tuple[str, bool, str]] = []
     events = [e for e in timeline or [] if e.get("t") is not None]
     peak = analysis.get("true_peak")
@@ -247,7 +252,7 @@ def checks(master: Path, voice: Optional[Path], timeline: Optional[Sequence[Dict
         return out
     mixed = pcm(master, timeout_s=timeout_s)
     if voice:
-        spans = voice_above_bed(mixed, pcm(voice, timeout_s=timeout_s))
+        spans = voice_above_bed(mixed, pcm(voice, timeout_s=timeout_s), voice_parts)
         if spans is None:
             out.append(("voice_above_bed", False, "the voice track is not heard in the mix"))
         elif spans:

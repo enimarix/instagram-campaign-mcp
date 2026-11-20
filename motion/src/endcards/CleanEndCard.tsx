@@ -11,7 +11,7 @@ import { brand } from "../brand";
 import { fonts } from "../lib/font";
 import { backOut, span } from "../voxel/anim.ts";
 import { MbTile, STORES, taglineOf, TRIAL, URL, Wordmark } from "./base";
-import { ACCENTS, type CardProps, cameoOf, TEXT_ACCENT } from "./schema.ts";
+import { ACCENTS, type CardProps, cameoOf, cardVolume, TEXT_ACCENT } from "./schema.ts";
 
 const smooth = Easing.bezier(0.22, 1, 0.36, 1);
 const ink = brand.colors.light.ink;
@@ -176,7 +176,7 @@ export const CardStack = ({ tagline, accent, address, dark = false, kicker = fal
         <div style={{ position: "absolute", left: 0, bottom: -10, height: 6, borderRadius: 3, background: color, width: `${100 * ease(frame, AT.line, 16)}%` }} />
       </div>
       <Sequence from={AT.pill} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-pop").src} volume={0.4} />
+        <Html5Audio src={assetById("sfx-pop").src} volume={cardVolume("sfx-pop")} />
       </Sequence>
     </div>
   );

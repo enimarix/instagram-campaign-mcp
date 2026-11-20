@@ -1,8 +1,8 @@
 // End cards (steps 130, 137): one per style, the shared props contract, never a price.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { CAMEOS, CARD_S, cardFrames, END_CARD_MIN_S, END_CARD_STYLES, endCardSchema, FOOD_IDS, SETTLE_S } from "../src/endcards/schema.ts";
+import { CAMEOS, CARD_PEAK_LUFS, CARD_S, cardFrames, cardVolume, END_CARD_MIN_S, END_CARD_STYLES, endCardSchema, FOOD_IDS, SETTLE_S, SFX_PEAK_LUFS } from "../src/endcards/schema.ts";
 import { bossBattleSchema } from "../src/templates/BossBattle/schema.ts";
 import { dialogStorySchema } from "../src/templates/DialogStory/schema.ts";
 import { factQuestSchema } from "../src/templates/FactQuest/schema.ts";
@@ -85,4 +85,18 @@ test("fitEndCard lengthens the outro so the card lasts its length, plus the loop
   // A card that is already long enough is left alone.
   const long = (o: number) => buildTimeline({ ...base, outroSeconds: o, loop: false });
   assert.equal(fitEndCard(long, 6, (t) => t.outroStart, CARD_S.pixel, 30).totalFrames, long(6).totalFrames);
+});
+
+test("every end-card sound plays at the voice's level, never by a hand-set volume (step 158)", () => {
+  const dir = new URL("../src/endcards/", import.meta.url);
+  for (const name of readdirSync(dir).filter((n) => n.endsWith("EndCard.tsx"))) {
+    const src = readFileSync(new URL(name, dir), "utf8");
+    const levelled = [...src.matchAll(/<Html5Audio src=\{assetById\("([\w-]+)"\)\.src\} volume=\{cardVolume\("\1"(?:, -\d+)?\)\} \/>/g)];
+    assert.equal(levelled.length, src.match(/<Html5Audio/g)?.length ?? 0, `${name}: every sound through cardVolume`);
+    for (const [, id] of levelled) assert.ok(id in SFX_PEAK_LUFS, `${name}: ${id} has no measured peak`);
+  }
+  // the loudest sound comes down to the level, a quiet one is never pushed past full volume
+  assert.ok(Math.abs(20 * Math.log10(cardVolume("sfx-coin")) + SFX_PEAK_LUFS["sfx-coin"] - CARD_PEAK_LUFS) < 1e-9);
+  assert.ok(cardVolume("sfx-coin") < 0.2 && cardVolume("sfx-pop", -8) < cardVolume("sfx-pop"));
+  for (const id of Object.keys(SFX_PEAK_LUFS) as (keyof typeof SFX_PEAK_LUFS)[]) assert.ok(cardVolume(id) <= 1);
 });

@@ -15,7 +15,7 @@ import { cellNoise, VoxelGrid } from "../voxel/mesh.ts";
 import { golem, KITCHEN_SPOT, KITCHEN_WIDE, kitchen, mbTile, PROPS } from "../voxel/models.ts";
 import { FORMS } from "../voxel/palette.ts";
 import { CameraRig, VoxelCanvas, VoxelCubes, VoxelMesh } from "../voxel/Stage.tsx";
-import { ACCENTS, type Accent, type CardProps, cameoOf, DEFAULT_TAGLINE } from "./schema.ts";
+import { ACCENTS, type Accent, type CardProps, cameoOf, cardVolume, DEFAULT_TAGLINE } from "./schema.ts";
 
 /** The kitchen sits this far below the podium: the crane up leaves it as the backdrop. */
 const KITCHEN_Y = -110;
@@ -123,7 +123,7 @@ export const VoxelEndCard = ({ tagline, accent, cameo: asked, address, pixelate 
         </group>
       </VoxelCanvas>
       <Sequence from={AT.pill} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-pop").src} volume={0.45} />
+        <Html5Audio src={assetById("sfx-pop").src} volume={cardVolume("sfx-pop")} />
       </Sequence>
       {/* Brand base: wordmark, tagline, pill, url, stacked in the lower half of the safe area. */}
       <div

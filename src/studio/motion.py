@@ -39,6 +39,7 @@ from . import (  # render.py imports us
     cinematic,
     ffmpeg,
     gpu_lock,
+    listen,
     macro3d,
     media,
     recipe,
@@ -297,10 +298,11 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
 
 def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
                         media_root: PathLike, *, timeout_s: float
-                        ) -> Tuple[MediaInfo, int, List[Dict[str, Any]]]:
+                        ) -> Tuple[MediaInfo, int, List[Dict[str, Any]], List[Dict[str, float]]]:
     """Render the master to `out`, then the shared finish (two-pass loudness when there is
-    audio). Returns its MediaInfo, the cover time in ms and its timeline (the template's own
-    events, motion/src/lib/events.ts, compressed). ValueError for bad props."""
+    audio). Returns its MediaInfo, the cover time in ms, its timeline (the template's own
+    events, motion/src/lib/events.ts, compressed) and where the voice plays (voiceParts in
+    motion/src/registry.ts, for the QC's listening). ValueError for bad props."""
     out = Path(out)
     if template == cinematic.TEMPLATE:
         def card(props: Dict[str, Any], backdrop: Optional[Path]) -> Optional[Path]:
@@ -325,7 +327,7 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
         else:  # nothing to normalise; QC reports the missing audio
             os.replace(raw, out)
     return (ffmpeg.probe(out), round((v["coverFrame"] or 0) * 1000 / v["fps"]),
-            recipe.compress_timeline(v["events"]))
+            recipe.compress_timeline(v["events"]), v.get("voiceParts") or listen.VOICE_FROM_START)
 
 
 def render_end_card(media_root: PathLike, props: Dict[str, Any], backdrop: Optional[Path] = None,

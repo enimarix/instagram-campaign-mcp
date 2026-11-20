@@ -105,7 +105,7 @@ def test_render_asset_finishes_fake_blender_frames(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cinematic, "_blender", fake_blender)
     out = tmp_path / "video.mp4"
-    info, cover_ms, timeline = cinematic.render_asset(ONE_LINE, out, tmp_path, timeout_s=120)
+    info, cover_ms, timeline, _ = cinematic.render_asset(ONE_LINE, out, tmp_path, timeout_s=120)
     assert seen["frames"] == 48 and seen["cues"][-1]["value"] == "X"  # flaps: no voice
     assert info.has_audio and info.width == 1080 and info.height == 1920
     assert info.duration == pytest.approx(2.0 + 3.5, abs=0.15)  # + the end card

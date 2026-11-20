@@ -61,6 +61,12 @@ CONTAINER_ARGS = ("-movflags", "+faststart")
 # Final loudness of every render (EBU R128 integrated / true peak / range).
 LOUDNESS_I, LOUDNESS_TP, LOUDNESS_LRA = -14.0, -1.5, 11.0
 LOUDNORM = f"loudnorm=I={LOUDNESS_I}:TP={LOUDNESS_TP}:LRA={LOUDNESS_LRA}"
+# Step 158: the encoded master must measure at most TRUE_PEAK_MAX and within LOUDNESS_TOL of
+# LOUDNESS_I (the AAC encode after loudnorm overshot its -1.5 target by up to 3 dB): a
+# 4x-oversampled limiter (a true-peak estimate) at LIMIT_DB, the encoded file measured, and
+# encoded again with the limiter lower by the overshoot, and the gain into it up by what the
+# limiting took off, while it is out (at most LIMIT_TRIES encodes).
+TRUE_PEAK_MAX, LOUDNESS_TOL, LIMIT_DB, LIMIT_TRIES = -1.0, 0.5, -2.0, 4
 AUDIO_FORMAT = f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo"
 
 # End of every video filtergraph: square pixels, output frame rate and pixel format.
@@ -872,11 +878,32 @@ def recipe_timeline(recipe: Recipe, duration_s: float,
     return compress_timeline(raw + clips)  # stable sort: our overlays first at the same t
 
 
+def _limiter(ceiling_db: float) -> str:
+    """Filter chain: a true-peak limiter at `ceiling_db` (4x oversampled, no auto gain)."""
+    return (f"aresample={4 * SAMPLE_RATE},alimiter=limit={10 ** (ceiling_db / 20):.5f}"
+            f":attack=1:release=50:level=0:latency=1")
+
+
+def loudness(path: PathLike, *, timeout_s: float) -> Tuple[Optional[float], Optional[float]]:
+    """(integrated loudness LUFS, true peak dBTP) of the audio (ffmpeg ebur128); None for a
+    value silence does not have."""
+    with tempfile.TemporaryDirectory() as work:
+        log = Path(work) / "loudness.log"
+        ffmpeg.run(["-i", path, "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-"],
+                   timeout_s=timeout_s, log_path=log)
+        summary = log.read_text(encoding="utf-8").rpartition("Summary:")[2]
+    found = [re.search(pattern, summary) for pattern in
+             (r"I:\s+(\S+) LUFS", r"True peak:\s+Peak:\s+(\S+) dBFS")]
+    values = [float(f.group(1)) if f else math.nan for f in found]
+    return tuple(v if math.isfinite(v) and v > -70 else None for v in values)
+
+
 def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path) -> None:
     """Two-pass loudnorm to LOUDNESS_*: measure, then apply with the measured values
-    (linear gain when the true-peak target allows it). The video is copied. Digital
-    silence (integrated loudness -inf) passes through unchanged. The audio is cut back to
-    the source's length: loudnorm flushes ~0.1 s more than it was given."""
+    (linear gain when the true-peak target allows it), then the true-peak ceiling (see
+    TRUE_PEAK_MAX), checked on the encoded file. The video is copied. Digital silence
+    (integrated loudness -inf) passes through unchanged. The audio is cut back to the
+    source's length: loudnorm flushes ~0.1 s more than it was given."""
     duration = ffmpeg.probe(src).duration
     ffmpeg.run(["-i", src, "-map", "0:a:0", "-af", f"{LOUDNORM}:print_format=json",
                 "-f", "null", "-"], timeout_s=timeout_s, log_path=log_path)
@@ -888,9 +915,18 @@ def normalize_loudness(src: Path, out: Path, *, timeout_s: float, log_path: Path
               f":offset={m['target_offset']}:linear=true")
     else:
         af = "anull"
-    ffmpeg.run(["-i", src, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
-                "-af", f"{af},{AUDIO_FORMAT},{_fit(duration)}", *AUDIO_ARGS, *CONTAINER_ARGS,
-                out], timeout_s=timeout_s)
+    gain, ceiling = 0.0, LIMIT_DB
+    for _ in range(LIMIT_TRIES):
+        ffmpeg.run(["-i", src, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af",
+                    f"{af},volume={gain:.2f}dB,{_limiter(ceiling)},{AUDIO_FORMAT},"
+                    f"{_fit(duration)}", *AUDIO_ARGS, *CONTAINER_ARGS, out], timeout_s=timeout_s)
+        lufs, peak = loudness(out, timeout_s=timeout_s)
+        over = 0.0 if peak is None else max(peak - TRUE_PEAK_MAX, 0.0)
+        short = 0.0 if lufs is None else LOUDNESS_I - lufs
+        if over == 0 and abs(short) <= LOUDNESS_TOL:
+            return
+        ceiling, gain = ceiling - (over + 0.2 if over else 0.0), gain + short
+    # ponytail: still out after LIMIT_TRIES encodes: kept, the QC's loudness checks flag it
 
 
 def render(recipe: Recipe, inputs: Mapping[str, PathLike], out: PathLike, *,

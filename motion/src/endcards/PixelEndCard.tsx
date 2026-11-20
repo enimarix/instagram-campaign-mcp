@@ -14,7 +14,7 @@ import { seeded } from "../lib/game";
 import { colors, palette } from "../lib/palette";
 import { snap } from "../lib/pixel";
 import { NAME_PARTS, taglineOf, TRIAL, URL } from "./base";
-import { type Accent, type CardProps, cameoOf } from "./schema.ts";
+import { type Accent, type CardProps, cameoOf, cardVolume } from "./schema.ts";
 
 /** The topic's macro colour, as the nearest Sweetie 16 colour. */
 export const PIXEL_ACCENT: Record<Accent, string> = { brand: "#38B764", protein: "#EF7D57", carbs: "#A7F070", fat: "#FFCD75", kcal: "#41A6F6" };
@@ -153,10 +153,10 @@ export const PixelEndCard = ({ tagline, accent, address, cameo, note }: Omit<Car
         </div>
       )}
       <Sequence from={AT.press} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-confirm").src} volume={0.5} />
+        <Html5Audio src={assetById("sfx-confirm").src} volume={cardVolume("sfx-confirm")} />
       </Sequence>
       <Sequence from={AT.button} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-coin").src} volume={0.5} />
+        <Html5Audio src={assetById("sfx-coin").src} volume={cardVolume("sfx-coin")} />
       </Sequence>
     </AbsoluteFill>
   );

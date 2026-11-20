@@ -92,12 +92,13 @@ def test_render_routes_macro3d_through_the_plates(tmp_path, monkeypatch):
     monkeypatch.setattr(macro3d, "render_plates", lambda shots, root, timeout_s: (
         seen.setdefault("shots", shots), "macro3d/plates/abc.mp4")[1])
     out = tmp_path / "video.mp4"
-    info, cover_ms, _ = motion.render_motion_asset("Macro3D", {"scenes": []}, out, tmp_path,
+    info, cover_ms, _, parts = motion.render_motion_asset("Macro3D", {"scenes": []}, out, tmp_path,
                                                    timeout_s=120)
     assert seen["template"] == "Macro3D" and seen["shots"] == SHOTS
     assert seen["props"]["plate"] == "public/macro3d/abc.mp4"
     assert (bundle / "public" / "macro3d" / "abc.mp4").read_bytes() == b"mp4"
     assert out.is_file() and cover_ms == 400
+    assert parts == motion.listen.VOICE_FROM_START  # the fake validation has no voiceParts
 
 
 def test_preview_puts_a_plate_under_the_frames_on_shots(tmp_path, monkeypatch):

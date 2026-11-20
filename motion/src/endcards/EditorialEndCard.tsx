@@ -14,7 +14,7 @@ import { TREE } from "../editorial/blossom.ts";
 import { fonts } from "../lib/font";
 import { backOut, span } from "../voxel/anim.ts";
 import { MbTile, STORES, taglineOf, TRIAL, URL, Wordmark } from "./base";
-import { ACCENTS, type CardProps, cameoOf } from "./schema.ts";
+import { ACCENTS, type CardProps, cameoOf, cardVolume } from "./schema.ts";
 
 /** Frames (from the card's start) at which each piece comes in. */
 const AT = { chip: 2, tagline: 6, tile: 18, cameo: 24, word: 26, pill: 40, url: 48, line: 52 };
@@ -74,7 +74,7 @@ export const EditorialEndCard = ({ tagline, accent, address, cameo }: Omit<CardP
         </div>
       </div>
       <Sequence from={AT.pill} durationInFrames={30} layout="none">
-        <Html5Audio src={assetById("sfx-pop").src} volume={0.4} />
+        <Html5Audio src={assetById("sfx-pop").src} volume={cardVolume("sfx-pop")} />
       </Sequence>
     </AbsoluteFill>
   );

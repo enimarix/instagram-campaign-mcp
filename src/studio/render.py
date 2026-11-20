@@ -129,15 +129,17 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
                  ) -> Tuple[MediaInfo, Dict[str, Any]]:
     """Render the master, preview, poster and thumbnail; return the master's MediaInfo and
     the asset fields (relative paths, and the timeline: what happens when, step 110), plus
-    `render_warnings` for QC when the render had to fall back (the static end card)."""
+    for QC `render_warnings` when the render had to fall back (the static end card) and
+    `voice_parts` (where a motion template plays the voice, src/studio/listen.py)."""
     env = _ENVELOPE.validate_python(asset["recipe"])
     folder = media.asset_dir(media_root, asset["batch_date"], asset["id"])
     video, preview = folder / "video.mp4", folder / "preview.mp4"
     poster, thumb = folder / "poster.jpg", folder / "thumb.jpg"
     cover_ms = env.thumb_offset_ms
     warnings: List[str] = []
+    parts = None  # the voice from 0
     if isinstance(env, MotionRecipe):
-        info, template_cover_ms, timeline = motion.render_motion_asset(
+        info, template_cover_ms, timeline, parts = motion.render_motion_asset(
             env.template, env.props, video, media_root, timeout_s=timeout_s)
         cover_ms = template_cover_ms if cover_ms is None else cover_ms
     else:
@@ -166,7 +168,8 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
     paths: Dict[str, Path] = {"file_path": video, "preview_path": preview,
                               "poster_path": poster, "thumbnail_path": thumb}
     return info, {**{k: media.relative(media_root, p) for k, p in paths.items()},
-                  "timeline": timeline, **({"render_warnings": warnings} if warnings else {})}
+                  "timeline": timeline, **({"render_warnings": warnings} if warnings else {}),
+                  **({"voice_parts": parts} if parts else {})}
 
 
 def auto_description(idea: Dict[str, Any], asset: Dict[str, Any]) -> str:
@@ -206,8 +209,9 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
         info, files = render_fn(asset, media_root,
                                 lambda p: store.update_render_job(job_id, progress=p))
         notes = files.pop("render_warnings", [])
-        qc = qc_fn({**asset, "timeline": files.get("timeline")}, idea, files["file_path"],
-                   media_root, settings or get_settings())  # this render's timeline (149)
+        qc = qc_fn({**asset, "timeline": files.get("timeline"),  # this render's (149, 158)
+                    "voice_parts": files.pop("voice_parts", None)}, idea, files["file_path"],
+                   media_root, settings or get_settings())
         if notes:
             qc = {**qc, "warnings": [*qc.get("warnings", []), *notes]}
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason

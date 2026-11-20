@@ -26,7 +26,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ..config import get_settings
-from . import ffmpeg, gpu_lock, media, recipe
+from . import ffmpeg, gpu_lock, listen, media, recipe
 from .ffmpeg import MediaInfo, PathLike
 from .tts import LineTiming, reading_timings
 
@@ -246,8 +246,9 @@ def _voice_path(p: Props, media_root: PathLike) -> Optional[Path]:
 
 def render_asset(props: Dict[str, Any], out: PathLike, media_root: PathLike, *,
                  timeout_s: float, end_card: Optional[recipe.CardRenderer] = None
-                 ) -> Tuple[MediaInfo, int, List[Dict[str, Any]]]:
-    """Render the master to `out` (same return as motion.render_motion_asset)."""
+                 ) -> Tuple[MediaInfo, int, List[Dict[str, Any]], List[Dict[str, float]]]:
+    """Render the master to `out` (same return as motion.render_motion_asset; the voice plays
+    from 0)."""
     out = Path(out)
     p = Props.model_validate(validate(props)["props"])
     timings, body_s, rec = _plan(p)
@@ -266,7 +267,8 @@ def render_asset(props: Dict[str, Any], out: PathLike, media_root: PathLike, *,
                     "-c:a", "aac", "-b:a", "192k", raw], timeout_s=timeout_s)
         inputs = {"source": raw, **({"music": AUDIO / f"{p.music}.wav"} if p.music != "none" else {})}
         info = recipe.render(rec, inputs, out, timeout_s=timeout_s, end_card=end_card)
-    return info, round(COVER_S * 1000), recipe.recipe_timeline(rec, info.duration)
+    return (info, round(COVER_S * 1000), recipe.recipe_timeline(rec, info.duration),
+            listen.VOICE_FROM_START)
 
 
 def preview_stills(props: Dict[str, Any], media_root: PathLike,
