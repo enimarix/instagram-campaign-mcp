@@ -1,5 +1,6 @@
 import os
 import tempfile
+from pathlib import Path
 
 import httpx
 import pytest
@@ -8,10 +9,52 @@ import pytest
 os.environ.setdefault("INSTAGRAM_ACCESS_TOKEN", "test_token")
 os.environ.setdefault("INSTAGRAM_BUSINESS_ACCOUNT_ID", "1789")
 os.environ["IG_MCP_ENV_FILE"] = "/nonexistent.env"
-# The worker's daily backup (render loop) must never write into the checkout's data/.
-os.environ.setdefault("BACKUP_DIR", tempfile.mkdtemp(prefix="ig-test-backups-"))
-# Tests never wait on (or block) the machine's real GPU lock held by a live studio (145).
-os.environ["GPU_LOCK_PATH"] = os.path.join(tempfile.mkdtemp(prefix="ig-test-gpu-"), "gpu.lock")
+
+# Step 160: every machine path a default setting points at goes to one temp dir per session,
+# before src is imported. A test that reaches the agent runner (or a detached `agent run` it
+# starts: it inherits this env) can't rebuild the live ~/.ig-campaign-agent, and a test never
+# waits on (or blocks) the real GPU lock (145) nor writes the checkout's data/.
+_TMP = Path(tempfile.mkdtemp(prefix="ig-test-"))
+os.environ.update({
+    "DATABASE_PATH": str(_TMP / "ig_campaign.db"),
+    "MEDIA_ROOT": str(_TMP / "media"),
+    "BACKUP_DIR": str(_TMP / "backups"),
+    "TTS_CACHE_DIR": str(_TMP / "cache" / "tts"),
+    "STT_CACHE_DIR": str(_TMP / "cache" / "stt"),
+    "INBOX_DIR": str(_TMP / "inbox"),
+    "AGENT_WORKSPACE": str(_TMP / "agent-ws"),
+    "AGENT_LOG_DIR": str(_TMP / "logs" / "agent"),
+    "GPU_LOCK_PATH": str(_TMP / "gpu" / "gpu.lock"),
+    "CLAUDE_BIN": str(_TMP / "no-claude-in-tests"),  # never a real AI run from a test
+})
+_REAL = [Path.home() / ".ig-campaign-agent", Path.home() / ".ig-campaign"]
+
+
+def _snapshot():
+    """path -> mtime of everything under the real machine folders."""
+    return {p: p.stat().st_mtime_ns for root in _REAL if root.exists()
+            for p in (root, *root.rglob("*"))}
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _real_machine_untouched():
+    """The suite (and anything it starts) never creates or changes the real agent workspace
+    or the GPU lock folder. A live studio render or a scheduled run starting meanwhile also
+    changes them: then rerun."""
+    before = _snapshot()
+    yield
+    after = _snapshot()
+    # the live studio's own GPU holder note may change; one written by this process is a leak
+    holder = Path.home() / ".ig-campaign" / "gpu.lock.holder"
+    if holder in after and after[holder] != before.get(holder):
+        if not holder.read_text(encoding="utf-8", errors="replace").startswith(
+                f"pid {os.getpid()}:"):
+            before.pop(holder, None)
+            after.pop(holder)
+    changed = sorted(str(p) for p in before.keys() | after.keys()
+                     if before.get(p) != after.get(p))
+    assert not changed, f"the test suite touched the real machine: {changed}"
+
 
 from src.config import InstagramMCPSettings  # noqa: E402
 from src.instagram_client import InstagramClient  # noqa: E402

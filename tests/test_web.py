@@ -7,10 +7,21 @@ import uvicorn
 from fastapi.testclient import TestClient
 
 from src import scheduler, worker
+from src.agent import schedule
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 
 from .conftest import LOCAL
+
+
+@pytest.fixture(autouse=True)
+def _no_agent_catch_up(monkeypatch):
+    """The real worker's catch-up starts the due playbooks detached: on the real clock, past
+    03:00 with an empty test DB, that rebuilt the live agent workspace (step 160)."""
+    async def idle(store, settings):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(schedule, "catch_up_loop", idle)
 
 
 def _settings(tmp_path, password=None, **kw):
