@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import json
 import re
 import time
@@ -22,7 +23,7 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Optional
 from urllib.parse import urlencode, urlparse
 from zoneinfo import ZoneInfo
 
@@ -109,6 +110,120 @@ class InstagramAPIError(Exception):
 
 class RateLimitExceeded(InstagramAPIError):
     """Raised when Meta reports a rate limit (or the client-side cap is hit)."""
+
+
+# Meta cut the studio off (step 167): every call fails the same way until the owner acts,
+# so the Breaker below stops calling. Code 200 subcode 5258005 "API access blocked." (seen
+# 2026-11-19/20 when Meta asked the owner to confirm his developer account; not in Meta's
+# error docs), code 368 "temporarily blocked for policies violations", and code 190 with
+# subcode 460 (password changed) / 463 (expired) / 467 (invalid) = the token is dead.
+ACCESS_BLOCKED_SUBCODE = 5258005
+POLICY_BLOCK_CODE = 368
+INVALID_TOKEN_CODE = 190
+DEAD_TOKEN_SUBCODES = {460, 463, 467}
+BREAKER_KEY = "graph_blocked"  # worker_state: shared by worker, API, MCP server, agent runs
+BREAKER_PAUSE_S = 30 * 60.0  # first pause, doubled after each failed probe
+BREAKER_MAX_PAUSE_S = 6 * 3600.0
+BREAKER_PROBE_S = 120.0  # after a pause one call tries; the others wait this long for it
+
+
+def blocks_access(code: Optional[int], subcode: Optional[int], own_token: bool = True) -> bool:
+    """A Graph error that means Meta blocked the studio (not just this request). A dead-token
+    190 counts only for the client's own token (190 on an app token = bad app credentials)."""
+    if subcode == ACCESS_BLOCKED_SUBCODE or code == POLICY_BLOCK_CODE:
+        return True
+    return own_token and code == INVALID_TOKEN_CODE and subcode in DEAD_TOKEN_SUBCODES
+
+
+class AccessBlocked(InstagramAPIError):
+    """Meta blocked API access or the token died. While the breaker is tripped it is raised
+    at once, without a network call. `until`: unix time of the next try."""
+
+    def __init__(self, message: str, error_code: Optional[int], error_subcode: Optional[int],
+                 until: float):
+        super().__init__(message, error_code, error_subcode)
+        self.until = until
+
+
+class Breaker:
+    """Graph circuit breaker. Tripped by a blocking error (blocks_access): calls are refused
+    for BREAKER_PAUSE_S, then one call goes through as the probe; a probe that is blocked
+    again doubles the pause (cap BREAKER_MAX_PAUSE_S), any answer that is not a block
+    resets it. With a `store` the state is one worker_state value shared by every process
+    (like RequestBudget's window), else this object's own: {until, pause_s, since, reason,
+    code, subcode, token, probing_at?} (unix times). `token` is a hash of the token it
+    tripped on, so a new token in .env starts clean."""
+
+    def __init__(self, store: Optional[CampaignStore], token: Optional[str], tz: str,
+                 clock: Callable[[], float] = time.time):
+        self.store = store
+        self.token = hashlib.sha256((token or "").encode()).hexdigest()[:16]
+        self.tz = ZoneInfo(tz)
+        self.clock = clock
+        self._state: Optional[Dict[str, Any]] = None
+
+    def state(self) -> Optional[Dict[str, Any]]:
+        s = self.store.get_state(BREAKER_KEY) if self.store is not None else self._state
+        return s if s and s.get("token") == self.token else None
+
+    def _save(self, s: Optional[Dict[str, Any]]) -> None:
+        if self.store is not None:
+            self.store.set_state(BREAKER_KEY, s)
+        else:
+            self._state = s
+
+    def hhmm(self, ts: float) -> str:
+        """Owner-local HH:MM of a unix time."""
+        return datetime.fromtimestamp(ts, self.tz).strftime("%H:%M")
+
+    @staticmethod
+    def _refused_until(s: Dict[str, Any], now: float) -> Optional[float]:
+        if now < s["until"]:
+            return s["until"]
+        probing = s.get("probing_at")
+        return probing + BREAKER_PROBE_S if probing and now - probing < BREAKER_PROBE_S else None
+
+    def blocked_until(self) -> Optional[float]:
+        """While calls are refused: the time they try again. None otherwise."""
+        s = self.state()
+        return self._refused_until(s, self.clock()) if s else None
+
+    def _error(self, s: Dict[str, Any], until: float) -> AccessBlocked:
+        reason = (s.get("reason") or "access blocked").rstrip(". ")
+        return AccessBlocked(f"Meta paused API access: {reason}; retrying at {self.hhmm(until)}",
+                             s.get("code"), s.get("subcode"), until)
+
+    def check(self) -> Optional[Dict[str, Any]]:
+        """Raise AccessBlocked while tripped; after a pause, let this call through as the
+        probe. Returns the tripped state (None when not tripped)."""
+        s = self.state()
+        if s is None:
+            return None
+        now = self.clock()
+        until = self._refused_until(s, now)
+        if until is not None:
+            raise self._error(s, until)
+        # ponytail: read-then-write, two processes probing in the same instant both go
+        # through (two calls instead of one); a compare-and-set on worker_state if it matters.
+        self._save({**s, "probing_at": now})
+        return s
+
+    def trip(self, code: Optional[int], subcode: Optional[int], message: str) -> AccessBlocked:
+        """Record a blocking error; returns the AccessBlocked to raise."""
+        now = self.clock()
+        s = self.state()
+        if s is not None and now < s["until"]:  # a call sent before the trip: already counted
+            return self._error(s, s["until"])
+        pause = BREAKER_PAUSE_S if s is None else min(s["pause_s"] * 2, BREAKER_MAX_PAUSE_S)
+        s = {"until": now + pause, "pause_s": pause, "since": s["since"] if s else now,
+             "reason": message[:200], "code": code, "subcode": subcode, "token": self.token}
+        self._save(s)
+        logger.warning("graph_access_blocked", code=code, subcode=subcode, pause_s=pause)
+        return self._error(s, s["until"])
+
+    def reset(self) -> None:
+        self._save(None)
+        logger.info("graph_access_restored")
 
 
 class NotConfigured(InstagramAPIError):
@@ -202,6 +317,7 @@ class GraphClient:
         if not self.access_token:
             raise NotConfigured(NOT_CONFIGURED_MSG)
         self.budget = RequestBudget(self.settings.rate_limit_requests_per_hour, store=store)
+        self.breaker = Breaker(store, self.access_token, self.settings.timezone)
         self.client = http_client or httpx.AsyncClient(
             timeout=httpx.Timeout(60.0),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
@@ -249,6 +365,7 @@ class GraphClient:
 
         if method not in ("GET", "POST", "DELETE"):
             raise ValueError(f"Unsupported HTTP method: {method}")
+        probe = self.breaker.check()  # tripped: AccessBlocked, no call, no budget slot
         await self.budget.acquire()
         try:
             if method == "GET":
@@ -280,8 +397,14 @@ class GraphClient:
             subcode = err.get("error_subcode")
             msg = err.get("error_user_msg") or err.get("message", "Unknown error")
             logger.warning("graph_error", endpoint=endpoint, code=code, subcode=subcode)
+            if blocks_access(code, subcode, own_token=token in (None, self.access_token)):
+                raise self.breaker.trip(code, subcode, msg)
+            if probe:  # Meta answered something else: access is back
+                self.breaker.reset()
             exc_cls = RateLimitExceeded if code in RATE_LIMIT_CODES else InstagramAPIError
             raise exc_cls(msg, code, subcode)
+        if probe:
+            self.breaker.reset()
 
         if response.status_code == 429:
             raise RateLimitExceeded("Instagram API rate limit exceeded", 429)

@@ -8,6 +8,25 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-20: A Meta block pauses the studio's Graph calls, posts wait (167)
+A Graph error that means Meta blocked the studio, not one request (code 200 subcode 5258005
+"API access blocked.", code 368 temporarily blocked for policy, code 190 subcode 460/463/467 on
+the studio's own token), trips a circuit breaker in `GraphClient._make_request`: every Graph
+call is then refused at once (`AccessBlocked`, no network call, no request-budget slot) for
+30 min, then one call goes through as the probe. A probe blocked again doubles the pause (60,
+120, 240 min, cap 6 h); any other answer from Meta resets it. The state is one worker_state
+value (`graph_blocked`) shared by the worker, the API, the MCP server and agent runs; a new
+token in .env starts clean. A blocked post goes back to pending until the next try without
+counting an attempt (like the publishing quota); data jobs and the Stories snapshot skip; the
+token status caches a failed check for 10 min instead of raising; the website shows one alert
+until the breaker resets. A post that already failed is put back with the Calendar's Replan
+(no new command).
+Reason: 2026-11-19 and 2026-11-20 Meta flagged the owner's developer account (« Account
+confirmation needed »): post #13 burned its 3 attempts in a second and failed, the worker kept
+calling a blocked account every few minutes and every website page called debug_token. Only
+the owner can unblock it (Confirm Account on developers.facebook.com); a 6 h cap keeps a long
+block quiet while the post still goes out the same day once access returns.
+
 ## 2026-11-20: A resource guard keeps the studio from freezing the PC (166)
 Every heavy child the studio starts (Blender, Remotion's node and Chrome, ffmpeg, the voice
 service and its model worker, agent CLI runs) runs at low priority (Windows

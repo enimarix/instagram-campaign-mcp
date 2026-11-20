@@ -14,6 +14,7 @@ Campaign layer: ties the Graph API client to the local store.
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import date, datetime, time, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -24,6 +25,7 @@ from .config import InstagramMCPSettings, get_settings
 from .instagram_client import (
     MISSING_OBJECT,
     PUBLISH_QUOTA_SUBCODE,
+    AccessBlocked,
     InstagramAPIError,
     InstagramClient,
     InvalidMedia,
@@ -241,6 +243,13 @@ async def run_due(
                               retry_in_minutes=BACKOFF_MINUTES, count_attempt=False)
             retrying.append({"id": post["id"], "error": e.message})
             break  # stop hammering the API this round
+        except AccessBlocked as e:
+            # Meta blocked the API (step 167): the post waits for the breaker's next try,
+            # its attempts unchanged.
+            wait = max(1, math.ceil((e.until - utcnow().timestamp()) / 60))
+            store.mark_failed(post["id"], e.message, retry_in_minutes=wait, count_attempt=False)
+            retrying.append({"id": post["id"], "error": e.message})
+            break
         except InstagramAPIError as e:
             if e.error_subcode == PUBLISH_QUOTA_SUBCODE and not e.maybe_published:
                 # ~100 API posts per rolling 24h: wait, don't burn attempts.

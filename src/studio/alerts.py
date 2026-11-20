@@ -4,7 +4,8 @@ Alerts (step 098): what needs the owner's attention, for the website's bell.
 Computed on every call from state that already exists (no event pipeline): failed
 publishes, publishes waiting for a check, re-planned late slots, the token, the latest run
 of each agent playbook, a QC failure spike in the last batch, a stale worker heartbeat, the
-Reel downloader's health and skipped DM picks. Experiment alerts come with 086's facts
+Graph breaker (Meta blocked API access, step 167), the Reel downloader's health and skipped
+DM picks. Experiment alerts come with 086's facts
 warning. Jobs whose alert is an event, not a state (the ads sync, 095), keep it with
 `raise_alert`.
 
@@ -16,14 +17,14 @@ kept in worker state, and the alert stays hidden until its `since` moves past th
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ..agent.packet import SKIPPED
 from ..config import InstagramMCPSettings
-from ..instagram_client import InstagramAPIError, InstagramClient
+from ..instagram_client import INVALID_TOKEN_CODE, InstagramClient
 from ..store import CampaignStore, parse_dt, to_iso
-from ..worker import ALIVE_WITHIN
+from ..worker import ALIVE_WITHIN, graph_breaker
 from . import downloader_service, token
 
 STATE_KEY = "alerts_dismissed"
@@ -162,6 +163,23 @@ def _worker(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
                    "ig-campaign up; nothing publishes meanwhile.", "/settings", beat)]
 
 
+def _graph_blocked(store: CampaignStore, settings: InstagramMCPSettings) -> List[Dict[str, Any]]:
+    breaker = graph_breaker(store, settings)
+    s = breaker.state()
+    if s is None:
+        return []
+    then = ("Posts wait and publish by themselves when access returns. Next try "
+            f"{breaker.hhmm(s['until'])}.")
+    since = to_iso(datetime.fromtimestamp(s["since"], timezone.utc))
+    if s.get("code") == INVALID_TOKEN_CODE:
+        return [_alert("graph_blocked", None, "error", "Meta refused the studio's token",
+                       f"Paste a new token in .env (see README, Token). {then}", "/settings",
+                       since)]
+    return [_alert("graph_blocked", None, "error", "Meta blocked the studio's API access",
+                   f"Open developers.facebook.com and click Confirm Account. {then}",
+                   "https://developers.facebook.com/apps/", since)]
+
+
 def _downloader(store: CampaignStore) -> List[Dict[str, Any]]:
     health = store.get_state(downloader_service.STATE_KEY) or {}
     if health.get("status") not in ("down", "broken"):
@@ -189,13 +207,11 @@ async def alerts(store: CampaignStore, settings: InstagramMCPSettings, now: date
                  client: Optional[InstagramClient] = None) -> List[Dict[str, Any]]:
     """[{id, kind, severity info|warn|error, title, detail, link, since}], newest first,
     without the dismissed ones. Reads only (the token status is cached for an hour)."""
-    try:
-        t = await token.token_status(client, settings)
-    except InstagramAPIError:  # e.g. bad app credentials: the Settings page shows it
-        t = None
+    t = await token.token_status(client, settings)  # a failed check: valid None, no alert
     found = [*_publishes(store, now), *_replanned(store, now), *_token(t),
              *_agent_runs(store), *_qc_spike(store), *_worker(store, now),
-             *_downloader(store), *_dm_skipped(store, now), *_raised(store, now)]
+             *_graph_blocked(store, settings), *_downloader(store), *_dm_skipped(store, now),
+             *_raised(store, now)]
     dismissed = store.get_state(STATE_KEY) or {}
     shown = [a for a in found if a["id"] not in dismissed
              or (a["since"] is not None and parse_dt(a["since"]) > parse_dt(dismissed[a["id"]]))]
