@@ -4,6 +4,7 @@ command or the workspace ever loosens; the rest drive a fake `claude` executable
 import json
 import os
 import sys
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 
@@ -123,6 +124,15 @@ def test_workspace_inside_repo_or_app_home_is_refused(cfg, agent_dir, where):
     cfg.agent_workspace = str(where)
     with pytest.raises(runner.AgentError, match="outside|git repository"):
         runner.prepare_workspace(cfg, "hello", agent_dir=agent_dir)
+
+
+def test_default_settings_in_tests_never_point_at_the_real_machine():
+    """Step 160 (tests/conftest.py): a default-settings run can't reach the live workspace."""
+    s = InstagramMCPSettings(_env_file=None)
+    tmp = Path(tempfile.gettempdir()).resolve()
+    for path in (s.agent_workspace, s.agent_log_dir, s.gpu_lock_path, s.database_path,
+                 s.media_root, s.backup_dir, s.claude_bin):
+        assert tmp in Path(path).resolve().parents, path
 
 
 def test_workspace_refuses_a_foreign_claude_folder(cfg, agent_dir, tmp_path):
