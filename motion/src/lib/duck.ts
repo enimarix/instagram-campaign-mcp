@@ -1,6 +1,7 @@
 // Music ducking (step 148): the bed steps down while the voice speaks, so the voice sits clearly
 // on top after the studio's -14 LUFS loudnorm, and comes back up in the gaps. Pure functions
-// (no imports), used by components/MusicBed.tsx and unit-tested in test/duck.test.ts.
+// (no imports), used by components/MusicBed.tsx and components/Sfx.tsx (the sound effects'
+// levels, step 159), unit-tested in test/duck.test.ts and test/sfx.test.ts.
 
 export type Span = { start_s: number; end_s: number };
 
