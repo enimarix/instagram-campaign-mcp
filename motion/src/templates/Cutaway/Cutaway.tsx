@@ -5,9 +5,9 @@
 // on a P-px grid (src/cutaway/kit.tsx), a game HUD in a 5x7 pixel font (src/cutaway/pixelfont.ts).
 import { useMemo } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
-import { type AssetId, assetById } from "../../assets";
 import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { BASE, Box, Defs, DitherRect, H, P, px, SkyLayer, STAGE, steps, Tag, tagHeight, Type, typeSize, W } from "../../cutaway/kit";
 import { C } from "../../cutaway/palette";
 import { DitherLayer } from "../../cutaway/shade";
@@ -15,8 +15,7 @@ import { chipText, dashesOf, mechanismClock, VIEWS, type ViewId } from "../../cu
 import type { ViewState } from "../../cutaway/views/common";
 import { cycleOf, VIEW_COMPONENTS } from "../../cutaway/views/index";
 import { EndCard } from "../../endcards/EndCard";
-import { cardVolume } from "../../endcards/schema";
-import { spokenLines } from "../../lib/duck";
+import { BANG_SPEECH_DB, type SfxId, spokenLines } from "../../lib/duck";
 import { loopFade } from "../../lib/timeline";
 import { easeInOut, easeOut, span } from "../../voxel/anim.ts";
 import { lerpText, stepsLayout, titleLayout } from "./layout";
@@ -298,20 +297,24 @@ const Picture = ({ plan, frame, fps }: { plan: Plan; frame: number; fps: number 
   );
 };
 
-/** SFX cues (frame, asset, volume): a blip per beat, a hit per burst, a swish per cut, the payoff's confirm. */
+/**
+ * SFX cues (frame, sound, dB from the voice's level, dB under a spoken line): a blip per beat,
+ * a hit per burst, a swish per cut, the payoff's confirm.
+ */
 const cuesOf = (plan: Plan, endStart: number, fps: number) => {
-  const cues: [number, AssetId, number][] = [];
+  const cues: [number, SfxId, number, number?][] = [];
   plan.scenes.forEach((sc, i) => {
     if (!i) return;
     const s = plan.all[i];
     const last = i === plan.all.length - 1;
-    // The payoff's confirm lands on the voice: 6 LU under it (at 0.35 it buried a word, step 158).
-    cues.push(last ? [sc.startFrame, "sfx-confirm", cardVolume("sfx-confirm", -6)] : [sc.startFrame, "sfx-select", 0.35]);
-    if (plan.resolved[i].cut) cues.push([sc.startFrame, "sfx-swish", 0.3]);
-    if (s.bang) cues.push([sc.startFrame + bangStart(sc.endFrame - sc.startFrame), "sfx-hit", 0.45]);
-    s.callouts.forEach((_, k) => cues.push([sc.startFrame + calloutStart(i, k, plan.resolved[i].cut, fps), "sfx-select", 0.15]));
+    // The payoff's confirm lands on the voice (at a hand-set 0.35 it buried a word, step 158).
+    cues.push(last ? [sc.startFrame, "sfx-confirm", -3] : [sc.startFrame, "sfx-select", -5]);
+    if (plan.resolved[i].cut) cues.push([sc.startFrame, "sfx-swish", -7]);
+    // The burst is the beat's point: it stays close under a spoken word.
+    if (s.bang) cues.push([sc.startFrame + bangStart(sc.endFrame - sc.startFrame), "sfx-hit", 0, BANG_SPEECH_DB]);
+    s.callouts.forEach((_, k) => cues.push([sc.startFrame + calloutStart(i, k, plan.resolved[i].cut, fps), "sfx-select", -12]));
   });
-  cues.push([endStart - 8, "sfx-swish", 0.35]);
+  cues.push([endStart - 8, "sfx-swish", -6]);
   return cues;
 };
 
@@ -323,6 +326,7 @@ export const Cutaway = (props: CutawayProps) => {
   const cues = useMemo(() => cuesOf(plan, endStart, fps), [plan, endStart, fps]);
   const loop = loopFade(frame, timeline);
   const last = plan.all[plan.all.length - 1];
+  const lines = spokenLines(props.voice);
   return (
     <AbsoluteFill style={{ background: C.night }}>
       <Defs />
@@ -346,12 +350,10 @@ export const Cutaway = (props: CutawayProps) => {
           <Picture plan={plan} frame={0} fps={fps} />
         </AbsoluteFill>
       )}
-      {cues.map(([at, id, volume], i) => (
-        <Sequence key={i} from={Math.max(0, at)} durationInFrames={45} layout="none">
-          <Html5Audio src={assetById(id).src} volume={volume} />
-        </Sequence>
+      {cues.map(([at, id, db, speech], i) => (
+        <Sfx key={i} id={id} at={at} db={db} speech={speech} lines={lines} />
       ))}
-      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
+      <MusicBed id={props.music} lines={lines} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

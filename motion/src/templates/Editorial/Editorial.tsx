@@ -7,9 +7,9 @@
 // across chapters while the type changes around it.
 import { type CSSProperties, useMemo } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
-import { type AssetId, assetById } from "../../assets";
 import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { Character } from "../../editorial/Character";
 import { Brackets, Counter, DeepGround, DotGrid, Drift, ease, GROTESK, Kicker, LEFT, PixelCaption, PixelDefs, Rise, Scrubber, SERIF, StatCard, struckWords, TagChip, W, H } from "../../editorial/kit";
 import { BLACK, CHARACTERS, PINK } from "../../editorial/palette.ts";
@@ -17,7 +17,7 @@ import { FlatTree, Tree } from "../../editorial/Tree";
 import { CROWN, gustOf, GUST_RANGE, TREE } from "../../editorial/blossom.ts";
 import { EndCard } from "../../endcards/EndCard";
 import { frenchSpaces } from "../../lib/french";
-import { spokenLines } from "../../lib/duck";
+import { type SfxId, spokenLines } from "../../lib/duck";
 import { loopFade } from "../../lib/timeline";
 import { type Camera, cameraOf, payoffCamera } from "./layout";
 import { bloomOf, cameoOf, type Chapter, type EditorialProps, timelineOf } from "./schema";
@@ -317,19 +317,19 @@ const SceneView = (sp: SceneProps) => {
 
 const isAnatomy = (p: EditorialProps, index: number) => index >= 1 && index <= p.chapters.length && p.chapters[index - 1].scene === "anatomy";
 
-/** SFX cues (frame, asset, volume) for the whole film. */
+/** SFX cues (frame, sound, dB from the voice's level) for the whole film. */
 const cuesOf = (p: EditorialProps, starts: number[], lens: number[], endStart: number) => {
-  const cues: [number, AssetId, number][] = [];
+  const cues: [number, SfxId, number, number?][] = [];
   p.chapters.forEach((c, i) => {
     const s = starts[i + 1];
     const len = lens[i + 1];
-    cues.push([s - 3, "sfx-swish", 0.3]);
-    if (c.scene === "tree") c.tags.forEach((_, k) => cues.push([s + Math.round(len * (0.3 + 0.14 * k)), "sfx-pop", 0.35]));
-    if (c.scene === "anatomy" && c.then) cues.push([s + Math.round(len * 0.5), "sfx-pop", 0.45]);
-    if ((c.scene === "tree" || c.scene === "anatomy") && c.stat) cues.push([s + Math.round(len * (c.scene === "anatomy" ? 0.35 : 0.3)), "sfx-pop", 0.35]);
+    cues.push([s - 3, "sfx-swish", -7]);
+    if (c.scene === "tree") c.tags.forEach((_, k) => cues.push([s + Math.round(len * (0.3 + 0.14 * k)), "sfx-pop", -2]));
+    if (c.scene === "anatomy" && c.then) cues.push([s + Math.round(len * 0.5), "sfx-pop", 0]);
+    if ((c.scene === "tree" || c.scene === "anatomy") && c.stat) cues.push([s + Math.round(len * (c.scene === "anatomy" ? 0.35 : 0.3)), "sfx-pop", -2]);
   });
-  cues.push([starts[p.chapters.length + 1] + 10, "sfx-chime", 0.45]);
-  cues.push([endStart - 3, "sfx-swish", 0.35]);
+  cues.push([starts[p.chapters.length + 1] + 10, "sfx-chime", 0]);
+  cues.push([endStart - 3, "sfx-swish", -6]);
   return cues;
 };
 
@@ -353,6 +353,7 @@ export const Editorial = (props: EditorialProps) => {
     chapterAt?.scene === "tree" && chapterAt.action === "wind" ? [(scenes[index].startFrame + GUST_RANGE[0] * lenOf(index)) / endStart, (scenes[index].startFrame + GUST_RANGE[1] * lenOf(index)) / endStart] : undefined;
   const cues = cuesOf(props, scenes.map((s) => s.startFrame), scenes.map((_, i) => lenOf(i)), endStart);
   const loop = loopFade(frame, timeline);
+  const lines = spokenLines(props.voice);
   return (
     <AbsoluteFill style={{ background: BLACK }}>
       {frame < endStart ? (
@@ -384,12 +385,10 @@ export const Editorial = (props: EditorialProps) => {
           <SceneView {...sp(0, 0)} />
         </AbsoluteFill>
       )}
-      {cues.map(([at, id, volume], i) => (
-        <Sequence key={i} from={Math.max(0, at)} durationInFrames={45} layout="none">
-          <Html5Audio src={assetById(id).src} volume={volume} />
-        </Sequence>
+      {cues.map(([at, id, db, speech], i) => (
+        <Sfx key={i} id={id} at={at} db={db} speech={speech} lines={lines} />
       ))}
-      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
+      <MusicBed id={props.music} lines={lines} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

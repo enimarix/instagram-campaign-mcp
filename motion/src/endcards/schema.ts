@@ -5,6 +5,7 @@
 // Imports only zod and pure modules, so `node --test` runs it (test/endcards.test.ts).
 import { z } from "zod";
 import { NO_PRICE, noPrice } from "../lib/noPrice.ts";
+import { type SfxId, sfxVolume, VOICE_LUFS } from "../lib/duck.ts";
 import { VIEW_IDS } from "../cutaway/views.ts";
 import { FORMS } from "../voxel/palette.ts";
 import { SCENE_IDS } from "../cinema/scenes.ts";
@@ -81,20 +82,16 @@ export const cameoOf = (style: EndCardStyle, cameo?: string): string => cameo ??
 export const CARD_S = { voxel: 3.5, paper: 3.5, clean: 3.5, pixel: 4, live: 4, cutaway: 4, editorial: 3.5, cinema: 3.5, macro3d: 3.5 } as const satisfies Record<EndCardStyle, number>;
 export const SETTLE_S = { voxel: 2.3, paper: 2.3, clean: 2.1, pixel: 2.8, live: 2.6, cutaway: 2.8, editorial: 2.3, cinema: 2.3, macro3d: 2.4 } as const satisfies Record<EndCardStyle, number>;
 
-/**
- * Peak momentary loudness (LUFS, ffmpeg ebur128 over the whole sound) of the sounds an end card
- * may play (motion/public/audio, mono).
- */
-export const SFX_PEAK_LUFS = { "sfx-pop": -20.9, "sfx-select": -24.6, "sfx-confirm": -16.7, "sfx-coin": -13.2, "sfx-chime": -15.2 } as const;
+export { SFX_PEAK_LUFS } from "../lib/duck.ts";
 /**
  * End-card sounds sit at the voice's level (step 158): the coin and the confirm at volume 0.5
  * peaked 9 LU over the speech once the studio's -14 LUFS finish lifted the quiet voice. A card
- * sound peaks at this level in the template's mix: the quietest approved voice's own
- * (conteur_grave, about -29 LUFS integrated); a louder voice leaves the card further under it.
+ * sound peaks at this level in the template's mix (lib/duck.ts VOICE_LUFS, the quietest approved
+ * voice's own); a louder voice leaves the card further under it.
  */
-export const CARD_PEAK_LUFS = -29;
+export const CARD_PEAK_LUFS = VOICE_LUFS;
 /** Volume that puts sound `id` at CARD_PEAK_LUFS (`db` lower for a quieter accent). */
-export const cardVolume = (id: keyof typeof SFX_PEAK_LUFS, db = 0) => Math.min(1, 10 ** ((CARD_PEAK_LUFS + db - SFX_PEAK_LUFS[id]) / 20));
+export const cardVolume = (id: SfxId, db = 0) => sfxVolume(id, db);
 
 /** Shortest end card (owner: a clean end card of 2 s or more; the reveal needs about 2 s). */
 export const END_CARD_MIN_S = 2.5;

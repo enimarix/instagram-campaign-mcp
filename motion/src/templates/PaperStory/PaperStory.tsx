@@ -8,14 +8,14 @@
 // and every move on 12 fps steps.
 import { useMemo } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
-import { type AssetId, assetById } from "../../assets";
 import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { EndCard } from "../../endcards/EndCard";
 import { PAPER } from "../../endcards/PaperEndCard";
 import { ACCENTS, TEXT_ACCENT } from "../../endcards/schema";
 import { countUp } from "../../lib/countUp";
-import { spokenLines } from "../../lib/duck";
+import { type SfxId, spokenLines } from "../../lib/duck";
 import { frenchSpaces } from "../../lib/french";
 import { loopFade, type Scene } from "../../lib/timeline";
 import { CharacterGroup, type Gesture, type Mood } from "../../paper/Character";
@@ -298,24 +298,24 @@ const SceneView = (sp: SceneProps) => {
   );
 };
 
-/** Paper SFX cues (frame, asset, volume) for the whole film. */
+/** Paper SFX cues (frame, sound, dB from the voice's level) for the whole film. */
 const cuesOf = (p: PaperStoryProps, scenes: Scene[], endStart: number, fps: number) => {
-  const cues: [number, AssetId, number][] = [];
+  const cues: [number, SfxId, number, number?][] = [];
   const n = p.beats.length;
   for (let i = 1; i <= n; i++) {
     const s = scenes[i];
     const len = s.endFrame - s.startFrame;
-    if (transitionInto(i) === "tear") cues.push([s.startFrame, "sfx-rip", 0.5]);
-    else cues.push([s.startFrame - Math.round(0.3 * fps), "sfx-swish", 0.5]);
+    if (transitionInto(i) === "tear") cues.push([s.startFrame, "sfx-rip", 0]);
+    else cues.push([s.startFrame - Math.round(0.3 * fps), "sfx-swish", -3]);
     const b = p.beats[i - 1];
-    b.labels.forEach((_, k) => cues.push([s.startFrame + labelStart(k, b.labels.length, len, fps, b.kind === "app" && !!b.rows), "sfx-pop", 0.25]));
-    if (b.kind === "problem") b.options.forEach((_, k) => cues.push([s.startFrame + optionTimes(k, b.options.length, len, fps).start, "sfx-pop", 0.45]));
-    if (b.kind === "app" && !b.rows) cues.push([s.startFrame + phoneTimes(len, fps).tap, "sfx-pop", 0.5]);
-    if (b.kind === "app" && b.total) cues.push([s.startFrame + rowTimes(b.rows!.length, len, fps).total, "sfx-pop", 0.5]);
-    if (b.kind === "payoff") cues.push([s.startFrame + payoffTimes(len).stamp, "sfx-chime", 0.6]);
+    b.labels.forEach((_, k) => cues.push([s.startFrame + labelStart(k, b.labels.length, len, fps, b.kind === "app" && !!b.rows), "sfx-pop", -4]));
+    if (b.kind === "problem") b.options.forEach((_, k) => cues.push([s.startFrame + optionTimes(k, b.options.length, len, fps).start, "sfx-pop", 0]));
+    if (b.kind === "app" && !b.rows) cues.push([s.startFrame + phoneTimes(len, fps).tap, "sfx-pop", 0]);
+    if (b.kind === "app" && b.total) cues.push([s.startFrame + rowTimes(b.rows!.length, len, fps).total, "sfx-pop", 0]);
+    if (b.kind === "payoff") cues.push([s.startFrame + payoffTimes(len).stamp, "sfx-chime", 0]);
   }
-  p.hook.labels.forEach((_, k) => k && cues.push([Math.round(HOOK_POP_S[k] * fps), "sfx-pop", 0.3]));
-  cues.push([endStart - Math.round(0.3 * fps), "sfx-swish", 0.5]);
+  p.hook.labels.forEach((_, k) => k && cues.push([Math.round(HOOK_POP_S[k] * fps), "sfx-pop", -3]));
+  cues.push([endStart - Math.round(0.3 * fps), "sfx-swish", -3]);
   return cues;
 };
 
@@ -334,6 +334,7 @@ export const PaperStory = (props: PaperStoryProps) => {
   const wipe = wipes.find(([c]) => Math.abs(frame - c) < half);
   const cues = useMemo(() => cuesOf(props, timeline.scenes, endStart, fps), [props, timeline, endStart, fps]);
   const loop = loopFade(frame, timeline);
+  const lines = spokenLines(props.voice);
   const wipeColor = (i: number) => (i < 0 ? PAPER.kraftDark : i % 4 === 2 ? BRAND : YELLOW);
   return (
     <AbsoluteFill style={{ background: PAPER.kraft }}>
@@ -359,12 +360,10 @@ export const PaperStory = (props: PaperStoryProps) => {
         </AbsoluteFill>
       )}
       <Finish step={Math.floor((frame * 12) / fps)} />
-      {cues.map(([at, id, volume], i) => (
-        <Sequence key={i} from={Math.max(0, at)} durationInFrames={45} layout="none">
-          <Html5Audio src={assetById(id).src} volume={volume} />
-        </Sequence>
+      {cues.map(([at, id, db, speech], i) => (
+        <Sfx key={i} id={id} at={at} db={db} speech={speech} lines={lines} />
       ))}
-      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
+      <MusicBed id={props.music} lines={lines} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>

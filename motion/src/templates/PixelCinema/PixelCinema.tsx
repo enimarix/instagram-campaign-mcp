@@ -7,17 +7,17 @@
 // sweeps onto the mB tile, the rain goes on).
 import { useMemo } from "react";
 import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
-import { type AssetId, assetById } from "../../assets";
 import { Stage } from "../../cinema/Stage";
 import { AppCard, Chip, Headline, Stat, Tag } from "../../cinema/type";
 import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
+import { Sfx } from "../../components/Sfx";
 import { EndCard } from "../../endcards/EndCard";
 import { ACCENTS } from "../../endcards/schema";
-import { speechSpans, spokenLines, type Span } from "../../lib/duck";
+import { type SfxId, speechSpans, spokenLines, type Span } from "../../lib/duck";
 import { loopFade, type Scene, type Timeline } from "../../lib/timeline";
 import { easeOut, span } from "../../voxel/anim.ts";
-import { anchorPx, beamOf, cameraAt, chipTimes, flashAt, flashTimes, hookTimes, openOf, payoffTimes, sceneIndex, sfxGain, thunderAt } from "./layout";
+import { anchorPx, beamOf, cameraAt, chipTimes, flashAt, flashTimes, hookTimes, openOf, payoffTimes, sceneIndex, thunderAt } from "./layout";
 import { type PixelCinemaProps, timelineOf, titleOf } from "./schema";
 
 /** Tops of the text blocks (px): the upper third, under the safe area's top (269). */
@@ -79,24 +79,24 @@ const Words = ({ p, i, f, frame, fps, t }: { p: PixelCinemaProps; i: number; f: 
   );
 };
 
-/** SFX cues (frame, asset, volume) for the whole film. */
+/** SFX cues (frame, sound, dB from the voice's level) for the whole film. */
 const cuesOf = (p: PixelCinemaProps, scenes: Scene[], endStart: number, fps: number, spans: readonly Span[]) => {
-  const cues: [number, AssetId, number][] = [];
+  const cues: [number, SfxId, number, number?][] = [];
   const hook = hookTimes(p, scenes[0].endFrame - scenes[0].startFrame, fps);
-  if (p.hook.strike) cues.push([hook.strike, "sfx-swish", 0.45], [hook.line, "sfx-pop", 0.35]);
+  if (p.hook.strike) cues.push([hook.strike, "sfx-swish", -4], [hook.line, "sfx-pop", -1]);
   p.beats.forEach((b, k) => {
     const s = scenes[k + 1];
     if (b.kind === "chip") {
-      cues.push([s.startFrame + chipTimes(fps).chip, "sfx-pop", 0.4]);
+      cues.push([s.startFrame + chipTimes(fps).chip, "sfx-pop", 0]);
       // A distant roll, never on a spoken word (round 3c: ~14 dB under the old crack).
       const flash = (s.startFrame + flashTimes(s.endFrame - s.startFrame, fps).at) / fps;
-      if (b.flash) cues.push([Math.round(thunderAt(spans, flash) * fps), "sfx-thunder", 0.3]);
+      if (b.flash) cues.push([Math.round(thunderAt(spans, flash) * fps), "sfx-thunder", 0]);
     } else {
       const pt = payoffTimes(fps);
-      cues.push(b.kind === "stat" ? [s.startFrame + pt.value + pt.count, "sfx-chime", 0.5] : [s.startFrame + pt.value, "sfx-swish", 0.45]);
+      cues.push(b.kind === "stat" ? [s.startFrame + pt.value + pt.count, "sfx-chime", 0] : [s.startFrame + pt.value, "sfx-swish", -4]);
     }
   });
-  cues.push([endStart - Math.round(0.3 * fps), "sfx-swish", 0.45]);
+  cues.push([endStart - Math.round(0.3 * fps), "sfx-swish", -4]);
   return cues;
 };
 
@@ -108,10 +108,9 @@ export const PixelCinema = (props: PixelCinemaProps) => {
   const i = sceneIndex(timeline, scenes.length, frame);
   const f = frame - scenes[i].startFrame;
   const chips = props.beats.filter((b) => b.kind === "chip").length;
-  const spans = useMemo(() => speechSpans(spokenLines(props.voice) ?? []), [props.voice]);
+  const lines = spokenLines(props.voice);
+  const spans = useMemo(() => speechSpans(lines ?? []), [lines]);
   const cues = useMemo(() => cuesOf(props, timeline.scenes, endStart, fps, spans), [props, timeline, endStart, fps, spans]);
-  // A number per frame (as MusicBed): the sfx duck under the voice like the bed.
-  const sfx = sfxGain(spans, frame / fps);
   const loop = loopFade(frame, timeline);
   return (
     <AbsoluteFill style={{ background: "#07081A" }}>
@@ -133,12 +132,10 @@ export const PixelCinema = (props: PixelCinemaProps) => {
           <Words p={props} i={0} f={0} frame={0} fps={fps} t={timeline} />
         </AbsoluteFill>
       )}
-      {cues.map(([at, id, volume], k) => (
-        <Sequence key={k} from={Math.max(0, at)} durationInFrames={id === "sfx-thunder" ? 105 : 45} layout="none">
-          <Html5Audio src={assetById(id).src} volume={volume * sfx} />
-        </Sequence>
+      {cues.map(([at, id, db, speech], k) => (
+        <Sfx key={k} id={id} at={at} db={db} speech={speech} lines={lines} />
       ))}
-      <MusicBed id={props.music} lines={spokenLines(props.voice)} />
+      <MusicBed id={props.music} lines={lines} />
       <SafeZoneGuide show={!!props.safeZone} />
       {props.voice?.audioSrc && <Html5Audio src={props.voice.audioSrc} />}
     </AbsoluteFill>
