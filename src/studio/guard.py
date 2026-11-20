@@ -46,7 +46,9 @@ NICE = 10
 # Free VRAM a job needs. Voice: VoxCPM2 + Whisper peaked at 6.83 GB allocated (tts.log,
 # 2026-11-20) plus the CUDA context; Blender: the macro plates held 1.1 GB, MPFB troupes more;
 # Remotion: Chrome's ANGLE. ponytail: constants, not measured per job.
-VRAM_GB = {"voice": 7.0, "blender": 3.0, "remotion": 1.5}
+# voice: ~5.8 GB loaded (6.7 GB card total with the ~0.9 GB desktop); 7.0 never fit beside the
+# owner's open apps, so no voiced render could start (170)
+VRAM_GB = {"voice": 6.0, "blender": 3.0, "remotion": 1.5}
 FOREIGN_VRAM_GB = 1.0  # another process above this = a game: wait
 MIN_FREE_RAM_GB = 8.0  # GUARD_MIN_FREE_RAM_GB overrides (0: no RAM check)
 WAIT_POLL_S = 10.0
