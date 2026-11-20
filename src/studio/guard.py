@@ -224,15 +224,15 @@ def admit(what: str, need_vram_gb: float = 0.0, min_free_ram_gb: Optional[float]
     min_free_ram_gb None: GUARD_MIN_FREE_RAM_GB, else MIN_FREE_RAM_GB."""
     if min_free_ram_gb is None:
         min_free_ram_gb = float(os.environ.get("GUARD_MIN_FREE_RAM_GB") or MIN_FREE_RAM_GB)
-    start, next_log = time.monotonic(), 0.0
+    start, next_log = time.monotonic(), None
     while True:
         why = check(need_vram_gb, min_free_ram_gb)
         waited = time.monotonic() - start
         if not why:
-            if next_log:
+            if next_log is not None:
                 log.warning("%s: starting after waiting %.0f s for resources", what, waited)
             return
-        if waited >= next_log:
+        if next_log is None or waited >= next_log:
             next_log = waited + log_every_s
             log.warning("%s: %s", what, "; ".join(why))
         time.sleep(poll_s)
