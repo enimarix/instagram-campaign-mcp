@@ -1,14 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Calendar, CalendarPost } from '../api/client'
+import type { Calendar, CalendarPost, HotHours } from '../api/client'
 import CalendarPage from './CalendarPage'
+import { slotLabel } from './when'
 
 const POST: CalendarPost = {
   id: 5, kind: 'reel', status: 'pending', attempts: 0, caption: 'pending one',
   publish_at: '2026-11-18T10:00:00+00:00', local: '2026-11-18T11:00:00+01:00',
-  asset_id: 3, preview_url: null, permalink: null, error: null, replanned: false,
+  asset_id: 3, preview_url: null, permalink: null, error: null, replanned: false, moved_to: null,
 }
+const MOVED = { id: 15, publish_at: '2026-11-24T10:54:00+00:00', local: '2026-11-24T11:54:00+01:00' }
 const DAYS = ['16', '17', '18', '19', '20', '21', '22'].map((d) => `2026-11-${d}`)
 
 function week(): Calendar {
@@ -20,6 +22,7 @@ function week(): Calendar {
   days[3].posts = [
     { ...POST, id: 7, status: 'failed', error: 'boom', local: '2026-11-19T18:00:00+01:00' },
     { ...POST, id: 8, replanned: true, error: 'Re-planned: 40 min late' },
+    { ...POST, id: 1, status: 'cancelled', moved_to: MOVED },
   ]
   return {
     days,
@@ -83,9 +86,9 @@ describe('CalendarPage', () => {
     expect(within(failed).getByText('boom')).toBeTruthy()
     expect(within(failed).getByRole('button', { name: 'Re-plan' })).toBeTruthy()
 
-    const moved = screen.getByRole('listitem', { name: 'Post 8' })
-    expect(within(moved).getByText('re-planned')).toBeTruthy()
-    expect(within(moved).getByText('Re-planned: 40 min late')).toBeTruthy()
+    const late = screen.getByRole('listitem', { name: 'Post 8' })
+    expect(within(late).getByText('re-planned')).toBeTruthy()
+    expect(within(late).getByText('Re-planned: 40 min late')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
     await waitFor(() => expect(calls.at(-1)?.url).toBe('/api/calendar?from=2026-11-23&to=2026-11-29'))
@@ -102,19 +105,74 @@ describe('CalendarPage', () => {
     expect(confirm).toHaveBeenCalledOnce()
   })
 
-  it('reschedules to the picked time as ISO', async () => {
+  it('a re-planned card says where the video went and shows that week', async () => {
     const calls = stubApi()
+    await page()
+    const card = screen.getByRole('listitem', { name: 'Post 1' })
+    expect(card.textContent).toContain('Re-planned →')
+    expect(within(card).queryByRole('button', { name: /Re-plan$|Reschedule|Cancel/ })).toBeNull()
+    fireEvent.click(within(card).getByRole('button', { name: slotLabel(MOVED.local) }))
+    expect(slotLabel(MOVED.local)).toMatch(/24.*11:54$/)
+    await waitFor(() => expect(calls.at(-1)?.url).toBe('/api/calendar?from=2026-11-23&to=2026-11-29'))
+  })
+
+  it('reschedules from the hot-hours picker, minutes still editable', async () => {
+    const hour = (h: number, extra: object) => ({
+      hour: h, publish_at: new Date(`2026-11-20T${h}:00`).toISOString(), local: `2026-11-20T${h}:00:00+01:00`,
+      followers: 10, score: 0.2, hot: false, taken: [] as number[], ...extra,
+    })
+    const grid: HotHours = { has_data: true, posting_windows: '11:00-13:00', days: [
+      { date: '2026-11-20', hours: [hour(17, {}), hour(18, { score: 1, hot: true, followers: 90 }), hour(19, { taken: [99] }),
+        hour(20, { taken: [5] })] },
+    ] }
+    HTMLDialogElement.prototype.showModal = function () { this.open = true }
+    const calls = stubApi({ 'GET /api/calendar/hot-hours': [[200, grid]] })
     const card = await page()
     fireEvent.click(within(card).getByRole('button', { name: 'Reschedule' }))
-    fireEvent.change(within(card).getByLabelText('New time'), { target: { value: '2026-11-20T18:30' } })
-    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Reschedule' })
+    expect(calls.map((c) => c.url)).toContain('/api/calendar/hot-hours?days=14')
+    expect(within(dialog).getByText(/most followers online/)).toBeTruthy()
+    const hot = await within(dialog).findByRole('button', { name: '18:00 hot' })
+    expect(hot.textContent).toContain('🔥')
+    expect(within(dialog).getByRole('button', { name: '17:00' }).textContent).not.toContain('🔥')
+    expect((within(dialog).getByRole('button', { name: '19:00 taken' }) as HTMLButtonElement).disabled).toBe(true)
+    // its own slot is not "taken" for the post being moved
+    expect((within(dialog).getByRole('button', { name: '20:00' }) as HTMLButtonElement).disabled).toBe(false)
+
+    fireEvent.click(hot)
+    const input = within(dialog).getByLabelText('New time') as HTMLInputElement
+    expect(input.value).toBe('2026-11-20T18:00')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(posts(calls)).toEqual([{ method: 'POST', url: '/api/posts/5/reschedule',
-      body: { publish_at: new Date('2026-11-20T18:30').toISOString() } }]))
+      body: { publish_at: new Date('2026-11-20T18:00').toISOString() } }]))
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Reschedule' }))
+    const again = await screen.findByRole('dialog', { name: 'Reschedule' })
+    fireEvent.change(within(again).getByLabelText('New time'), { target: { value: '2026-11-20T18:35' } })
+    fireEvent.click(within(again).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(posts(calls).at(-1)?.body).toEqual({ publish_at: new Date('2026-11-20T18:35').toISOString() }))
+  })
+
+  it('says when there is no audience data yet', async () => {
+    HTMLDialogElement.prototype.showModal = function () { this.open = true }
+    stubApi({ 'GET /api/calendar/hot-hours': [[200, { has_data: false, posting_windows: '11:00-13:00', days: [] }]] })
+    const card = await page()
+    fireEvent.click(within(card).getByRole('button', { name: 'Reschedule' }))
+    expect(await screen.findByText(/No audience data yet.*11:00-13:00/)).toBeTruthy()
+  })
+
+  it('tells where a re-planned video went', async () => {
+    stubApi({ 'POST /api/posts/7/replan': [[200, { status: 'pending', ...MOVED }]] })
+    await page()
+    fireEvent.click(screen.getByRole('button', { name: 'Re-plan' }))
+    const status = await screen.findByRole('status')
+    expect(status.textContent).toContain(`Re-planned for ${slotLabel(MOVED.local)}`)
+    expect(status.textContent).toContain('to pick another time')
   })
 
   it('re-plans a commentary clip after the rights check', async () => {
     const calls = stubApi({
-      'POST /api/posts/7/replan': [[409, { error: 'rights', message: 'needs your check' }], [200, { id: 10 }]],
+      'POST /api/posts/7/replan': [[409, { error: 'rights', message: 'needs your check' }], [200, { status: 'pending', ...MOVED }]],
     })
     vi.stubGlobal('confirm', vi.fn(() => true))
     await page()

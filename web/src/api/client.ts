@@ -260,6 +260,8 @@ export type CalendarPost = Slot & {
   permalink: string | null
   error: string | null
   replanned: boolean // moved by the worker: it would have gone out late
+  /** A cancelled row whose video was queued again (Re-plan): the newest live row. */
+  moved_to: (Slot & { id: number }) | null
 }
 /** GET /api/calendar: every owner-local day of the range, and the publish_check videos. */
 export type Calendar = { days: { date: string; posts: CalendarPost[] }[]; publish_check: Asset[] }
@@ -270,8 +272,15 @@ type QueueRow = { id: number; status: string; publish_at: string }
 export const reschedulePost = (id: number, publish_at: string) =>
   post<QueueRow>(`/api/posts/${id}/reschedule`, { publish_at })
 export const cancelPost = (id: number) => post<QueueRow>(`/api/posts/${id}/cancel`)
+/** Re-plan answers with the row that will publish (a new one for a studio video). */
 export const replanPost = (id: number, confirmed = false) =>
-  post<QueueRow>(`/api/posts/${id}/replan`, { confirmed })
+  post<QueueRow & { local: string }>(`/api/posts/${id}/replan`, { confirmed })
+/** One owner-local hour of the Reschedule picker; `score` 0..1 = followers online vs the
+ * best hour; `taken`: ids of the queued posts inside it. */
+export type HotHour = Slot & { hour: number; followers: number | null; score: number; hot: boolean; taken: number[] }
+/** GET /api/calendar/hot-hours: `has_data` false = no audience data, the posting windows are hot. */
+export type HotHours = { has_data: boolean; posting_windows: string; days: { date: string; hours: HotHour[] }[] }
+export const getHotHours = (days = 14) => request<HotHours>(`/api/calendar/hot-hours?days=${days}`)
 export const releaseAsset = (id: number) => post<Asset>(`/api/assets/${id}/release`)
 
 /** What the worker's last pass did (campaign.run_due), or `error` when it crashed. */

@@ -166,3 +166,77 @@ def test_replan_commentary_needs_the_rights_confirmation(tc, store, cfg):
     assert store.get_scheduled(post["id"])["status"] == "failed"
     r = tc.post(f"/api/posts/{post['id']}/replan", json={"confirmed": True}, headers=H)
     assert r.status_code == 200 and store.get_asset(a["id"])["status"] == "scheduled"
+
+
+def _paris_today():
+    return utcnow().astimezone(ZoneInfo("Europe/Paris")).date().isoformat()
+
+
+def test_replanned_row_says_where_it_went(tc, store, cfg):
+    # 169: the cancelled card points at the new post instead of showing the old failure.
+    a = _asset(store, cfg, status="scheduled")
+    post = _failed(store, a["id"])
+    transition(store, a["id"], "approved", actor="worker")
+    new = tc.post(f"/api/posts/{post['id']}/replan", headers=H).json()
+    assert new["local"] == parse_dt(new["publish_at"]).astimezone(
+        ZoneInfo("Europe/Paris")).isoformat(timespec="seconds")
+    plain = store.schedule("reel", {}, utcnow() - timedelta(minutes=1), asset_id=None)
+    store.cancel(plain["id"])  # a plain cancel: nothing went anywhere
+
+    today = _paris_today()
+    rows = {p["id"]: p for d in tc.get("/api/calendar", params={"from": today, "to": today}
+                                       ).json()["days"] for p in d["posts"]}
+    old = rows[post["id"]]
+    assert old["status"] == "cancelled" and old["error"] is None
+    assert old["moved_to"] == {"id": new["id"], "publish_at": new["publish_at"],
+                               "local": new["local"]}
+    assert rows[plain["id"]]["moved_to"] is None
+
+
+def test_cancelled_row_without_a_live_successor_is_unchanged(tc, store, cfg):
+    a = _asset(store, cfg, status="scheduled")
+    post = _failed(store, a["id"])
+    transition(store, a["id"], "approved", actor="worker")
+    new = tc.post(f"/api/posts/{post['id']}/replan", headers=H).json()
+    tc.post(f"/api/posts/{new['id']}/cancel", headers=H)  # the new one is cancelled too
+    today = _paris_today()
+    (old,) = [p for d in tc.get("/api/calendar", params={"from": today, "to": today}
+                                ).json()["days"] for p in d["posts"] if p["id"] == post["id"]]
+    assert old["moved_to"] is None and old["error"] == "boom"
+
+
+def _hours(out):
+    return {(d["date"], h["hour"]): h for d in out["days"] for h in d["hours"]}
+
+
+def test_hot_hours_rank_the_audience_profile(store, cfg):
+    from src.studio.calendar import hot_hours
+    day = utcnow().date() + timedelta(days=1)
+    now = datetime.combine(day, datetime.min.time(), tzinfo=UTC) + timedelta(hours=9, minutes=30)
+    store.save_online_followers(utcnow().date(), {9: 50, 17: 100, 18: 80, 19: 60, 3: 10})
+    busy = store.schedule("reel", {}, now + timedelta(hours=7, minutes=50))  # 17:20Z
+    out = hot_hours(store, cfg, days=2, now=now)
+
+    assert out["has_data"] is True and [d["date"] for d in out["days"]] == [
+        str(day), str(day + timedelta(days=1))]
+    assert out["days"][0]["hours"][0]["hour"] == 11  # 10:00 Paris (09:00Z) already began
+    hours = _hours(out)
+    d0, d1 = str(day), str(day + timedelta(days=1))
+    top = hours[(d0, 18)]  # 17Z
+    assert top["hot"] and top["score"] == 1.0 and top["taken"] == [busy["id"]]
+    assert top["local"] == f"{d0}T18:00:00+01:00"
+    assert [h for (d, h), v in hours.items() if d == d1 and v["hot"]] == [18, 19, 20]
+    assert hours[(d1, 10)]["score"] == 0.5 and not hours[(d1, 10)]["hot"]
+    assert hours[(d1, 1)]["followers"] is None and hours[(d1, 1)]["score"] == 0
+    assert hours[(d1, 18)]["taken"] == []
+
+
+def test_hot_hours_fall_back_to_the_posting_windows(tc, store, cfg):
+    r = tc.get("/api/calendar/hot-hours", params={"days": 3})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["has_data"] is False and out["posting_windows"] == "10:00-12:00"
+    last = out["days"][-1]["hours"]
+    assert [h["hour"] for h in last if h["hot"]] == [10, 11]
+    assert all(h["score"] == (1.0 if h["hot"] else 0.0) for h in last)
+    assert tc.get("/api/calendar/hot-hours", params={"days": 15}).status_code == 422

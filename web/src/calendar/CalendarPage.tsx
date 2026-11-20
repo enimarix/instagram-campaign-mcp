@@ -7,16 +7,18 @@ import {
   getCalendar,
   releaseAsset,
   replanPost,
-  reschedulePost,
   type Calendar,
   type CalendarPost,
+  type Slot,
 } from '../api/client'
-import { inputValue, localDate } from '../inbox/ui'
+import { localDate } from '../inbox/ui'
 import { Button } from '../ui/Button'
 import { Card, EmptyState } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
-import { field, link, type Tone } from '../ui/styles'
+import { link, type Tone } from '../ui/styles'
+import HotHoursSheet from './HotHoursSheet'
+import { dayLabel, slotLabel } from './when'
 
 const STATUS_TONE: Record<CalendarPost['status'], Tone> = {
   pending: 'info', publishing: 'warn', published: 'success', failed: 'danger', cancelled: 'neutral',
@@ -27,19 +29,20 @@ const RIGHTS_CONFIRM =
 
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
 const monday = (d: Date) => addDays(d, -((d.getDay() + 6) % 7))
-const dayLabel = (iso: string) =>
-  new Date(`${iso}T00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
 
 type Act = (fn: () => Promise<unknown>) => Promise<boolean>
+type Moved = Slot & { id: number } // where a re-planned video went
+/** What a card asks the page for: run an action, show a week, say where a post went, pick a time. */
+type Page = { act: Act; show: (local: string) => void; replanned: (to: Moved) => void; pick: (p: Moved) => void }
 
 /** A failed row gets a new slot; a commentary clip asks the owner's check first (GOAL §5.1). */
 async function replan(id: number) {
   try {
-    await replanPost(id)
+    return await replanPost(id)
   } catch (e) {
     if (!(e instanceof ApiError && e.code === 'rights' && window.confirm(`${errorMessage(e)}\n\n${RIGHTS_CONFIRM}`)))
       throw e
-    await replanPost(id, true)
+    return replanPost(id, true)
   }
 }
 
@@ -49,6 +52,8 @@ export default function CalendarPage() {
   const [week, setWeek] = useState(() => monday(new Date()))
   const [cal, setCal] = useState<Calendar | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Moved | null>(null) // the last Re-plan's new slot
+  const [picking, setPicking] = useState<Moved | null>(null) // the post in the Reschedule sheet
 
   const load = useCallback(
     () => getCalendar(localDate(week), localDate(addDays(week, 6))).then(setCal, (e: unknown) => setError(errorMessage(e))),
@@ -61,6 +66,7 @@ export default function CalendarPage() {
   // Run an action, then show the queue as the server has it now. True when it worked.
   const act: Act = async (fn) => {
     setError(null)
+    setNotice(null)
     let ok = true
     try {
       await fn()
@@ -73,6 +79,8 @@ export default function CalendarPage() {
   }
 
   const [today] = useState(() => localDate(new Date()))
+  const show = (local: string) => setWeek(monday(new Date(`${local.slice(0, 10)}T00:00`)))
+  const page: Page = { act, show, replanned: setNotice, pick: setPicking }
   return (
     <div className="space-y-4">
       <PageHeader title="Calendar" actions={
@@ -83,6 +91,18 @@ export default function CalendarPage() {
         </div>
       } />
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {notice && (
+        <p role="status" className="rounded-card border border-line/60 bg-surface-2 p-3 text-sm">
+          Re-planned for <strong>{slotLabel(notice.local)}</strong> —{' '}
+          <button type="button" className={link} onClick={() => show(notice.local)}>show it</button> or{' '}
+          <button type="button" className={link} onClick={() => setPicking(notice)}>reschedule it</button>{' '}
+          to pick another time.
+        </p>
+      )}
+      {picking && (
+        <HotHoursSheet post={picking} onClose={() => setPicking(null)}
+          onSaved={() => { setPicking(null); setNotice(null); load() }} />
+      )}
       {cal && cal.publish_check.length > 0 && (
         <section aria-labelledby="check-title" className="rounded-card border border-warn/30 bg-warn/12 p-4 text-sm">
           <h3 id="check-title" className="font-semibold">Did these reach Instagram?</h3>
@@ -111,7 +131,7 @@ export default function CalendarPage() {
                 {dayLabel(d.date)}
               </h3>
               <ul className="space-y-2">
-                {d.posts.map((p) => <PostCard key={p.id} post={p} act={act} />)}
+                {d.posts.map((p) => <PostCard key={p.id} post={p} page={page} />)}
               </ul>
             </li>
           ))}
@@ -124,9 +144,8 @@ export default function CalendarPage() {
   )
 }
 
-function PostCard({ post: p, act }: { post: CalendarPost; act: Act }) {
-  const [when, setWhen] = useState<string | null>(null) // set while picking a new time
-
+function PostCard({ post: p, page: { act, show, replanned, pick } }: { post: CalendarPost; page: Page }) {
+  const moved = p.moved_to
   return (
     <Card as="li" aria-label={`Post ${p.id}`} className="p-3! text-sm">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -136,6 +155,14 @@ function PostCard({ post: p, act }: { post: CalendarPost; act: Act }) {
       </div>
       {p.caption && <p className="mt-1 line-clamp-3 break-words">{p.caption}</p>}
       {p.error && <p className={`mt-1 text-xs ${p.status === 'failed' ? 'text-danger' : 'text-muted'}`}>{p.error}</p>}
+      {moved && (
+        <p className="mt-1 text-xs text-muted">
+          Re-planned →{' '}
+          <button type="button" className={`inline-flex min-h-11 items-center ${link}`} onClick={() => show(moved.local)}>
+            {slotLabel(moved.local)}
+          </button>
+        </p>
+      )}
       <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
         {p.asset_id !== null && (
           <Link to={`/assets/${p.asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Video {p.asset_id}</Link>
@@ -144,24 +171,12 @@ function PostCard({ post: p, act }: { post: CalendarPost; act: Act }) {
           <a href={p.permalink} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>On Instagram</a>
         )}
       </div>
-      {when !== null && (
-        <label className="mt-2 block text-xs font-medium">
-          New time
-          <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
-            className={`${field} mt-1 block w-full px-2 font-normal`} />
-        </label>
-      )}
       <div className="mt-2 flex flex-wrap gap-1">
-        {p.status === 'pending' && (when === null ? (
-          <Button size="sm" onClick={() => setWhen(inputValue(new Date(p.publish_at)))}>Reschedule</Button>
-        ) : (
-          <Button size="sm" variant="primary" disabled={!when}
-            onClick={() => act(() => reschedulePost(p.id, new Date(when).toISOString())).then((ok) => ok && setWhen(null))}>
-            Save
-          </Button>
-        ))}
+        {p.status === 'pending' && <Button size="sm" onClick={() => pick(p)}>Reschedule</Button>}
         {p.status === 'failed' && (
-          <Button size="sm" variant="primary" onClick={() => act(() => replan(p.id))}>Re-plan</Button>
+          <Button size="sm" variant="primary" onClick={() => act(async () => replanned(await replan(p.id)))}>
+            Re-plan
+          </Button>
         )}
         {(p.status === 'pending' || p.status === 'failed') && (
           <Button size="sm" variant="ghost" onClick={() => window.confirm('Cancel this post?') && act(() => cancelPost(p.id))}>
