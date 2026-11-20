@@ -25,8 +25,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from ..config import get_settings
-from . import cinematic, ffmpeg, gpu_lock, media
+from . import cinematic, ffmpeg, media
 from .ffmpeg import PathLike
 
 ENGINE = cinematic.ROOT / "engine" / "troupe.py"
@@ -167,10 +166,8 @@ def _blender(jobs: List[Dict[str, Any]], out: Path, timeout_s: float) -> None:
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
     n = sum(len(j["stills"]) if j.get("stills") else j["frames"] for j in jobs)
     actors = sum(len(j["cast"]) for j in jobs)
-    blender = cinematic.find_blender()
-    with gpu_lock.hold("Blender troupe shots", get_settings().gpu_lock_path):  # step 145
-        cinematic._run([blender, "-b", "--python-exit-code", "1", "-P", ENGINE, "--", cfg_path], "Blender",
-                       max(timeout_s, 120 + n * S_PER_FRAME + actors * S_PER_ACTOR))
+    cinematic.blender(["-b", "--python-exit-code", "1", "-P", ENGINE, "--", cfg_path], "Blender troupe shots",
+                      max(timeout_s, 120 + n * S_PER_FRAME + actors * S_PER_ACTOR))
 
 
 def render_shots(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float) -> str:

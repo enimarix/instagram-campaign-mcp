@@ -116,7 +116,7 @@ def test_tools_path_override(monkeypatch, tmp_path):
     tools, blender = out.stdout.splitlines()
     assert Path(tools) == tmp_path and Path(blender).is_relative_to(tmp_path)
     seen = {}
-    monkeypatch.setattr(cinematic.subprocess, "run", lambda cmd, **k: seen.update(k) or
+    monkeypatch.setattr(cinematic.guard, "run", lambda cmd, **k: seen.update(k) or
                         type("Done", (), {"returncode": 0})())
     cinematic._run(["x"], "x", 1)
     assert seen["env"]["CINEMATIC_TOOLS"] == str(cinematic.TOOLS)  # Blender's kit.py reads it
@@ -144,3 +144,15 @@ def test_render_shots_grades_freezes_concats_and_caches(monkeypatch, tmp_path):
     troupe.render_shots({"shots": [SHOT, {**SHOT, "seed": 3}]}, tmp_path, timeout_s=120)
     assert [len(j) for j in calls] == [2, 1]  # only the new shot renders
     assert not list((tmp_path / "troupe").glob("troupe-*"))  # work dirs cleaned up
+
+
+def test_blender_runs_through_the_wrapper(tmp_path, monkeypatch):
+    """_blender hands Blender the shots.json troupe.py reads, through cinematic.blender() (166)."""
+    ran = []
+    monkeypatch.setattr(troupe.cinematic, "blender", lambda args, what, t: ran.append((args, t)))
+    jobs = [{"id": "k1", **troupe.job(troupe.validate({"shots": [SHOT]}).shots[0]), "stills": None}]
+    troupe._blender(jobs, tmp_path, 10)
+    cfg = json.loads((tmp_path / "shots.json").read_text(encoding="utf-8"))
+    assert cfg["fps"] == 24 and cfg["size"] == [720, 1280] and cfg["shots"][0]["id"] == "k1"
+    assert ran[0][0][-1] == tmp_path / "shots.json"
+    assert ran[0][1] >= 120 + 24 * troupe.S_PER_FRAME + troupe.S_PER_ACTOR
