@@ -351,7 +351,6 @@ export const Editorial = (props: EditorialProps) => {
   const scenes = timeline.scenes.slice(0, props.chapters.length + 2);
   const index = Math.max(0, ...scenes.map((s, i) => (frame >= s.startFrame ? i : 0)));
   const lens = sceneLens(timeline, props.chapters.length, endStart);
-  const lenOf = (i: number) => lens[i];
   const sp = (i: number, at: number): SceneProps => {
     const f = at - scenes[i].startFrame;
     return { p: props, index: i, f, len: lens[i], frame: at, shot: shotIndex(f, lens[i], fps) };
@@ -365,8 +364,8 @@ export const Editorial = (props: EditorialProps) => {
   // Not over the anatomy card, nor over the petals close-up (the crown fills the frame there).
   const showScrub = index >= 1 && !isAnatomy(props, index) && !(chapterAt?.scene === "tree" && chapterAt.action === "petals");
   const range: [number, number] | undefined =
-    chapterAt?.scene === "tree" && chapterAt.action === "wind" ? [(scenes[index].startFrame + GUST_RANGE[0] * lenOf(index)) / endStart, (scenes[index].startFrame + GUST_RANGE[1] * lenOf(index)) / endStart] : undefined;
-  const cues = cuesOf(props, scenes.map((s) => s.startFrame), scenes.map((_, i) => lenOf(i)), endStart);
+    chapterAt?.scene === "tree" && chapterAt.action === "wind" ? [(scenes[index].startFrame + GUST_RANGE[0] * lens[index]) / endStart, (scenes[index].startFrame + GUST_RANGE[1] * lens[index]) / endStart] : undefined;
+  const cues = cuesOf(props, scenes.map((s) => s.startFrame), lens, endStart);
   const loop = loopFade(frame, timeline);
   const lines = spokenLines(props.voice);
   return (
