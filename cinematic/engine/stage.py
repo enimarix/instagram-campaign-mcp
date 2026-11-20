@@ -118,6 +118,11 @@ def camera(kind, frames, wide, center, head=None, look=None):
     if kind == "top":
         c = Vector(center)
         pos, aim, o.data.lens = c + Vector((0, -0.05, 4.3)), c, 20
+        # the camera is above the ceiling: what hangs wholly above 2 m (ceiling, pendant lamp)
+        # is hidden from the camera only, so the room keeps its shadows
+        for ob in s.objects:
+            if ob.type == "MESH" and min((ob.matrix_world @ Vector(b)).z for b in ob.bound_box) > 2.0:
+                ob.visible_camera = False
     elif kind == "close":
         pos, o.data.lens = near, 50
     elif kind == "dolly":
