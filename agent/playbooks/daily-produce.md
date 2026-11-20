@@ -389,7 +389,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    = a `set` (dinner, living, gym, kitchen, restaurant, beach), its `cast` (troupe ids from
    the template's schema; 5-8 different characters across the skit, each with a `role` when
    it speaks: « Toi », « Tonton Karim ») and 1-4 `beats`. A beat = ONE action (`who` +
-   `action`: crunch, faint, fork_up, phone_photo, cheer, shout, curl, Death01, Hit_Chest...),
+   `action`: crunch, faint, fork_up, phone_photo, cheer, shout, Death01, Hit_Chest...),
    ONE narrator line (tu, short, said over the action), maybe a `say` (a character's short
    shout in its own voice, under 48 characters), maybe a `number` (the key fact, counted;
    a stated fact needs its source in `citations`) and `speed` x10 for a repeated gesture,
