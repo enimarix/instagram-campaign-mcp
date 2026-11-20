@@ -42,7 +42,7 @@ from .campaign import (
     snapshot_account,
 )
 from .config import InstagramMCPSettings
-from .instagram_client import InstagramClient
+from .instagram_client import Breaker, InstagramClient
 from .learning import evidence, experiments, facts
 from .store import CampaignStore, parse_dt, to_iso, utcnow
 from .studio import dm_picks, downloader_service, housekeeping, power, render
@@ -138,6 +138,11 @@ def data_budget_left(client: InstagramClient) -> bool:
     return client.budget.used() < client.budget.per_hour * DATA_SHARE
 
 
+def graph_breaker(store: CampaignStore, settings: InstagramMCPSettings) -> Breaker:
+    """The Graph breaker's shared state, read through the store (src/instagram_client.py)."""
+    return Breaker(store, settings.instagram_access_token, settings.timezone)
+
+
 def _every(store: CampaignStore, key: str, period: timedelta, now: datetime) -> bool:
     """True (and the time is recorded) when the job last ran `period` ago or never."""
     last = store.get_state(key)
@@ -156,8 +161,13 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
     t = now()
     today = t.astimezone(ZoneInfo(settings.timezone)).date()
     out: Dict[str, Any] = {}
+    breaker = graph_breaker(store, settings)
 
     async def job(name: str, make: Callable[[], Awaitable[Any]]) -> bool:
+        until = breaker.blocked_until()
+        if until is not None:  # step 167: no call, no traceback; tried again next round
+            out[name] = f"skipped: Meta blocked API access until {breaker.hhmm(until)}"
+            return False
         if not data_budget_left(client):
             out[name] = "skipped: request budget"
             return False
@@ -231,7 +241,8 @@ async def run(client: InstagramClient, store: CampaignStore, settings: Instagram
             if slot and slot != woken_for and parse_dt(slot) > utcnow():  # queue changed
                 woken_for = slot
                 await asyncio.to_thread(register_wake, parse_dt(slot))
-            if stories_every and time.monotonic() - last_stories >= stories_every * 60:
+            if (stories_every and time.monotonic() - last_stories >= stories_every * 60
+                    and graph_breaker(store, settings).blocked_until() is None):
                 last_stories = time.monotonic()
                 try:
                     await collect_insights(client, store, limit=0)

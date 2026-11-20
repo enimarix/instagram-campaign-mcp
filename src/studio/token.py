@@ -23,9 +23,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from ..config import InstagramMCPSettings
-from ..instagram_client import InstagramAPIError, InstagramClient
+from ..instagram_client import AccessBlocked, InstagramAPIError, InstagramClient
 
 CACHE_SECONDS = 3600.0
+ERROR_CACHE_SECONDS = 600.0  # a failed check (Meta blocked, bad app credentials)
 INVALID_TOKEN = 190  # Graph error code for an expired / revoked token
 ENV_KEY = "INSTAGRAM_ACCESS_TOKEN"
 _ENV_LINE = re.compile(rf"^\s*(export\s+)?{ENV_KEY}\s*=", re.IGNORECASE)
@@ -48,7 +49,8 @@ def _iso(ts: Optional[int]) -> Optional[str]:
 
 async def token_status(client: Optional[InstagramClient], settings: InstagramMCPSettings,
                        clock: Callable[[], float] = time.time) -> Dict[str, Any]:
-    """{configured, valid, expires_at, days_left, can_refresh, scopes}; cached an hour.
+    """{configured, valid, expires_at, days_left, can_refresh, scopes[, error]}; cached an
+    hour, a failed check 10 min (never raised: `valid` None and Meta's `error` text).
 
     `valid`/`expires_at` are None when unknown (no client). A valid token with `expires_at`
     None never expires (system-user token: debug_token reports expires_at 0).
@@ -62,7 +64,7 @@ async def token_status(client: Optional[InstagramClient], settings: InstagramMCP
     key = hashlib.sha256(token.encode()).hexdigest()
     now = clock()
     hit = _status.get(key)
-    if hit and now - hit[0] < CACHE_SECONDS:
+    if hit and now - hit[0] < (ERROR_CACHE_SECONDS if "error" in hit[1] else CACHE_SECONDS):
         return {**hit[1], "can_refresh": out["can_refresh"]}
     app_token = _app_token(settings)
     try:
@@ -71,8 +73,10 @@ async def token_status(client: Optional[InstagramClient], settings: InstagramMCP
                                            token=app_token)).get("data") or {}
     except InstagramAPIError as e:
         # With an app token, a bad input token answers 200 is_valid=false; 190 = bad app creds.
-        if e.error_code != INVALID_TOKEN or app_token:
-            raise
+        if isinstance(e, AccessBlocked) or e.error_code != INVALID_TOKEN or app_token:
+            out["error"] = e.message
+            _status[key] = (now, out)
+            return out
         data = {"is_valid": False}
     expires = data.get("expires_at") or None
     out.update(valid=bool(data.get("is_valid")), expires_at=_iso(expires),

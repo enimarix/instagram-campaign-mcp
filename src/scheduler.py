@@ -240,7 +240,11 @@ async def _token(args: argparse.Namespace, settings: InstagramMCPSettings,
     async with InstagramClient(settings, store=store) as client:
         try:
             if args.token_command == "status":
-                print(json.dumps(await token_status(client, settings), indent=2))
+                status = await token_status(client, settings)
+                if status.get("error"):  # Meta's message, never the token
+                    print(f"token status: {status['error']}", file=sys.stderr)
+                    return 1
+                print(json.dumps(status, indent=2))
                 return 0
             result = await refresh_token(client, settings, Path(ENV_FILE))
         except RefreshRefused as e:
