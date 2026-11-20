@@ -84,8 +84,8 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
             settings, lambda: catch_up_loop(store, settings)))
         downloader = asyncio.create_task(worker.downloader_loop(store, settings))
         fresh = asyncio.create_task(settings_overrides.refresh_loop(store, settings))
-        guard = asyncio.create_task(watchdog_loop(store, voice_pid) if settings.guard_watchdog
-                                    else asyncio.sleep(0))
+        watchdog = asyncio.create_task(watchdog_loop(store, voice_pid) if settings.guard_watchdog
+                                       else asyncio.sleep(0))
         try:
             if settings.instagram_configured:
                 async with InstagramClient(settings, store=store) as client:
@@ -99,7 +99,7 @@ async def _worker(settings: InstagramMCPSettings, interval: int = 60,
                     await asyncio.wait({renders}, timeout=interval)
                 await renders
         finally:
-            for task in (renders, agents, downloader, fresh, guard):
+            for task in (renders, agents, downloader, fresh, watchdog):
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task

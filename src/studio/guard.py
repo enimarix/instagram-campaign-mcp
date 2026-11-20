@@ -305,13 +305,16 @@ def processes() -> List[Tuple[int, int, str]]:
 
 
 def heavy_children(root: int, voice_pid: Optional[int] = None,
-                   table: Optional[List[Tuple[int, int, str]]] = None) -> List[int]:
-    """Our heavy processes: under `root`, named like a renderer (HEAVY_NAMES), or the voice
-    model worker `voice_pid` (and its children; never the voice service itself). A child must
-    be younger than its parent: Windows keeps a dead parent's pid in its children, and pids
-    get reused."""
+                   table: Optional[List[Tuple[int, int, str]]] = None,
+                   ours: Optional[Set[int]] = None) -> List[int]:
+    """Our heavy processes under `root`: its own children that run() started (`ours`), the
+    processes named like a renderer (HEAVY_NAMES) deeper down (Remotion's Chrome, an agent
+    run's previews), and the voice model worker `voice_pid` with its children (never the
+    voice service itself, nor the Reel downloader's node). A child must be younger than its
+    parent: Windows keeps a dead parent's pid in its children, and pids get reused."""
     from ..agent.proc import started
 
+    ours = _running if ours is None else ours
     kids: Dict[int, List[Tuple[int, str]]] = {}
     for pid, ppid, name in processes() if table is None else table:
         if pid != ppid:
@@ -329,7 +332,9 @@ def heavy_children(root: int, voice_pid: Optional[int] = None,
                 continue  # the pid's real parent died: not ours
             seen.add(pid)
             voice = in_voice or pid == voice_pid
-            if voice or name in HEAVY_NAMES:
+            if parent == root and pid not in ours and name in HEAVY_NAMES:
+                continue  # a service of ours (the Reel downloader's node), not a job
+            if voice or pid in ours or name in HEAVY_NAMES:
                 out.append(pid)
             todo.append((pid, voice))
     return out

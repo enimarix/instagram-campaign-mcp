@@ -231,9 +231,11 @@ def test_heavy_children_are_renderers_under_us_and_the_voice_worker(monkeypatch)
              (202, 100, "python"), (400, 202, "claude"), (301, 400, "python"),  # an agent run
              (500, 301, "blender"),  # its MCP server's preview
              (600, 100, "node"),  # older than the studio: its real parent died, not ours
-             (700, 1, "blender")]  # the owner's own Blender
-    assert sorted(guard.heavy_children(100, 300, table)) == [200, 300, 500]
-    assert sorted(guard.heavy_children(100, None, table)) == [200, 500]  # no model loaded
+             (700, 1, "blender"),  # the owner's own Blender
+             (210, 100, "node"), (211, 210, "node")]  # the Reel downloader (no run() child)
+    born.update({210: 60, 211: 61})
+    assert sorted(guard.heavy_children(100, 300, table, ours={200})) == [200, 300, 500]
+    assert sorted(guard.heavy_children(100, None, table, ours={200})) == [200, 500]  # unloaded
 
 
 def test_process_table_has_this_process():
