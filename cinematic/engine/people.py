@@ -172,10 +172,11 @@ def _smooth(keys, x):
     return keys[-1][1]
 
 
-def keyed(move, times):
-    """Per-frame extra bone rotations (degrees) of a hand-keyed move."""
+def keyed(move, times, offset=0.0):
+    """Per-frame extra bone rotations (degrees) of a hand-keyed move: looping keys follow the
+    actor's clock, timed ones start with the shot (a raised fork rises on screen)."""
     keys, cycle = move.get("keys") or {}, move.get("cycle")
-    return [{bone: _smooth(k, (t % cycle) / cycle if cycle else t) for bone, k in keys.items()}
+    return [{bone: _smooth(k, (t % cycle) / cycle if cycle else t - offset) for bone, k in keys.items()}
             for t in times]
 
 
@@ -220,11 +221,11 @@ def ground(body, rig):
     rig.location.z -= low
 
 
-def act(body, rig, move, sampled, fps, frames, rng, face_name=None, face_at=0.0, times=None):
+def act(body, rig, move, sampled, fps, frames, rng, face_name=None, face_at=0.0, times=None, offset=0.0):
     """Play a move on the rig, still upright at the origin (retarget.apply): the retargeted base
     (sampled clip), its keys, the face, blinks, the prop. Then place() it (and ground() a lying one)."""
     seated = ACTIONS["seated"] if move["base"].startswith("Sitting") else {}
-    extra = keyed(move, times) if move.get("keys") else None
+    extra = keyed(move, times, offset) if move.get("keys") else None
     retarget.apply(rig, *sampled, skip=seated.get("skip", ()), offsets=seated.get("offsets"), keyed=extra)
     blinks(body, frames, rng)
     name = face_name or move.get("face")

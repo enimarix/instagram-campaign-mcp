@@ -125,15 +125,22 @@ def _spot(spec: Dict[str, Any], at: Union[str, Tuple[float, float]]) -> Dict[str
     return spec["spots"][at] if isinstance(at, str) else {"at": list(at), "facing": 0}
 
 
+def _offset(a: Actor, seed: int) -> float:
+    """A crowd never moves in sync: each actor's looping clip starts somewhere else (0-2 s);
+    a clip that plays once (a faint) starts at its beginning."""
+    move = cinematic.ACTIONS["moves"].get(a.action, {"base": a.action})
+    if not move["base"].endswith("_Loop"):
+        return 0.0
+    return zlib.crc32(f"{a.who}/{seed}".encode()) % 1000 / 500
+
+
 def job(shot: Shot) -> Dict[str, Any]:
     """The shot as engine/troupe.py reads it (everything resolved), minus its id and stills."""
     spec = SETS["sets"][shot.set]
     cast = [{"who": a.who, "look": cinematic.CAST[a.who], "spot": _spot(spec, a.at),
              "facing": a.facing, "to": _spot(spec, a.to) if a.to else None, "action": a.action,
              "face": a.face, "face_at": a.face_at,
-             # a crowd never moves in sync: each actor's clock starts somewhere else
-             "offset": a.offset if a.offset is not None else
-             zlib.crc32(f"{a.who}/{shot.seed}".encode()) % 1000 / 500}
+             "offset": a.offset if a.offset is not None else _offset(a, shot.seed)}
             for a in shot.cast]
     return {"set": shot.set, "light": shot.light, "frames": max(2, round(shot.duration * FPS)),
             "speed": shot.speed, "seed": shot.seed, "camera": shot.camera.model_dump(), "cast": cast}

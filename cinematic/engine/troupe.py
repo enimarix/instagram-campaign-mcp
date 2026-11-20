@@ -44,7 +44,8 @@ def render_shot(cfg, shot):
     for a, move, smp, times in zip(shot["cast"], moves, sampled, clocks):
         body, rig = people.build(a["look"], a["who"])
         people.decimate(body, rig)
-        people.act(body, rig, move, smp, fps, frames, rng, a.get("face"), a.get("face_at", 0.0), times)
+        people.act(body, rig, move, smp, fps, frames, rng, a.get("face"), a.get("face_at", 0.0), times,
+                   a.get("offset", 0.0))
         people.place(rig, a["spot"], a.get("facing"), move.get("lie"))
         if a.get("to"):  # walk there in a straight line over the shot
             rig.keyframe_insert("location", frame=1)

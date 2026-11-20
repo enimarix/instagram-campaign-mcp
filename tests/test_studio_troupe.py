@@ -51,6 +51,9 @@ def test_defaults_sit_on_seats_and_stand_elsewhere():
     assert job["cast"][0]["look"] == cinematic.CAST["dad"]
     offsets = [a["offset"] for a in job["cast"]]
     assert len(set(offsets)) == 3 and all(0 <= o < 2 for o in offsets)  # never in sync
+    faint = troupe.validate({"shots": [{"set": "dinner", "cast": [
+        {"who": "dad", "at": "door", "action": "faint"}]}]}).shots[0]
+    assert troupe.job(faint)["cast"][0]["offset"] == 0  # a clip played once starts at its start
 
 
 @pytest.mark.parametrize("change, match", [
