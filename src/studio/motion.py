@@ -39,6 +39,7 @@ from . import (  # render.py imports us
     cinematic,
     ffmpeg,
     gpu_lock,
+    listen,
     macro3d,
     media,
     recipe,
@@ -233,9 +234,6 @@ def bundle_dir() -> Path:
         return _bundle
 
 
-VOICE_FROM_START = [{"audio_s": 0.0, "at_s": 0.0}]  # the voice file plays from 0
-
-
 def _stage_audio(bundle: Path, props: Dict[str, Any], media_root: PathLike) -> Dict[str, Any]:
     """Props for Remotion: a media-path `voice.audioSrc` becomes a file in the bundle."""
     src = (props.get("voice") or {}).get("audioSrc")
@@ -329,7 +327,7 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
         else:  # nothing to normalise; QC reports the missing audio
             os.replace(raw, out)
     return (ffmpeg.probe(out), round((v["coverFrame"] or 0) * 1000 / v["fps"]),
-            recipe.compress_timeline(v["events"]), v.get("voiceParts") or VOICE_FROM_START)
+            recipe.compress_timeline(v["events"]), v.get("voiceParts") or listen.VOICE_FROM_START)
 
 
 def render_end_card(media_root: PathLike, props: Dict[str, Any], backdrop: Optional[Path] = None,

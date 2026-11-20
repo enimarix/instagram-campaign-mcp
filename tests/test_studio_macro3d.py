@@ -98,7 +98,7 @@ def test_render_routes_macro3d_through_the_plates(tmp_path, monkeypatch):
     assert seen["props"]["plate"] == "public/macro3d/abc.mp4"
     assert (bundle / "public" / "macro3d" / "abc.mp4").read_bytes() == b"mp4"
     assert out.is_file() and cover_ms == 400
-    assert parts == motion.VOICE_FROM_START  # the fake validation has no voiceParts
+    assert parts == motion.listen.VOICE_FROM_START  # the fake validation has no voiceParts
 
 
 def test_preview_puts_a_plate_under_the_frames_on_shots(tmp_path, monkeypatch):

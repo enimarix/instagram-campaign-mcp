@@ -133,6 +133,7 @@ def _match(v: Sequence[float], m: Sequence[float], ev: Sequence[float], a: int, 
 
 
 Parts = Sequence[Mapping[str, float]]  # [{audio_s, at_s}]: the voice from audio_s plays at at_s
+VOICE_FROM_START: Parts = [{"audio_s": 0.0, "at_s": 0.0}]  # the whole voice file from 0
 
 
 def placed(spans: Sequence[Tuple[int, int]], parts: Optional[Parts]
@@ -140,7 +141,7 @@ def placed(spans: Sequence[Tuple[int, int]], parts: Optional[Parts]
     """(start, end, lag) in steps: `spans` (voice time) cut where a part of the voice starts,
     each piece with its part's lag (video minus voice time). No parts: the voice from 0."""
     edges = sorted((round(p["audio_s"] * 100), round(p["at_s"] * 100) - round(p["audio_s"] * 100))
-                   for p in parts or [{"audio_s": 0, "at_s": 0}])
+                   for p in parts or VOICE_FROM_START)
     out = []
     for a, b in spans:
         for k, (start, lag) in enumerate(edges):

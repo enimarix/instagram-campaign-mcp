@@ -26,7 +26,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ..config import get_settings
-from . import ffmpeg, gpu_lock, media, recipe
+from . import ffmpeg, gpu_lock, listen, media, recipe
 from .ffmpeg import MediaInfo, PathLike
 from .tts import LineTiming, reading_timings
 
@@ -268,7 +268,7 @@ def render_asset(props: Dict[str, Any], out: PathLike, media_root: PathLike, *,
         inputs = {"source": raw, **({"music": AUDIO / f"{p.music}.wav"} if p.music != "none" else {})}
         info = recipe.render(rec, inputs, out, timeout_s=timeout_s, end_card=end_card)
     return (info, round(COVER_S * 1000), recipe.recipe_timeline(rec, info.duration),
-            [{"audio_s": 0.0, "at_s": 0.0}])
+            listen.VOICE_FROM_START)
 
 
 def preview_stills(props: Dict[str, Any], media_root: PathLike,
