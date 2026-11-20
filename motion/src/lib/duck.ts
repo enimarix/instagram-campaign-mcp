@@ -56,6 +56,28 @@ export const speechDepth = (spans: readonly Span[], t: number): number => {
   return depth;
 };
 
+/**
+ * Integrated loudness (LUFS, ffmpeg ebur128) of every music bed in motion/public/audio. The
+ * levels above were set on the step-148 beds (about -17 LUFS); the 8-bit loops are about 4 LU
+ * louder and buried the voice (10 LU over the bed, step 159), so a bed louder than BED_LUFS
+ * comes down to it. A quieter bed is left as it is (the soft beds were chosen by ear).
+ */
+export const MUSIC_LUFS = {
+  "music-overworld": -13.1,
+  "music-cave": -13.4,
+  "music-marimba": -19.7,
+  "music-kalimba": -19.2,
+  "music-lounge": -23.5,
+  "music-dusk": -19.4,
+  "music-cutaway-a": -17.8,
+  "music-cutaway-b": -16.9,
+  "music-cutaway-c": -17.1,
+  "music-nocturne": -23.9,
+} as const;
+export const BED_LUFS = -17;
+/** Gain that brings bed `id` down to BED_LUFS when it is louder (1 otherwise). */
+export const bedLevel = (id: keyof typeof MUSIC_LUFS) => Math.min(1, 10 ** ((BED_LUFS - MUSIC_LUFS[id]) / 20));
+
 // Sound effects (steps 158-159): every sound is set against the voice from its measured peak,
 // never by a hand-set file volume (a coin at full volume peaked 21 LU over the speech once the
 // studio's -14 LUFS finish lifted the quiet voice).

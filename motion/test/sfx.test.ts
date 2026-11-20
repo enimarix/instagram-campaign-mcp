@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { ASSETS } from "../src/assets.ts";
-import { BANG_SPEECH_DB, SFX_PEAK_LUFS, type SfxId, sfxGain, sfxVolume, SPEECH_SFX_DB, speechSpans, VOICE_LUFS } from "../src/lib/duck.ts";
+import { BANG_SPEECH_DB, BED_LUFS, bedLevel, MUSIC_LUFS, SFX_PEAK_LUFS, type SfxId, sfxGain, sfxVolume, SPEECH_SFX_DB, speechSpans, VOICE_LUFS } from "../src/lib/duck.ts";
 
 const dB = (g: number) => 20 * Math.log10(g);
 const near = (a: number, b: number, msg?: string) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b} ${msg ?? ""}`);
@@ -13,6 +13,13 @@ const IDS = Object.keys(SFX_PEAK_LUFS) as SfxId[];
 test("every sound effect has a measured peak", () => {
   const sfx = Object.entries(ASSETS).filter(([, a]) => a.kind === "sfx").map(([id]) => id);
   assert.deepEqual([...IDS].sort(), sfx.sort());
+});
+
+test("every music bed has a measured loudness; a loud one comes down to the beds' level", () => {
+  const music = Object.entries(ASSETS).filter(([, a]) => a.kind === "music").map(([id]) => id);
+  assert.deepEqual(Object.keys(MUSIC_LUFS).sort(), music.sort());
+  near(dB(bedLevel("music-overworld")) + MUSIC_LUFS["music-overworld"], BED_LUFS, "the 8-bit loop at the level");
+  assert.equal(bedLevel("music-nocturne"), 1, "a soft bed is left as it is");
 });
 
 test("a sound peaks at the voice's level in the gaps and further under it on a spoken line", () => {

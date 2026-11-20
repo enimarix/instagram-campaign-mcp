@@ -1,23 +1,12 @@
 import { useMemo } from "react";
 import { Html5Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { assetById } from "../assets";
-import { duckGain, speechSpans, type Span } from "../lib/duck";
+import { bedLevel, duckGain, MUSIC_LUFS, speechSpans, type Span } from "../lib/duck";
 
-/** Level in the gaps, under the voice and the sfx; ducked further while a line is spoken. */
+/** Level in the gaps (of a bed at BED_LUFS), under the voice and the sfx; ducked further while a line is spoken. */
 const VOLUME = 0.25;
 
-export type MusicId =
-  | "music-overworld"
-  | "music-cave"
-  | "music-marimba"
-  | "music-kalimba"
-  | "music-dusk"
-  | "music-cutaway-a"
-  | "music-cutaway-b"
-  | "music-cutaway-c"
-  | "music-lounge"
-  | "music-nocturne"
-  | "none";
+export type MusicId = keyof typeof MUSIC_LUFS | "none";
 
 // A template's background music (step 048a): a music loop from src/assets.ts under the whole
 // video, so a Reel without a voice still has sound. "none" plays nothing. With `lines` (the voice
@@ -30,7 +19,7 @@ export const MusicBed = ({ id, lines }: { id: MusicId; lines?: readonly Span[] }
   if (id === "none") return null;
   const bed = assetById(id);
   // A number per frame (not a callback): the callback's frame restarts in every loop.
-  const volume = VOLUME * duckGain(spans, frame / fps);
+  const volume = VOLUME * bedLevel(id) * duckGain(spans, frame / fps);
   const intro = "loopStart_s" in bed ? Math.round(bed.loopStart_s * fps) : 0;
   if (!intro) return <Html5Audio src={bed.src} loop volume={volume} />;
   return (
