@@ -202,6 +202,19 @@ class InstagramMCPSettings(BaseSettings):
     gpu_lock_path: Optional[str] = Field(
         None, description="File lock that lets one heavy GPU job run at a time"
     )
+    # --- Resource guard (step 166, src/studio/guard.py: the PC froze twice) --
+    guard_min_free_ram_gb: float = Field(
+        8.0, ge=0, description="A render or the voice model starts only with this much free RAM"
+        " (GB; 0: no check)"
+    )
+    guard_startup_grace_min: float = Field(
+        10.0, ge=0, description="Minutes after the studio starts before any render, agent run or"
+        " voice model load (0: none)"
+    )
+    guard_watchdog: bool = Field(
+        True, description="Pause the studio's heavy jobs while free RAM or the GPU temperature"
+        " is critical"
+    )
 
     # --- Housekeeping -----------------------------------------------------
     # Once a day (src/studio/housekeeping.py). Liked assets are archived only past best_before.

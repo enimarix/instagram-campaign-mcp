@@ -37,6 +37,7 @@ from pydantic import SecretStr
 
 from ..config import APP_HOME, ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
+from ..studio import guard
 from ..studio.power import keep_awake
 from . import packet
 from .proc import is_gone
@@ -280,9 +281,9 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
                       f"command {json.dumps(cmd)}\n--- stderr\n")
             err.flush()
             with keep_awake():
-                proc = subprocess.Popen(cmd, cwd=ws, stdin=subprocess.DEVNULL,
-                                        stdout=out, stderr=err, env=env,
-                                        start_new_session=sys.platform != "win32")
+                proc = subprocess.Popen(cmd, **guard.low_priority(dict(  # 166
+                    cwd=ws, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env,
+                    start_new_session=sys.platform != "win32")))
                 try:
                     code = proc.wait(timeout=timeout_s)
                 except subprocess.TimeoutExpired:

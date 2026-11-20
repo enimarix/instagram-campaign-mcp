@@ -26,6 +26,12 @@ os.environ.update({
     "AGENT_LOG_DIR": str(_TMP / "logs" / "agent"),
     "GPU_LOCK_PATH": str(_TMP / "gpu" / "gpu.lock"),
     "CLAUDE_BIN": str(_TMP / "no-claude-in-tests"),  # never a real AI run from a test
+    # Step 166: the resource guard never waits on, probes or pauses the real machine in a
+    # test (tests/test_guard.py drives it with fakes).
+    "GUARD_MIN_FREE_RAM_GB": "0",
+    "GUARD_STARTUP_GRACE_MIN": "0",
+    "GUARD_WATCHDOG": "false",
+    "GUARD_NVIDIA_SMI": str(_TMP / "no-nvidia-smi"),
 })
 _REAL = [Path.home() / ".ig-campaign-agent", Path.home() / ".ig-campaign"]
 

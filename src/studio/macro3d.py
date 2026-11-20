@@ -21,8 +21,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
-from ..config import get_settings
-from . import cinematic, ffmpeg, gpu_lock, media
+from . import cinematic, ffmpeg, media
 from .ffmpeg import PathLike
 
 TEMPLATE = "Macro3D"
@@ -56,10 +55,8 @@ def _blender(shots: List[Dict[str, Any]], out: Path, timeout_s: float) -> None:
     cfg_path = out / "plates.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
     n = sum(len(s["stills"]) if s.get("stills") else s["frames"] for s in shots)
-    blender = cinematic.find_blender()
-    with gpu_lock.hold("Blender macro plates", get_settings().gpu_lock_path):  # step 145
-        cinematic._run([blender, "-b", "-P", ENGINE, "--", cfg_path], "Blender",
-                       max(timeout_s, 120 + n * S_PER_FRAME))
+    cinematic.blender(["-b", "-P", ENGINE, "--", cfg_path], "Blender macro plates",
+                      max(timeout_s, 120 + n * S_PER_FRAME))
 
 
 def _job(shot: Dict[str, Any], key: str) -> Dict[str, Any]:

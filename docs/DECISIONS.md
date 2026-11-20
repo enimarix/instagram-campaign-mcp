@@ -8,6 +8,28 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-20: A resource guard keeps the studio from freezing the PC (166)
+Every heavy child the studio starts (Blender, Remotion's node and Chrome, ffmpeg, the voice
+service and its model worker, agent CLI runs) runs at low priority (Windows
+BELOW_NORMAL_PRIORITY_CLASS, POSIX nice 10). A heavy GPU job, once it holds the GPU lock (145),
+also waits until free RAM >= `GUARD_MIN_FREE_RAM_GB` (8), free VRAM >= its need (voice 7 GB,
+Blender 3 GB, Remotion 1.5 GB; when nvidia-smi answers) and no other program (a game, a Blender
+started by hand) uses more than 1 GB of VRAM; it logs "waiting for RAM / VRAM / a game". A
+watchdog in the worker of `up` checks free RAM and the GPU temperature every 10 s: under 3 GB
+or above 88 °C it suspends the studio's own heavy processes, resumes them above 6 GB and under
+80 °C, and after 3 min still bad kills the newest (its render is retried later, the voice
+model is just unloaded), with an alert on the website each time; it never touches a process
+that is not the studio's. For `GUARD_STARTUP_GRACE_MIN` (10) minutes after `up` starts no
+render, agent run or voice model load starts, and the catch-up starts one agent run at a time,
+the next only once that run and its renders are done. Blender is launched only through
+`cinematic.blender()` (dev runs: `python -m src.studio.cinematic <blender args>`); a test fails
+on a launch anywhere else. `GUARD_WATCHDOG=false` turns the watchdog off.
+Reason: the owner's laptop (RTX 3070 Laptop 8 GB, 32 GB RAM) froze hard twice (2026-11-19 and
+2026-11-20, Kernel-Power 41): the voice model and a Blender started outside the lock on the
+GPU at once, everything at normal priority, and heavy work began within a minute of logon.
+Owner: « try and do something for the computer to prevent it from stopping and surcharging
+like this ».
+
 ## 2026-11-20: A voiced video is loudness-normalised by its voice, and the voice is peak-limited before the mix (161)
 The target stays -14 LUFS integrated, true peak <= -1 dBTP. A video with a voice (motion
 templates, Blender skits, remixes with a voice-over) no longer goes through the mix's two-pass

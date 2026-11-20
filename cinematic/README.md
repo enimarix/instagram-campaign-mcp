@@ -47,7 +47,8 @@ The `macro3d` style (template `Macro3D`, « Macro 3D ») is Remotion over Blende
 the photoreal plates, `motion/src/templates/Macro3D/` composes the word-by-word captions, Marco
 (the coach), the labels, the counter and the end card on top (`src/studio/macro3d.py`).
 
-- Engine: `engine/macro.py` (`blender -b -P engine/macro.py -- plates.json`). Each shot is its own
+- Engine: `engine/macro.py` (`python -m src.studio.cinematic -b -P cinematic/engine/macro.py --
+  plates.json`: never `blender.exe` directly, the wrapper takes the GPU lock, step 166). Each shot is its own
   scene: a black studio void (a dark floor dissolving into black, a soft top key, two cool rim
   lights, out-of-focus dust near the lens), one subject at real size, a 60 mm lens with a
   macro depth of field (about half the subject sharp), and one camera move: `push`, `pull`,

@@ -6,8 +6,9 @@ that decides: a playbook is due once its time today has passed (on its weekday, 
 one), it has no run started today, it isn't running and its file exists. Three callers:
 
 - `ig-campaign agent run-due` (the OS tasks' action): runs each due playbook in turn;
-- the `up` / `worker` process: catch_up() at start and every CATCH_UP_EVERY, starting due
-  runs detached (a run missed while the PC was off starts at the next logon, same day),
+- the `up` / `worker` process: catch_up() after the startup grace and every CATCH_UP_EVERY,
+  starting due runs detached one at a time, each once the last run and its renders are done
+  (166) (a run missed while the PC was off starts after the next logon, same day),
   and the light run the owner's scheduled work orders (136) and change requests (147) ask
   for, or new capability re-wakes (156) (order_run);
 - the website's Settings page: overview() (next and last run per playbook).
@@ -45,6 +46,7 @@ from .runner import (
     AgentRunRefused,
     _playbook_file,
     check_lock,
+    close_dead_runs,
     preflight,
     run_agent,
 )
@@ -258,24 +260,40 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     return ORDER_PLAYBOOK
 
 
+def busy(store: CampaignStore) -> Optional[str]:
+    """Why the catch-up starts no run now (166: never back to back), else None: a run is
+    running (one whose runner is gone is closed first, 155), or renders are queued."""
+    close_dead_runs(store)
+    if store.running_agent_runs(limit=1):
+        return "an agent run is running"
+    if any(store.list_render_jobs(state, limit=1) for state in ("queued", "running")):
+        return "renders are waiting"
+    return None
+
+
 def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              start: Optional[Callable[..., Any]] = None,
              now: Optional[Callable[[], datetime]] = None) -> List[str]:
-    """Start each due playbook detached (runs.start_run), then the work orders' run if they
-    need one (order_run). Never raises: the worker lives."""
+    """Start the first due playbook detached (runs.start_run), else the work orders' run if
+    they need one (order_run); nothing while busy(): one run, then the next waits for it
+    and its renders. Never raises: the worker lives.
+    ponytail: a run's row appears a second or two after its start, well within a tick."""
     from .runs import start_run
 
     now = now or utcnow  # looked up per call (a default argument would freeze it)
 
     started = []
     try:
+        if busy(store):
+            return started
         for playbook in due_runs(store, settings, now()):
             try:
                 (start or start_run)(store, settings, playbook)
                 started.append(playbook)
+                break
             except AgentError as e:
                 print(f"agent catch-up: {e}", file=sys.stderr, flush=True)
-        if order_run(store, settings, now(), start=start or start_run):
+        if not started and order_run(store, settings, now(), start=start or start_run):
             started.append(ORDER_PLAYBOOK)
     except Exception as e:  # noqa: BLE001 - e.g. database locked: next tick
         print(f"agent catch-up failed: {e!r}", file=sys.stderr, flush=True)
