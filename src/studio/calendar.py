@@ -139,7 +139,8 @@ def hot_hours(
     taken: Dict[datetime, List[int]] = {}
     for r in store.queue_times(since=now):
         if r["status"] != "published":
-            hour = parse_dt(r["publish_at"]).replace(minute=0, second=0, microsecond=0)
+            local = parse_dt(r["publish_at"]).astimezone(tz)  # owner-local hours (+05:30 zones)
+            hour = local.replace(minute=0, second=0, microsecond=0).astimezone(timezone.utc)
             taken.setdefault(hour, []).append(r["id"])
     first = now.astimezone(tz).date()
     out = []
