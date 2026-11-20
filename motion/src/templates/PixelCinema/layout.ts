@@ -5,7 +5,7 @@ import { CELL, type Camera, toScreen } from "../../cinema/pixel.ts";
 import { type AnchorId, SETS, type Shot, viewOf } from "../../cinema/scenes.ts";
 import { ATTACK_S, RELEASE_S, type Span } from "../../lib/duck.ts";
 import { easeInOut, easeOut, span } from "../../voxel/anim.ts";
-import type { Timeline } from "../../lib/timeline.ts";
+import { shotCuts, type Timeline } from "../../lib/timeline.ts";
 import { plain, type PixelCinemaProps } from "./schema.ts";
 
 const chars = (s: string) => Array.from(s).length;
@@ -55,16 +55,14 @@ export const payoffTimes = (fps: number) => ({ title: 0, value: Math.round(0.35 
 /** Index of the scene on screen at `frame` (0 = hook) among `n` scenes. */
 export const sceneIndex = (t: Timeline, n: number, frame: number) => Math.max(0, ...t.scenes.slice(0, n).map((s, i) => (frame >= s.startFrame ? i : 0)));
 
-/** A scene longer than this is cut into two shots halfway (no slow beats). */
-export const SPLIT_S = 4;
-
 /** A shot on screen from frame `start` (inclusive) to `end` (exclusive). */
 export type Segment = { start: number; end: number; shot: Shot };
 
 /**
- * The film's shots: the set's list in order, looping, one per scene and two for a scene longer
- * than SPLIT_S; the lightning beat takes the set's flash shot (unless its view was just on
- * screen) without using up a list shot. Never the same view twice in a row.
+ * The film's shots: the set's list in order, looping, one per scene and one more every
+ * MAX_SHOT_S of a longer scene (shotCuts); the lightning beat opens on the set's flash shot
+ * (unless its view was just on screen) without using up a list shot. Never the same view
+ * twice in a row.
  */
 export const segmentsOf = (p: PixelCinemaProps, t: Timeline, fps: number): Segment[] => {
   const { shots, flash } = SETS[p.scene];
@@ -78,18 +76,12 @@ export const segmentsOf = (p: PixelCinemaProps, t: Timeline, fps: number): Segme
   for (let i = 0; i <= p.beats.length; i++) {
     const { startFrame: start, endFrame: end } = t.scenes[i];
     const b = i ? p.beats[i - 1] : null;
-    const prev = out[out.length - 1]?.shot.view;
-    if (b?.kind === "chip" && b.flash) {
-      out.push({ start, end, shot: prev !== flash.view ? flash : take(prev) });
-      continue;
+    const bounds = [0, ...shotCuts(end - start, fps), end - start];
+    for (let k = 0; k + 1 < bounds.length; k++) {
+      const prev = out[out.length - 1]?.shot.view;
+      const shot = !k && b?.kind === "chip" && b.flash && prev !== flash.view ? flash : take(prev);
+      out.push({ start: start + bounds[k], end: start + bounds[k + 1], shot });
     }
-    const first = take(prev);
-    if (end - start <= SPLIT_S * fps) {
-      out.push({ start, end, shot: first });
-      continue;
-    }
-    const mid = start + Math.round((end - start) / 2);
-    out.push({ start, end: mid, shot: first }, { start: mid, end, shot: take(first.view) });
   }
   return out;
 };

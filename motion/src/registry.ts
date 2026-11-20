@@ -22,9 +22,10 @@ import { TimelineDemo, timelineDemoSchema, timelineOf } from "./templates/Timeli
 import { VoxelQuest } from "./templates/VoxelQuest/VoxelQuest";
 import { timelineOf as voxelQuestTimeline, voxelQuestSchema } from "./templates/VoxelQuest/schema";
 import { coverFrame as editorialCover, Editorial } from "./templates/Editorial/Editorial";
+import { cutsOf as editorialCuts } from "./templates/Editorial/layout";
 import { cameoOf as editorialCameo, editorialSchema, timelineOf as editorialTimeline } from "./templates/Editorial/schema";
 import { PixelCinema } from "./templates/PixelCinema/PixelCinema";
-import { coverOf as pixelCinemaCover } from "./templates/PixelCinema/layout";
+import { coverOf as pixelCinemaCover, segmentsOf as pixelCinemaShots } from "./templates/PixelCinema/layout";
 import { pixelCinemaSchema, timelineOf as pixelCinemaTimeline } from "./templates/PixelCinema/schema";
 import { Macro3D } from "./templates/Macro3D/Macro3D";
 import { coverOf as macro3dCover, shotsOf as macro3dShots, type Shot } from "./templates/Macro3D/layout";
@@ -399,6 +400,7 @@ export const templates = {
       const total = timeline.totalFrames;
       return [
         ...scriptEvents(timeline, FPS, ["hook card", ...p.chapters.map(chapter), "payoff over the tree in full bloom", "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        ...editorialCuts(timeline, p.chapters.length, endStart, FPS).map((c) => ({ t: c.frame / FPS, d: 0, e: `cut: ${c.shot % 2 ? "closer" : "wider"} framing` })),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (editorial): mB tile, macroBody, 7 jours gratuits, macrobody.fr; cameo ${editorialCameo(p)}` },
       ];
     },
@@ -435,6 +437,9 @@ export const templates = {
       const total = timeline.totalFrames;
       return [
         ...scriptEvents(timeline, FPS, ["hook card", ...p.beats.map(beat), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
+        ...pixelCinemaShots(p, timeline, FPS)
+          .filter((s) => !timeline.scenes.some((x) => x.startFrame === s.start))
+          .map((s) => ({ t: s.start / FPS, d: (s.end - s.start) / FPS, e: `cut: ${s.shot.view} shot` })),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: `end card (cinema): the beam sweeps onto the mB tile over the ${p.scene} set, macroBody, 7 jours gratuits, macrobody.fr` },
       ];
     },

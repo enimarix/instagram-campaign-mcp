@@ -18,11 +18,12 @@ import { CROWN, gustOf, GUST_RANGE, TREE } from "../../editorial/blossom.ts";
 import { EndCard } from "../../endcards/EndCard";
 import { frenchSpaces } from "../../lib/french";
 import { type SfxId, spokenLines } from "../../lib/duck";
-import { loopFade } from "../../lib/timeline";
-import { type Camera, cameraOf, payoffCamera } from "./layout";
+import { loopFade, shotIndex } from "../../lib/timeline";
+import { type Camera, cameraOf, payoffCamera, recut, sceneLens, typeShot } from "./layout";
 import { bloomOf, cameoOf, type Chapter, type EditorialProps, timelineOf } from "./schema";
 
-type SceneProps = { p: EditorialProps; index: number; f: number; len: number; frame: number };
+/** `shot`: how many cuts into its scene (a scene longer than 3 s cuts to a new framing, layout.ts). */
+type SceneProps = { p: EditorialProps; index: number; f: number; len: number; frame: number; shot: number };
 
 /** The hook's key word rises at HOOK_KEY_AT, then the strike. */
 export const HOOK_KEY_AT = 8;
@@ -30,9 +31,9 @@ export const HOOK_STRIKE_AT = 18;
 /** Words of a Rise land 16 frames after their start; the key's words start 3 frames apart. */
 const RISE = 16;
 
-/** The Reel cover: once every word of the key has landed and the strike is drawn (at least 1.2 s). */
+/** The Reel cover: once every word of the lead and the key has landed and the strike is drawn (at least 1.2 s). */
 export const coverFrame = (p: Pick<EditorialProps, "hook">, fps: number) =>
-  Math.max(Math.round(1.2 * fps), HOOK_KEY_AT + 3 * (p.hook.key.split(" ").length - 1) + RISE + 1, HOOK_STRIKE_AT + p.hook.lead.split(" ").length + 11);
+  Math.max(Math.round(1.2 * fps), 2 * (p.hook.lead.split(" ").length - 1) + RISE + 1, HOOK_KEY_AT + 3 * (p.hook.key.split(" ").length - 1) + RISE + 1, HOOK_STRIKE_AT + p.hook.lead.split(" ").length + 11);
 /** Frames the anatomy card takes to slide up (or down, out). */
 const CARD_SLIDE = 12;
 /** Where the tree's foot stands. */
@@ -93,7 +94,7 @@ const cameraTransform = (cam: Camera, stage: { x: number; y: number; s: number }
 /** Black behind the header when the picture runs up under it (close-ups). */
 const HeaderShade = () => <div style={{ position: "absolute", left: 0, top: 0, width: W, height: 760, background: "linear-gradient(#000 0%, #000 52%, rgba(0,0,0,0) 100%)" }} />;
 
-const TreeChapter = ({ p, index, f, len, frame }: SceneProps) => {
+const TreeChapter = ({ p, index, f, len, frame, shot }: SceneProps) => {
   const c = p.chapters[index - 1] as Extract<Chapter, { scene: "tree" }>;
   const [from, to] = bloomOf(p.chapters, index - 1);
   const first = !p.chapters.slice(0, index - 1).some((x) => x.scene === "tree" || x.scene === "split");
@@ -103,7 +104,7 @@ const TreeChapter = ({ p, index, f, len, frame }: SceneProps) => {
   const stage = stageOf(top, c.stat ? 900 : GROUND, c.tags.length ? 420 : 540);
   const gust = c.action === "wind" ? gustOf(f, len) : c.action === "petals" ? 0.3 + 0.15 * Math.sin(f / 9) : 0;
   const petals = c.action === "petals" ? 90 : c.action === "wind" ? 40 : 14;
-  const cam = cameraOf(c.action, f / len);
+  const cam = recut(cameraOf(c.action, f / len), shot);
   // The gust shakes the frame a little at its peak.
   const shake = c.action === "wind" ? Math.max(0, gust - 0.6) * Math.sin(f * 1.7) * 10 : 0;
   const box = crownBox(stage);
@@ -111,6 +112,8 @@ const TreeChapter = ({ p, index, f, len, frame }: SceneProps) => {
   const ring = c.action === "loop" ? ease(f, len * 0.1, len * 0.45) : 0;
   const r = Math.max(box.w, box.h) / 2 + 30;
   const close = c.action === "petals";
+  // A cut in closer runs the crown up under the header too.
+  const shade = close || shot % 2 === 1;
   return (
     <>
       {framed > 0 && <DotGrid opacity={framed} />}
@@ -124,7 +127,7 @@ const TreeChapter = ({ p, index, f, len, frame }: SceneProps) => {
         </g>
       </svg>
       {close && <Drift frame={frame} count={22} />}
-      {close && <HeaderShade />}
+      {shade && <HeaderShade />}
       {c.tags.map((t, i) => {
         const at = Math.round(len * (0.3 + 0.14 * i));
         const e = ease(f, at, 14);
@@ -136,7 +139,7 @@ const TreeChapter = ({ p, index, f, len, frame }: SceneProps) => {
   );
 };
 
-const SplitChapter = ({ p, index, f, len, frame }: SceneProps) => {
+const SplitChapter = ({ p, index, f, len, frame, shot }: SceneProps) => {
   const c = p.chapters[index - 1] as Extract<Chapter, { scene: "split" }>;
   const top = headerBottom(c) + 30;
   const h = (1170 - top - 30) / 2;
@@ -149,12 +152,14 @@ const SplitChapter = ({ p, index, f, len, frame }: SceneProps) => {
   );
   const y2 = top + h + 30;
   const label: CSSProperties = { position: "absolute", left: box.x + 22, fontFamily: GROTESK.fontFamily, fontSize: 22, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase" };
-  // Camera: the panels slide in from opposite sides, then the shot pushes in on « avec ».
+  // Camera: the panels slide in from opposite sides, then the shot pushes in on « avec »; a cut
+  // (long chapter) jumps closer, on « sans » first, then back on « avec ».
   const push = ease(f, len * 0.45, len * 0.55);
+  const focusY = shot % 2 ? top + h / 2 : y2 + h / 2;
   const slideX = (k: number) => (1 - panel(k)) * (k ? 120 : -120);
   return (
     <>
-      <div style={{ position: "absolute", inset: 0, transformOrigin: `600px ${y2 + h / 2}px`, transform: `scale(${1 + 0.07 * push})` }}>
+      <div style={{ position: "absolute", inset: 0, transformOrigin: `600px ${focusY}px`, transform: `scale(${1 + 0.07 * push + (shot ? 0.12 : 0)})` }}>
         <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
           <defs>
             <linearGradient id="flatSky" x1="0" y1="0" x2="0" y2="1">
@@ -187,14 +192,15 @@ const SplitChapter = ({ p, index, f, len, frame }: SceneProps) => {
 };
 
 /** The deep blue card: the character (its mood turning halfway when `then`), the caption on top, the stat under. */
-const AnatomyCard = ({ p, index, f, len }: SceneProps) => {
+const AnatomyCard = ({ p, index, f, len, shot }: SceneProps) => {
   const c = p.chapters[index - 1] as Extract<Chapter, { scene: "anatomy" }>;
   const turn = Math.round(len * 0.5);
   const mood = c.then && f >= turn ? c.then : c.mood;
   const arrive = ease(f, 6, 14);
   const aura = CHARACTERS[c.character].aura;
-  // Camera: a slow push on the character while the ground drifts by (parallax).
-  const push = 1 + 0.1 * ease(f, 10, len - 10);
+  // Camera: a slow push on the character while the ground drifts by (parallax); a cut (long
+  // chapter) jumps in closer, then back out a little wider.
+  const push = (1 + 0.1 * ease(f, 10, len - 10)) * (!shot ? 1 : shot % 2 ? 1.22 : 0.94);
   return (
     <div style={{ position: "absolute", left: 40, top: 180, width: 1000, height: 1560, borderRadius: 44, overflow: "hidden", border: "4px solid #3B3FA6", boxShadow: "0 0 0 2px #000, 0 30px 80px rgba(43,47,134,0.45)" }}>
       <DeepGround f={f} drift={-f * 0.9}>
@@ -235,15 +241,16 @@ const AnatomyChapter = (sp: SceneProps) => (
 );
 
 /** A type-only beat: the title slams in big, word by word, the key under it, the block drifting and petals crossing. */
-const TypeChapter = ({ p, index, f, len, frame }: SceneProps) => {
+const TypeChapter = ({ p, index, f, len, frame, shot }: SceneProps) => {
   const c = p.chapters[index - 1] as Extract<Chapter, { scene: "type" }>;
   const size = Array.from(c.title).length > 16 ? 120 : 150;
   const push = ease(f, 0, len);
+  const cut = typeShot(shot);
   return (
     <>
       <Drift frame={frame} count={20} />
       <Counter n={index} total={p.chapters.length} f={f} />
-      <div style={{ position: "absolute", left: LEFT, top: 560, width: 900, transformOrigin: "0 50%", transform: `scale(${1.12 - 0.12 * push}) translateY(${-30 * push}px)` }}>
+      <div style={{ position: "absolute", left: LEFT, top: 560 + cut.dy, width: 900, transformOrigin: "0 50%", transform: `scale(${(1.12 - 0.12 * push) * cut.scale}) translateY(${-30 * push}px)` }}>
         <div style={{ lineHeight: 0.98 }}>
           <Rise text={c.title} f={f} start={0} stagger={3} style={{ ...GROTESK, fontSize: size }} />
         </div>
@@ -257,7 +264,7 @@ const TypeChapter = ({ p, index, f, len, frame }: SceneProps) => {
   );
 };
 
-/** The typographic duo: the lead rises from `leadAt` (-1 = there from frame 0), the key from `keyAt`, then the strike. */
+/** The typographic duo: the lead rises from `leadAt`, the key from `keyAt`, then the strike. */
 const Duo = ({ d, f, leadAt, keyAt, strikeAt, size, keySize }: { d: EditorialProps["hook"]; f: number; leadAt: number; keyAt: number; strikeAt: number; size: number; keySize: number }) => (
   <>
     <div style={{ lineHeight: 1.0 }}>
@@ -269,30 +276,34 @@ const Duo = ({ d, f, leadAt, keyAt, strikeAt, size, keySize }: { d: EditorialPro
   </>
 );
 
-/** The hook: readable from frame 0, moving from frame 0 (a push on the type, petals at depth crossing it). */
-const Hook = ({ p, f, len, frame }: SceneProps) => {
+/**
+ * The hook: moving from frame 0 (the lead rises in word by word from frame 0, a push on the
+ * type, petals at depth crossing it); a hook longer than 3 s cuts to a new framing.
+ */
+const Hook = ({ p, f, len, frame, shot }: SceneProps) => {
   const size = Array.from(p.hook.lead).length > 26 ? 96 : 116;
   const push = Math.min(1, f / len);
+  const cut = typeShot(shot);
   return (
     <>
       <Drift frame={frame + 60} count={24} />
       <div style={{ position: "absolute", left: LEFT, top: 290 }}>
         <Kicker text={p.kicker} f={f} />
       </div>
-      <div style={{ position: "absolute", left: LEFT, top: 520, width: 900, transformOrigin: "0 30%", transform: `scale(${1 + 0.08 * push}) translateY(${-24 * push}px)` }}>
-        <Duo d={p.hook} f={f} leadAt={-1} keyAt={HOOK_KEY_AT} strikeAt={HOOK_STRIKE_AT} size={size} keySize={150} />
+      <div style={{ position: "absolute", left: LEFT, top: 520 + cut.dy, width: 900, transformOrigin: "0 30%", transform: `scale(${(1 + 0.08 * push) * cut.scale}) translateY(${-24 * push}px)` }}>
+        <Duo d={p.hook} f={f} leadAt={0} keyAt={HOOK_KEY_AT} strikeAt={HOOK_STRIKE_AT} size={size} keySize={150} />
       </div>
     </>
   );
 };
 
-const Payoff = ({ p, f, len, frame }: SceneProps) => {
+const Payoff = ({ p, f, len, frame, shot }: SceneProps) => {
   const size = Array.from(p.payoff.lead).length > 26 ? 84 : 100;
   const stage = stageOf(345 + linesOf(p.payoff.lead, size, 900) * size + 150 + 20, GROUND);
   return (
     <>
       <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
-        <g transform={cameraTransform(payoffCamera(f / len), stage)}>
+        <g transform={cameraTransform(recut(payoffCamera(f / len), shot), stage)}>
           <Tree {...stage} frame={frame} bloom={1} gust={0.2 * Math.sin(f / 14)} petals={60} />
         </g>
       </svg>
@@ -339,8 +350,11 @@ export const Editorial = (props: EditorialProps) => {
   const { timeline, endStart } = useMemo(() => timelineOf(props, fps), [props, fps]);
   const scenes = timeline.scenes.slice(0, props.chapters.length + 2);
   const index = Math.max(0, ...scenes.map((s, i) => (frame >= s.startFrame ? i : 0)));
-  const lenOf = (i: number) => (i + 1 < scenes.length ? scenes[i + 1].startFrame : endStart) - scenes[i].startFrame;
-  const sp = (i: number, at: number): SceneProps => ({ p: props, index: i, f: at - scenes[i].startFrame, len: lenOf(i), frame: at });
+  const lens = sceneLens(timeline, props.chapters.length, endStart);
+  const sp = (i: number, at: number): SceneProps => {
+    const f = at - scenes[i].startFrame;
+    return { p: props, index: i, f, len: lens[i], frame: at, shot: shotIndex(f, lens[i], fps) };
+  };
   const since = frame - scenes[index].startFrame;
   // The anatomy card slides up over the scene before it, and down off the scene after it.
   const cardIn = isAnatomy(props, index) && index > 0 && !isAnatomy(props, index - 1) && since < CARD_SLIDE;
@@ -350,8 +364,8 @@ export const Editorial = (props: EditorialProps) => {
   // Not over the anatomy card, nor over the petals close-up (the crown fills the frame there).
   const showScrub = index >= 1 && !isAnatomy(props, index) && !(chapterAt?.scene === "tree" && chapterAt.action === "petals");
   const range: [number, number] | undefined =
-    chapterAt?.scene === "tree" && chapterAt.action === "wind" ? [(scenes[index].startFrame + GUST_RANGE[0] * lenOf(index)) / endStart, (scenes[index].startFrame + GUST_RANGE[1] * lenOf(index)) / endStart] : undefined;
-  const cues = cuesOf(props, scenes.map((s) => s.startFrame), scenes.map((_, i) => lenOf(i)), endStart);
+    chapterAt?.scene === "tree" && chapterAt.action === "wind" ? [(scenes[index].startFrame + GUST_RANGE[0] * lens[index]) / endStart, (scenes[index].startFrame + GUST_RANGE[1] * lens[index]) / endStart] : undefined;
+  const cues = cuesOf(props, scenes.map((s) => s.startFrame), lens, endStart);
   const loop = loopFade(frame, timeline);
   const lines = spokenLines(props.voice);
   return (

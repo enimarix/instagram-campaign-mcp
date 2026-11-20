@@ -42,14 +42,15 @@ const SetAt = ({ p, frame, t, fps }: { p: PixelCinemaProps; frame: number; t: Ti
 /** The text over scene `i`, `f` frames into it. */
 const Words = ({ p, i, f, frame, fps, t }: { p: PixelCinemaProps; i: number; f: number; frame: number; fps: number; t: Timeline }) => {
   if (i === 0) {
+    // The hook's type rises in over frames 0-6 while the camera already moves (owner: no still first frame).
     const ht = hookTimes(p, t.scenes[0].endFrame - t.scenes[0].startFrame, fps);
     return p.hook.strike ? (
       <>
-        <Headline text={p.hook.strike} y={TITLE_Y} f={f} start={-99} size={70} strike={easeOut(span(f, ht.strike, Math.round(0.25 * fps)))} />
+        <Headline text={p.hook.strike} y={TITLE_Y} f={f} start={0} size={70} strike={easeOut(span(f, ht.strike, Math.round(0.25 * fps)))} />
         <Headline text={p.hook.line} y={TITLE_Y + 96} f={f} start={ht.line} size={96} />
       </>
     ) : (
-      <Headline text={p.hook.line} y={TITLE_Y + 40} f={f} start={-99} size={96} />
+      <Headline text={p.hook.line} y={TITLE_Y + 40} f={f} start={0} size={96} />
     );
   }
   const b = p.beats[i - 1];

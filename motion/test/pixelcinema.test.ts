@@ -7,7 +7,8 @@ import { bayer, dither, GH, GW, hash, ramp, toScreen, toWorld } from "../src/cin
 import { ANCHORS, paint, SCENE_IDS, SETS, solidAt } from "../src/cinema/scenes.ts";
 import { CAMEOS, CARD_S } from "../src/endcards/schema.ts";
 import { speechSpans } from "../src/lib/duck.ts";
-import { beamOf, cameraAt, coverOf, hookTimes, openOf, segmentsOf, SPLIT_S, thunderAt } from "../src/templates/PixelCinema/layout.ts";
+import { MAX_SHOT_S } from "../src/lib/timeline.ts";
+import { beamOf, cameraAt, coverOf, hookTimes, openOf, segmentsOf, thunderAt } from "../src/templates/PixelCinema/layout.ts";
 import { beatLine, joinParts, pixelCinemaSchema, pixelCinemaScript, splitHighlight, timelineOf, titleOf } from "../src/templates/PixelCinema/schema.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
@@ -83,14 +84,14 @@ test("direction: strike then line, the beam comes on, the camera pushes in, the 
   assert.deepEqual(hookTimes(EXAMPLES[2], hookLen, 30), { strike: -1, line: 0 });
   assert.ok(beamOf(p, timeline, 0, 30).power < 0.5);
   assert.ok(beamOf(p, timeline, h.line + 30, 30).power > 0.9);
-  // Every shot is a new view, none lasts longer than SPLIT_S, and the camera moves within the first second of each.
+  // Every shot is a new view, none lasts longer than MAX_SHOT_S (the lightning beat too), and the camera moves within the first second of each.
   for (const ex of EXAMPLES) {
     const tl = timelineOf(ex, 30).timeline;
     const segs = segmentsOf(ex, tl, 30);
     assert.equal(segs[0].start, 0);
     for (const [i, s] of segs.entries()) {
       if (i) assert.ok(s.shot.view !== segs[i - 1].shot.view && s.start === segs[i - 1].end, `${ex.scene} shot ${i}`);
-      assert.ok(s.end - s.start <= SPLIT_S * 30 + 1 || ex.beats.some((b) => b.kind === "chip" && b.flash), `${ex.scene} shot ${i} short`);
+      assert.ok(s.end - s.start <= MAX_SHOT_S * 30, `${ex.scene} shot ${i} short`);
       const a = cameraAt(ex, tl, s.start, 30);
       const b = cameraAt(ex, tl, Math.min(s.end - 1, s.start + 30), 30);
       assert.equal(a.view, b.view);
