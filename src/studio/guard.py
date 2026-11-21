@@ -16,8 +16,9 @@ Step 145's GPU lock (gpu_lock.py) keeps our own heavy jobs one at a time; this a
 - Watchdog (studio side, the worker of `up`): every EVERY_S, free RAM < 3 GB (or the heat
   below) suspends our heavy children; RAM > 6 GB (and cool) resumes them; RAM still short
   after 3 min, the newest is killed (its render fails with the reason and is retried; the
-  voice model worker is just unloaded). Only processes under this one, named like a renderer or the voice
-  model worker (its pid from the voice service's /health), are ever touched.
+  voice model worker is just unloaded). Only processes under this one, named like a renderer
+  or the voice model worker (its pid from the voice service's /health), and (171) the
+  processes under the GPU lock's holder are ever touched.
 
 Heat budget (step 171, docs/DECISIONS.md 2026-11-21): the laptop powered itself off under ONE
 long Blender render (16 CPU threads + the GPU at its 130 W limit, ~220 W on a 230 W adapter).
