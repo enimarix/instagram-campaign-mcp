@@ -666,3 +666,11 @@ recipes (`kind: motion`) and render queue, so step 138's style buttons pick it u
 No AI video model: everything renders locally at no cost per video, about 1 minute of
 machine time per second of video.
 Reason: the owner's request; local rendering keeps the cost at zero and the result repeatable.
+
+## 2026-11-21 — Blender renders through Vulkan, not OpenGL (step 176)
+The owner's laptop (AORUS 15P XD, RTX 3070 Laptop, driver 596.49 then 621.24) powered off six times (Kernel-Power
+41, no bugcheck) the instant a Blender EEVEE render took the GPU to full load through OpenGL, also after a cleaning
+and a driver update, also 30 s into a test at 53 °C. The owner's DirectX games run for hours, and the same shots
+through Blender's Vulkan backend rendered clean at the same load (126 W, 71 °C, the 8-shot proof in 13.1 min vs
+18.6 min). `cinematic.blender()` (the one launch point) passes `--gpu-backend vulkan`;
+`CINEMATIC_GPU_BACKEND=""` goes back to Blender's default.
