@@ -16,7 +16,7 @@ the chart hits only come as `original_sound`.
 - `on_beats()` moves the voice lines onto that grid: every template starts a scene when a
   line starts (motion/src/lib/timeline.ts), so every template cuts on the beat.
 
-Beat finding is stdlib + ffmpeg (no numpy): band energy flux, tempo by autocorrelation, beats
+Beat finding is stdlib + ffmpeg (no numpy): 5-band energy flux, tempo by autocorrelation, beats
 by dynamic programming (Ellis 2007), downbeat = the beat phase with the most kick energy.
 ponytail: 4/4 and a steady tempo assumed (library tracks are); CPJKU/beat_this (MIT, CPU
 `small0`) if the grid slips on real tracks.
@@ -29,6 +29,7 @@ import hashlib
 import json
 import math
 import re
+import statistics
 import tempfile
 from array import array
 from operator import mul
@@ -46,12 +47,14 @@ SR = 11025
 HOP = 256  # ~23 ms analysis frames
 FPS = SR / HOP
 MIN_BPM, MAX_BPM, PREFERRED_BPM = 60.0, 180.0, 120.0
+BANDS = ("lowpass=f=150", "highpass=f=150,lowpass=f=400", "highpass=f=400,lowpass=f=1500",
+         "highpass=f=1500,lowpass=f=5000", "highpass=f=5000")  # the kick band first
 TIGHTNESS = 100.0  # DP penalty on beat gaps away from the period (librosa's default)
 DROP_RATIO = 2.0  # kick-band energy x2 over the bars before it (+3 dB) = the drums kick in
 LINE_GAP_S = 0.15  # least silence between two voice lines
 DOWNBEAT_WAIT_S = 0.6  # a line waits this long at most for a downbeat, else the next beat
-UNDER_VOICE_LU = 15.0  # the track under a voice (memory audio-mix: voice clearly on top)
-ALONE_LUFS = -14.0  # the track with no voice: the Reel's usual loudness
+UNDER_VOICE_LU = 15.0  # the track under the voice (memory audio-mix: voice clearly on top)
+MAX_TRACK_BYTES = 50 * 2 ** 20
 END_ROOM_S = 5.0  # the outro / end card after the last line, still under the track
 TIMEOUT_S = 120.0
 DOWNLOAD_HOSTS = (".fbcdn.net", ".cdninstagram.com")
@@ -98,7 +101,7 @@ async def fetch(client: Any, media_root: Any, audio_id: str, *,
         return load(media_root, audio_id)
     except ValueError:
         pass
-    info = await client.get_audio(audio_id)
+    info = {"audio_id": audio_id, **await client.get_audio(audio_id)}
     url = info.get("download_url") or ""
     host = urlparse(url).hostname or ""
     if urlparse(url).scheme != "https" or not host.endswith(DOWNLOAD_HOSTS):
@@ -107,17 +110,27 @@ async def fetch(client: Any, media_root: Any, audio_id: str, *,
     folder.mkdir(parents=True, exist_ok=True)
     track = folder / f"{audio_id}.m4a"
     own = http is None
-    http = http or httpx.AsyncClient(timeout=60, follow_redirects=True)
-    try:  # a signed CDN link: never our token
-        r = await http.get(url)
+    http = http or httpx.AsyncClient(timeout=60)
+    try:  # a signed CDN link, checked above: never our token, no redirect elsewhere
+        r = await http.get(url, follow_redirects=False)
         r.raise_for_status()
+    except httpx.HTTPError as e:  # a tool error the agent can act on (pick another track)
+        raise ValueError(f"track {audio_id}: download failed ({e})") from None
     finally:
         if own:
             await http.aclose()
-    track.write_bytes(r.content)
-    meta = {**brief(info), "track": media.relative(media_root, track),
-            **await asyncio.to_thread(measure, track)}  # ffmpeg + pure Python: off the loop
-    (folder / f"{audio_id}.json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
+    if len(r.content) > MAX_TRACK_BYTES:
+        raise ValueError(f"track {audio_id}: {len(r.content)} bytes, not a song")
+    # temp + replace: parallel fetches of one track never read a half-written file
+    with tempfile.TemporaryDirectory(dir=folder) as work:
+        part = Path(work) / track.name
+        part.write_bytes(r.content)
+        part.replace(track)
+        meta = {**brief(info), "track": media.relative(media_root, track),
+                **await asyncio.to_thread(measure, track)}  # ffmpeg + pure Python: off the loop
+        part = Path(work) / "meta.json"
+        part.write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
+        part.replace(folder / f"{audio_id}.json")
     return meta
 
 
@@ -148,11 +161,14 @@ def tempo_period(onset: Sequence[float]) -> int:
     """The beat period in frames: autocorrelation weighted toward PREFERRED_BPM."""
     mean = sum(onset) / len(onset)
     o = [x - mean for x in onset]
+    lo, hi = int(FPS * 60 / MAX_BPM), int(FPS * 60 / MIN_BPM)
+    ac = {lag: sum(map(mul, o[:-lag], o[lag:])) / (len(o) - lag) for lag in range(lo - 1, hi + 2)}
     best, period = -math.inf, 0
-    for lag in range(int(FPS * 60 / MAX_BPM), int(FPS * 60 / MIN_BPM) + 1):
-        ac = sum(map(mul, o[:-lag], o[lag:])) / (len(o) - lag)
+    for lag in range(lo, hi + 1):
         bpm = 60 * FPS / lag
-        score = ac * math.exp(-0.5 * math.log2(bpm / PREFERRED_BPM) ** 2)
+        # with its neighbours: a period between two whole frames splits its peak in two
+        near = (ac[lag - 1] + 2 * ac[lag] + ac[lag + 1]) / 4
+        score = near * math.exp(-0.5 * math.log2(bpm / PREFERRED_BPM) ** 2)
         if score > best:
             best, period = score, lag
     return period
@@ -169,7 +185,7 @@ def track_beats(onset: Sequence[float], period: int) -> List[int]:
             s = score[prev] - TIGHTNESS * math.log((t - prev) / period) ** 2
             if arg < 0 or s > best:
                 best, arg = s, prev
-        if arg >= 0 and best > 0:
+        if arg >= 0:  # always linked: a quiet break never cuts the chain (Ellis 2007)
             score[t] += best
             back[t] = arg
     # the last beat: the best-scored frame in the final period
@@ -181,13 +197,18 @@ def track_beats(onset: Sequence[float], period: int) -> List[int]:
     return beats[::-1]
 
 
-def beat_map(full: Sequence[float], kick: Sequence[float]) -> Dict[str, Any]:
-    """{bpm, beats, downbeats, drop_s} from the band energies (frames of HOP samples)."""
-    n = min(len(full), len(kick))
-    kick_flux = _flux(kick[:n])
-    onset = [a + b for a, b in zip(_flux(full[:n]), kick_flux)]
-    if n < 4 * FPS or not any(onset):
+def beat_map(bands: Sequence[Sequence[float]]) -> Dict[str, Any]:
+    """{bpm, beats, downbeats, drop_s} from band energies (frames of HOP samples), the kick
+    band first. Onset = the bands' log-energy rises summed, in standard deviations: a cheap
+    spectral flux (5 bands agreed with librosa's tempo on 11 of 12 trending tracks, 2 on 8)."""
+    n = min(map(len, bands))
+    fluxes = [_flux(b[:n]) for b in bands]
+    kick, kick_flux = bands[0], fluxes[0]
+    onset = [sum(x) for x in zip(*fluxes)]
+    sd = statistics.pstdev(onset) if n > 1 else 0.0
+    if n < 4 * FPS or not sd:
         return {"bpm": None, "beats": [], "downbeats": [], "drop_s": None}
+    onset = [x / sd for x in onset]  # TIGHTNESS is in these units (as librosa)
     period = tempo_period(onset)
     beats = track_beats(onset, period)
 
@@ -214,10 +235,9 @@ def beat_map(full: Sequence[float], kick: Sequence[float]) -> Dict[str, Any]:
 
 def measure(path: Path) -> Dict[str, Any]:
     """{duration_s, lufs, bpm, beats, downbeats, drop_s} of a track file."""
-    full = _energy(_band(path, "highpass=f=40"))
-    kick = _energy(_band(path, "lowpass=f=150"))
-    return {"duration_s": round(len(full) / FPS, 3),
-            "lufs": recipe.loudness(path, timeout_s=TIMEOUT_S)[0], **beat_map(full, kick)}
+    bands = [_energy(_band(path, b)) for b in BANDS]
+    return {"duration_s": round(len(bands[0]) / FPS, 3),
+            "lufs": recipe.loudness(path, timeout_s=TIMEOUT_S)[0], **beat_map(bands)}
 
 
 # --- The voice on the beat --------------------------------------------------------------------
@@ -275,25 +295,26 @@ def retime_voice(src: Path, old: Sequence[Dict[str, Any]], new: Sequence[Dict[st
 def apply(props: Dict[str, Any], media_root: Any, audio_id: str) -> tuple:
     """Props cut on the track's beat with the template's own bed off, and the recipe's
     `ig_audio` (what publish attaches, what the preview mixes). ValueError when the track
-    is not fetched or has no beat."""
+    is not fetched, has no beat, or the video has no voice.
+    ponytail: voiced videos only. The clean master must pass QC on its own (an audio track
+    at -14 LUFS): with a voice it does; without one the finish would push the sfx alone to
+    -14 under Instagram's track. Music-only videos need QC to judge the mix with the track."""
     meta = load(media_root, audio_id)
     if not meta.get("beats"):
         raise ValueError(f"track {audio_id}: no beat found, pick another track")
-    props = {**props, "music": "none"}
-    voice = props.get("voice")
-    voiced = bool(voice and voice.get("audioSrc"))
-    if voice and voice.get("lines"):
-        lines = on_beats(voice["lines"], meta)
-        if lines[-1]["end_s"] + END_ROOM_S > meta["duration_s"]:
-            raise ValueError(f"track {audio_id} ({meta['duration_s']:g} s) is shorter than "
-                             "the video: pick a longer one")
-        voice = {**voice, "lines": lines}
-        if voiced:
-            src = media.resolve(media_root, voice["audioSrc"])
-            moved = retime_voice(src, props["voice"]["lines"], lines, src.parent)
-            voice["audioSrc"] = media.relative(media_root, moved)
-        props["voice"] = voice
-    target = recipe.VOICE_REF_LUFS - UNDER_VOICE_LU if voiced else ALONE_LUFS
+    voice = props.get("voice") or {}
+    if not (voice.get("audioSrc") and voice.get("lines")):
+        raise ValueError("an Instagram track needs a voiced video (a voice other than none)")
+    lines = on_beats(voice["lines"], meta)
+    if lines[-1]["end_s"] + END_ROOM_S > meta["duration_s"]:
+        raise ValueError(f"track {audio_id} ({meta['duration_s']:g} s) is shorter than "
+                         "the video: pick a longer one")
+    src = media.resolve(media_root, voice["audioSrc"])
+    moved = retime_voice(src, voice["lines"], lines, src.parent)
+    props = {**props, "music": "none",
+             "voice": {**voice, "lines": lines, "audioSrc": media.relative(media_root, moved)}}
+    # the finish brings the voice to LOUDNESS_I; the track sits UNDER_VOICE_LU below it
+    target = recipe.LOUDNESS_I - UNDER_VOICE_LU
     gain = 100 if meta.get("lufs") is None else 100 * 10 ** ((target - meta["lufs"]) / 20)
     ig_audio = {"audio_id": audio_id, "title": meta.get("title"), "artist": meta.get("artist"),
                 "track": meta["track"], "audio_volume": max(1, min(100, round(gain))),
@@ -301,12 +322,10 @@ def apply(props: Dict[str, Any], media_root: Any, audio_id: str) -> tuple:
     return props, ig_audio
 
 
-def preview_args(ig_audio: Dict[str, Any], has_audio: bool) -> List[str]:
+def preview_args(ig_audio: Dict[str, Any]) -> List[str]:
     """ffmpeg arguments (after the video input) that mix the track into the review preview
-    the way Instagram's volumes will (input 1 = the track)."""
-    m = f"[1:a]volume={ig_audio['audio_volume'] / 100:.3f}"
-    if not has_audio:
-        return ["-filter_complex", f"{m}[a]", "-map", "0:v", "-map", "[a]", "-shortest"]
+    the way Instagram's volumes will (input 1 = the track; the master is voiced: apply)."""
+    m = f"[1:a]volume={ig_audio['audio_volume'] / 100:.3f}[m]"
     v = f"[0:a]volume={ig_audio['video_volume'] / 100:.3f}[v]"
-    return ["-filter_complex", f"{m}[m];{v};[v][m]amix=inputs=2:duration=first:normalize=0[a]",
+    return ["-filter_complex", f"{m};{v};[v][m]amix=inputs=2:duration=first:normalize=0[a]",
             "-map", "0:v", "-map", "[a]"]

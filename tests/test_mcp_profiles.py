@@ -25,6 +25,7 @@ AGENT_ALLOWED = {
     "analyse_work_order", "list_sources",
     "render_remix",
     "get_clip_frames", "set_clip_timeline", "search_stock", "add_stock_clip", "find_sfx",
+    "trending_music", "fetch_music",
     "list_ad_winners", "propose_ad_test", "stop_ad_test", "list_ad_tests",
     "get_ad_test_results",
 }

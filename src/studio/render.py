@@ -175,7 +175,7 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
     mix: List[Any] = []
     if env.ig_audio:  # the review preview plays the track as Instagram will; the master stays clean
         mix = ["-i", media.resolve(media_root, env.ig_audio.track),
-               *music.preview_args(env.ig_audio.model_dump(), info.has_audio)]
+               *music.preview_args(env.ig_audio.model_dump())]
     ffmpeg.run(["-i", video, *mix, *PREVIEW_ARGS, "-preset", preset, preview],
                timeout_s=timeout_s)
     progress(0.9)

@@ -384,12 +384,23 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    (English words: "fork drop", "crowd gasp", "whoosh") gives library sounds; put a
    sound's `ref` (`ov:<id>`) in the prop. A CC BY sound's `credit` is added to the caption
    by submit_asset: leave it there.
+   **Trending music.** A Reel cut on a fresh trending track does better than one on a
+   template's own bed. Once per run, `trending_music()` (and `trending_music("gym")`,
+   `("workout")`, `("lofi")` for the mood) lists Instagram's trending tracks; prefer
+   `audio_type` `music` (royalty-free, little-known: the owner's pick) over
+   `original_sound` (viral, but famous songs in it can get the Reel muted). Pick a track
+   whose mood fits the story and that runs at least 10 s longer than the video, vary
+   tracks across the batch, then `fetch_music(audio_id)` (its tempo and drop) and pass
+   `render_motion(..., music_audio_id=<audio_id>)`: the lines then start on its beats and
+   the payoff on the drop, the template's bed is off, and the Reel is published with that
+   Instagram track. Voiced videos only (a voice other than `none`); when fetch_music
+   finds no beat or the download fails, pick another track.
 3. `preview_motion(template, props)` returns stills. Look at them: the hook readable in
    the first frame, no text cut off or overflowing, nothing hidden in the bottom third
    (Instagram's caption area), nothing crowded. Fix the props and preview again (at most
    2 previews per idea). Macro3D previews render Blender stills (about a minute): one is
    enough.
-4. `render_motion(template=…, props=…, idea_id=…, caption=…)` for every idea; send them in
+4. `render_motion(template=…, props=…, idea_id=…, caption=…, music_audio_id=…)` for every idea; send them in
    parallel. Keep every returned job id in your wait list.
 
 ## Phase 9: review renders as they finish

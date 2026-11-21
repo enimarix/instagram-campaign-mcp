@@ -759,8 +759,8 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
     The template must be in the idea's style (an idea without one takes the template's).
     `music_audio_id` (a track fetched with fetch_music): the scenes start on its beats and
     the drop, the template's own bed is off, and the Reel is published with that Instagram
-    track attached. The worker renders; the asset becomes `ready`, or `failed` with QC
-    reasons."""
+    track attached (voiced videos only); pass it again on a re-render to keep the track.
+    The worker renders; the asset becomes `ready`, or `failed` with QC reasons."""
     out = await _studio(motion.queue_motion_render, store(), get_settings(), template=template,
                         props=props, idea_id=idea_id, asset_id=asset_id, caption=caption,
                         voice=voice, music_audio_id=music_audio_id)
