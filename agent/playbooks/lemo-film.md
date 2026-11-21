@@ -57,6 +57,17 @@ $remake
 - VoxCPM2 can garble short or unusual phrasings: if a take mis-says a word, rewrite the line.
 - Mix: the voice clearly on top, music ducked well under it, always.
 
+## Sound effects (optional): the studio's library
+
+- Real recorded sounds (whoosh, boing, fork drop, crowd gasp, applause, ...) in
+  `$sfx_dir/`, one `<id>.wav` each (48 kHz mono, at most 6 s, all set to the same peak
+  loudness, so set them by ear under the voice). What each one is: `$sfx_manifest`
+  (`{"sounds": {id: {title, category, tags, duration_s, licence, credit, ...}}}`). Read
+  them, copy the ones you use into `$film_dir/`; never change or add files there.
+- Only CC0 and CC BY sounds are in it. **Every CC BY sound you use: put its `credit` line
+  as it is at the end of the caption in post.json** (CC0 needs none). Write the sounds you
+  used in NOTES.md.
+
 ## Content (macroBody brand)
 
 - macroBody (macrobody.fr) is a French calorie / macro tracking app. Colours: emerald

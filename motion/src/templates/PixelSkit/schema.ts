@@ -2,6 +2,7 @@
 // Imports only zod and pure modules (and types), so `node --test` runs it directly (test/pixelskit.test.ts).
 import { z } from "zod";
 import { screenText } from "../../endcards/schema.ts";
+import { LIBRARY_SFX } from "../../lib/duck.ts";
 import type { Timeline, Timing } from "../../lib/timeline";
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "a #RRGGBB colour");
@@ -21,6 +22,9 @@ export const MUSIC = ["music-overworld", "music-cave", "none"] as const;
 
 /** Sound effects a beat or the sting can play: `sfx-<name>` in src/assets.ts. */
 export const SFX = ["hit", "jump", "select", "confirm", "coin"] as const;
+/** Or a library sound (step 150): `ov:<id>` from the studio's find_sfx. */
+const librarySfx = z.string().regex(LIBRARY_SFX, "a library sound: ov:<id> from find_sfx");
+const sound = z.union([z.enum(SFX), librarySfx]);
 
 /**
  * What the beat's actor does, from the moment its box opens:
@@ -37,8 +41,8 @@ const beat = z.strictObject({
   /** 80 chars fit the box (about 4 lines at scale 4). */
   line: z.string().min(1).max(80),
   action: z.enum(ACTIONS).default("idle"),
-  /** Played as the action starts. */
-  sfx: z.enum(SFX).optional(),
+  /** Played as the action starts: a built-in name or a library `ov:<id>`. */
+  sfx: sound.optional(),
 });
 
 export const pixelSkitSchema = z
@@ -61,8 +65,8 @@ export const pixelSkitSchema = z
     holdBeforePunchline_s: z.number().min(0).max(2).default(0.6),
     /** Freeze the picture for a moment once the punchline has landed (typed, or voiced). */
     freezeOnPunchline: z.boolean().default(true),
-    /** Sound when the punchline lands, or "none". */
-    sting: z.enum([...SFX, "none"]).default("hit"),
+    /** Sound when the punchline lands (a built-in name or a library `ov:<id>`), or "none". */
+    sting: z.union([sound, z.literal("none")]).default("hit"),
     /** Sources (GOAL.md §5.6), usually empty for humour. Not shown, kept with the asset. */
     citations: z.array(z.strictObject({ url: z.url({ protocol: /^https?$/ }), title: z.string().optional() })),
     /** Small line under the last box when there are citations, e.g. "Sources in caption". */

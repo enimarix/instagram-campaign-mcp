@@ -16,7 +16,7 @@ import structlog
 from ..config import InstagramMCPSettings
 from ..instagram_client import InstagramClient, caption_problem
 from ..store import CampaignStore, parse_dt, utcnow
-from . import media
+from . import media, sfx
 from .assets import InvalidTransition, transition
 from .rights import can_publish, caption_credit_problem
 
@@ -81,6 +81,10 @@ def queue_asset(
     problem = caption_credit_problem(source, asset["caption"])
     if problem:
         raise QueueRefused("caption", problem)
+    missing = sfx.missing_credits(asset["recipe"], asset["caption"])  # CC BY sounds (150)
+    if missing:
+        raise QueueRefused("caption", "the caption must credit the sounds: add "
+                           + " / ".join(missing))
     try:
         ok = bool(asset["file_path"]) and media.resolve(
             settings.media_root, asset["file_path"]).is_file()
