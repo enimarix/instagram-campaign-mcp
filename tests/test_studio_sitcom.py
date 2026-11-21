@@ -78,7 +78,8 @@ def test_speeds_freeze_reactions_and_close_ups():
     assert crunch and all(s["speed"] == 10.0 for s in crunch)  # x10 on the repeated gesture
     last = [s for s in shots if s["set"] == "living"][-1]
     assert last["freeze"] == pytest.approx(0.9, abs=1 / 24)  # the punchline frozen
-    assert last["camera"]["kind"] in ("wide", "top")  # on the whole action, not a face
+    beat = PROPS["scenes"][-1]["beats"][-1]  # a whip lands on the punchline's actor
+    assert last["camera"] == {"kind": "whip", "on": beat["who"]}
     slow = [s for s in shots if s["speed"] in ([1.0, 0.3], 0.3)]
     assert slow[0]["speed"] == [1.0, 0.3]  # a ramp into the slow motion
     said = [s for s in shots if s["camera"] == {"kind": "dolly", "on": "dad"}]  # the speaker's line

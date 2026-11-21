@@ -182,9 +182,9 @@ def shot_list(props: Dict[str, Any], parts: Sequence[Dict[str, Any]]) -> Dict[st
                 kind, on = ("crash", lead) if si == 0 else ("wide", None)
             elif speaker and k == 0:
                 kind, on = "dolly", speaker
-            elif k == n - 1 and frozen:  # the frozen punchline shows the whole action
-                kind = "top" if shots and shots[-1]["camera"]["kind"] == "wide" else "wide"
-                on = None
+            elif k == n - 1 and frozen:  # a whip lands on the punchline's actor, frozen there:
+                # its whole body at ~2 m (a wide can miss a standing mark, a close-up a faint)
+                kind, on = "whip", beat["who"]
             else:
                 kind = ROTATION[(j - 1) % len(ROTATION)]
                 on = lead

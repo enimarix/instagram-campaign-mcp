@@ -97,7 +97,7 @@ absurd skits under a French voice-over. Remotion template `SitcomSkit` (`motion/
 times the skit; `src/studio/sitcom.py` turns its parts into a shot list: a cut every 1-2 s, at
 least three angles a scene (the scene opens wide, the skit on a crash zoom into the first
 action; then reaction close-ups on the others, top-down, wide, close, whip, dolly), x10 for
-repeated gestures, a slow-mo ramp into falls, the punchline's last frame held, a close-up built
+repeated gestures, a slow-mo ramp into falls, a whip onto the punchline's actor frozen on its last frame, a close-up built
 with its actor and the two nearest only. The light is a `sitcom*` preset of `sets.json`
 (saturated warm key, pink fill, a turquoise / emerald side light) and the grade adds
 saturation to the PS2 look (`sitcom.GRADE`). The characters' lines get their own approved
