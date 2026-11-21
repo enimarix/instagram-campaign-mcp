@@ -29,7 +29,9 @@ $remake
 - **Format: vertical 1080×1920** (`--size 1080x1920` on every render tool, lay out from
   innerWidth × innerHeight), 30–45 s, the style's fps. An Instagram Reel: the hook is on
   screen and moving from frame 1, text inside the safe zone (no text in the bottom 20 % or
-  the top 12 %), a cut or a new visual beat every 2–3 s. Nothing repetitive.
+  the top 12 %), a cut or a new visual beat every 2–3 s. Nothing repetitive. No frame
+  held still for 3 s or more, the end frame included (keep something moving): the
+  studio's quality check fails a frozen stretch.
 
 ## The machine (it powered off under load: non-negotiable)
 
