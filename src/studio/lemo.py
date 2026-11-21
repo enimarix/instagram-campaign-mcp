@@ -124,6 +124,8 @@ def register_film(store: CampaignStore, settings: InstagramMCPSettings,
                   ) -> Dict[str, Any]:
     """The delivered film becomes an asset of the order's idea, queued for render + QC.
     Returns {asset, job}; ValueError when the film delivered no final.mp4."""
+    from .production import default_best_before  # here: production imports work_orders
+
     film = workspace / FILM_DIR
     final = film / "final.mp4"
     if not final.is_file() or not final.stat().st_size:
@@ -133,8 +135,6 @@ def register_film(store: CampaignStore, settings: InstagramMCPSettings,
     dest = media.resolve(settings.media_root, rel)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(final, dest)
-    from .production import default_best_before  # here: production imports work_orders
-
     hook = _text(post.get("hook"), HOOK_CHARS) or idea["hook"]
     # never empty: a script marks the video AI-made for Instagram's label (publish.py)
     script = _text(post.get("script"), SCRIPT_CHARS) or _notes(film) or hook
@@ -146,7 +146,6 @@ def register_film(store: CampaignStore, settings: InstagramMCPSettings,
         recipe={"kind": "ffmpeg", "recipe": RECIPE, "inputs": {"source": rel}},
         caption=_text(post.get("caption"), 2200) or hook,
         description=_text(post.get("description"), DESCRIPTION_CHARS)
-        or f"Un film Lemo-Opuscar ({idea['style']}) : {hook}"[:DESCRIPTION_CHARS])
-    asset = store.update_asset(asset["id"],
-                               best_before=default_best_before(store, settings, asset))
+        or f"Un film Lemo-Opuscar ({idea['style']}) : {hook}"[:DESCRIPTION_CHARS],
+        best_before=default_best_before(store, settings, {"idea_id": idea["id"]}))
     return {"asset": asset, "job": enqueue_render(store, asset["id"])}
