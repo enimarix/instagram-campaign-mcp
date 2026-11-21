@@ -75,7 +75,7 @@ export default function ReasonSheet({ reasons, at, onSave, onClose, onRestyle, s
           <summary className="min-h-6 cursor-pointer font-medium">Même vidéo, autre style</summary>
           {restyling && (
             <div className="mt-2 space-y-3">
-              <StylePicker value={newStyle} onChange={setNewStyle} autoLabel="Au choix de l'IA" exclude={style} />
+              <StylePicker value={newStyle} onChange={setNewStyle} autoLabel="Au choix de l'IA" exclude={style} all />
               <Button variant="primary" className="w-full" onClick={() => onRestyle(newStyle)}>Refaire dans ce style</Button>
             </div>
           )}

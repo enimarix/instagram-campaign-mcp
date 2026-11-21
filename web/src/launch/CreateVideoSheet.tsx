@@ -35,7 +35,7 @@ export default function CreateVideoSheet({ onClose, onSent }: { onClose: () => v
             className={`${field} mt-1 block w-full py-2 text-base`} />
         </label>
         <p className="text-right text-xs text-muted tabular-nums">{text.length}/500</p>
-        <StylePicker value={style} onChange={setStyle} />
+        <StylePicker value={style} onChange={setStyle} all />
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!text.trim()} className="w-full">
           Envoyer à l'IA

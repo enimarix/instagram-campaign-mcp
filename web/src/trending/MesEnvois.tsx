@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { ApiError, editWorkOrder, errorMessage, listWorkOrders, type Style, type WorkMode, type WorkOrder } from '../api/client'
+import { ApiError, editWorkOrder, errorMessage, listStyleCatalog, listWorkOrders, type CatalogStyle, type WorkMode, type WorkOrder } from '../api/client'
 import { safeUrl } from '../inbox/ui'
 import { StylePicker } from '../launch/StylePicker'
 import { styleLabel, useStyles } from '../launch/useStyles'
@@ -64,7 +64,7 @@ function origin(o: WorkOrder) {
   return `envoyé par @${o.sender_username ?? '?'}, ${ago(o.received_at ?? o.created_at)}`
 }
 
-function OrderCard({ order: o, styles, onChanged }: { order: WorkOrder; styles?: Style[]; onChanged: () => void }) {
+function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; styleName: string; onChanged: () => void }) {
   const [editing, setEditing] = useState(false)
   const [label, tone] = orderStatus(o)
   const href = safeUrl(o.permalink)
@@ -76,7 +76,7 @@ function OrderCard({ order: o, styles, onChanged }: { order: WorkOrder; styles?:
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone={tone}>{label}</Chip>
         {o.own_reel && <Chip tone="accent">Ton Reel</Chip>}
-        <Chip>{styleLabel(styles, o.style)}</Chip>
+        <Chip>{styleName}</Chip>
         <span className="text-muted">{origin(o)}</span>
       </div>
       {o.blocked_reason && label === 'Bloqué' && <p className="text-danger">Bloqué : {o.blocked_reason}</p>}
@@ -125,12 +125,21 @@ export default function MesEnvois() {
   const [orders, setOrders] = useState<WorkOrder[]>()
   const [error, setError] = useState<string | null>(null)
   const { styles } = useStyles()
+  const [lemo, setLemo] = useState<CatalogStyle[]>() // Lemo names, fetched only when an order has one
+  const wantsLemo = !!orders?.some((o) => o.style?.startsWith('lemo:'))
 
   const reload = useCallback(() => listWorkOrders('mine').then((o) => {
     setOrders(o)
     setError(null)
   }, (e: unknown) => setError(errorMessage(e))), [])
   useEffect(() => { void reload() }, [reload])
+  useEffect(() => {
+    if (!wantsLemo || lemo) return
+    let live = true
+    listStyleCatalog({ family: 'lemo' }).then((s) => live && setLemo(s), () => live && setLemo([])) // failed: the id stays
+    return () => { live = false }
+  }, [wantsLemo, lemo])
+  const styleName = (id: string | null) => lemo?.find((s) => s.id === id)?.label ?? styleLabel(styles, id)
 
   return (
     <>
@@ -145,7 +154,7 @@ export default function MesEnvois() {
         </EmptyState>
       ) : (
         <ul aria-label="Mes envois" className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {orders.map((o) => <OrderCard key={o.id} order={o} styles={styles} onChanged={() => void reload()} />)}
+          {orders.map((o) => <OrderCard key={o.id} order={o} styleName={styleName(o.style)} onChanged={() => void reload()} />)}
         </ul>
       )}
       <details className="mt-8 rounded-card border border-line/60 bg-surface p-4 shadow-card">

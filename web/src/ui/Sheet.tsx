@@ -16,11 +16,12 @@ export function Sheet({ title, onClose, children }: Props) {
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      onClose={(e) => e.target === ref.current && onClose()} // React bubbles a nested sheet's close
       aria-labelledby={id}
       onKeyDown={(e) => {
         if (e.key !== 'Escape') return
         e.preventDefault() // one close path for browsers and jsdom alike
+        e.stopPropagation() // a sheet opened from a sheet: Esc closes only the top one
         ref.current?.close()
       }}
       onClick={(e) => e.target === ref.current && ref.current.close()}

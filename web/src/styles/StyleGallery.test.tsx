@@ -97,7 +97,7 @@ describe('StyleGallery (172)', () => {
     expect(within(sheet).getByRole('link', { name: 'Lemo-Opuscar by Lemomo (LemoLab)' })).toBeTruthy()
     expect(within(sheet).getByRole('link', { name: 'CC BY 4.0' })).toBeTruthy()
     fireEvent.click(within(sheet).getByRole('button', { name: 'Choisir ce style' }))
-    expect(onSelect).toHaveBeenCalledWith('lemo:watercolor')
+    expect(onSelect).toHaveBeenCalledWith('lemo:watercolor', expect.objectContaining({ id: 'lemo:watercolor' }))
   })
 
   it('says when the catalog is down', async () => {
