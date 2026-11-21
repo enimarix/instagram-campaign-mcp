@@ -61,6 +61,9 @@ SKIT_SEAT = {"location": [0, 0.15, 0], "clip": {
 FPS = recipe.FPS  # the output; Blender renders at BLENDER_FPS, the PS2 cutscene rate
 BLENDER_FPS = 24
 RENDER_SIZE = (720, 1280)  # upscaled to 1080x1920 with lanczos (soft, like the reference)
+# The largest image side in a Blender scene (faces, outfits; the rest 512): MPFB's 2048-4096
+# textures sat whole in the 8 GB of VRAM and the NVIDIA driver stalled (177's diet).
+TEXTURE_PX = 1024
 TAIL_S = 0.8  # after the last line, before the end card
 CARD_S = 3.5
 COVER_S = 1.0  # the hook is on screen from frame 0
@@ -244,6 +247,7 @@ def _blender(p: Props, timings: Sequence[LineTiming], cues: List[Dict[str, Any]]
              frames: int, out: Path, stills: Optional[List[int]] = None) -> None:
     cfg = {"out": str(out), "fps": BLENDER_FPS, "frames": frames, "size": list(RENDER_SIZE),
            "cues": cues, "character": {**CAST[p.character], **SKIT_SEAT}, "cameras": cameras(p, timings),
+           "texture_px": TEXTURE_PX,
            "stills": stills}
     cfg_path = out / "shot.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")

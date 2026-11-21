@@ -8,6 +8,24 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-21: Blender's VRAM diet, heavy jobs off CPU 0, one Blender call per shot (177)
+Every Blender scene's images are shared (one copy per file) and crushed: faces and outfits to
+1024 px (`cinematic.TEXTURE_PX`), the rest 512; the EEVEE shadow pool is 256 MB (default
+512). Measured with `python -m src.studio.troupe measure` on the proof's dinner of 7 (one
+frame): Blender's VRAM 2.29 GB -> 1.20 GB, textures 601 MB -> 121 MB, same picture. Outfit
+textures had stayed at 4096 px: the old "skin" rule matched "male" in `male_casualsuit`.
+`guard.VRAM_GB["blender"]` stays 3. Heavy children run on CPUs 1..n (`guard.cpu_set`), never
+CPU 0; guard.log lines show the used VRAM and the graphics clock. The troupe renders each
+uncached shot in its own Blender call (a crash loses one shot). The GPU runs clock-capped:
+the owner's admin logon task `GPUClockCap` runs `nvidia-smi -lgc 210,1500` at every logon;
+the studio never sets clocks itself.
+Reason: a bluescreen (DPC_WATCHDOG_VIOLATION, current DPC in nvlddmkm) and six power-offs
+under Blender troupe scenes. VRAM over-commit was the first suspect, but the full proof with
+the diet still powered the PC off at 21:47 (1.2 GB measured). Root cause: the GPU boosts to
+~2100 MHz (a 3070 Laptop is rated ~1600). With the 1500 MHz cap the 8-shot proof with the
+diet passed: 12.9 min, 130.8 W peak, 3.1 GB VRAM. A guard.log clock above ~1600 MHz shows a
+missing cap.
+
 ## 2026-11-21: A job waits for RAM / VRAM without holding the GPU lock (175)
 `gpu_lock.hold` used to take the lock, then wait in `guard.admit`. Now it waits for
 admission with the lock free, takes the lock, and checks `guard.blockers` again under it:

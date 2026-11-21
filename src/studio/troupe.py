@@ -18,14 +18,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import tempfile
+import threading
+import time
 import zlib
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from . import cinematic, ffmpeg, media
+from . import cinematic, ffmpeg, guard, media
 from .ffmpeg import PathLike
 
 ENGINE = cinematic.ROOT / "engine" / "troupe.py"
@@ -156,12 +159,14 @@ def engine_hash() -> str:
 
 
 def shot_key(shot: Shot, engine: str) -> str:
-    spec = {**job(shot), "freeze": shot.freeze, "engine": engine, "size": SIZE, "samples": SAMPLES}
+    spec = {**job(shot), "freeze": shot.freeze, "engine": engine, "size": SIZE, "samples": SAMPLES,
+            "texture_px": cinematic.TEXTURE_PX}
     return hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def _blender(jobs: List[Dict[str, Any]], out: Path, timeout_s: float) -> None:
-    cfg = {"out": str(out), "fps": FPS, "size": list(SIZE), "samples": SAMPLES, "shots": jobs}
+    cfg = {"out": str(out), "fps": FPS, "size": list(SIZE), "samples": SAMPLES,
+           "texture_px": cinematic.TEXTURE_PX, "shots": jobs}
     cfg_path = out / "shots.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
     n = sum(len(j["stills"]) if j.get("stills") else j["frames"] for j in jobs)
@@ -185,15 +190,16 @@ def render_shots(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float
     todo = {k: s for k, s in zip(keys, shots) if not (clips / f"{k}.mp4").is_file()}
     with tempfile.TemporaryDirectory(prefix="troupe-", dir=root) as tmp:
         work = Path(tmp)
-        if todo:
-            _blender([{"id": k, **job(s), "stills": None} for k, s in todo.items()], work, timeout_s)
-            for k, s in todo.items():
-                part = work / f"{k}.mp4"
-                hold = f"tpad=stop_mode=clone:stop_duration={s.freeze:g}," if s.freeze else ""
-                ffmpeg.run(["-framerate", FPS, "-i", work / k / "f_%04d.png", "-filter_complex",
-                            f"[0:v]{hold}{cinematic.GRADE}[v]", "-map", "[v]", "-r", FPS,
-                            "-c:v", "libx264", "-crf", "17", part], timeout_s=timeout_s)
-                part.replace(clips / f"{k}.mp4")
+        # One Blender call per shot, cached at once: a crash, a kill or a power cut (171) loses
+        # one shot, and the GPU lock is free between shots (heat pauses, other jobs).
+        for k, s in todo.items():
+            _blender([{"id": k, **job(s), "stills": None}], work, timeout_s)
+            part = work / f"{k}.mp4"
+            hold = f"tpad=stop_mode=clone:stop_duration={s.freeze:g}," if s.freeze else ""
+            ffmpeg.run(["-framerate", FPS, "-i", work / k / "f_%04d.png", "-filter_complex",
+                        f"[0:v]{hold}{cinematic.GRADE}[v]", "-map", "[v]", "-r", FPS,
+                        "-c:v", "libx264", "-crf", "17", part], timeout_s=timeout_s)
+            part.replace(clips / f"{k}.mp4")
         listing = work / "concat.txt"
         quoted = [(clips / f"{k}.mp4").as_posix().replace("'", r"'\''") for k in keys]
         listing.write_text("".join(f"file '{q}'\n" for q in quoted), encoding="utf-8")
@@ -202,3 +208,54 @@ def render_shots(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float
                    timeout_s=timeout_s)
         part.replace(track)
     return media.relative(media_root, track)
+
+
+def measure(data: Dict[str, Any], out: PathLike, *, shot: Optional[int] = None,
+            frame: Optional[int] = None, timeout_s: float = 1800,
+            every_s: float = 0.2) -> Dict[str, Any]:
+    """What one frame of a shot costs the GPU (step 177): renders frame `frame` (default the
+    middle) of shot `shot` (default the one with the most actors) through cinematic.blender()
+    into `out`, sampling nvidia-smi's used VRAM every `every_s` meanwhile. Blender's VRAM =
+    the peak minus the baseline taken just before (run it with the GPU otherwise idle);
+    the scene's texture memory comes from the engine (stats.json). Also in out/measure.json."""
+    shots = validate(data).shots
+    i = shot if shot is not None else max(range(len(shots)), key=lambda n: len(shots[n].cast))
+    spec = job(shots[i])
+    f = frame or max(1, spec["frames"] // 2)
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    base = guard.vram_used_gb()
+    peak, stop = [base or 0.0], threading.Event()
+
+    def sample() -> None:
+        while not stop.wait(every_s):
+            used = guard.vram_used_gb()
+            if used is not None:
+                peak[0] = max(peak[0], used)
+
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    started = time.monotonic()
+    try:
+        _blender([{"id": "measure", **spec, "stills": [f]}], out, timeout_s)
+    finally:
+        stop.set()
+        sampler.join()
+    stats = json.loads((out / "measure" / "stats.json").read_text(encoding="utf-8"))
+    known = base is not None
+    result = {"shot": i, "set": spec["set"], "actors": len(spec["cast"]), "frame": f,
+              "seconds": round(time.monotonic() - started, 1), "baseline_vram_gb": base,
+              "peak_vram_gb": round(peak[0], 2) if known else None,
+              "blender_vram_gb": round(peak[0] - base, 2) if known else None,
+              **stats, "still": str(out / "measure" / f"still_{f}.png")}
+    (out / "measure.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+    return result
+
+
+if __name__ == "__main__":  # python -m src.studio.troupe measure <shots.json> <out> [shot] [frame]
+    if len(sys.argv) < 4 or sys.argv[1] != "measure":
+        sys.exit("usage: python -m src.studio.troupe measure <shots.json> <out dir> [shot] [frame]")
+    extra = [int(a) for a in sys.argv[4:6]]
+    print(json.dumps(measure(json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")),
+                             sys.argv[3], shot=extra[0] if extra else None,
+                             frame=extra[1] if len(extra) > 1 else None), indent=1))

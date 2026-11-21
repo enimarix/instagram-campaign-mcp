@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -139,11 +140,68 @@ def test_render_shots_grades_freezes_concats_and_caches(monkeypatch, tmp_path):
     info = ffmpeg.probe(tmp_path / path)
     assert path.startswith("troupe/tracks/") and (info.width, info.height) == (1080, 1920)
     assert info.duration == pytest.approx(1.0 + 0.5 + 0.5, abs=0.1)  # the freeze holds 0.5 s
-    assert [len(j) for j in calls] == [2] and calls[0][0]["cast"][0]["look"]["label"] == "Papa"
+    assert [len(j) for j in calls] == [1, 1] and calls[0][0]["cast"][0]["look"]["label"] == "Papa"
     assert troupe.render_shots(data, tmp_path, timeout_s=120) == path  # cached track
     troupe.render_shots({"shots": [SHOT, {**SHOT, "seed": 3}]}, tmp_path, timeout_s=120)
-    assert [len(j) for j in calls] == [2, 1]  # only the new shot renders
+    assert [len(j) for j in calls] == [1, 1, 1]  # one Blender call per shot; only the new one renders
     assert not list((tmp_path / "troupe").glob("troupe-*"))  # work dirs cleaned up
+
+
+@needs_ffmpeg
+def test_a_crash_loses_only_the_shot_being_rendered(monkeypatch, tmp_path):
+    """171/177: each shot is its own Blender call, cached at once, so a kill mid-list keeps
+    the shots before it and the retry renders only what is missing."""
+    calls = []
+
+    def fake(jobs, out, timeout_s):
+        calls.append(jobs[0]["id"])
+        if len(calls) == 2:
+            raise cinematic.CinematicError("Blender: killed")
+        (out / jobs[0]["id"]).mkdir(parents=True)
+        ffmpeg.run(["-f", "lavfi", "-i", "color=c=orange:s=72x128:r=24", "-frames:v", jobs[0]["frames"],
+                    out / jobs[0]["id"] / "f_%04d.png"], timeout_s=30)
+
+    monkeypatch.setattr(troupe, "_blender", fake)
+    data = {"shots": [SHOT, {**SHOT, "seed": 5}]}
+    with pytest.raises(cinematic.CinematicError):
+        troupe.render_shots(data, tmp_path, timeout_s=120)
+    assert len(list((tmp_path / "troupe" / "shots").glob("*.mp4"))) == 1  # the first shot is kept
+    troupe.render_shots(data, tmp_path, timeout_s=120)
+    assert calls[2:] == [calls[1]]  # the retry renders the lost shot only
+
+
+def test_measure_renders_one_frame_of_the_biggest_shot(monkeypatch, tmp_path):
+    """177: one still of the shot with the most actors, Blender's VRAM = peak - baseline,
+    the engine's texture stats alongside."""
+    readings = [1.0, 1.2, 3.4, 2.0]  # the baseline, then what Blender's run adds
+    seen = []
+
+    def vram():
+        seen.append(1)
+        return readings[min(len(seen), len(readings)) - 1]
+
+    monkeypatch.setattr(troupe.guard, "vram_used_gb", vram)
+    ran = []
+
+    def fake(jobs, out, timeout_s):
+        ran.append(jobs)
+        deadline = time.monotonic() + 5
+        while len(seen) < len(readings) and time.monotonic() < deadline:  # the sampler runs
+            time.sleep(0.005)
+        (out / "measure").mkdir()
+        (out / "measure" / "stats.json").write_text(json.dumps(
+            {"images": 3, "texture_mb": 12.5, "largest": [["skin.png", 1024, 1024]]}))
+
+    monkeypatch.setattr(troupe, "_blender", fake)
+    big = {**SHOT, "duration": 2.0, "cast": [{"who": "dad", "at": "seat1"}, {"who": "mum", "at": "seat2"}]}
+    r = troupe.measure({"shots": [SHOT, big]}, tmp_path, every_s=0.001)
+    assert (r["shot"], r["actors"], r["frame"]) == (1, 2, 24)
+    assert len(ran) == 1 and ran[0][0]["stills"] == [24] and ran[0][0]["id"] == "measure"
+    assert (r["baseline_vram_gb"], r["peak_vram_gb"], r["blender_vram_gb"]) == (1.0, 3.4, 2.4)
+    assert r["texture_mb"] == 12.5 and r["still"].endswith("still_24.png")
+    seen.clear()
+    assert troupe.measure({"shots": [SHOT, big]}, tmp_path / "b", shot=0, frame=5,
+                          every_s=0.001)["frame"] == 5
 
 
 def test_blender_runs_through_the_wrapper(tmp_path, monkeypatch):
@@ -154,5 +212,18 @@ def test_blender_runs_through_the_wrapper(tmp_path, monkeypatch):
     troupe._blender(jobs, tmp_path, 10)
     cfg = json.loads((tmp_path / "shots.json").read_text(encoding="utf-8"))
     assert cfg["fps"] == 24 and cfg["size"] == [720, 1280] and cfg["shots"][0]["id"] == "k1"
+    assert cfg["texture_px"] == cinematic.TEXTURE_PX == 1024  # 177: the engine's texture clamp
     assert ran[0][0][-1] == tmp_path / "shots.json"
     assert ran[0][1] >= 120 + 24 * troupe.S_PER_FRAME + troupe.S_PER_ACTOR
+
+
+def test_engine_clamps_textures_and_shares_copies():
+    """177's VRAM diet, checked in the engine's source (Blender never runs in tests): both
+    runs crush every scene image to the config's texture_px after sharing the copies."""
+    engine = cinematic.ROOT / "engine"
+    for run in ("troupe.py", "shot.py"):
+        assert 'crush_textures(' in (engine / run).read_text(encoding="utf-8")
+        assert '.get("texture_px", 1024))' in (engine / run).read_text(encoding="utf-8")
+    people = (engine / "people.py").read_text(encoding="utf-8")
+    assert "def crush_textures(px=1024):\n" in people and "    share_images()\n" in people
+    assert '"shadow_pool_size", "256"' in (engine / "stage.py").read_text(encoding="utf-8")
