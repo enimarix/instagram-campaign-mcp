@@ -217,7 +217,7 @@ def measure(data: Dict[str, Any], out: PathLike, *, shot: Optional[int] = None,
     middle) of shot `shot` (default the one with the most actors) through cinematic.blender()
     into `out`, sampling nvidia-smi's used VRAM every `every_s` meanwhile. Blender's VRAM =
     the peak minus the baseline taken just before (run it with the GPU otherwise idle);
-    the scene's texture memory comes from the engine (stats.json)."""
+    the scene's texture memory comes from the engine (stats.json). Also in out/measure.json."""
     shots = validate(data).shots
     i = shot if shot is not None else max(range(len(shots)), key=lambda n: len(shots[n].cast))
     spec = job(shots[i])
@@ -242,11 +242,13 @@ def measure(data: Dict[str, Any], out: PathLike, *, shot: Optional[int] = None,
         stop.set()
         sampler.join()
     stats = json.loads((out / "measure" / "stats.json").read_text(encoding="utf-8"))
-    return {"shot": i, "set": spec["set"], "actors": len(spec["cast"]), "frame": f,
+    result = {"shot": i, "set": spec["set"], "actors": len(spec["cast"]), "frame": f,
             "seconds": round(time.monotonic() - started, 1),
             "baseline_vram_gb": base, "peak_vram_gb": round(peak[0], 2) if base is not None else None,
             "blender_vram_gb": round(peak[0] - base, 2) if base is not None else None,
             **stats, "still": str(out / "measure" / f"still_{f}.png")}
+    (out / "measure.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+    return result
 
 
 if __name__ == "__main__":  # python -m src.studio.troupe measure <shots.json> <out> [shot] [frame]
