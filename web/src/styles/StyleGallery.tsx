@@ -11,7 +11,7 @@ import { useToast } from '../ui/useToast'
 const FAMILY: Record<StyleFamily, string> = { studio: 'Studio', lemo: 'Lemo' }
 
 /** Words in the name, essence, category or tags (the server's `q`, done here: the list is small). */
-export function matches(s: CatalogStyle, q: string) {
+function matches(s: CatalogStyle, q: string) {
   const hay = [s.id, s.label, s.essence ?? '', s.category ?? '', ...s.tags].join(' ').toLowerCase()
   return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w))
 }

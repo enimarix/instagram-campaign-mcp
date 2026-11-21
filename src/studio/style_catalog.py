@@ -77,7 +77,7 @@ def _parse(folder: str, md_mtime: int, json_mtime: int) -> Optional[Dict[str, An
     meta: Dict[str, Any] = {}
     if json_mtime:
         try:
-            meta = json.loads((d / "style.json").read_text(encoding="utf-8"))
+            meta = json.loads((d / "style.json").read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             meta = {}
     title = next((m.group(1) for m in map(_TITLE.match, lines[:3]) if m), None)
