@@ -105,6 +105,18 @@ export const SFX_PEAK_LUFS = {
 } as const;
 export type SfxId = keyof typeof SFX_PEAK_LUFS;
 /**
+ * A library sound (step 150): `ov:<Openverse id>`, a real recording the studio cached
+ * (src/studio/sfx.py) with its loudest moment set to LIBRARY_PEAK_LUFS (or under it), so it
+ * plays from that peak like the sounds above. The render copies its file into the bundle.
+ */
+export type LibrarySfx = `ov:${string}`;
+export const LIBRARY_SFX = /^ov:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const LIBRARY_PEAK_LUFS = -20; // = PEAK_LUFS in src/studio/sfx.py (tests check both)
+/** Any sound a template plays: a synthesized one or a library one. */
+export type AnySfx = SfxId | LibrarySfx;
+export const isLibrarySfx = (id: string): id is LibrarySfx => LIBRARY_SFX.test(id);
+const peakOf = (id: AnySfx) => (isLibrarySfx(id) ? LIBRARY_PEAK_LUFS : SFX_PEAK_LUFS[id]);
+/**
  * The level sounds are set against: the quietest approved voice's own (conteur_grave, about
  * -29 LUFS integrated in a template's mix); a louder voice leaves every sound further under it.
  */
@@ -115,13 +127,13 @@ export const SPEECH_SFX_DB = -12;
 export const BANG_SPEECH_DB = -6;
 
 /** Volume that puts sound `id`'s peak `db` from VOICE_LUFS (0 = at the voice's level), never past full. */
-export const sfxVolume = (id: SfxId, db = 0) => Math.min(1, 10 ** ((VOICE_LUFS + db - SFX_PEAK_LUFS[id]) / 20));
+export const sfxVolume = (id: AnySfx, db = 0) => Math.min(1, 10 ** ((VOICE_LUFS + db - peakOf(id)) / 20));
 
 /**
  * A body sound's volume at `t` seconds: sfxVolume(id, db) in the gaps, `speech` dB lower while a
  * line of `spans` (speechSpans()) is spoken, with the bed's ramps.
  */
-export const sfxGain = (spans: readonly Span[], id: SfxId, t: number, db = 0, speech = SPEECH_SFX_DB) =>
+export const sfxGain = (spans: readonly Span[], id: AnySfx, t: number, db = 0, speech = SPEECH_SFX_DB) =>
   sfxVolume(id, db + speech * speechDepth(spans, t));
 
 /**

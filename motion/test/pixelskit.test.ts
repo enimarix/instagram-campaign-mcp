@@ -78,11 +78,16 @@ test("schema rejects bad cast, beat counts, speakers, actions, sfx, a short tag,
   bad({ beats: base.beats.slice(0, 2), tag: true });
   bad({ holdBeforePunchline_s: 3 });
   bad({ sting: "boom" });
+  bad({ sting: "ov:not-an-id" });
+  bad({ beats: [...base.beats.slice(0, 2), { line: "x", sfx: "ov:../../x" }] });
   bad({ citations: undefined });
   bad({ voice: { lines: timings(3) } });
   // A failed length check does not crash the refines (zod 4 runs them anyway).
   assert.equal(pixelSkitSchema.safeParse({ ...base, beats: undefined, cast: undefined }).success, false);
   assert.ok(pixelSkitSchema.safeParse({ ...base, voice: { lines: timings(4) } }).success);
+  // A library sound (step 150) wherever a built-in name goes.
+  const ov = "ov:a8032d83-dd12-4978-b1e7-2cc07779387d";
+  assert.ok(pixelSkitSchema.safeParse({ ...base, sting: ov, beats: [...base.beats.slice(0, 2), { line: "x", sfx: ov }] }).success);
 });
 
 test("beats map to script lines; the punchline is the last beat, or the one before the tag", () => {

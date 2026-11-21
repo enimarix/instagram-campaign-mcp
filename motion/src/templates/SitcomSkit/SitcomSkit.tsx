@@ -8,6 +8,7 @@ import { AbsoluteFill, Html5Audio, Sequence, useCurrentFrame, useVideoConfig } f
 import { MusicBed } from "../../components/MusicBed";
 import { SafeZoneGuide } from "../../components/SafeZoneGuide";
 import { Sfx } from "../../components/Sfx";
+import { type AnySfx, isLibrarySfx } from "../../lib/duck";
 import { EndCard } from "../../endcards/EndCard";
 import { cast } from "./cast";
 import { BigNumber, Bubble, Hook, Karaoke, numberText, Plate, Slate } from "./kit";
@@ -15,6 +16,8 @@ import { type Beat, HOOK_MIN_S, layoutOf, SFX_FILE, type SitcomProps } from "./s
 import { easeOut, span } from "../../voxel/anim.ts";
 
 const SLATE_S = 1.2;
+/** A beat's sound: a built-in name's file, or the library `ov:<id>` as is (step 150). */
+const sfxId = (name: NonNullable<Beat["sfx"]>): AnySfx => (isLibrarySfx(name) ? name : SFX_FILE[name as keyof typeof SFX_FILE]);
 
 /** A character's line, in its own voice (src/studio/sitcom.py), from the bubble's start. */
 const SayVoice = ({ voice, from, frames }: { voice: string; from: number; frames: number }) => (
@@ -93,7 +96,7 @@ export const SitcomSkit = (props: SitcomProps) => {
       {props.scenes.flatMap((s, i) =>
         s.beats.map((b, j) => {
           const p = parts.find((x) => x.scene === i && x.beat === j && x.part === "line");
-          return b.sfx && p ? <Sfx key={`f${i}-${j}`} id={SFX_FILE[b.sfx]} at={at(p.start_s)} lines={speech} /> : null;
+          return b.sfx && p ? <Sfx key={`f${i}-${j}`} id={sfxId(b.sfx)} at={at(p.start_s)} lines={speech} /> : null;
         }),
       )}
       {spoken.filter((x) => x.say).map((x, i) => (

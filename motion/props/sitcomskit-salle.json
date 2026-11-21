@@ -11,10 +11,10 @@
         {"who": "cousin", "at": "bench", "action": "curl"}
       ],
       "beats": [
-        {"line": "Ta barre d'hier te paraît soudain beaucoup plus lourde.", "key": "plus lourde", "who": "teen", "action": "PickUp_Table", "react": "jaw_drop", "sfx": "whoosh"},
+        {"line": "Ta barre d'hier te paraît soudain beaucoup plus lourde.", "key": "plus lourde", "who": "teen", "action": "PickUp_Table", "react": "jaw_drop", "sfx": "ov:eab8a6e2-0ac8-4615-9e0d-ebde30523783"},
         {"line": "Trois potes hurlent, chacun sous un angle différent.", "key": "Trois potes", "who": "coach", "action": "cheer", "face": "shout", "say": {"who": "coach", "text": "ALLEZ, ALLEZ !"}},
         {"line": "Garde tes protéines hautes et baisse un peu la charge, sans honte.", "key": "protéines", "who": "teen", "action": "Hit_Chest", "react": "outraged", "say": {"who": "gym_girl", "text": "Pousse !"}},
-        {"line": "Trop tard. La barre a gagné, au ralenti.", "key": "La barre a gagné", "who": "teen", "action": "Death01", "speed": "slowmo", "sfx": "hit"}
+        {"line": "Trop tard. La barre a gagné, au ralenti.", "key": "La barre a gagné", "who": "teen", "action": "Death01", "speed": "slowmo", "sfx": "ov:c5e1b337-c2e5-4faa-b1fa-2185c860103a"}
       ]
     }
   ],

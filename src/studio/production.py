@@ -22,7 +22,7 @@ from ..learning.experiments import check_idea
 from ..learning.quotas import flagged_pillars, todays_quotas
 from ..store import CampaignStore
 from ..taxonomy import load_taxonomy, validate
-from . import styles, work_orders
+from . import sfx, styles, work_orders
 from .assets import edit_asset
 from .render import auto_description
 from .rights import caption_credit_problem
@@ -298,7 +298,8 @@ def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
     description (2-3 plain sentences: what happens, the hook, the payoff; default: the one
     already stored, else an automatic one) to a QC-passed (`ready`) asset the owner has not
     judged yet. Re-submitting overwrites. Everything is checked before anything is written;
-    ValueError names the problem."""
+    ValueError names the problem. The credit line of each CC BY library sound the video
+    plays (step 150) is added to the caption when missing."""
     asset = store.get_asset(asset_id)
     status = asset["status"]
     if status == "rendering":
@@ -323,6 +324,7 @@ def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
                                                                 caption)
     if problem:
         raise ValueError(problem)
+    caption = sfx.with_credits(caption, asset["recipe"])  # CC BY library sounds (150)
     if best_before is None:
         best_before = default_best_before(store, settings, asset)
     if description is None:

@@ -48,3 +48,20 @@ from `motion/`): sprites from `src/lib/sprites.ts`, audio from its square/triang
 Press Start 2P covers Latin-1 and Latin Extended-A (all but ŉ, Ţ, ţ), plus Greek and
 Cyrillic. Romanian comma-below Ș ș are missing (Ț ț and cedilla Ş ş are there). Design size 8 px: use whole multiples.
 "Press Start 2P" is a Reserved Font Name: a modified copy must be renamed.
+
+## The sound-effects library (step 150): not in this folder
+
+Real recorded sound effects come from [Openverse](https://openverse.org) (Freesound
+recordings), fetched by `ig-campaign sfx seed` (the starter pack) and the agent's `find_sfx`
+tool into `data/sfx/` (git-ignored runtime data, never committed). Only **CC0** and
+**CC BY** sounds are accepted (`src/studio/sfx.py` refuses NC, ND, SA and any other
+licence, on every search result). Each sound is `data/sfx/<openverse id>.wav` (48 kHz mono,
+silence trimmed, at most 6 s, its peak set to the library's level) and has an entry in
+`data/sfx/manifest.json`: title, creator, licence and its URL, the Freesound page, the
+attribution text Openverse gives, our short credit line, tags, duration and measured peak.
+
+A template plays one as `ov:<openverse id>` in its sfx props; the render copies the file into
+the bundle (`ov-sfx/` in its public folder). A **CC BY** sound used in a video puts its credit
+line (« Son : "<title>" par <creator> (<page>), CC BY <version> ») in the post's caption: the
+studio adds it at submit and refuses to queue a caption without it. CC0 sounds need no credit
+(we keep the creator in the manifest anyway).

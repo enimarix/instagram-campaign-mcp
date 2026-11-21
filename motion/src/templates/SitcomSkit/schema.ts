@@ -8,6 +8,7 @@
 // numbers and the end card over the shots. Imports only zod and pure modules, so `node --test` runs it.
 import { z } from "zod";
 import { accentSchema, addressSchema, CARD_S, screenText } from "../../endcards/schema.ts";
+import { LIBRARY_SFX } from "../../lib/duck.ts";
 import { LINE_GAP_S } from "../../lib/timeline.ts";
 import { keyIndexes, wordTimes } from "../../macro3d/words.ts";
 
@@ -59,8 +60,8 @@ const beat = z.strictObject({
     .optional(),
   /** The key fact as a big number over the action (counts up from `from` when given). A stated fact needs its source in `citations`. */
   number: z.strictObject({ value: z.number(), from: z.number().optional(), unit: screenText(14).optional(), decimals: z.number().int().min(0).max(1).default(0) }).optional(),
-  /** A cartoon sound as the beat starts. */
-  sfx: z.enum(SITCOM_SFX).optional(),
+  /** A cartoon sound as the beat starts: a built-in name or a library `ov:<id>` (find_sfx, step 150: a real fork drop, gasp, laugh...). */
+  sfx: z.union([z.enum(SITCOM_SFX), z.string().regex(LIBRARY_SFX, "a library sound: ov:<id> from find_sfx")]).optional(),
 });
 
 const scene = z.strictObject({

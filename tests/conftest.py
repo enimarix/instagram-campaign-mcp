@@ -26,6 +26,8 @@ os.environ.update({
     "AGENT_LOG_DIR": str(_TMP / "logs" / "agent"),
     "GPU_LOCK_PATH": str(_TMP / "gpu" / "gpu.lock"),
     "CLAUDE_BIN": str(_TMP / "no-claude-in-tests"),  # never a real AI run from a test
+    "LEMO_LIBRARY": str(_TMP / "no-lemo-library"),  # 172: tests build a tiny fake one
+    "LEMO_SKILL_DIR": str(_TMP / "no-lemo-skill"),  # 173: never the owner's plugin skill
     # Step 166: the resource guard never waits on, probes or pauses the real machine in a
     # test (tests/test_guard.py drives it with fakes).
     "GUARD_MIN_FREE_RAM_GB": "0",
@@ -65,7 +67,7 @@ def _real_machine_untouched():
 from src.config import InstagramMCPSettings  # noqa: E402
 from src.instagram_client import InstagramClient  # noqa: E402
 from src.store import CampaignStore  # noqa: E402
-from src.studio import downloader_service  # noqa: E402
+from src.studio import downloader_service, sfx  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -73,6 +75,12 @@ def _no_real_downloader(monkeypatch, tmp_path_factory):
     """A built vendor/ submodule on a dev machine must never start inside a test (063a)."""
     monkeypatch.setattr(downloader_service, "VENDOR_DIR",
                         tmp_path_factory.getbasetemp() / "no-downloader")
+
+
+@pytest.fixture(autouse=True)
+def _own_sfx_library(monkeypatch, tmp_path):
+    """Each test gets an empty sound library, never the checkout's data/sfx (150)."""
+    monkeypatch.setattr(sfx, "SFX_DIR", tmp_path / "sfx")
 
 API = "https://graph.facebook.com/v25.0"
 # TestClient base URL: without UI_PASSWORD the Host guard refuses Starlette's "testserver".

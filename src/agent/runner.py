@@ -31,7 +31,7 @@ import tempfile
 from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import SecretStr
 
@@ -56,6 +56,8 @@ DISALLOWED_TOOLS = ("Bash", "PowerShell", "Monitor", "Edit", "Write", "NotebookE
 MARKER = ".ig-campaign-agent"  # in <ws>/.claude: the runner made it and may replace it
 PLAYBOOK_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 DEAD_RUN = "le studio a redémarré pendant la tâche"  # its runner process is gone (155)
+# templates of other runners, never an agent run (the film brief, src/agent/film.py, 173)
+TEMPLATES = ("lemo-film",)
 
 
 class AgentError(RuntimeError):
@@ -69,7 +71,7 @@ class AgentRunRefused(AgentError):
 def _playbook_file(playbook: str, agent_dir: Path) -> Path:
     name = playbook.removesuffix(".md")
     path = agent_dir / "playbooks" / f"{name}.md"
-    if not PLAYBOOK_NAME.match(name) or not path.is_file():
+    if not PLAYBOOK_NAME.match(name) or name in TEMPLATES or not path.is_file():
         raise AgentError(f"unknown playbook {playbook!r} (agent/playbooks/<name>.md)")
     return path
 
@@ -208,6 +210,41 @@ def _kill_tree(proc: subprocess.Popen) -> None:
     proc.wait()
 
 
+def run_cli(cmd: List[str], cwd: Path, env: Dict[str, str], log: Path, timeout_s: float,
+            title: str) -> Tuple[Optional[int], str]:
+    """Run the CLI in `cwd` at low priority, its stderr into `log` (made here), killed with
+    its children after timeout_s. Returns (exit code, None on timeout; stdout)."""
+    with log.open("w", encoding="utf-8") as err, tempfile.TemporaryFile() as out:
+        err.write(f"{title}\ncwd {cwd}\ncommand {json.dumps(cmd)}\n--- stderr\n")
+        err.flush()
+        with keep_awake():
+            proc = subprocess.Popen(cmd, **guard.low_priority(dict(  # 166
+                cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env,
+                start_new_session=sys.platform != "win32")))
+            try:
+                code: Optional[int] = proc.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                _kill_tree(proc)
+                code = None
+        out.seek(0)
+        return code, out.read().decode("utf-8", "replace")
+
+
+def close_log(settings: InstagramMCPSettings, log: Path, status: str, summary: str,
+              usage: Optional[Dict[str, Any]]) -> str:
+    """Append the outcome to a run's log and redact every secret in it; returns the
+    summary, redacted too."""
+    for secret in _secrets(settings):
+        summary = summary.replace(secret, "***")
+    with log.open("a", encoding="utf-8") as f:
+        f.write(f"--- {status}\n{summary}\n{json.dumps(usage, indent=2)}\n")
+    text = log.read_text(encoding="utf-8", errors="replace")
+    for secret in _secrets(settings):
+        text = text.replace(secret, "***")
+    log.write_text(text, encoding="utf-8")
+    return summary
+
+
 def _outcome(code: int, stdout: str) -> tuple[str, str, Optional[Dict[str, Any]]]:
     """(status, summary, usage) from the CLI's `--output-format json` result."""
     try:
@@ -276,21 +313,7 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
         cmd = [exe, *build_command(settings, name, config, max_turns=max_turns,
                                    dry_run=dry_run)[1:]]
         env = {**os.environ, "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
-        with log.open("w", encoding="utf-8") as err, tempfile.TemporaryFile() as out:
-            err.write(f"run {run['id']} playbook {name}\ncwd {ws}\n"
-                      f"command {json.dumps(cmd)}\n--- stderr\n")
-            err.flush()
-            with keep_awake():
-                proc = subprocess.Popen(cmd, **guard.low_priority(dict(  # 166
-                    cwd=ws, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env,
-                    start_new_session=sys.platform != "win32")))
-                try:
-                    code = proc.wait(timeout=timeout_s)
-                except subprocess.TimeoutExpired:
-                    _kill_tree(proc)
-                    code = None
-            out.seek(0)
-            stdout = out.read().decode("utf-8", "replace")
+        code, stdout = run_cli(cmd, ws, env, log, timeout_s, f"run {run['id']} playbook {name}")
         if code is None:
             summary = f"timed out after {timeout_s / 60:g} min: killed"
         else:
@@ -305,14 +328,7 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     except Exception as e:  # noqa: BLE001 - the row must not stay `running`
         summary = f"runner error: {e!r}"
     finally:
-        for secret in _secrets(settings):
-            summary = summary.replace(secret, "***")
-        with log.open("a", encoding="utf-8") as f:
-            f.write(f"--- {status}\n{summary}\n{json.dumps(usage, indent=2)}\n")
-        text = log.read_text(encoding="utf-8", errors="replace")
-        for secret in _secrets(settings):
-            text = text.replace(secret, "***")
-        log.write_text(text, encoding="utf-8")
+        summary = close_log(settings, log, status, summary, usage)
         row = store.finish_agent_run(run["id"], status, summary=summary, usage=usage,
                                      log_path=str(log))
     return row

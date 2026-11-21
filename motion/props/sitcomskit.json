@@ -13,10 +13,10 @@
         {"who": "grandma", "role": "Mamie", "at": "stand0", "action": "Idle_Loop"}
       ],
       "beats": [
-        {"line": "Chaque plat passe en photo avant la première bouchée.", "key": "Chaque plat", "who": "teen", "action": "phone_photo", "react": "outraged", "sfx": "clatter"},
-        {"line": "Sept personnes attendent, la fourchette en l'air.", "key": "fourchette", "who": "dad", "action": "fork_up", "face": "outraged", "say": {"who": "dad", "text": "Ça refroidit, là !"}},
+        {"line": "Chaque plat passe en photo avant la première bouchée.", "key": "Chaque plat", "who": "teen", "action": "phone_photo", "react": "outraged", "sfx": "ov:1e2b8d6a-9c61-4f96-8cf6-004e6682728b"},
+        {"line": "Sept personnes attendent, la fourchette en l'air.", "key": "fourchette", "who": "dad", "action": "fork_up", "face": "outraged", "sfx": "ov:aa99dc03-7c0c-454a-9102-4fbe1622ddf9", "say": {"who": "dad", "text": "Ça refroidit, là !"}},
         {"line": "Le gratin, la sauce, le pain… tout y passe.", "key": "tout", "who": "teen", "action": "phone_photo", "react": "jaw_drop", "say": {"who": "uncle", "text": "Même le pain ?!"}},
-        {"line": "Et Mamie n'a pas tenu jusqu'au dessert.", "key": "Mamie", "who": "grandma", "action": "faint", "speed": "slowmo", "sfx": "gasp"}
+        {"line": "Et Mamie n'a pas tenu jusqu'au dessert.", "key": "Mamie", "who": "grandma", "action": "faint", "speed": "slowmo", "sfx": "ov:dc075e45-8326-48c5-b78d-06ce23418d47"}
       ]
     }
   ],

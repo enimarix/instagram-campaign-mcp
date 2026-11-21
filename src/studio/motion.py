@@ -8,7 +8,8 @@ Python side of the Remotion templates in `motion/` (GOAL.md §3.1, §4.1, §5.6)
   process on the machine (the worker and the MCP server), and every render reuses that bundle.
 
 Recipes store the voice audio as a media path (`voice.audioSrc`, relative to the media root);
-a render copies it into the bundle's `public/` and hands Remotion that URL instead.
+a render copies it into the bundle's `public/` and hands Remotion that URL instead. Library
+sounds (`ov:<id>` in sfx props, src/studio/sfx.py) are copied there too.
 Node: `NODE_BIN` (a full path or a command name) overrides `node` on PATH.
 
 Template `CinematicSkit` (style `blender`) is not Remotion: Blender renders it
@@ -48,6 +49,7 @@ from . import (  # render.py imports us
     media,
     recipe,
     render,
+    sfx,
     sitcom,
     styles,
 )
@@ -319,6 +321,8 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     still_props.pop("plate", None)  # Macro3D / SitcomSkit: the studio's own plates only, never the props'
     for say in sitcom.says(still_props) if template == sitcom.TEMPLATE else ():
         say.pop("audioSrc", None)
+    if sfx.refs(still_props):  # silent in a still, but the file must load
+        sfx.stage(bundle_dir() / "public", still_props)
     folder = Path(media_root) / "previews" / render.recipe_hash([template, still_props])
     folder.mkdir(parents=True, exist_ok=True)
     plates = {}
@@ -358,6 +362,7 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
         return cinematic.render_asset(props, out, media_root, timeout_s=timeout_s, end_card=card)
     v = validate_props(template, props)
     staged = _stage_audio(bundle_dir(), v["props"], media_root)
+    sfx.stage(bundle_dir() / "public", staged)
     if template == macro3d.TEMPLATE:  # the Blender plates first, under the picture
         track = media.resolve(media_root, macro3d.render_plates(v["plates"], media_root,
                                                                timeout_s=timeout_s))
@@ -425,6 +430,9 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     if voiced is not v["props"]:
         v = validate_props(template, voiced)
     env: Dict[str, Any] = {"kind": "motion", "template": template, "props": v["props"]}
+    credits = sfx.credits(v["props"])  # ValueError for a library sound not cached (150)
+    if credits:  # the caption must carry them: submit_asset adds them, the publish guard checks
+        env["sfx_credits"] = credits
     if v["coverFrame"] is not None:  # the publish guard sends it to Instagram as the cover
         env["thumb_offset_ms"] = round(v["coverFrame"] * 1000 / v["fps"])
     if asset_id is not None:

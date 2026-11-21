@@ -295,6 +295,42 @@ describe('InboxPage feed', () => {
       expect((await screen.findByRole('alert')).textContent).toContain('has not passed QC')
       expect(cards()).toEqual(['Video 1', 'Video 2'])
     })
+
+    it('« Tous les styles » picks a Lemo-Opuscar style for the restyle; the change sheet stays', async () => {
+      const lemo = { id: 'lemo:watercolor', family: 'lemo', label: 'Watercolor Brush', essence: 'Soft washes.',
+        category: null, tags: [], preview: { poster: null, clip: null }, favourite: false, selectable: true,
+        why_not: null, credit: null }
+      const calls = stubApi({
+        'GET /api/assets': [200, [asset(1, { style: 'paper' })]],
+        'GET /api/styles': [200, []],
+        'GET /api/style-catalog': [200, [lemo]],
+        'POST /api/assets/1/restyle': [200, { id: 5 }],
+      })
+      renderPage()
+      await screen.findByText('0 of 1 decided')
+      press(1, 'Change')
+      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      const details = within(sheet).getByText('Même vidéo, autre style').closest('details')!
+      details.open = true
+      fireEvent(details, new Event('toggle'))
+      fireEvent.click(await within(sheet).findByRole('button', { name: 'Tous les styles' }))
+      const gallery = await screen.findByRole('dialog', { name: 'Tous les styles' })
+      fireEvent.keyDown(gallery, { key: 'Escape' }) // Esc closes only the gallery
+      expect(screen.queryByRole('dialog', { name: 'Tous les styles' })).toBeNull()
+      expect(screen.getByRole('dialog', { name: 'What should change?' })).toBeTruthy()
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Tous les styles' }))
+      const again = await screen.findByRole('dialog', { name: 'Tous les styles' })
+      fireEvent.click(await within(again).findByRole('button', { name: 'Watercolor Brush' }))
+      fireEvent.click(within(screen.getByRole('dialog', { name: 'Watercolor Brush' })).getByRole('button', { name: 'Choisir ce style' }))
+      expect(screen.queryByRole('dialog', { name: 'Tous les styles' })).toBeNull()
+      expect(screen.getByRole('dialog', { name: 'What should change?' })).toBeTruthy()
+      expect(within(sheet).getByRole('button', { name: 'Watercolor Brush' }).getAttribute('aria-pressed')).toBe('true')
+      expect(within(sheet).getByText('Soft washes.', { exact: false })).toBeTruthy()
+      expect(within(sheet).queryByText(/L'IA choisit le style/)).toBeNull()
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Refaire dans ce style' }))
+      await screen.findByText(/la même vidéo dans un autre style/)
+      expect(posts(calls)).toEqual([['/api/assets/1/restyle', { style: 'lemo:watercolor' }]])
+    })
   })
 
   describe('decline', () => {

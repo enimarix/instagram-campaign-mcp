@@ -13,7 +13,7 @@ import { Sprite } from "../../components/Sprite";
 import { Flash, Wipe } from "../../components/Transitions";
 import { EndCard } from "../../endcards/EndCard";
 import { CARD_S } from "../../endcards/schema";
-import { pausedLines, spokenLines } from "../../lib/duck";
+import { type AnySfx, isLibrarySfx, pausedLines, spokenLines } from "../../lib/duck";
 import type { PixelArt } from "../../lib/game";
 import { colors } from "../../lib/palette";
 import { buildTimeline, fitEndCard, loopFade, sceneAt } from "../../lib/timeline";
@@ -125,7 +125,8 @@ const Stage = ({ p, area, act, opacity }: { p: PixelSkitProps; area: Area; act?:
   );
 };
 
-const sfxId = (name: (typeof SFX)[number]) => `sfx-${name}` as const;
+/** A beat's sound: a built-in name (`sfx-<name>` in src/assets.ts) or a library `ov:<id>` (150). */
+const sfxId = (name: string): AnySfx => (isLibrarySfx(name) ? name : (`sfx-${name as (typeof SFX)[number]}` as const));
 
 export const PixelSkit = (props: PixelSkitProps) => {
   const frame = useCurrentFrame();

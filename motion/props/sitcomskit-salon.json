@@ -11,8 +11,8 @@
         {"who": "grandpa", "at": "stand1", "action": "Idle_Loop"}
       ],
       "beats": [
-        {"line": "Maman enchaîne ses cent crunchs, tous les soirs.", "key": "cent crunchs", "who": "gym_mum", "action": "crunch", "speed": "x10", "number": {"from": 0, "value": 100, "unit": "crunchs"}, "sfx": "boing"},
-        {"line": "Pendant ce temps, le canapé finit les chips.", "key": "chips", "who": "dad", "action": "Sitting_Talking_Loop", "face": "smile", "say": {"who": "kid_boy", "text": "Encore un paquet ?"}},
+        {"line": "Maman enchaîne ses cent crunchs, tous les soirs.", "key": "cent crunchs", "who": "gym_mum", "action": "crunch", "speed": "x10", "number": {"from": 0, "value": 100, "unit": "crunchs"}, "sfx": "ov:1de73f3a-4154-4520-93ff-17b75c353e76"},
+        {"line": "Pendant ce temps, le canapé finit les chips.", "key": "chips", "who": "dad", "action": "Sitting_Talking_Loop", "face": "smile", "sfx": "ov:bd9db3fc-aac2-4121-824a-1037c3038e26", "say": {"who": "kid_boy", "text": "Encore un paquet ?"}},
         {"line": "Les crunchs ne brûlent pas le gras du ventre : c'est le total de ta journée qui compte.", "key": "total de ta journée", "who": "gym_mum", "action": "crunch", "speed": "x10", "react": "disgust"}
       ]
     },
@@ -26,7 +26,7 @@
         {"who": "kid_girl", "at": "towel0", "action": "Idle_Loop"}
       ],
       "beats": [
-        {"line": "Résultat : des abdos en béton… toujours bien cachés.", "key": "bien cachés", "who": "gym_mum", "action": "Idle_Loop", "face": "disgust", "react": "smile", "sfx": "boing"}
+        {"line": "Résultat : des abdos en béton… toujours bien cachés.", "key": "bien cachés", "who": "gym_mum", "action": "Idle_Loop", "face": "disgust", "react": "smile", "sfx": "ov:8541b72b-f50e-496f-a2bb-5422fdb43258"}
       ]
     }
   ],

@@ -22,10 +22,12 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler agent run daily-produce  # locked-down Claude Code run (058)
   python -m src.scheduler agent check         # is the Claude Code CLI there and signed in?
   python -m src.scheduler agent run-due       # run playbooks due per AGENT_SCHEDULE (061)
+  python -m src.scheduler agent film 12       # make Lemo-Opuscar work order 12 into a film (173)
   python -m src.scheduler agent install-schedule [--remove]  # OS autostart + daily runs
   python -m src.scheduler downloader setup|update|status  # Reel downloader service (063a)
   python -m src.scheduler restore <backup> [--yes]  # put a nightly backup back (097)
   python -m src.scheduler doctor              # is everything installed? (100)
+  python -m src.scheduler web build           # rebuild web/dist (`up` does when stale, 175)
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -118,6 +120,7 @@ async def _up(host: str, port: int) -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     _close_dead_runs(settings)
+    _rebuild_website(settings)
     server = uvicorn.Server(uvicorn.Config(create_app(settings), host=host, port=port))
     voice = _start_voice(settings)
     task = asyncio.create_task(_worker_after_voice(settings, voice))
@@ -145,6 +148,45 @@ def _close_dead_runs(settings: InstagramMCPSettings) -> None:
             store.close()
     except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: the worker says so
         print(f"agent runs not checked: {e!r}", file=sys.stderr, flush=True)
+
+
+def _rebuild_website(settings: InstagramMCPSettings) -> None:
+    """web/dist rebuilt when a source is newer, before serving (175). A failure keeps the
+    old site and shows as a website alert; nothing here stops the API from starting."""
+    from .studio import website
+
+    try:
+        if website.stale(settings):
+            print("website: sources changed since the last build, rebuilding web/dist",
+                  file=sys.stderr, flush=True)
+        store = CampaignStore(settings.database_path)
+        try:
+            result = website.rebuild_if_stale(settings, store)
+        finally:
+            store.close()
+    except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: the worker says so
+        print(f"website not rebuilt: {e!r}", file=sys.stderr, flush=True)
+        return
+    if result is not None:
+        print("website: rebuilt" if result["ok"] else
+              f"website: the site could not be rebuilt, the old one is served: {result['error']}",
+              file=sys.stderr, flush=True)
+
+
+def _web(args: argparse.Namespace) -> int:
+    """`web build`: build the website now, whatever its age (175)."""
+    from .studio import website
+
+    settings = get_settings()
+    result = website.build(settings)
+    with suppress(Exception):  # the result shows as an alert; no database: still built
+        store = CampaignStore(settings.database_path)
+        try:
+            website.record(store, result)
+        finally:
+            store.close()
+    print(json.dumps(result, indent=2))
+    return 0 if result["ok"] else 1
 
 
 def _start_voice(settings: InstagramMCPSettings):
@@ -311,9 +353,14 @@ def _agent(args: argparse.Namespace) -> int:
             print(json.dumps(runs, indent=2, default=str))
             return 0 if all(r["status"] == "succeeded" for r in runs) else 1
         try:
-            run = run_agent(store, settings, args.playbook, max_turns=args.max_turns,
-                            timeout_s=args.timeout * 60 if args.timeout else None,
-                            dry_run=args.dry_run)
+            if args.agent_command == "film":
+                from .agent.film import run_film
+
+                run = run_film(store, settings, args.order_id)
+            else:
+                run = run_agent(store, settings, args.playbook, max_turns=args.max_turns,
+                                timeout_s=args.timeout * 60 if args.timeout else None,
+                                dry_run=args.dry_run)
         finally:
             store.close()
     except AgentError as e:
@@ -394,6 +441,40 @@ def _style_requests(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- style catalog (172) -------------------------------------------------------
+def _styles(args: argparse.Namespace) -> int:
+    """`styles fetch-previews`: the Lemo-Opuscar posters (and opt-in demo films) for the
+    style gallery, downloaded once from the gallery site."""
+    from .studio import style_catalog
+
+    try:
+        result = style_catalog.fetch_previews(get_settings(), slugs=args.slugs or None,
+                                              clips=args.clips, force=args.force)
+    except ValueError as e:
+        print(f"styles: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 1 if result["failed"] else 0
+
+
+# --- sound effects (150) -------------------------------------------------------
+def _sfx(args: argparse.Namespace) -> int:
+    """`sfx seed`: the starter pack from Openverse; `sfx find`: what the agent's find_sfx
+    returns."""
+    from .studio import sfx
+
+    try:
+        if args.sfx_command == "seed":
+            result = sfx.seed(only=args.categories or None, force=args.force)
+        else:
+            result = sfx.find_sfx(" ".join(args.query), args.limit)
+    except (ValueError, RuntimeError) as e:
+        print(f"sfx: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 1 if result.get("failed") else 0
+
+
 # --- doctor (100) ---------------------------------------------------------
 def _doctor() -> int:
     from .studio.doctor import checks
@@ -464,6 +545,8 @@ def main(argv: list[str] | None = None) -> None:
     ar.add_argument("--timeout", type=float, metavar="MIN",
                     help="Wall-clock limit in minutes (default AGENT_TIMEOUT_MINUTES)")
     agent.add_parser("check", help="Preflight only: CLI found and signed in")
+    af = agent.add_parser("film", help="Make a Lemo-Opuscar work order into a film (173)")
+    af.add_argument("order_id", type=int, help="A scheduled work order in a lemo:<slug> style")
     agent.add_parser("run-due", help="Run every playbook due per AGENT_SCHEDULE, in turn")
     ais = agent.add_parser("install-schedule",
                            help="Start `up` at logon and the daily runs via the OS scheduler")
@@ -488,6 +571,26 @@ def main(argv: list[str] | None = None) -> None:
     srm = sr.add_parser("mark", help="accepted -> building (step started) -> live (merged)")
     srm.add_argument("id", type=int)
     srm.add_argument("status", choices=("building", "live"))
+    sty = sub.add_parser("styles", help="The style gallery (172)").add_subparsers(
+        dest="styles_command", required=True)
+    fp = sty.add_parser("fetch-previews", help="Download the Lemo-Opuscar style posters once"
+                                               " (from the gallery site) for the gallery")
+    fp.add_argument("slugs", nargs="*", metavar="SLUG", help="Only these styles (default: all)")
+    fp.add_argument("--clips", action="store_true",
+                    help="Also the demo films, up to 20 MB each (~15 MB a style)")
+    fp.add_argument("--force", action="store_true", help="Download again files already there")
+    sx = sub.add_parser("sfx", help="The sound-effects library (150, Openverse CC0 / CC BY)"
+                        ).add_subparsers(dest="sfx_command", required=True)
+    ss = sx.add_parser("seed", help="Fetch the starter pack (~40 sounds) into data/sfx/")
+    ss.add_argument("categories", nargs="*", metavar="CATEGORY",
+                    help="Only these categories (default: all)")
+    ss.add_argument("--force", action="store_true", help="Search again categories cached")
+    sf = sx.add_parser("find", help="Library sounds for a query (fetches when none fits)")
+    sf.add_argument("query", nargs="+")
+    sf.add_argument("--limit", type=int, default=5)
+    sub.add_parser("web", help="The website (web/)").add_subparsers(
+        dest="web_command", required=True).add_parser(
+        "build", help="npm run build into web/dist now (`up` does it when web/ changed)")
     sub.add_parser("doctor", help="Check what the studio needs (ffmpeg, Node, website, "
                                   "downloader, Claude Code, .env); changes nothing")
     args = parser.parse_args(argv)
@@ -512,8 +615,14 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_restore(args))
     if args.command == "doctor":
         sys.exit(_doctor())
+    if args.command == "web":
+        sys.exit(_web(args))
     if args.command == "style-requests":
         sys.exit(_style_requests(args))
+    if args.command == "styles":
+        sys.exit(_styles(args))
+    if args.command == "sfx":
+        sys.exit(_sfx(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 

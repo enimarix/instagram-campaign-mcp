@@ -88,3 +88,12 @@ test("the cover is the hook over the opening action; the sounds and bed are meas
   assert.ok(END_CARD_STYLES.includes("sitcom"));
   assert.deepEqual([...CAMEOS.sitcom], ["applause"]);
 });
+
+test("a beat plays a built-in sound or a library ov:<id> (step 150); anything else is refused", () => {
+  const p = read("sitcomskit");
+  const withSfx = (sfx: string) => ({ ...p, scenes: [{ ...p.scenes[0], beats: [{ ...p.scenes[0].beats[0], sfx }, ...p.scenes[0].beats.slice(1)] }] });
+  assert.ok(ok(withSfx("boing")));
+  assert.ok(ok(withSfx("ov:aa99dc03-7c0c-454a-9102-4fbe1622ddf9")));
+  assert.ok(!ok(withSfx("ov:not-an-id")) && !ok(withSfx("fart")));
+  assert.ok(EXAMPLES.every((x) => x.scenes.some((s) => s.beats.some((b) => b.sfx?.startsWith("ov:")))), "the examples use real foley");
+});

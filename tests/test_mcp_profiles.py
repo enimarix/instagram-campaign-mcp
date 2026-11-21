@@ -24,7 +24,7 @@ AGENT_ALLOWED = {
     "list_dm_picks", "mark_dm_pick", "list_work_orders", "skip_work_order",
     "analyse_work_order", "list_sources",
     "render_remix",
-    "get_clip_frames", "set_clip_timeline", "search_stock", "add_stock_clip",
+    "get_clip_frames", "set_clip_timeline", "search_stock", "add_stock_clip", "find_sfx",
     "list_ad_winners", "propose_ad_test", "stop_ad_test", "list_ad_tests",
     "get_ad_test_results",
 }

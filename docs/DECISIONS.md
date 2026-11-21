@@ -8,6 +8,42 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-21: A job waits for RAM / VRAM without holding the GPU lock (175)
+`gpu_lock.hold` used to take the lock, then wait in `guard.admit`. Now it waits for
+admission with the lock free, takes the lock, and checks `guard.blockers` again under it:
+still blocked (another job took the VRAM meanwhile), it lets the lock go and waits again.
+Same API and logs; the voice service (stdlib, loaded by path) included. Of two waiters
+admitted at once, the one that started waiting first goes first: each admitted waiter keeps
+a ticket file `<lock>.queue/<start ns>-<pid>-<n>`, touched every poll; a ticket older than
+10 s belongs to a dead waiter and is removed. Not a strict queue: a younger job whose need is
+met may still go while an older one waits for more VRAM.
+Reason: 2026-11-21 00:10-00:57 the voice load waited 47 min for VRAM while holding the lock,
+so even small Remotion renders queued behind it (the film agent's report).
+
+## 2026-11-21: The Lemo film runner is the one agent run with a shell (173)
+A work order in a Lemo-Opuscar style (`lemo:<slug>`, owner-mode orders only) is made by
+`ig-campaign agent film <order_id>` (src/agent/film.py), started by the worker's catch-up:
+Claude Code headless with Bash, Read/Glob/Grep, Write/Edit (pre-approved inside its
+workspace only) and the lemo-opuscar plugin skill (copied into the workspace). Everything
+else stays locked: its workspace `<AGENT_WORKSPACE>/films/<order id>/` passes the content
+agent's checks (outside the repo and APP_HOME, in no git repo), `--setting-sources project`,
+`--strict-mcp-config` with no MCP server at all (it never sees the studio's tools or the
+database), no web tools or subagents, an environment without any .env name or secret
+value, the Read deny rules on .env and the data folders, LEMO_FILM_MAX_MIN (90) with the
+process tree killed after it, one film at a time (it holds the `lemo-film` agent-run lock
+until its render is judged, and no other agent run starts meanwhile), LEMO_FILMS_PER_DAY
+(3) started per owner-local day, and every heavy command through the GPU lock
+(`src/studio/gpu_run.py`). The delivered `final.mp4` goes through the normal render + QC
+(normalised like an edit; the motion freeze limit) into the Inbox as an own-rights motion
+idea; any failure skips the order with the reason. The content agent never sees Lemo
+orders and they never wake its light run.
+Reason: the owner wants to order videos in any of the library's ~100 styles (2026-11-21).
+A Lemo film is code the session writes, renders and mixes (headless Chrome, ffmpeg): it
+cannot be made without a shell. A shell can read any file the user can (the deny rules only
+cover the Read tool), so the protection is what the process holds: no secret in its
+environment, no MCP server, no publishing path, a workspace outside the repo, a time cap
+and the token cap.
+
 ## 2026-11-21: A heat budget: heavy jobs use half the CPUs and the watchdog cools the laptop (171)
 Every heavy child (Blender, Remotion, ffmpeg, the voice service and its model worker) runs on
 the first `GUARD_CPU_SHARE` (0.5) of the logical CPUs (affinity, inherited by its children:
@@ -630,3 +666,11 @@ recipes (`kind: motion`) and render queue, so step 138's style buttons pick it u
 No AI video model: everything renders locally at no cost per video, about 1 minute of
 machine time per second of video.
 Reason: the owner's request; local rendering keeps the cost at zero and the result repeatable.
+
+## 2026-11-21 — Blender renders through Vulkan, not OpenGL (step 176)
+The owner's laptop (AORUS 15P XD, RTX 3070 Laptop, driver 596.49 then 621.24) powered off six times (Kernel-Power
+41, no bugcheck) the instant a Blender EEVEE render took the GPU to full load through OpenGL, also after a cleaning
+and a driver update, also 30 s into a test at 53 °C. The owner's DirectX games run for hours, and the same shots
+through Blender's Vulkan backend rendered clean at the same load (126 W, 71 °C, the 8-shot proof in 13.1 min vs
+18.6 min). `cinematic.blender()` (the one launch point) passes `--gpu-backend vulkan`;
+`CINEMATIC_GPU_BACKEND=""` goes back to Blender's default.

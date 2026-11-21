@@ -34,7 +34,7 @@ const order = (id: number, over: Partial<WorkOrder> = {}): WorkOrder => ({
   created_at: hoursAgo(1), permalink: `https://www.instagram.com/reel/D${id}/`, sender_username: 'amine_xenima',
   received_at: hoursAgo(2), source: 'dm', embed_url: `https://www.instagram.com/reel/D${id}/embed`, topic: null,
   caption_quote: null, likes: null, comments: null, views: null, thumbnail_url: null, style: null,
-  from_asset_id: null, ...over,
+  from_asset_id: null, updated_at: hoursAgo(1), idea_hook: null, video_status: null, ...over,
 })
 
 // GET /api/styles (138): one button per enabled style; a turned-off one shows no button
@@ -221,11 +221,9 @@ describe('Tendances', () => {
     fireEvent.change(within(sheet).getByLabelText('Ta consigne'), { target: { value: ' version sans sucre ' } })
     const voxel = await within(sheet).findByRole('button', { name: '3D 8-bit' })
     expect(within(sheet).getByRole('button', { name: "Auto (l'IA choisit)" }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.mouseEnter(voxel.parentElement!) // hover: the preview, nothing chosen yet
-    expect(within(sheet).getByLabelText('Aperçu 3D 8-bit').querySelector('video')?.getAttribute('src')).toBe('/api/styles/voxel/preview/clip')
-    fireEvent.mouseLeave(voxel.parentElement!)
+    fireEvent.mouseEnter(voxel) // hover selects nothing and previews nothing
     expect(within(sheet).queryByLabelText('Aperçu 3D 8-bit')).toBeNull()
-    fireEvent.click(voxel) // a tap (phone): chosen, and its preview stays
+    fireEvent.click(voxel) // a click: chosen, and its preview shows
     expect(voxel.getAttribute('aria-pressed')).toBe('true')
     expect(within(sheet).getByLabelText('Aperçu 3D 8-bit').textContent).toContain('Le style 3D 8-bit.')
     fireEvent.click(within(sheet).getByRole('button', { name: "Envoyer à l'IA" }))
@@ -386,10 +384,16 @@ describe('Mes envois', () => {
           from_asset_id: 42, style: 'voxel', status: 'scheduled', instruction: 'Même vidéo, autre style : refais la vidéo 42' }),
         order(6, { source: 'create', pick_id: null, permalink: null, embed_url: null, sender_username: null, received_at: null,
           status: 'scheduled', instruction: 'Les protéines du soir' }),
+        order(5, { source: 'create', pick_id: null, permalink: null, embed_url: null, sender_username: null, received_at: null,
+          style: 'lemo:watercolor', status: 'scheduled', instruction: 'Le sommeil' }),
       ]],
+      'GET /api/style-catalog?family=lemo': [200, [{ id: 'lemo:watercolor', family: 'lemo', label: 'Watercolor Brush',
+        essence: null, category: null, tags: [], preview: { poster: null, clip: null }, favourite: false,
+        selectable: true, why_not: null, credit: null }]],
     })
     renderPage('/trending?tab=envois')
     const list = await screen.findByRole('list', { name: 'Mes envois' })
+    expect(await within(within(list).getByRole('listitem', { name: 'Envoi 5' })).findByText('Watercolor Brush')).toBeTruthy() // its name, not lemo:watercolor
     const change = within(list).getByRole('listitem', { name: 'Envoi 7' })
     expect(await within(change).findByText('3D 8-bit')).toBeTruthy()
     expect(within(change).getByText(/autre style de la vidéo 42/)).toBeTruthy()

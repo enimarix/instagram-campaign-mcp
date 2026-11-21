@@ -18,6 +18,7 @@ from src.learning import funnel
 from src.learning.quotas import todays_quotas
 from src.store import MIGRATIONS, CampaignStore
 from src.studio import motion, production, styles, work_orders
+from src.studio.assets import transition
 
 from .conftest import LOCAL
 from .test_api_assets import _settings
@@ -133,6 +134,20 @@ def test_order_style_fills_the_idea_and_refuses_another(store, settings):
     idea = _idea(store, settings, "Protéines", work_order_id=order["id"])
     assert idea["style"] == "macro3d"
     assert work_orders.get_order(store, order["id"])["status"] == "in_production"
+
+
+def test_an_order_shows_what_the_ai_wrote_and_its_video_status(store, settings):
+    """174: « Créer »'s pile reads the idea's hook and the newest video's status."""
+    order = work_orders.create_video(store, "Les protéines du soir")
+    assert (order["idea_hook"], order["video_status"]) == (None, None)
+    idea = _idea(store, settings, "Ton estomac a une horloge", work_order_id=order["id"])
+    assert work_orders.get_order(store, order["id"])["idea_hook"] == "Ton estomac a une horloge"
+    first = store.add_asset(idea["id"])
+    assert work_orders.get_order(store, order["id"])["video_status"] == "rendering"
+    transition(store, first["id"], "failed", actor="worker")
+    assert work_orders.list_orders(store, source="mine")[0]["video_status"] == "failed"
+    store.add_asset(idea["id"])  # a newer version: its status is the one shown
+    assert work_orders.get_order(store, order["id"])["video_status"] == "rendering"
 
 
 def test_render_motion_refuses_a_template_outside_the_style(store, settings, tmp_path,

@@ -122,7 +122,9 @@ def run_qc(asset: Dict[str, Any], idea: Optional[Dict[str, Any]], master_path: s
     s = settings
     path = media.resolve(media_root, master_path)
     info = ffmpeg.probe(path)
-    motion = (asset.get("recipe") or {}).get("kind") == "motion"
+    # a Lemo-Opuscar film (173) is code-animated like a motion render: same freeze limit
+    motion = ((asset.get("recipe") or {}).get("kind") == "motion"
+              or str((idea or {}).get("style") or "").startswith("lemo:"))
     max_freeze = s.qc_max_freeze_s_motion if motion else s.qc_max_freeze_s
     found = analyze(path, max_black_s=s.qc_max_black_s, max_freeze_s=max_freeze,
                     has_audio=info.has_audio)

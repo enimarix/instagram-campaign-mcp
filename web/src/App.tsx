@@ -1,6 +1,7 @@
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router'
 import Alerts from './Alerts'
 import CalendarPage from './calendar/CalendarPage'
+import CreatePage from './create/CreatePage'
 import AssetPage from './inbox/AssetPage'
 import InboxPage from './inbox/InboxPage'
 import Ads from './pages/Ads'
@@ -13,11 +14,12 @@ import Posts, { PostPage } from './pages/Posts'
 import ReportPage from './pages/Report'
 import Settings from './pages/Settings'
 import Trends from './pages/Trends'
+import StylesPage from './styles/StylesPage'
 import TokenBanner from './TokenBanner'
 import TrendingPage from './trending/TrendingPage'
 import {
-  AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, InboxIcon, MegaphoneIcon, MoreIcon, SettingsIcon,
-  TrendsIcon,
+  AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, CreateIcon, InboxIcon, MegaphoneIcon, MoreIcon, PaletteIcon,
+  SettingsIcon, TrendsIcon,
 } from './ui/icons'
 import { PageHeader } from './ui/PageHeader'
 import { card } from './ui/styles'
@@ -26,10 +28,12 @@ import { ToastProvider } from './ui/Toast'
 // `tab`: also in the phone's bottom bar; the rest sit behind "More" there.
 const NAV = [
   { path: '/inbox', label: 'Inbox', Icon: InboxIcon, tab: true },
+  { path: '/create', label: 'Créer', Icon: CreateIcon, tab: true },
   { path: '/trending', label: 'Trending', Icon: TrendsIcon, tab: true },
   { path: '/calendar', label: 'Calendar', Icon: CalendarIcon, tab: true },
-  { path: '/analytics', label: 'Analytics', Icon: ChartIcon, tab: true },
+  { path: '/analytics', label: 'Analytics', Icon: ChartIcon }, // 174: its tab went to Créer
   { path: '/learnings', label: 'Learnings', Icon: BulbIcon },
+  { path: '/styles', label: 'Styles', Icon: PaletteIcon },
   { path: '/ads', label: 'Ads', Icon: MegaphoneIcon },
   { path: '/agent', label: 'Agent', Icon: AgentIcon, tab: true },
   { path: '/settings', label: 'Settings', Icon: SettingsIcon },
@@ -74,6 +78,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/inbox" replace />} />
               <Route path="/inbox" element={<InboxPage />} />
+              <Route path="/create" element={<CreatePage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/analytics/posts" element={<Posts />} />
@@ -84,6 +89,7 @@ export default function App() {
               <Route path="/trending" element={<TrendingPage />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/learnings" element={<Learnings />} />
+              <Route path="/styles" element={<StylesPage />} />
               <Route path="/ads" element={<Ads />} />
               <Route path="/agent" element={<Agent />} />
               <Route path="/settings" element={<Settings />} />

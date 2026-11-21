@@ -8,7 +8,8 @@ Step 145's GPU lock (gpu_lock.py) keeps our own heavy jobs one at a time; this a
 - Low priority: every heavy child (Blender, Remotion's node and its Chrome, ffmpeg, the voice
   service and its model worker, agent CLI runs) starts through run() / low_priority():
   Windows BELOW_NORMAL_PRIORITY_CLASS, POSIX nice 10, so the owner's input never starves.
-- Admission: gpu_lock.hold() calls admit() once it has the lock. The job waits (and logs
+- Admission: gpu_lock.hold() calls admit() before it takes the lock (and blockers() again
+  once it has it, 175: a waiting job never holds the lock). The job waits (and logs
   "waiting for RAM / VRAM / a game") while free RAM < GUARD_MIN_FREE_RAM_GB (8) and, when
   nvidia-smi answers, while free VRAM < the job's need (VRAM_GB) or another process (a game,
   a Blender started by hand) uses more than FOREIGN_VRAM_GB, or before GUARD_NOT_BEFORE (the
@@ -334,13 +335,21 @@ def blockers(need_vram_gb: float, min_free_ram_gb: float) -> List[str]:
     return why
 
 
+def ram_floor(min_free_ram_gb: Optional[float] = None) -> float:
+    """The free RAM a job needs: min_free_ram_gb, else GUARD_MIN_FREE_RAM_GB, else
+    MIN_FREE_RAM_GB."""
+    if min_free_ram_gb is not None:
+        return min_free_ram_gb
+    return float(os.environ.get("GUARD_MIN_FREE_RAM_GB") or MIN_FREE_RAM_GB)
+
+
 def admit(what: str, need_vram_gb: float = 0.0, min_free_ram_gb: Optional[float] = None, *,
           poll_s: float = WAIT_POLL_S, log_every_s: float = LOG_EVERY_S,
-          check: Callable[[float, float], List[str]] = blockers) -> None:
-    """Return once `what` may start (blockers() empty); wait and log meanwhile.
-    min_free_ram_gb None: GUARD_MIN_FREE_RAM_GB, else MIN_FREE_RAM_GB."""
-    if min_free_ram_gb is None:
-        min_free_ram_gb = float(os.environ.get("GUARD_MIN_FREE_RAM_GB") or MIN_FREE_RAM_GB)
+          check: Optional[Callable[[float, float], List[str]]] = None) -> None:
+    """Return once `what` may start (check, default blockers(), empty); wait and log
+    meanwhile. min_free_ram_gb: see ram_floor()."""
+    check = check or blockers
+    min_free_ram_gb = ram_floor(min_free_ram_gb)
     start, next_log = time.monotonic(), None
     while True:
         why = check(need_vram_gb, min_free_ram_gb)

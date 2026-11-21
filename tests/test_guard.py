@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import os
 import re
 import subprocess
@@ -143,28 +144,130 @@ def test_admit_floor_defaults_to_the_env(monkeypatch):
     assert seen == [12.0, guard.MIN_FREE_RAM_GB]
 
 
-def test_the_gpu_lock_admits_while_holding_it(monkeypatch, tmp_path):
+def _held(path):
+    """True when another handle (like another process) can't take the lock right now."""
+    try:
+        with gpu_lock.file_lock(path, timeout_s=0):
+            return False
+    except gpu_lock.LockTimeout:
+        return True
+
+
+def _fast_admit(monkeypatch):
+    monkeypatch.setattr(gpu_lock.guard, "admit", functools.partial(guard.admit, poll_s=0.01))
+
+
+def test_the_gpu_lock_admits_before_taking_it_then_checks_again(monkeypatch, tmp_path):
     path = tmp_path / "gpu.lock"
     seen = []
 
     def admit(what, need, floor):
-        try:  # another process (or handle) can't take the lock meanwhile
-            with gpu_lock.file_lock(path, timeout_s=0):
-                held = False
-        except gpu_lock.LockTimeout:
-            held = True
-        seen.append((what, need, floor, held))
+        seen.append(("admit", what, need, floor, _held(path)))
+
+    def blockers(need, floor):
+        seen.append(("check", need, floor, _held(path)))
+        return []
 
     monkeypatch.setattr(gpu_lock.guard, "admit", admit)
+    monkeypatch.setattr(gpu_lock.guard, "blockers", blockers)
     with gpu_lock.hold("voice service", path, need_vram_gb=7.0, min_free_ram_gb=8.0):
+        assert _held(path)
+    assert seen == [("admit", "voice service", 7.0, 8.0, False), ("check", 7.0, 8.0, True)]
+
+
+def test_blocked_again_under_the_lock_lets_it_go_and_waits(monkeypatch, tmp_path):
+    path = tmp_path / "gpu.lock"
+    answers, seen = [[], ["waiting for VRAM: 1.0 GB free, 6 GB needed"], [], []], []
+
+    def blockers(need, floor):
+        seen.append(_held(path))
+        return answers.pop(0)
+
+    _fast_admit(monkeypatch)
+    monkeypatch.setattr(gpu_lock.guard, "blockers", blockers)
+    with gpu_lock.hold("voice service", path, need_vram_gb=6.0, poll_s=0.01):
         pass
-    assert seen == [("voice service", 7.0, 8.0, True)]
+    # admit (free), under the lock (blocked: let go), admit again (free), under the lock (ok)
+    assert seen == [False, True, False, True] and not answers
+
+
+def test_a_job_waiting_for_vram_never_blocks_the_others(monkeypatch, tmp_path, caplog):
+    path = tmp_path / "gpu.lock"
+    vram_back, entered = threading.Event(), []
+    monkeypatch.setattr(gpu_lock.guard, "blockers", lambda need, floor: (
+        ["waiting for VRAM: 2.0 GB free, 6 GB needed"] if need == 6.0 and not vram_back.is_set()
+        else []))
+    _fast_admit(monkeypatch)
+    caplog.set_level("WARNING", "guard")
+
+    def voice():
+        with gpu_lock.hold("voice service", path, need_vram_gb=6.0, poll_s=0.01):
+            entered.append("voice")
+
+    t = threading.Thread(target=voice)
+    t.start()
+    try:
+        time.sleep(0.2)  # the voice waits for VRAM ...
+        with gpu_lock.hold("Remotion render", path, need_vram_gb=1.5, timeout_s=1):
+            entered.append("render")  # ... and a small render goes meanwhile
+    finally:
+        vram_back.set()
+        t.join(5)
+    assert entered == ["render", "voice"]
+    assert "voice service: waiting for VRAM" in caplog.text
+
+
+def test_of_two_admitted_waiters_the_older_goes_first(monkeypatch, tmp_path):
+    path = tmp_path / "gpu.lock"
+    monkeypatch.setattr(gpu_lock.guard, "blockers", lambda need, floor: [])
+    release, order = threading.Event(), []
+
+    def first():
+        with gpu_lock.hold("Blender render", path):
+            order.append("holder")
+            release.wait(5)
+
+    def waiter(name, poll_s):
+        with gpu_lock.hold(name, path, poll_s=poll_s):
+            order.append(name)
+
+    threads = [threading.Thread(target=first)]
+    threads[0].start()
+    while not order:
+        time.sleep(0.01)
+    # the older one polls slowly: without its ticket the younger would always win
+    threads += [threading.Thread(target=waiter, args=("older", 0.3))]
+    threads[1].start()
+    time.sleep(0.1)
+    threads += [threading.Thread(target=waiter, args=("younger", 0.01))]
+    threads[2].start()
+    time.sleep(0.2)
+    release.set()
+    for t in threads:
+        t.join(5)
+    assert order == ["holder", "older", "younger"]
+    assert not list((tmp_path / "gpu.lock.queue").iterdir())  # tickets cleaned up
+
+
+def test_a_dead_waiters_ticket_does_not_hold_the_queue(monkeypatch, tmp_path):
+    path = tmp_path / "gpu.lock"
+    queue = tmp_path / "gpu.lock.queue"
+    queue.mkdir()
+    dead = queue / f"{0:020d}-1-0"
+    dead.touch()
+    old = time.time() - gpu_lock.TICKET_STALE_S - 1
+    os.utime(dead, (old, old))
+    monkeypatch.setattr(gpu_lock.guard, "blockers", lambda need, floor: [])
+    with gpu_lock.hold("Remotion render", path, timeout_s=0):
+        pass
+    assert not dead.exists()
 
 
 def test_studio_jobs_ask_for_their_vram(monkeypatch, settings):
     seen = []
     monkeypatch.setattr(gpu_lock.guard, "admit", lambda what, need, floor: seen.append(
         (what, need, floor)))
+    monkeypatch.setattr(gpu_lock.guard, "blockers", lambda need, floor: [])
     monkeypatch.setattr("src.config.get_settings", lambda: settings.model_copy(
         update={"guard_min_free_ram_gb": 9.0}))
     with guard.gpu("Remotion Hello render", "remotion"):
@@ -392,8 +495,9 @@ def test_tools_get_thread_counts_to_match(monkeypatch, tmp_path):
                         subprocess.CompletedProcess(cmd, 0, b"", b""))
     monkeypatch.setattr(cinematic, "find_blender", lambda: "blender")
     monkeypatch.setattr(guard, "gpu", lambda what, kind: contextlib.nullcontext())
+    monkeypatch.setattr(cinematic, "GPU_BACKEND", "vulkan")
     cinematic.blender(["-b", "-P", "x.py"], "Blender test", 60)
-    assert seen[-1][:4] == ["blender", "-t", "8", "-b"]
+    assert seen[-1][:6] == ["blender", "--gpu-backend", "vulkan", "-t", "8", "-b"]  # 176
     monkeypatch.setattr(ffmpeg, "find_ffmpeg", lambda: "ffmpeg")
     ffmpeg.run(["-i", "in.mp4", "-c:v", "libx264", "out.mp4"], timeout_s=60)
     assert seen[-1][-3:] == ["-threads", "8", "out.mp4"]

@@ -35,6 +35,7 @@ from .studio import (
     production,
     remix,
     research,
+    sfx,
     stock,
     style_requests,
     work_orders,
@@ -762,6 +763,18 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
             "state": out["job"]["state"]}
 
 
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                      open_world_hint=True))
+async def find_sfx(query: str, limit: int = 5) -> Dict[str, Any]:
+    """Real recorded sound effects for a scene (English words: "whoosh", "fork drop",
+    "crowd gasp"), from the studio's library (CC0 / CC BY only); when nothing cached fits,
+    a few are fetched from Openverse now. Each sound has a `ref` ("ov:<id>"): put it where
+    a template takes a sound (PixelSkit beat `sfx`, `sting`) next to the built-in names.
+    Its level is set from its measured peak, under the voice. A CC BY sound's `credit` is
+    added to the caption by submit_asset; CC0 needs none."""
+    return await _studio(sfx.find_sfx, query, min(limit, 20))
+
+
 # ----------------------------------------------------------------------
 # Studio: reaction remixes (src/studio/remix.py)
 # ----------------------------------------------------------------------
@@ -1282,6 +1295,10 @@ AGENT_TOOLS = frozenset({
     # (the key stays in it); licence, credit and ads_allowed are recorded in code.
     "search_stock",
     "add_stock_clip",
+    # Sound effects (step 150): the library's CC0 / CC BY sounds, cached by our server
+    # (fetch on demand from Openverse when nothing fits); read + cache only, the licence
+    # rule and the caption credits live in src/studio/sfx.py.
+    "find_sfx",
     # Ads (096; 128: the owner decides what is promoted): propose and stop tests, read
     # results. No agent tool launches or activates (the owner's Approve in the website is
     # the only launch), unkills, changes a setting or reaches the writer; stop ->
