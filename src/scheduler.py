@@ -394,6 +394,22 @@ def _style_requests(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- style catalog (172) -------------------------------------------------------
+def _styles(args: argparse.Namespace) -> int:
+    """`styles fetch-previews`: the Lemo-Opuscar posters (and opt-in demo films) for the
+    style gallery, downloaded once from the gallery site."""
+    from .studio import style_catalog
+
+    try:
+        result = style_catalog.fetch_previews(get_settings(), slugs=args.slugs or None,
+                                              clips=args.clips, force=args.force)
+    except ValueError as e:
+        print(f"styles: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 1 if result["failed"] else 0
+
+
 # --- doctor (100) ---------------------------------------------------------
 def _doctor() -> int:
     from .studio.doctor import checks
@@ -488,6 +504,14 @@ def main(argv: list[str] | None = None) -> None:
     srm = sr.add_parser("mark", help="accepted -> building (step started) -> live (merged)")
     srm.add_argument("id", type=int)
     srm.add_argument("status", choices=("building", "live"))
+    sty = sub.add_parser("styles", help="The style gallery (172)").add_subparsers(
+        dest="styles_command", required=True)
+    fp = sty.add_parser("fetch-previews", help="Download the Lemo-Opuscar style posters once"
+                                               " (from the gallery site) for the gallery")
+    fp.add_argument("slugs", nargs="*", metavar="SLUG", help="Only these styles (default: all)")
+    fp.add_argument("--clips", action="store_true",
+                    help="Also the demo films, up to 20 MB each (~15 MB a style)")
+    fp.add_argument("--force", action="store_true", help="Download again files already there")
     sub.add_parser("doctor", help="Check what the studio needs (ffmpeg, Node, website, "
                                   "downloader, Claude Code, .env); changes nothing")
     args = parser.parse_args(argv)
@@ -514,6 +538,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_doctor())
     if args.command == "style-requests":
         sys.exit(_style_requests(args))
+    if args.command == "styles":
+        sys.exit(_styles(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 

@@ -494,6 +494,12 @@ class InstagramMCPSettings(BaseSettings):
         45.0, gt=0, description="Longest stretch of a clip one reaction remix may use (seconds)"
     )
 
+    # --- Style catalog (src/studio/style_catalog.py) -----------------------
+    lemo_library: str = Field(
+        str(Path.home() / "lemo-opuscar"),
+        description="The Lemo-Opuscar library folder (its styles/ fill the style gallery)",
+    )
+
     # --- Logging / cache --------------------------------------------------
     log_level: str = Field("INFO", description="Log level")
     cache_enabled: bool = Field(True, description="Cache GET responses")
