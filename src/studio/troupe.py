@@ -242,11 +242,12 @@ def measure(data: Dict[str, Any], out: PathLike, *, shot: Optional[int] = None,
         stop.set()
         sampler.join()
     stats = json.loads((out / "measure" / "stats.json").read_text(encoding="utf-8"))
+    known = base is not None
     result = {"shot": i, "set": spec["set"], "actors": len(spec["cast"]), "frame": f,
-            "seconds": round(time.monotonic() - started, 1),
-            "baseline_vram_gb": base, "peak_vram_gb": round(peak[0], 2) if base is not None else None,
-            "blender_vram_gb": round(peak[0] - base, 2) if base is not None else None,
-            **stats, "still": str(out / "measure" / f"still_{f}.png")}
+              "seconds": round(time.monotonic() - started, 1), "baseline_vram_gb": base,
+              "peak_vram_gb": round(peak[0], 2) if known else None,
+              "blender_vram_gb": round(peak[0] - base, 2) if known else None,
+              **stats, "still": str(out / "measure" / f"still_{f}.png")}
     (out / "measure.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     return result
 

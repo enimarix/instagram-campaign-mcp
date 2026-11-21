@@ -32,9 +32,9 @@ long Blender render (16 CPU threads + the GPU at its 130 W limit, ~220 W on a 23
   GPU >= GUARD_SUSPEND_TEMP_C (83) until <= GUARD_RESUME_TEMP_C (74); 60 s at >= 95 % of the
   GPU power limit, or CPU throttling (% Performance Limit < 80) -> a COOL_S pause; after
   GUARD_MAX_BUSY_MIN of continuous heavy work, the same pause (duty cycle). It writes
-  data/logs/guard.log (GPU heat, power, used VRAM, CPU, RAM, the lock), synced line by line so it survives a power cut. Heat never kills a job
-  (paused, it cools down); only RAM still short after 3 min does. run() timeouts skip paused
-  time.
+  data/logs/guard.log (GPU heat, power, used VRAM, CPU, RAM, the lock), synced line by line
+  so it survives a power cut. Heat never kills a job (paused, it cools down); only RAM still
+  short after 3 min does. run() timeouts skip paused time.
 
 Stdlib only above the "studio side" line: the voice service (its own venv) loads this file by
 path through gpu_lock.py. GUARD_NVIDIA_SMI overrides the nvidia-smi command (tests: none).

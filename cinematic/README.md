@@ -57,7 +57,14 @@ for every shot not cached yet). Example: `shotlists/proof.json`.
   resolved shot and the engine's files); the shots end to end are the track
   (`<media root>/troupe/tracks/`). Cost: `shotlists/proof.json` (8 shots, 28 actors built,
   11 s of video) took 18.6 min, about 1.7 minutes per second of video (a one-actor 1 s shot:
-  ~1.1 min). Cached shots cost nothing on a re-render.
+  ~1.1 min). Cached shots cost nothing on a re-render. Each uncached shot is its own Blender
+  call (step 177): a crash loses one shot.
+- VRAM (step 177): every scene image is shared (one copy per file) and crushed to 1024 px for
+  faces and outfits (`cinematic.TEXTURE_PX`), 512 for the rest; the shadow pool is 256 MB.
+  `python -m src.studio.troupe measure <shots.json> <out> [shot] [frame]` renders one frame
+  (default: the shot with the most actors, its middle frame) and reports Blender's peak VRAM
+  (nvidia-smi, minus the baseline) and the scene's texture MB (`<out>/measure.json`, the
+  still beside it). Proof dinner of 7: 2.29 GB -> 1.20 GB, textures 601 -> 121 MB.
 
 | Piece | Source | License |
 |---|---|---|
