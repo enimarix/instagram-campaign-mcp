@@ -27,6 +27,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler downloader setup|update|status  # Reel downloader service (063a)
   python -m src.scheduler restore <backup> [--yes]  # put a nightly backup back (097)
   python -m src.scheduler doctor              # is everything installed? (100)
+  python -m src.scheduler web build           # rebuild web/dist (`up` does when stale, 175)
 
 Stories expire after 24h and are judged on a snapshot taken at 20h or later,
 so they must be snapshotted often; the worker does it every hour (src/worker.py).
@@ -119,6 +120,7 @@ async def _up(host: str, port: int) -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     _close_dead_runs(settings)
+    _rebuild_website(settings)
     server = uvicorn.Server(uvicorn.Config(create_app(settings), host=host, port=port))
     voice = _start_voice(settings)
     task = asyncio.create_task(_worker_after_voice(settings, voice))
@@ -146,6 +148,45 @@ def _close_dead_runs(settings: InstagramMCPSettings) -> None:
             store.close()
     except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: the worker says so
         print(f"agent runs not checked: {e!r}", file=sys.stderr, flush=True)
+
+
+def _rebuild_website(settings: InstagramMCPSettings) -> None:
+    """web/dist rebuilt when a source is newer, before serving (175). A failure keeps the
+    old site and shows as a website alert; nothing here stops the API from starting."""
+    from .studio import website
+
+    try:
+        if website.stale(settings):
+            print("website: sources changed since the last build, rebuilding web/dist",
+                  file=sys.stderr, flush=True)
+        store = CampaignStore(settings.database_path)
+        try:
+            result = website.rebuild_if_stale(settings, store)
+        finally:
+            store.close()
+    except Exception as e:  # noqa: BLE001 - e.g. a newer DB schema: the worker says so
+        print(f"website not rebuilt: {e!r}", file=sys.stderr, flush=True)
+        return
+    if result is not None:
+        print("website: rebuilt" if result["ok"] else
+              f"website: the site could not be rebuilt, the old one is served: {result['error']}",
+              file=sys.stderr, flush=True)
+
+
+def _web(args: argparse.Namespace) -> int:
+    """`web build`: build the website now, whatever its age (175)."""
+    from .studio import website
+
+    settings = get_settings()
+    result = website.build(settings)
+    with suppress(Exception):  # the result shows as an alert; no database: still built
+        store = CampaignStore(settings.database_path)
+        try:
+            website.record(store, result)
+        finally:
+            store.close()
+    print(json.dumps(result, indent=2))
+    return 0 if result["ok"] else 1
 
 
 def _start_voice(settings: InstagramMCPSettings):
@@ -520,6 +561,9 @@ def main(argv: list[str] | None = None) -> None:
     fp.add_argument("--clips", action="store_true",
                     help="Also the demo films, up to 20 MB each (~15 MB a style)")
     fp.add_argument("--force", action="store_true", help="Download again files already there")
+    sub.add_parser("web", help="The website (web/)").add_subparsers(
+        dest="web_command", required=True).add_parser(
+        "build", help="npm run build into web/dist now (`up` does it when web/ changed)")
     sub.add_parser("doctor", help="Check what the studio needs (ffmpeg, Node, website, "
                                   "downloader, Claude Code, .env); changes nothing")
     args = parser.parse_args(argv)
@@ -544,6 +588,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_restore(args))
     if args.command == "doctor":
         sys.exit(_doctor())
+    if args.command == "web":
+        sys.exit(_web(args))
     if args.command == "style-requests":
         sys.exit(_style_requests(args))
     if args.command == "styles":
