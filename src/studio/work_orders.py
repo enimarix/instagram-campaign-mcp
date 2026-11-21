@@ -59,9 +59,14 @@ AGENT_KEYS = ("id", "source", "source_id", "pick_id", "mode", "style", "instruct
               "permalink", "own_reel", "sender_username", "topic", "caption_quote", "likes",
               "comments", "views", "created_at", "skip_reason", "idea_id", "asset_id",
               "from_asset_id")
+# idea_hook: what the AI wrote for the order; video_status: its newest video's (rendering,
+# ready, failed...), so « Créer » (174) can show the stage between in_production and in_feed
 _ROWS = ("SELECT w.*, COALESCE(s.url, p.reel_url) AS permalink, s.author, s.stats,"
-         " p.sender_username, p.received_at FROM work_orders w"
-         " LEFT JOIN sources s ON s.id = w.source_id LEFT JOIN dm_picks p ON p.id = w.pick_id")
+         " p.sender_username, p.received_at, i.hook AS idea_hook,"
+         " (SELECT a.status FROM assets a WHERE a.idea_id = w.idea_id ORDER BY a.id DESC"
+         "  LIMIT 1) AS video_status FROM work_orders w"
+         " LEFT JOIN sources s ON s.id = w.source_id LEFT JOIN dm_picks p ON p.id = w.pick_id"
+         " LEFT JOIN ideas i ON i.id = w.idea_id")
 _MINE = "(w.origin != 'trend')"  # a _select filter key: 1 = the owner's own sends
 
 

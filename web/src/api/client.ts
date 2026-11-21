@@ -991,6 +991,9 @@ export type WorkOrder = {
   analysis: string | null // status analysed: the AI's analysis, no video
   idea_id: number | null
   asset_id: number | null
+  updated_at: string // the last change (stage, note, block): « Créer » shows the time in stage
+  idea_hook: string | null // what the AI wrote for it (its idea), once started (174)
+  video_status: string | null // its newest video: rendering, ready, failed… (174)
   // what the Reel was (trend orders; a DM Reel has none until downloaded); caption: other people's words
   topic: string | null
   caption_quote: string | null

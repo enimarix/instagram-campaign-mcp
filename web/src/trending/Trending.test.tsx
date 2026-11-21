@@ -34,7 +34,7 @@ const order = (id: number, over: Partial<WorkOrder> = {}): WorkOrder => ({
   created_at: hoursAgo(1), permalink: `https://www.instagram.com/reel/D${id}/`, sender_username: 'amine_xenima',
   received_at: hoursAgo(2), source: 'dm', embed_url: `https://www.instagram.com/reel/D${id}/embed`, topic: null,
   caption_quote: null, likes: null, comments: null, views: null, thumbnail_url: null, style: null,
-  from_asset_id: null, ...over,
+  from_asset_id: null, updated_at: hoursAgo(1), idea_hook: null, video_status: null, ...over,
 })
 
 // GET /api/styles (138): one button per enabled style; a turned-off one shows no button
