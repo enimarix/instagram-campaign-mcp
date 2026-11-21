@@ -39,6 +39,10 @@ ROOT = Path(__file__).resolve().parents[2] / "cinematic"
 # deleted them). Blender gets the same path (_run), for the engine's kit.py.
 TOOLS = Path(os.environ.get("CINEMATIC_TOOLS") or ROOT / "tools")
 BLENDER = TOOLS / "blender-5.2.4-windows-x64" / "blender.exe"
+# Blender draws through Vulkan, not OpenGL (176): on the owner's laptop (RTX 3070 Laptop) an
+# EEVEE render through OpenGL powered the PC off six times the moment the GPU went to full
+# load; the same shots through Vulkan render clean (and faster). "" = Blender's default.
+GPU_BACKEND = os.environ.get("CINEMATIC_GPU_BACKEND", "vulkan")
 RHUBARB = TOOLS / "Rhubarb-Lip-Sync-1.14.0-Windows" / "rhubarb.exe"
 
 
@@ -255,7 +259,8 @@ def blender(args: Sequence[Any], what: str, timeout_s: float) -> None:
     a launch anywhere else. Its threads match its share of the CPUs (171)."""
     exe = find_blender()
     with guard.gpu(what, "blender"):
-        _run([exe, "-t", guard.heavy_cpus(), *args], "Blender", timeout_s)
+        backend = ["--gpu-backend", GPU_BACKEND] if GPU_BACKEND else []
+        _run([exe, *backend, "-t", guard.heavy_cpus(), *args], "Blender", timeout_s)
 
 
 def _voice_path(p: Props, media_root: PathLike) -> Optional[Path]:

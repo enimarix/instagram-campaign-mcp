@@ -107,3 +107,5 @@ the photoreal plates, `motion/src/templates/Macro3D/` composes the word-by-word 
 - Cost (RTX laptop GPU, EEVEE 48 samples): about 0.6 s per frame, so a 40 s video is about
   12-15 minutes of Blender plus the Remotion pass; re-renders reuse the cached shots.
 
+
+GPU backend: every Blender launch uses `--gpu-backend vulkan` (step 176; OpenGL powered the laptop off). Override with `CINEMATIC_GPU_BACKEND`.

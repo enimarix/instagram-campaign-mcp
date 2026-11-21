@@ -495,8 +495,9 @@ def test_tools_get_thread_counts_to_match(monkeypatch, tmp_path):
                         subprocess.CompletedProcess(cmd, 0, b"", b""))
     monkeypatch.setattr(cinematic, "find_blender", lambda: "blender")
     monkeypatch.setattr(guard, "gpu", lambda what, kind: contextlib.nullcontext())
+    monkeypatch.setattr(cinematic, "GPU_BACKEND", "vulkan")
     cinematic.blender(["-b", "-P", "x.py"], "Blender test", 60)
-    assert seen[-1][:4] == ["blender", "-t", "8", "-b"]
+    assert seen[-1][:6] == ["blender", "--gpu-backend", "vulkan", "-t", "8", "-b"]  # 176
     monkeypatch.setattr(ffmpeg, "find_ffmpeg", lambda: "ffmpeg")
     ffmpeg.run(["-i", "in.mp4", "-c:v", "libx264", "out.mp4"], timeout_s=60)
     assert seen[-1][-3:] == ["-threads", "8", "out.mp4"]
