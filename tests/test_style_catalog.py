@@ -3,6 +3,7 @@ merged with a tiny fake Lemo-Opuscar library; favourites; ✦ styles not selecta
 preview fetch (respx, no network) and the API."""
 
 import json
+import os
 
 import httpx
 import pytest
@@ -120,7 +121,6 @@ def test_parse_is_cached_by_mtime(store, settings, lib):
     assert sc._parse.cache_info().hits >= hits + 3
     md = lib / "styles" / "watercolor" / "STYLE.md"
     md.write_text("# Aquarelle — Style Prompt\n\n> Nouvelle essence.\n", "utf-8")
-    import os
     st = md.stat()
     os.utime(md, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
     w = {e["id"]: e for e in sc.lemo_styles(settings)}["lemo:watercolor"]
