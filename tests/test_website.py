@@ -115,6 +115,7 @@ def test_cli_web_build_builds_whatever_its_age(web, monkeypatch, capsys):
     root, settings = web
     calls = fake_npm(monkeypatch)
     monkeypatch.setattr(scheduler, "get_settings", lambda: settings)
+    monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)  # keeps capsys' file
     with pytest.raises(SystemExit) as e:
         scheduler.main(["web", "build"])
     assert e.value.code == 0 and len(calls) == 1
