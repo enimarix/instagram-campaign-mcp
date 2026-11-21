@@ -208,7 +208,7 @@ def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
     log.touch()
     status, summary, usage = "failed", "interrupted", None
     try:
-        style = lemo.style_info(order["style"], settings.lemo_library)
+        style = lemo.style_info(order["style"], settings)
         exe = preflight(settings)
         ws = prepare_workspace(settings, order_id, lemo.film_brief(
             settings, order, style, _from_video(store, order)))

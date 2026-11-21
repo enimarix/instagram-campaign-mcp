@@ -69,9 +69,12 @@ def _fake_cli(tmp_path: Path) -> str:
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
     lib = tmp_path / "lemo-opuscar"
-    (lib / "styles" / "watercolor").mkdir(parents=True)
-    (lib / "styles" / "watercolor" / "style.json").write_text(json.dumps(
-        {"slug": "watercolor", "en": "Watercolor Brush", "line": "A painted walk."}))
+    for slug, needs in (("watercolor", []), ("collage", ["image-generation"])):
+        (lib / "styles" / slug).mkdir(parents=True)
+        (lib / "styles" / slug / "STYLE.md").write_text(
+            f"# {slug.title()} Brush — Style Prompt\n\n> A painted walk. More.\n",
+            encoding="utf-8")
+        (lib / "styles" / slug / "style.json").write_text(json.dumps({"needs": needs}))
     skill = tmp_path / "skill"
     (skill / "scripts").mkdir(parents=True)
     (skill / "SKILL.md").write_text("---\nname: lemo-opuscar\n---\n")
@@ -182,6 +185,8 @@ def test_lemo_styles_are_checked_in_the_library(store, cfg):
     for bad in ("lemo:nope", "lemo:../x", "lemo:"):
         with pytest.raises(ValueError, match="unknown Lemo-Opuscar style"):
             _order(store, bad)
+    with pytest.raises(ValueError, match="générateur d'images"):
+        _order(store, "lemo:collage")  # shown in the catalog, not selectable
 
 
 def test_lemo_orders_never_reach_the_agent(store, cfg, settings):

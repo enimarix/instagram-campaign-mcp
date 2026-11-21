@@ -1,8 +1,9 @@
 """
 Lemo-Opuscar films (step 173): an order in one of the library's ~100 styles becomes a video.
 
-A style id is `lemo:<slug>`, the slug of a folder `<LEMO_LIBRARY>/styles/<slug>/` with a
-style.json (step 172's catalog lists them for the owner). Unlike our templates, a Lemo film
+A style id is `lemo:<slug>`, a selectable Lemo entry of step 172's catalog
+(style_catalog.lemo_styles: a folder `<LEMO_LIBRARY>/styles/<slug>/`, not one that needs an
+image generator). Unlike our templates, a Lemo film
 is written as code by a Claude Code session (src/agent/film.py) from the film brief made
 here (agent/playbooks/lemo-film.md filled in per order). It delivers `film/final.mp4` and
 `film/post.json` in its workspace; register_film() copies the film into the media folder
@@ -22,15 +23,14 @@ from typing import Any, Dict, List, Optional
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore
-from . import media
+from . import media, style_catalog
 from .assets import DESCRIPTION_CHARS
 from .render import enqueue_render
 
 REPO = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO / "agent" / "playbooks" / "lemo-film.md"
 GPU_RUN = REPO / "src" / "studio" / "gpu_run.py"
-PREFIX = "lemo:"
-SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+PREFIX = style_catalog.LEMO_PREFIX
 FILM_DIR = "film"  # the film's project folder inside its workspace
 DEFAULT_TTS = "http://127.0.0.1:8766/tts"
 HOOK_CHARS = 200
@@ -44,20 +44,18 @@ def is_lemo(style: Optional[str]) -> bool:
     return bool(style) and style.startswith(PREFIX)
 
 
-def style_info(style: str, library: Optional[str] = None) -> Dict[str, Any]:
-    """{id, slug, label, line} of a `lemo:<slug>` style; ValueError when the library has no
-    such style (or the id is not a Lemo one)."""
-    slug = style[len(PREFIX):] if is_lemo(style) else ""
-    lib = Path(library or get_settings().lemo_library).expanduser()
-    path = lib / "styles" / slug / "style.json"
-    if not SLUG.match(slug) or not path.is_file():
-        raise ValueError(f"unknown Lemo-Opuscar style {style!r} (no {path})")
-    try:
-        meta = json.loads(path.read_text(encoding="utf-8"))
-    except ValueError:
-        meta = {}
-    return {"id": style, "slug": slug, "label": meta.get("en") or slug,
-            "line": meta.get("line") or ""}
+def style_info(style: str, settings: Optional[InstagramMCPSettings] = None
+               ) -> Dict[str, Any]:
+    """{id, slug, label, line} of a selectable `lemo:<slug>` style of the catalog;
+    ValueError when there is no such style or it cannot be made here."""
+    entries = style_catalog.lemo_styles(settings or get_settings()) if is_lemo(style) else []
+    entry = next((e for e in entries if e["id"] == style), None)
+    if entry is None:
+        raise ValueError(f"unknown Lemo-Opuscar style {style!r}")
+    if not entry["selectable"]:
+        raise ValueError(f"{entry['label']} ({style}): {entry['why_not']}")
+    return {"id": style, "slug": style[len(PREFIX):], "label": entry["label"],
+            "line": entry["essence"] or ""}
 
 
 def check_style(style: str) -> str:
