@@ -101,8 +101,8 @@ export default function CreatePage() {
   useEffect(() => { void loadCatalog(); void reload() }, [loadCatalog, reload])
   useEffect(() => {
     if (!orders?.some((o) => OPEN.includes(o.status))) return
-    const t = setTimeout(() => void reload(), POLL_MS)
-    return () => clearTimeout(t)
+    const t = setInterval(() => void reload(), POLL_MS) // a failed reload does not stop it
+    return () => clearInterval(t)
   }, [orders, reload])
 
   const { ids, reel } = parsePrompt(draft.text)
@@ -119,7 +119,8 @@ export default function CreatePage() {
   const plan = draft.text.trim() ? planOrders(draft) : []
   const length = instruction(draft).length
   const missing = ids.filter((id) => assets[id] === null)
-  const blocked = !plan.length || missing.length > 0 || (plan[0]?.kind === 'create' && length > INSTRUCTION_MAX)
+  const tooLong = plan[0]?.kind === 'create' && length > INSTRUCTION_MAX
+  const blocked = !plan.length || missing.length > 0 || tooLong
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -139,10 +140,12 @@ export default function CreatePage() {
     setBusy(false)
     const sent = plan.length - failed.length
     if (sent) toast({ message: sent > 1 ? `${sent} vidéos dans la pile.` : 'Vidéo dans la pile.' })
-    if (failed.length) {
-      setError(failed.join('\n'))
-      set({ styles: draft.styles.filter((s) => left.has(s)) }) // what went through is not sent twice
-    } else setDraft(EMPTY)
+    if (failed.length) setError(failed.join('\n'))
+    // what went through is never sent twice: with one order per style only the failed styles
+    // stay; a restyle of several videos (orders per video and style) is cleared once one went
+    const perStyle = plan.length === draft.styles.length
+    if (!failed.length || (sent && !perStyle)) setDraft(EMPTY)
+    else if (sent) set({ styles: draft.styles.filter((s) => left.has(s)) })
     void reload()
   }
 
@@ -172,7 +175,7 @@ export default function CreatePage() {
           onChange={(address) => set({ address })} />
         <Choice label="Durée" options={Object.entries(LENGTH).map(([id, [text]]) => [id as Length, text])} value={draft.length}
           onChange={(length) => set({ length })} />
-        {length > INSTRUCTION_MAX && <p className="text-sm text-danger">Trop long : {length}/{INSTRUCTION_MAX} caractères.</p>}
+        {tooLong && <p className="text-sm text-danger">Trop long : {length}/{INSTRUCTION_MAX} caractères.</p>}
         {missing.length > 0 && <p className="text-sm text-danger">Pas de vidéo {missing.map((i) => `#${i}`).join(', ')} dans le studio.</p>}
         {error && <p role="alert" className="text-sm whitespace-pre-line text-danger">{error}</p>}
         <Button type="submit" variant="primary" size="lg" loading={busy} disabled={blocked} className="w-full">
