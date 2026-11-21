@@ -12,9 +12,9 @@ import pytest
 
 from src.agent import film, runner, schedule
 from src.config import InstagramMCPSettings
+from src.store import to_iso, utcnow
 from src.studio import gpu_run, lemo, media, work_orders
 from src.studio.assets import transition
-from src.store import to_iso, utcnow
 
 TOKEN = "IGQ-film-secret-789"
 SAMPLE = Path(__file__).resolve().parents[1] / "src" / "studio" / "samples" / "sample.mp4"
@@ -35,9 +35,10 @@ seen = {"args": args, "cwd": os.getcwd(), "env": dict(os.environ),
 Path(os.environ["FAKE_CLAUDE_SEEN"]).write_text(json.dumps(seen))
 if mode == "sleep":
     time.sleep(60)
-if mode in ("success", "QC"):
+if mode in ("success", "QC", "bare"):
     Path("film").mkdir(exist_ok=True)
     Path("film/final.mp4").write_bytes(Path(os.environ["FAKE_FILM"]).read_bytes())
+if mode in ("success", "QC"):
     Path("film/post.json").write_text(json.dumps({
         "hook": "Où partent vos calories ?", "script": "Disons 2 000 kcal par jour.",
         "caption": "Où partent vos 2 000 kcal ? Envoyez ça à un ami.",
@@ -195,6 +196,12 @@ def test_lemo_orders_never_reach_the_agent(store, cfg, settings):
     assert work_orders.get_order(store, order["id"])["blocked_reason"] is None
 
 
+def test_a_lemo_style_is_for_owner_mode_only(store, cfg):
+    order = _order(store)
+    with pytest.raises(ValueError, match="your own orders only"):
+        work_orders.set_instruction(store, order["id"], "autre chose", mode="react")
+
+
 def test_a_change_order_may_remake_a_video_in_a_lemo_style(store, cfg):
     idea = store.add_idea("motion", hook="h")
     asset = store.add_asset(idea["id"])
@@ -226,6 +233,20 @@ def test_a_film_reaches_the_inbox(store, cfg, judged, tmp_path):
     assert idea["hook"] == "Où partent vos calories ?"
     assert idea["citations"] == [{"url": "https://www.fao.org/x", "title": "FAO 2004"}]
     assert TOKEN not in Path(run["log_path"]).read_text()
+
+
+def test_a_film_without_post_json_still_carries_the_ai_label(store, cfg, judged,
+                                                              monkeypatch):
+    from src.studio.publish import ai_generated
+
+    monkeypatch.setenv("FAKE_CLAUDE", "bare")
+    order = _order(store)
+    assert film.run_film(store, cfg, order["id"])["status"] == "succeeded"
+    asset = store.get_asset(work_orders.get_order(store, order["id"])["asset_id"])
+    idea = store.get_idea(asset["idea_id"])
+    assert idea["hook"] == order["instruction"] == asset["caption"]
+    assert idea["script"] and ai_generated(asset, idea)
+    assert asset["best_before"]
 
 
 @pytest.mark.parametrize("mode, why", [("fail", "error_max_turns"),

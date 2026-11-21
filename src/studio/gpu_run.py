@@ -11,14 +11,19 @@ it. Never the voice service call: that service takes the lock itself.
 
 from __future__ import annotations
 
+import os
 import sys
-from pathlib import Path
-from typing import List, Optional
+
+if not __package__:  # run by path from a film's folder: the repo root replaces this folder
+    # on the path before any other import (src/studio/token.py, calendar.py ... would shadow
+    # the stdlib's)
+    sys.path[0] = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from typing import List, Optional  # noqa: E402
 
 if __package__:
     from . import gpu_lock, guard
-else:  # run by path from a film's folder: the repo root on the path, then the package
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+else:
     from src.studio import gpu_lock, guard
 
 NEED_VRAM_GB = 1.5  # a film's headless Chrome + encode (~33 W, measured on the 3 test films)

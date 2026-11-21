@@ -34,6 +34,7 @@ SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FILM_DIR = "film"  # the film's project folder inside its workspace
 DEFAULT_TTS = "http://127.0.0.1:8766/tts"
 HOOK_CHARS = 200
+SCRIPT_CHARS = 8000
 # Normalise to our spec (1080x1920, 30 fps, H.264 + AAC) and loudness; a film is already
 # vertical, so the crop cuts nothing.
 RECIPE = {"version": 1, "ops": [{"op": "fit_vertical", "mode": "crop"}]}
@@ -95,6 +96,13 @@ def _post(film: Path) -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _notes(film: Path) -> Optional[str]:
+    try:
+        return _text((film / "NOTES.md").read_text(encoding="utf-8"), SCRIPT_CHARS)
+    except OSError:
+        return None
+
+
 def _text(value: Any, limit: int) -> Optional[str]:
     if not isinstance(value, str):
         return None
@@ -125,10 +133,13 @@ def register_film(store: CampaignStore, settings: InstagramMCPSettings,
     dest = media.resolve(settings.media_root, rel)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(final, dest)
+    from .production import default_best_before  # here: production imports work_orders
+
     hook = _text(post.get("hook"), HOOK_CHARS) or idea["hook"]
-    script = _text(post.get("script"), 8000)
+    # never empty: a script marks the video AI-made for Instagram's label (publish.py)
+    script = _text(post.get("script"), SCRIPT_CHARS) or _notes(film) or hook
     with store._tx() as c:  # the idea was made at the film's start from the instruction
-        c.execute("UPDATE ideas SET hook=?, script=COALESCE(?, script), citations=? WHERE id=?",
+        c.execute("UPDATE ideas SET hook=?, script=?, citations=? WHERE id=?",
                   (hook, script, json.dumps(_citations(post.get("sources"))), idea["id"]))
     asset = store.add_asset(
         idea["id"], batch_date=idea["batch_date"],
@@ -136,4 +147,6 @@ def register_film(store: CampaignStore, settings: InstagramMCPSettings,
         caption=_text(post.get("caption"), 2200) or hook,
         description=_text(post.get("description"), DESCRIPTION_CHARS)
         or f"Un film Lemo-Opuscar ({idea['style']}) : {hook}"[:DESCRIPTION_CHARS])
+    asset = store.update_asset(asset["id"],
+                               best_before=default_best_before(store, settings, asset))
     return {"asset": asset, "job": enqueue_render(store, asset["id"])}

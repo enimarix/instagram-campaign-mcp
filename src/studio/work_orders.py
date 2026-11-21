@@ -199,7 +199,12 @@ def set_instruction(store: CampaignStore, order_id: int, instruction: str,
     if mode is not None and mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
     order = get_order(store, order_id)
-    style = order["style"] if style is ... else _style(store, style, mode or order["mode"])
+    if style is ...:  # kept; a Lemo style still needs mode owner
+        style = order["style"]
+        if lemo.is_lemo(style):
+            _style(store, style, mode or order["mode"])
+    else:
+        style = _style(store, style, mode or order["mode"])
     now = to_iso(utcnow())
     with store._tx() as c:
         moved = c.execute(
