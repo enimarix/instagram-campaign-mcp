@@ -212,5 +212,18 @@ def test_blender_runs_through_the_wrapper(tmp_path, monkeypatch):
     troupe._blender(jobs, tmp_path, 10)
     cfg = json.loads((tmp_path / "shots.json").read_text(encoding="utf-8"))
     assert cfg["fps"] == 24 and cfg["size"] == [720, 1280] and cfg["shots"][0]["id"] == "k1"
+    assert cfg["texture_px"] == cinematic.TEXTURE_PX == 1024  # 177: the engine's texture clamp
     assert ran[0][0][-1] == tmp_path / "shots.json"
     assert ran[0][1] >= 120 + 24 * troupe.S_PER_FRAME + troupe.S_PER_ACTOR
+
+
+def test_engine_clamps_textures_and_shares_copies():
+    """177's VRAM diet, checked in the engine's source (Blender never runs in tests): both
+    runs crush every scene image to the config's texture_px after sharing the copies."""
+    engine = cinematic.ROOT / "engine"
+    for run in ("troupe.py", "shot.py"):
+        assert 'crush_textures(' in (engine / run).read_text(encoding="utf-8")
+        assert '.get("texture_px", 1024))' in (engine / run).read_text(encoding="utf-8")
+    people = (engine / "people.py").read_text(encoding="utf-8")
+    assert "def crush_textures(px=1024):\n" in people and "    share_images()\n" in people
+    assert '"shadow_pool_size", "256"' in (engine / "stage.py").read_text(encoding="utf-8")

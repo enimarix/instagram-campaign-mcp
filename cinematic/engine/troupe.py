@@ -2,12 +2,13 @@
 
     blender -b -P cinematic/engine/troupe.py -- <shots.json>
 
-<shots.json>: out, fps, size, samples, shots [{id, set, light, frames, speed, seed, stills,
+<shots.json>: out, fps, size, samples, texture_px (the largest image side), shots [{id, set, light, frames, speed, seed, stills,
 camera {kind, on}, cast [{who, look (its cast.json entry), spot {at, facing, seat, z}, facing,
 to (a spot to walk to), action, face, face_at, offset}]}], all resolved and checked by
 troupe.py. Every shot is its own scene: the set (engine/<sets.json module>.py), the actors
 (engine/people.py) and one camera (engine/stage.py). Writes out/<id>/f_####.png (frames
-1..frames) or out/<id>/still_<n>.png for each frame in `stills`.
+1..frames) or out/<id>/still_<n>.png for each frame in `stills`, and out/<id>/stats.json
+(the scene's texture memory, 177).
 """
 import importlib
 import json
@@ -56,7 +57,7 @@ def render_shot(cfg, shot):
         if move.get("lie"):
             people.ground(body, rig)
         actors[a["who"]] = rig
-    people.crush_textures()
+    people.crush_textures(cfg.get("texture_px", 1024))
     stage.lights(sun or stage.sun_dir(preset), preset)
     s.frame_start, s.frame_end = 1, frames
     s.frame_set(1)

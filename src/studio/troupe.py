@@ -159,12 +159,14 @@ def engine_hash() -> str:
 
 
 def shot_key(shot: Shot, engine: str) -> str:
-    spec = {**job(shot), "freeze": shot.freeze, "engine": engine, "size": SIZE, "samples": SAMPLES}
+    spec = {**job(shot), "freeze": shot.freeze, "engine": engine, "size": SIZE, "samples": SAMPLES,
+            "texture_px": cinematic.TEXTURE_PX}
     return hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def _blender(jobs: List[Dict[str, Any]], out: Path, timeout_s: float) -> None:
-    cfg = {"out": str(out), "fps": FPS, "size": list(SIZE), "samples": SAMPLES, "shots": jobs}
+    cfg = {"out": str(out), "fps": FPS, "size": list(SIZE), "samples": SAMPLES,
+           "texture_px": cinematic.TEXTURE_PX, "shots": jobs}
     cfg_path = out / "shots.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
     n = sum(len(j["stills"]) if j.get("stills") else j["frames"] for j in jobs)
