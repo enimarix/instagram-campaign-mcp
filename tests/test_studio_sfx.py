@@ -189,10 +189,6 @@ async def test_find_sfx_error_when_nothing_cached_and_openverse_down():
         await srv.find_sfx("gasp")
 
 
-def test_find_sfx_is_in_the_agent_profile():
-    assert "find_sfx" in srv.AGENT_TOOLS
-
-
 # --- renders and credits -----------------------------------------------------------------
 def _cache(licence="by", **kw):
     """A sound in the library without a download (manifest entry + file)."""

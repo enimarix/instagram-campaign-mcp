@@ -308,8 +308,10 @@ def _matches(query: str, limit: int) -> tuple:
         hits = sum(w in hay for w in words)
         if hits:
             (full if hits == len(words) else part).append((-hits, e["licence"] != "cc0", e))
-    order = lambda xs: [_brief(e) for *_, e in sorted(xs, key=lambda x: x[:2])][:limit]  # noqa: E731
-    return order(full), order(part)
+    def best(xs: list) -> List[Dict[str, Any]]:  # most words, then CC0 first
+        return [_brief(e) for *_, e in sorted(xs, key=lambda x: x[:2])][:limit]
+
+    return best(full), best(part)
 
 
 def find_sfx(query: str, limit: int = 5, *, client: Optional[httpx.Client] = None
