@@ -44,6 +44,7 @@ from . import (  # render.py imports us
     listen,
     macro3d,
     media,
+    music,
     recipe,
     render,
     sfx,
@@ -374,10 +375,13 @@ def render_end_card(media_root: PathLike, props: Dict[str, Any], backdrop: Optio
 def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
                         template: str, props: Dict[str, Any], idea_id: Optional[int] = None,
                         asset_id: Optional[int] = None, caption: Optional[str] = None,
-                        voice: Optional[str] = None, actor: str = "agent") -> Dict[str, Any]:
+                        voice: Optional[str] = None, music_audio_id: Optional[str] = None,
+                        actor: str = "agent") -> Dict[str, Any]:
     """Store a motion recipe and queue its render; returns {asset, job} at once (the worker
     renders). New asset for `idea_id`, or a re-render of `asset_id` (failed: same asset;
-    ready: a child asset). Runs TTS first when the template has a script and no voice yet."""
+    ready: a child asset). Runs TTS first when the template has a script and no voice yet.
+    `music_audio_id`: an Instagram track (fetched with music.fetch) the video is cut to and
+    published with, in place of the template's bed (step 178)."""
     if (idea_id is None) == (asset_id is None):
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
     # 138: the template must be in the idea's style (one without takes the template's)
@@ -391,6 +395,10 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     credits = sfx.credits(v["props"])  # ValueError for a library sound not cached (150)
     if credits:  # the caption must carry them: submit_asset adds them, the publish guard checks
         env["sfx_credits"] = credits
+    if music_audio_id:  # the lines on the track's beat; publish attaches the track
+        props, env["ig_audio"] = music.apply(v["props"], settings.media_root, music_audio_id)
+        v = validate_props(template, props)
+        env["props"] = v["props"]
     if v["coverFrame"] is not None:  # the publish guard sends it to Instagram as the cover
         env["thumb_offset_ms"] = round(v["coverFrame"] * 1000 / v["fps"])
     if asset_id is not None:
