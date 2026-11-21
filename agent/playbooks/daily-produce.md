@@ -379,6 +379,11 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
      story's `character` (default) or the avocado; for Cutaway a small running mechanism
      (a view id; default the payoff's view); for Editorial the first anatomy character
      (default) or the tree; otherwise the template's default.
+   **Real sounds.** Where a template takes a sound (PixelSkit: each beat's `sfx`, the
+   `sting`), a real recording often lands better than a built-in blip: `find_sfx("boing")`
+   (English words: "fork drop", "crowd gasp", "whoosh") gives library sounds; put a
+   sound's `ref` (`ov:<id>`) in the prop. A CC BY sound's `credit` is added to the caption
+   by submit_asset: leave it there.
 3. `preview_motion(template, props)` returns stills. Look at them: the hook readable in
    the first frame, no text cut off or overflowing, nothing hidden in the bottom third
    (Instagram's caption area), nothing crowded. Fix the props and preview again (at most

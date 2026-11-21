@@ -290,6 +290,7 @@ The owner declined the first 8-bit FactQuest render ("not good at all") and aske
 ## Done
 
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 150 — Openverse sound effects — PR #181 (2026-11-21) — real recorded sfx (Freesound via Openverse, CC0 / CC BY only) cached and levelled, a starter pack command, `find_sfx` for the agent, `ov:<id>` in the templates, CC BY credits added to captions and enforced at queue.
 - [x] 175 — Studio hygiene — PR #180 (2026-11-21) — `up` rebuilds the site when web/src is newer (atomic swap, alert on failure, `ig-campaign web build`); jobs wait for RAM/VRAM with the GPU lock free, oldest first.
 - [x] 174 — « Créer » page — PR #179 (2026-11-21) — prompt box with #video chips and Reel links, style picker (Auto, favourites, the full gallery, up to 4 styles → one order each), la pile with live stages into the Inbox, the AI's hook, notes and cancel.
 - [x] 173 — Lemo engine — PR #178 (2026-11-21) — a work order in a lemo:<slug> style is made by a locked film run (headless Claude + the Lemo skill, no MCP, no secrets, time/daily caps, one at a time) → QC → Inbox; proof: video 43 (watercolor, proteins egg / lentils / Greek yogurt).
@@ -480,7 +481,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 
 ### Phase 5d — Studio tools (owner, 2026-11-19: « to be installed and tested and used for future videos when needed »)
 - [x] 149 — Earshot audio check (Leonxlnx/earshot, MIT, CPU-only) — **verify in docs**; every render's QC also listens: each sfx lands on its cut, voice ≥ 12 LU above music+sfx under speech, no harsh peaks (the Pixel ciné thunder case), a fail reason the agent can act on — deps: 148 · touches: `src/studio/qc.py`, a new `src/studio/listen.py`, `tests/`
-- [ ] 150 — Openverse sound effects (WordPress/openverse API) — **verify in docs**; search + download sfx on demand, only licences allowing commercial use (CC0, CC-BY; never NC/ND), licence + attribution recorded per file (ASSETS_LICENSES / asset credits), cached, picked by the agent per scene — deps: 149 · touches: a new `src/studio/sfx.py`, `motion/` assets loader, `tests/`
+- [x] 150 — Openverse sound effects (WordPress/openverse API) — **verify in docs**; search + download sfx on demand, only licences allowing commercial use (CC0, CC-BY; never NC/ND), licence + attribution recorded per file (ASSETS_LICENSES / asset credits), cached, picked by the agent per scene — deps: 149 · touches: a new `src/studio/sfx.py`, `motion/` assets loader, `tests/`
 - [ ] 151 — HyperFrames spike (heygen-com/hyperframes, Apache-2.0) — **verify in docs**; install, render one macroBody scene (same brief as a Remotion template), compare quality / speed / RAM+GPU against Remotion under the GPU lock, write the keep-or-drop decision in DECISIONS — deps: 145 · touches: `vendor/hyperframes/` (spike), `docs/DECISIONS.md`
 - [x] 152 — (no PR: superseded by 163–165, owner 2026-11-20 « do both » on the AI's two invented styles) Blender upgrade: several characters, several sets, dance / walk cycles
 - [x] 153 — (no PR: merged into 154) owner DM order 10's reference Reel (Dfifv_OsUaL, same creator) is the same Macro 3D look as 154: its video « de l'assiette au muscle » is made in 154's style
@@ -508,6 +509,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 - [x] 160 — Tests never touch the real machine: `tests/conftest.py` points `AGENT_WORKSPACE` and `AGENT_LOG_DIR` (and any other home-folder path: `~/.ig-campaign` GPU lock, caches) at a session temp dir, and the real-render test is opt-in (env flag). On 2026-11-19 a pytest run in a dev worktree rebuilt the real `~/.ig-campaign-agent` (MCP config pointing at the deleted wt/155 venv, safety marker gone) and every AI run failed from 23:17 to 01:07 UTC (runs 11–14, incl. the nightly analysis); plain pytest also renders 2 real videos when motion/node_modules exists. Find the leaking test(s) and add a guard test that fails if the suite writes under the real home paths. — deps: — · touches: `tests/conftest.py`, the leaking tests, `tests/test_studio_render*.py`
 
 ## Follow-ups (parked from reviews)
+- (150) Library sfx (`ov:<id>`) only in PixelSkit + <Sfx> so far: add sfx override props to the other templates; run the listen QC on newly fetched sounds.
 - (175) Voice load (6 GB) may starve behind back-to-back renders (admission polls every 10 s): give a long-waiting ticket priority over new jobs' admission.
 - (174) « Créer une vidéo » sheet and « Mes envois » should point to /create; an all-or-none create_videos service for multi-style sends.
 - (lead) `ig-campaign up` should rebuild web/dist when web/src is newer (the served site was 2 days stale after web merges).

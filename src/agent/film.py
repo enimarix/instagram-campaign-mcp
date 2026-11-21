@@ -42,7 +42,7 @@ from dotenv import dotenv_values
 
 from ..config import ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from ..studio import lemo, work_orders
+from ..studio import lemo, sfx, work_orders
 from ..studio.production import qc_summary
 from ..studio.seed import local_today
 from .proc import started as process_started
@@ -60,6 +60,7 @@ from .runner import (
     workspace_settings,
 )
 
+SFX = "sfx"  # the sound library's copy in the workspace (lemo-film.md)
 PLAYBOOK = "lemo-film"  # agent_runs.playbook of the films (and the brief's template name)
 SKILL = "lemo-opuscar"
 SKILL_CACHE = Path.home() / ".claude" / "plugins" / "cache" / "lemolab" / SKILL
@@ -109,6 +110,10 @@ def prepare_workspace(settings: InstagramMCPSettings, order_id: int, brief: str)
     shutil.copytree(skill_dir(settings), claude / "skills" / SKILL)
     (claude / "settings.json").write_text(json.dumps(workspace_settings(settings), indent=2))
     (ws / "BRIEF.md").write_text(brief, encoding="utf-8")
+    # 150: the sound library, copied in (the film may not read the studio's data/)
+    shutil.rmtree(ws / SFX, ignore_errors=True)
+    if sfx.manifest_path().is_file():
+        shutil.copytree(sfx.SFX_DIR, ws / SFX, ignore=shutil.ignore_patterns(".*", "*.tmp"))
     return ws
 
 

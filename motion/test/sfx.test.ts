@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { ASSETS } from "../src/assets.ts";
-import { BANG_SPEECH_DB, BED_LUFS, bedLevel, MUSIC_LUFS, SFX_PEAK_LUFS, type SfxId, sfxGain, sfxVolume, SPEECH_SFX_DB, speechSpans, VOICE_LUFS } from "../src/lib/duck.ts";
+import { BANG_SPEECH_DB, BED_LUFS, bedLevel, isLibrarySfx, LIBRARY_PEAK_LUFS, MUSIC_LUFS, SFX_PEAK_LUFS, type SfxId, sfxGain, sfxVolume, SPEECH_SFX_DB, speechSpans, VOICE_LUFS } from "../src/lib/duck.ts";
 
 const dB = (g: number) => 20 * Math.log10(g);
 const near = (a: number, b: number, msg?: string) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b} ${msg ?? ""}`);
@@ -48,4 +48,16 @@ test("no template plays a sound at a hand-set volume: only the voice is a plain 
       assert.match(tag, /src=\{(voice|props\.voice\.audioSrc)\}/, `${name}: ${tag} (sound effects go through <Sfx>)`);
     }
   }
+});
+
+test("a library sound (ov:<id>, step 150) plays from the library's peak, under the voice", () => {
+  const ov = "ov:a8032d83-dd12-4978-b1e7-2cc07779387d";
+  assert.ok(isLibrarySfx(ov));
+  for (const id of ["ov:", "ov:../x", "sfx-pop", "OV:A8032D83-DD12-4978-B1E7-2CC07779387D"]) assert.ok(!isLibrarySfx(id), id);
+  const spans = speechSpans([{ start_s: 1, end_s: 3 }]);
+  near(dB(sfxGain(spans, ov, 5)) + LIBRARY_PEAK_LUFS, VOICE_LUFS, "in a gap");
+  near(dB(sfxGain(spans, ov, 2)) + LIBRARY_PEAK_LUFS, VOICE_LUFS + SPEECH_SFX_DB, "on a word");
+  // The studio's cache (src/studio/sfx.py) sets every library sound to that same peak.
+  const py = readFileSync(new URL("../../src/studio/sfx.py", import.meta.url), "utf8");
+  assert.equal(Number(/^PEAK_LUFS = (-?[\d.]+)/m.exec(py)?.[1]), LIBRARY_PEAK_LUFS);
 });

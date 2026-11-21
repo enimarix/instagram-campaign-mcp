@@ -457,6 +457,24 @@ def _styles(args: argparse.Namespace) -> int:
     return 1 if result["failed"] else 0
 
 
+# --- sound effects (150) -------------------------------------------------------
+def _sfx(args: argparse.Namespace) -> int:
+    """`sfx seed`: the starter pack from Openverse; `sfx find`: what the agent's find_sfx
+    returns."""
+    from .studio import sfx
+
+    try:
+        if args.sfx_command == "seed":
+            result = sfx.seed(only=args.categories or None, force=args.force)
+        else:
+            result = sfx.find_sfx(" ".join(args.query), args.limit)
+    except (ValueError, RuntimeError) as e:
+        print(f"sfx: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 1 if result.get("failed") else 0
+
+
 # --- doctor (100) ---------------------------------------------------------
 def _doctor() -> int:
     from .studio.doctor import checks
@@ -561,6 +579,15 @@ def main(argv: list[str] | None = None) -> None:
     fp.add_argument("--clips", action="store_true",
                     help="Also the demo films, up to 20 MB each (~15 MB a style)")
     fp.add_argument("--force", action="store_true", help="Download again files already there")
+    sx = sub.add_parser("sfx", help="The sound-effects library (150, Openverse CC0 / CC BY)"
+                        ).add_subparsers(dest="sfx_command", required=True)
+    ss = sx.add_parser("seed", help="Fetch the starter pack (~40 sounds) into data/sfx/")
+    ss.add_argument("categories", nargs="*", metavar="CATEGORY",
+                    help="Only these categories (default: all)")
+    ss.add_argument("--force", action="store_true", help="Search again categories cached")
+    sf = sx.add_parser("find", help="Library sounds for a query (fetches when none fits)")
+    sf.add_argument("query", nargs="+")
+    sf.add_argument("--limit", type=int, default=5)
     sub.add_parser("web", help="The website (web/)").add_subparsers(
         dest="web_command", required=True).add_parser(
         "build", help="npm run build into web/dist now (`up` does it when web/ changed)")
@@ -594,6 +621,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_style_requests(args))
     if args.command == "styles":
         sys.exit(_styles(args))
+    if args.command == "sfx":
+        sys.exit(_sfx(args))
     if args.command in ("serve", "up"):
         from .api.auth import bind_error
 
