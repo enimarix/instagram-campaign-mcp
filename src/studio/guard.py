@@ -32,9 +32,9 @@ long Blender render (16 CPU threads + the GPU at its 130 W limit, ~220 W on a 23
   GPU >= GUARD_SUSPEND_TEMP_C (83) until <= GUARD_RESUME_TEMP_C (74); 60 s at >= 95 % of the
   GPU power limit, or CPU throttling (% Performance Limit < 80) -> a COOL_S pause; after
   GUARD_MAX_BUSY_MIN of continuous heavy work, the same pause (duty cycle). It writes
-  data/logs/guard.log (GPU heat, power, used VRAM, CPU, RAM, the lock), synced line by line
-  so it survives a power cut. Heat never kills a job (paused, it cools down); only RAM still
-  short after 3 min does. run() timeouts skip paused time.
+  data/logs/guard.log (GPU heat, power, used VRAM, graphics clock, CPU, RAM, the
+  lock), synced line by line so it survives a power cut. Heat never kills a job (paused, it
+  cools down); only RAM still short after 3 min does. run() timeouts skip paused time.
 
 Stdlib only above the "studio side" line: the voice service (its own venv) loads this file by
 path through gpu_lock.py. GUARD_NVIDIA_SMI overrides the nvidia-smi command (tests: none).
@@ -269,18 +269,19 @@ def _num(text: str) -> Optional[float]:
 
 
 def gpu_status() -> Optional[Dict[str, Optional[float]]]:
-    """{free_vram_gb, temp_c, power_w, power_limit_w, util_pct, used_vram_gb, total_vram_gb}
-    of the first NVIDIA GPU (the last five None when it does not say); None without
-    nvidia-smi."""
+    """{free_vram_gb, temp_c, power_w, power_limit_w, util_pct, used_vram_gb, total_vram_gb,
+    clock_mhz} of the first NVIDIA GPU (the last six None when it does not say); None without
+    nvidia-smi. clock_mhz is the graphics clock: above ~1600 the owner's clock cap is missing
+    (177: an uncapped 2100 MHz boost crashed the PC)."""
     try:
         free, temp, *rest = (_smi("--query-gpu=memory.free,temperature.gpu,power.draw,"
                                   "enforced.power.limit,utilization.gpu,memory.used,"
-                                  "memory.total") or [])[0][:7]
-        power, limit, util, used, total = (*map(_num, rest), None, None, None, None, None)[:5]
+                                  "memory.total,clocks.gr") or [])[0][:8]
+        power, limit, util, used, total, clock = (*map(_num, rest), *[None] * 6)[:6]
         return {"free_vram_gb": float(free) / 1024, "temp_c": float(temp), "power_w": power,
                 "power_limit_w": limit, "util_pct": util,
                 "used_vram_gb": None if used is None else used / 1024,
-                "total_vram_gb": None if total is None else total / 1024}
+                "total_vram_gb": None if total is None else total / 1024, "clock_mhz": clock}
     except (IndexError, ValueError):
         return None
 
@@ -614,6 +615,7 @@ class Watchdog:
         return {"ram": free_ram_gb(), "temp": g.get("temp_c"), "watts": g.get("power_w"),
                 "limit": g.get("power_limit_w"), "util": g.get("util_pct"),
                 "vram": g.get("used_vram_gb"), "vram_total": g.get("total_vram_gb"),
+                "clock": g.get("clock_mhz"),
                 "perf": cpu_perf_limit() if heavy else None}  # typeperf: only when it matters
 
     def _ours(self, pid: int) -> bool:
@@ -716,8 +718,9 @@ class Watchdog:
                     and (self.next_line is None or now >= self.next_line)):
             self.next_line = now + STATE_EVERY_S
             line = (f"GPU {_n(temp)} °C {_n(watts)}/{_n(limit)} W {_n(util)} % | "
-                    f"VRAM {_n(r.get('vram'), '.1f')}/{_n(r.get('vram_total'), '.1f')} GB used | "
-                    f"CPU limit {_n(perf)} % | RAM {_n(ram, '.1f')} GB free | "
+                    f"VRAM {_n(r.get('vram'), '.1f')}/{_n(r.get('vram_total'), '.1f')} GB used, "
+                    f"clock {_n(r.get('clock'))} MHz | CPU limit {_n(perf)} % | "
+                    f"RAM {_n(ram, '.1f')} GB free | "
                     f"lock {by or 'free'} | heavy {len(targets)}, paused {len(self.suspended)}"
                     + "".join(f" | {d}" for d in done))
             with contextlib.suppress(OSError):  # a full disk never stops the guarding

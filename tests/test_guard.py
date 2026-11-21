@@ -116,13 +116,15 @@ def test_gpu_status_reads_used_vram(monkeypatch):
     """177: guard.log shows the used VRAM; troupe.measure samples it."""
     rows = {"--query-gpu=memory.used": [["2150"]]}
     monkeypatch.setattr(guard, "_smi", lambda q: rows.get(q, [["5000", "61", "98.5", "130.0",
-                                                               "96", "3192", "8192"]]))
+                                                               "96", "3192", "8192", "1500"]]))
     g = guard.gpu_status()
     assert g["free_vram_gb"] == pytest.approx(5000 / 1024) and g["power_w"] == 98.5
     assert (g["used_vram_gb"], g["total_vram_gb"]) == pytest.approx((3192 / 1024, 8.0))
+    assert g["clock_mhz"] == 1500  # 177: shows whether the owner's clock cap is on
     assert guard.vram_used_gb() == pytest.approx(2150 / 1024)
     monkeypatch.setattr(guard, "_smi", lambda q: [["5000", "61", "[N/A]", "[N/A]", "[N/A]"]])
-    assert guard.gpu_status()["used_vram_gb"] is None  # an older nvidia-smi answer
+    old = guard.gpu_status()  # an older nvidia-smi answer
+    assert old["used_vram_gb"] is None and old["clock_mhz"] is None
 
 
 def test_no_nvidia_smi_means_no_gpu_check(monkeypatch):
@@ -417,7 +419,7 @@ def test_watchdog_guards_the_gpu_lock_holders_processes():
 def test_guard_log_has_a_line_per_action_and_every_30_s(tmp_path):
     log = tmp_path / "logs" / "guard.log"
     probe = {"ram": 18.2, "temp": 71.0, "watts": 98.0, "limit": 130.0, "util": 96.0,
-             "perf": 100.0, "vram": 2.14, "vram_total": 8.0}
+             "perf": 100.0, "vram": 2.14, "vram_total": 8.0, "clock": 1500.0}
     box = Box(probe, probe, probe, {**probe, "temp": 84.0}, log_path=log)
     dog = box.dog(children=(11,))
     for t in (0, 10, 30, 31):
@@ -425,9 +427,11 @@ def test_guard_log_has_a_line_per_action_and_every_30_s(tmp_path):
         dog.tick()
     lines = log.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 3  # 0 s, 30 s, and the pause at 31 s
-    assert lines[0].endswith("GPU 71 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used | CPU limit 100 % | "
+    assert lines[0].endswith("GPU 71 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used, clock 1500 MHz | "
+                             "CPU limit 100 % | "
                              "RAM 18.2 GB free | lock pid 7: Blender (dev) | heavy 1, paused 0")
-    assert lines[2].endswith("GPU 84 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used | CPU limit 100 % | "
+    assert lines[2].endswith("GPU 84 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used, clock 1500 MHz | "
+                             "CPU limit 100 % | "
                              "RAM 18.2 GB free | "
                              "lock pid 7: Blender (dev) | heavy 1, paused 1 | paused 1 heavy "
                              "job process(es) (GPU 84 °C): free RAM 18.2 GB, GPU 84 °C")

@@ -116,3 +116,11 @@ the photoreal plates, `motion/src/templates/Macro3D/` composes the word-by-word 
 
 
 GPU backend: every Blender launch uses `--gpu-backend vulkan` (step 176; OpenGL powered the laptop off). Override with `CINEMATIC_GPU_BACKEND`.
+
+GPU clock cap (step 177): the RTX 3070 Laptop boosts to ~2100 MHz (rated ~1600) and that
+boost was what powered the PC off (and the DPC_WATCHDOG bluescreen) under Blender, not VRAM.
+The owner's admin logon task `GPUClockCap` runs `nvidia-smi -lgc 210,1500` at every logon
+(the cap lasts until a reboot). With it the 8-shot proof (`shotlists/proof.json`, diet on)
+passed: 12.9 min, 130.8 W peak, 3.1 GB VRAM. guard.log lines show the graphics clock
+(`clock 1500 MHz`) beside the VRAM: a clock above ~1600 means the cap is missing. The studio
+never sets clocks itself (a Windows / NVIDIA setting: the owner's).
