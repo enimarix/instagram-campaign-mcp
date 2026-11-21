@@ -306,3 +306,11 @@ def test_motion_and_python_agree_on_the_library_peak():
     assert f'BUNDLE_DIR = "{sfx.BUNDLE_DIR}"' in Path(sfx.__file__).read_text("utf-8")
     assert f"`{sfx.BUNDLE_DIR}/" in (Path(motion.MOTION_DIR) / "src" / "components" /
                                      "Sfx.tsx").read_text("utf-8")
+
+
+def test_a_motion_recipe_keeps_its_sound_credits(tmp_path):
+    """179: the motion envelope forbade sfx_credits, so a render with a CC BY sound failed."""
+    from src.studio import render
+    env = {"kind": "motion", "template": "PixelSkit", "props": {},
+           "sfx_credits": ['Son : "Boing" par X, CC BY 4.0']}
+    assert render.validate_recipe(env, tmp_path)["sfx_credits"] == env["sfx_credits"]

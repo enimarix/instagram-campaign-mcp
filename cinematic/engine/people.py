@@ -59,13 +59,32 @@ def decimate(body, rig):
                 d.ratio = 0.6
 
 
-def crush_textures():
-    """Small textures, nearest filtering. Faces keep a bit more detail: that contrast is the look."""
+def share_images():
+    """One copy of each image file: MPFB loads a skin, hair or outfit again for every actor
+    wearing it (dad, uncle and chef share a skin), and each copy would sit in VRAM (177)."""
+    first = {}
+    for img in list(bpy.data.images):
+        if not img.filepath or not img.size[0]:
+            continue
+        key = (os.path.normcase(bpy.path.abspath(img.filepath)), img.colorspace_settings.name,
+               tuple(img.size))
+        if key in first:
+            img.user_remap(first[key])
+            bpy.data.images.remove(img)
+        else:
+            first[key] = img
+
+
+def crush_textures(px=1024):
+    """Small textures, nearest filtering, one copy each. Faces and outfits keep up to `px`
+    (they came at 2048-4096 and sat whole in VRAM, 177's diet), the rest 512: that contrast
+    is the look."""
+    share_images()
     for img in bpy.data.images:
         if img.size[0] == 0 or "@" in img.name or img.name.endswith(".hdr"):   # set textures are sized at load
             continue
         n = img.name.lower()
-        cap = 4096 if ("skin" in n or "male" in n or "female" in n) else 512
+        cap = px if ("skin" in n or "male" in n or "female" in n) else min(px, 512)
         w, h = img.size
         if max(w, h) > cap:
             k = cap / max(w, h)

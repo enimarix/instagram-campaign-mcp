@@ -79,6 +79,7 @@ class MotionRecipe(_Envelope):
     kind: Literal["motion"]
     template: str
     props: Dict[str, Any] = {}
+    sfx_credits: Optional[List[str]] = None  # CC BY library sounds' credit lines (150, 179)
 
 
 _ENVELOPE = TypeAdapter(Annotated[Union[FfmpegRecipe, MotionRecipe], Field(discriminator="kind")])
