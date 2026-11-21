@@ -163,7 +163,9 @@ def engine_hash() -> str:
 
 def shot_key(shot: Shot, engine: str, grade: str = cinematic.GRADE) -> str:
     spec = {**job(shot), "freeze": shot.freeze, "engine": engine, "size": SIZE, "samples": SAMPLES,
-            "texture_px": cinematic.TEXTURE_PX, "grade": grade}
+            "texture_px": cinematic.TEXTURE_PX}
+    if grade != cinematic.GRADE:  # 164: the default grade keeps the shots already cached
+        spec["grade"] = grade
     return hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:16]
 
 
