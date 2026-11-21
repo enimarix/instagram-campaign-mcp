@@ -59,11 +59,11 @@ $remake
 
 ## Sound effects (optional): the studio's library
 
-- Real recorded sounds (whoosh, boing, fork drop, crowd gasp, applause, ...) in
-  `$sfx_dir/`, one `<id>.wav` each (48 kHz mono, at most 6 s, all set to the same peak
-  loudness, so set them by ear under the voice). What each one is: `$sfx_manifest`
-  (`{"sounds": {id: {title, category, tags, duration_s, licence, credit, ...}}}`). Read
-  them, copy the ones you use into `$film_dir/`; never change or add files there.
+- Real recorded sounds (whoosh, boing, fork drop, crowd gasp, applause, ...) in `sfx/`
+  in this folder (when it is there), one `<id>.wav` each (48 kHz mono, at most 6 s, all
+  set to the same peak loudness, so set them by ear under the voice). What each one is:
+  `sfx/manifest.json` (`{"sounds": {id: {title, category, tags, duration_s, licence,
+  credit, ...}}}`). Copy the ones you use into `$film_dir/`.
 - Only CC0 and CC BY sounds are in it. **Every CC BY sound you use: put its `credit` line
   as it is at the end of the caption in post.json** (CC0 needs none). Write the sounds you
   used in NOTES.md.

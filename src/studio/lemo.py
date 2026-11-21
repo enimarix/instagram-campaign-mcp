@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore
-from . import media, sfx, style_catalog
+from . import media, style_catalog
 from .assets import DESCRIPTION_CHARS
 from .render import enqueue_render
 
@@ -81,8 +81,7 @@ def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dic
         remake=remake, film_dir=FILM_DIR,
         library=Path(settings.lemo_library).expanduser().as_posix(),
         gpu_run=f'"{Path(sys.executable).as_posix()}" "{GPU_RUN.as_posix()}" --',
-        tts_url=settings.tts_http_url or DEFAULT_TTS, sfx_dir=sfx.SFX_DIR.as_posix(),
-        sfx_manifest=sfx.manifest_path().as_posix())
+        tts_url=settings.tts_http_url or DEFAULT_TTS)
 
 
 def _post(film: Path) -> Dict[str, Any]:

@@ -12,6 +12,7 @@ import pytest
 import respx
 
 import src.instagram_mcp_server as srv
+from src.agent import film
 from src.config import InstagramMCPSettings
 from src.store import utcnow
 from src.studio import ffmpeg, lemo, motion, production, sfx
@@ -286,13 +287,21 @@ def test_submit_adds_the_cc_by_credit_and_the_publish_guard_checks_it(store, tmp
     assert queue_asset(store, s, a["id"], utcnow() + timedelta(hours=2))
 
 
-def test_the_lemo_brief_points_at_the_library(tmp_path):
+def test_a_film_workspace_gets_a_copy_of_the_library(tmp_path):
     s = InstagramMCPSettings(_env_file=None, database_path=":memory:",
-                             lemo_library=str(tmp_path / "lib"))
+                             agent_workspace=str(tmp_path / "ws"),
+                             lemo_skill_dir=str(tmp_path / "skill"))
+    (tmp_path / "skill").mkdir()
+    (tmp_path / "skill" / "SKILL.md").write_text("skill", "utf-8")
     brief = lemo.film_brief(s, {"id": 3, "instruction": "x"},
                             {"id": "lemo:a", "slug": "a", "label": "A", "line": "l"})
-    assert sfx.SFX_DIR.as_posix() in brief and sfx.manifest_path().as_posix() in brief
-    assert "$sfx" not in brief and "credit" in brief
+    assert "sfx/manifest.json" in brief and "credit" in brief
+    assert not (film.prepare_workspace(s, 3, brief) / film.SFX).exists()  # no library yet
+    by = _cache("by")
+    ws = film.prepare_workspace(s, 3, brief)
+    assert (ws / film.SFX / f"{by['id']}.wav").is_file()
+    assert by["id"] in json.loads((ws / film.SFX / "manifest.json").read_text("utf-8"))["sounds"]
+    assert not list((ws / film.SFX).glob(".*"))  # not the lock file
 
 
 def test_motion_and_python_agree_on_the_library_peak():
