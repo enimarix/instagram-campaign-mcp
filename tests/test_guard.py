@@ -4,6 +4,7 @@ processes started here (never a real render, never a process this test did not s
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 import subprocess
@@ -43,7 +44,7 @@ def test_low_priority_keeps_the_callers_flags():
     if sys.platform == "win32":
         assert kw["creationflags"] == 0x8 | guard.BELOW_NORMAL
     else:
-        assert kw["preexec_fn"] is guard._nice
+        assert callable(kw["preexec_fn"])
 
 
 def test_run_timeout_kills_the_child():
@@ -174,38 +175,238 @@ def test_studio_jobs_ask_for_their_vram(monkeypatch, settings):
 # --- watchdog -----------------------------------------------------------------------------
 
 class Box:
-    def __init__(self, *probes):
-        self.probes, self.now, self.acts = list(probes), 0.0, []
+    """Probes are (free RAM, GPU °C) or a dict of Watchdog._probe's keys."""
 
-    def dog(self, children=(11, 12)):
-        dog = guard.Watchdog(root=1, probe=lambda: self.probes.pop(0),
+    def __init__(self, *probes, log_path=None):
+        self.probes, self.now, self.acts = list(probes), 0.0, []
+        self.log_path = log_path
+
+    def probe(self, heavy):
+        r = self.probes.pop(0)
+        return r if isinstance(r, dict) else {"ram": r[0], "temp": r[1]}
+
+    def dog(self, children=(11, 12), theirs=(), holder="pid 7: Blender (dev)"):
+        dog = guard.Watchdog(root=1, probe=self.probe,
                              children=lambda root, voice: list(children),
+                             holder=lambda root: (holder, list(theirs)),
                              act=lambda pid, a: self.acts.append((a, pid)),
-                             clock=lambda: self.now)
-        dog.started = lambda pid: {11: 100, 12: 200}.get(pid)  # 12 is the newest
+                             clock=lambda: self.now, log_path=self.log_path or Path(
+                                 os.devnull))
+        dog.started = lambda pid: {11: 100, 12: 200, 31: 300}.get(pid)  # 12 newer than 11
         dog._mark = lambda pid, why: self.acts.append(("mark", pid))
         return dog
+
+
+@pytest.fixture(autouse=True)
+def no_paused_time():
+    guard._paused[:] = [0.0, None]
+    yield
+    guard._paused[:] = [0.0, None]
 
 
 def test_watchdog_pauses_on_low_ram_and_resumes_when_it_is_back():
     box = Box((2.5, 60.0), (4.0, 60.0), (6.5, 60.0))
     dog = box.dog()
-    assert dog.tick() == ["paused 2 heavy job process(es): free RAM 2.5 GB, GPU 60 °C"]
+    assert dog.tick() == ["paused 2 heavy job process(es) (free RAM 2.5 GB): free RAM 2.5 GB, "
+                          "GPU 60 °C"]
     assert dog.tick() == []  # between the marks: stays paused
     assert dog.tick() == ["resumed 2 paused process(es): free RAM 6.5 GB, GPU 60 °C"]
     assert box.acts == [("suspend", 11), ("suspend", 12), ("resume", 11), ("resume", 12)]
 
 
-def test_watchdog_kills_the_newest_after_three_minutes_of_heat():
-    box = Box((20.0, 90.0), (20.0, 85.0), (20.0, 85.0), (20.0, 79.0))
+def test_watchdog_kills_the_newest_after_three_minutes_short_of_ram():
+    box = Box((2.0, 60.0), (4.0, 60.0), (4.0, 60.0), (7.0, 60.0))
     dog = box.dog()
     assert dog.tick()[0].startswith("paused 2")
     box.now = guard.KILL_AFTER_S - 1
     assert dog.tick() == []
     box.now = guard.KILL_AFTER_S
-    assert dog.tick() == ["stopped process 12: free RAM 20.0 GB, GPU 85 °C for 3 min"]
+    assert dog.tick() == ["stopped process 12: free RAM 4.0 GB, GPU 60 °C for 3 min"]
     assert dog.tick()[0].startswith("resumed 1")
     assert box.acts[2:] == [("mark", 12), ("kill", 12), ("resume", 11)]
+
+
+def test_heat_pauses_at_83_resumes_at_74_and_never_kills():
+    box = Box((20.0, 82.0), (20.0, 83.0), (20.0, 80.0), (20.0, 75.0), (20.0, 74.0))
+    dog = box.dog()
+    assert dog.tick() == []  # under the limit
+    assert dog.tick()[0].startswith("paused 2 heavy job process(es) (GPU 83 °C)")
+    box.now = 3600  # an hour hot: still paused, nothing killed (paused, it cools)
+    assert dog.tick() == [] and dog.tick() == []
+    assert dog.tick()[0].startswith("resumed 2")
+    assert [a for a, _ in box.acts] == ["suspend", "suspend", "resume", "resume"]
+
+
+def test_a_minute_at_the_gpu_power_limit_cools_three_minutes():
+    hot = {"ram": 20.0, "temp": 70.0, "watts": 125.0, "limit": 130.0, "util": 99.0}
+    box = Box(hot, {**hot, "watts": 100.0}, hot, hot, {**hot, "watts": 20.0},
+              {**hot, "watts": 20.0})
+    dog = box.dog()
+    assert dog.tick() == []
+    box.now = 30
+    assert dog.tick() == []  # dipped under 95 %: the minute starts again
+    box.now = 40
+    assert dog.tick() == []
+    box.now = 100
+    assert dog.tick() == ["paused 2 heavy job process(es) (GPU at 96% of its 130 W limit for "
+                          "60 s; cooling 3 min): free RAM 20.0 GB, GPU 70 °C"]
+    box.now = 100 + guard.COOL_S - 1
+    assert dog.tick() == []  # cooling
+    box.now = 100 + guard.COOL_S
+    assert dog.tick()[0].startswith("resumed 2")
+
+
+def test_a_throttled_cpu_for_a_minute_cools_three_minutes():
+    hot = {"ram": 20.0, "temp": 60.0, "perf": 62.0, "util": 50.0}
+    box = Box(hot, hot)
+    dog = box.dog()
+    assert dog.tick() == []
+    box.now = guard.SUSTAIN_S
+    assert dog.tick()[0].startswith("paused 2 heavy job process(es) (CPU held back to 62 % "
+                                    "(heat) for 60 s; cooling 3 min)")
+
+
+def test_duty_cycle_cools_after_fifteen_busy_minutes():
+    busy = {"ram": 20.0, "temp": 70.0, "util": 97.0}
+    idle = {**busy, "util": 2.0}
+    box = Box(busy, busy, busy, busy, busy, busy, idle, idle, busy)
+    dog = box.dog()
+    assert dog.max_busy_s == 15 * 60  # GUARD_MAX_BUSY_MIN default
+    for t in (0, 600, 899):
+        box.now = t
+        assert dog.tick() == []
+    box.now = 900
+    assert "15 min of heavy work; cooling 3 min" in dog.tick()[0]
+    box.now = 900 + guard.COOL_S
+    assert dog.tick()[0].startswith("resumed 2")
+    box.now = 1100
+    assert dog.tick() == [] and dog.busy_since == 1100  # counting afresh
+    box.now = 1200  # an idle GPU (a loaded voice model waiting) is no heavy work ...
+    assert dog.tick() == []
+    box.now = 1200 + guard.COOL_S  # ... and a rest as long as a cooling pause resets the count
+    assert dog.tick() == [] and dog.busy_since is None
+    box.now = 1500
+    assert dog.tick() == [] and dog.busy_since == 1500
+
+
+def test_watchdog_guards_the_gpu_lock_holders_processes():
+    box = Box((2.0, 60.0), (9.0, 60.0))
+    dog = box.dog(children=(), theirs=(31,))
+    assert dog.tick()[0].startswith("paused 1")
+    assert dog.tick()[0].startswith("resumed 1")
+    assert box.acts == [("suspend", 31), ("resume", 31)]
+
+
+def test_guard_log_has_a_line_per_action_and_every_30_s(tmp_path):
+    log = tmp_path / "logs" / "guard.log"
+    probe = {"ram": 18.2, "temp": 71.0, "watts": 98.0, "limit": 130.0, "util": 96.0,
+             "perf": 100.0}
+    box = Box(probe, probe, probe, {**probe, "temp": 84.0}, log_path=log)
+    dog = box.dog(children=(11,))
+    for t in (0, 10, 30, 31):
+        box.now = t
+        dog.tick()
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3  # 0 s, 30 s, and the pause at 31 s
+    assert lines[0].endswith("GPU 71 °C 98/130 W 96 % | CPU limit 100 % | RAM 18.2 GB free | "
+                             "lock pid 7: Blender (dev) | heavy 1, paused 0")
+    assert lines[2].endswith("GPU 84 °C 98/130 W 96 % | CPU limit 100 % | RAM 18.2 GB free | "
+                             "lock pid 7: Blender (dev) | heavy 1, paused 1 | paused 1 heavy "
+                             "job process(es) (GPU 84 °C): free RAM 18.2 GB, GPU 84 °C")
+
+
+def test_guard_log_rotates(tmp_path, monkeypatch):
+    log = tmp_path / "guard.log"
+    monkeypatch.setattr(guard, "LOG_MAX_BYTES", 10)
+    guard.write_log(log, "a" * 20)
+    guard.write_log(log, "b")
+    assert log.read_text(encoding="utf-8").endswith(" b\n")
+    assert "a" * 20 in log.with_name("guard.log.1").read_text(encoding="utf-8")
+
+
+def test_holder_tree_is_under_the_lock_holder_only(monkeypatch):
+    born = {7: 10, 70: 20, 71: 21, 72: 22, 73: 5, 100: 1, 200: 30}
+    monkeypatch.setattr("src.agent.proc.started", born.get)
+    table = [(7, 1, "python"),  # a dev script holding the lock
+             (70, 7, "blender"), (71, 70, "python"), (72, 7, "conhost"),
+             (73, 7, "python"),  # older than the script: its real parent died
+             (100, 1, "python"), (200, 100, "blender")]  # the studio and its own render
+    monkeypatch.setattr(gpu_lock, "held_by", lambda path=None: "pid 7: Blender (dev) x")
+    assert guard.holder_tree(100, table) == ("pid 7: Blender (dev) x", [70, 71])
+    assert guard.holder_tree(7, table) == ("pid 7: Blender (dev) x", [])  # the studio: covered
+    monkeypatch.setattr(gpu_lock, "held_by", lambda path=None: None)  # free: a stale .holder
+    assert guard.holder_tree(100, table) == (None, [])
+
+
+def test_held_by_reads_the_lock_not_the_stale_holder_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(gpu_lock.guard, "admit", lambda *a: None)
+    path = tmp_path / "gpu.lock"
+    assert gpu_lock.held_by(path) is None
+    with gpu_lock.hold("Blender troupe shots", path):
+        assert gpu_lock.held_by(path) == f"pid {os.getpid()}: Blender troupe shots"
+    assert path.with_name("gpu.lock.holder").exists() and gpu_lock.held_by(path) is None
+
+
+# --- heat budget: CPUs and threads (171) --------------------------------------------------
+
+AFFINITY = ("import ctypes, os, sys\n"
+            "if sys.platform == 'win32':\n"
+            "    k = ctypes.WinDLL('kernel32'); k.GetCurrentProcess.restype = ctypes.c_void_p\n"
+            "    m, s = ctypes.c_size_t(), ctypes.c_size_t()\n"
+            "    k.GetProcessAffinityMask.argtypes = (ctypes.c_void_p, ctypes.c_void_p,"
+            " ctypes.c_void_p)\n"
+            "    k.GetProcessAffinityMask(k.GetCurrentProcess(), ctypes.byref(m),"
+            " ctypes.byref(s))\n"
+            "    print(m.value)\n"
+            "else:\n"
+            "    print(sum(1 << c for c in os.sched_getaffinity(0)))\n")
+
+
+def test_heavy_cpus_is_the_share_of_the_logical_cpus(monkeypatch):
+    monkeypatch.setattr(os, "cpu_count", lambda: 16)
+    assert guard.heavy_cpus() == 8  # GUARD_CPU_SHARE default 0.5
+    monkeypatch.setenv("GUARD_CPU_SHARE", "0.25")
+    assert guard.heavy_cpus() == 4
+    monkeypatch.setenv("GUARD_CPU_SHARE", "0.01")
+    assert guard.heavy_cpus() == 1
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no CPU affinity")
+def test_run_pins_the_child_to_the_first_cpus(monkeypatch):
+    if (os.cpu_count() or 1) < 2:
+        pytest.skip("one CPU: nothing to pin")
+    monkeypatch.setenv("GUARD_CPU_SHARE", "0.5")
+    n = guard.heavy_cpus()
+    # A pinned process never spins up more than its CPUs
+    out = guard.run([PY, "-c", AFFINITY], capture_output=True, text=True, timeout=60)
+    assert int(out.stdout) == (1 << n) - 1  # CPUs 0..n-1
+
+
+def test_tools_get_thread_counts_to_match(monkeypatch, tmp_path):
+    from src.studio import cinematic, ffmpeg, motion
+
+    monkeypatch.setenv("GUARD_CPU_SHARE", "0.5")
+    monkeypatch.setattr(os, "cpu_count", lambda: 16)
+    seen = []
+    monkeypatch.setattr(guard, "run", lambda cmd, **k: seen.append([str(c) for c in cmd]) or
+                        subprocess.CompletedProcess(cmd, 0, b"", b""))
+    monkeypatch.setattr(cinematic, "find_blender", lambda: "blender")
+    monkeypatch.setattr(guard, "gpu", lambda what, kind: contextlib.nullcontext())
+    cinematic.blender(["-b", "-P", "x.py"], "Blender test", 60)
+    assert seen[-1][:4] == ["blender", "-t", "8", "-b"]
+    monkeypatch.setattr(ffmpeg, "find_ffmpeg", lambda: "ffmpeg")
+    ffmpeg.run(["-i", "in.mp4", "-c:v", "libx264", "out.mp4"], timeout_s=60)
+    assert seen[-1][-3:] == ["-threads", "8", "out.mp4"]
+    assert motion._concurrency() == 4  # half of 8
+    monkeypatch.setenv("GUARD_CPU_SHARE", "0.25")
+    assert motion._concurrency() == 2
+
+
+def test_run_timeout_skips_the_time_the_watchdog_kept_jobs_paused():
+    guard._paused[:] = [0.0, time.monotonic()]  # a pause running now
+    out = guard.run([PY, "-c", "import time; time.sleep(1.5); print('done')"],
+                    capture_output=True, text=True, timeout=0.5)
+    assert out.stdout.strip() == "done"
 
 
 def test_watchdog_leaves_processes_alone_when_all_is_well():
