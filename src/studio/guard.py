@@ -24,14 +24,15 @@ Step 145's GPU lock (gpu_lock.py) keeps our own heavy jobs one at a time; this a
 Heat budget (step 171, docs/DECISIONS.md 2026-11-21): the laptop powered itself off under ONE
 long Blender render (16 CPU threads + the GPU at its 130 W limit, ~220 W on a 230 W adapter).
 
-- Less heat per job: every heavy child runs on the first GUARD_CPU_SHARE of the logical CPUs
-  (pin(), inherited by its own children) and the tools' thread counts match heavy_cpus()
+- Less heat per job: every heavy child runs on GUARD_CPU_SHARE of the logical CPUs, CPU 1
+  onward (pin(), inherited by its own children; CPU 0 takes most interrupts and driver DPCs,
+  177: left to Windows) and the tools' thread counts match heavy_cpus()
   (Blender -t, ffmpeg -threads, Remotion --concurrency, the voice's torch and Whisper).
 - The watchdog also guards whoever holds the GPU lock (a dev script, gpu-run.py) and cools:
   GPU >= GUARD_SUSPEND_TEMP_C (83) until <= GUARD_RESUME_TEMP_C (74); 60 s at >= 95 % of the
   GPU power limit, or CPU throttling (% Performance Limit < 80) -> a COOL_S pause; after
   GUARD_MAX_BUSY_MIN of continuous heavy work, the same pause (duty cycle). It writes
-  data/logs/guard.log, synced line by line so it survives a power cut. Heat never kills a job
+  data/logs/guard.log (GPU heat, power, used VRAM, CPU, RAM, the lock), synced line by line so it survives a power cut. Heat never kills a job
   (paused, it cools down); only RAM still short after 3 min does. run() timeouts skip paused
   time.
 
@@ -92,12 +93,21 @@ def heavy_cpus() -> int:
     return max(1, min(total, round(total * cpu_share())))
 
 
+def cpu_set(n: int) -> range:
+    """The logical CPUs a heavy job runs on: `n` of them from CPU 1 (CPU 0 takes most
+    interrupts and the NVIDIA driver's DPCs, whose stall bluescreened the laptop, 177), side
+    by side: Windows and Linux number a core's two hyperthreads together, so fewer physical
+    cores heat up. All of them (from 0) when `n` is every CPU."""
+    total = os.cpu_count() or 1
+    first = 1 if n < total else 0
+    return range(first, first + min(n, total))
+
+
 def pin(pid: int = 0, n: Optional[int] = None) -> None:
-    """Keep process `pid` (0: this one) on the first `n` logical CPUs (default heavy_cpus());
-    the children it starts later inherit it. The first ones: Windows and Linux number a
-    core's two hyperthreads side by side, so fewer physical cores heat up (8 of 16 = 4 cores).
-    OSError when it can't (the process is gone). ponytail: one processor group (<= 64 CPUs)."""
-    n = n or heavy_cpus()
+    """Keep process `pid` (0: this one) on cpu_set(`n`) (default heavy_cpus()); the children
+    it starts later inherit it. OSError when it can't (the process is gone). ponytail: one
+    processor group (<= 64 CPUs)."""
+    cpus = cpu_set(n or heavy_cpus())
     if sys.platform == "win32":
         import ctypes
         from ctypes import wintypes
@@ -111,12 +121,13 @@ def pin(pid: int = 0, n: Optional[int] = None) -> None:
         if not handle:
             raise OSError(ctypes.get_last_error(), f"cannot open process {pid}")
         try:
-            if not k32.SetProcessAffinityMask(handle, (1 << min(n, 64)) - 1):
+            mask = sum(1 << c for c in cpus if c < 64)
+            if not k32.SetProcessAffinityMask(handle, mask):
                 raise OSError(ctypes.get_last_error(), f"cannot pin process {pid}")
         finally:
             k32.CloseHandle(handle)
     elif hasattr(os, "sched_setaffinity"):  # macOS has none: no pinning there
-        os.sched_setaffinity(pid, range(n))
+        os.sched_setaffinity(pid, cpus)
 
 
 def low_priority(kwargs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -258,14 +269,27 @@ def _num(text: str) -> Optional[float]:
 
 
 def gpu_status() -> Optional[Dict[str, Optional[float]]]:
-    """{free_vram_gb, temp_c, power_w, power_limit_w, util_pct} of the first NVIDIA GPU (the
-    last three None when it does not say); None without nvidia-smi."""
+    """{free_vram_gb, temp_c, power_w, power_limit_w, util_pct, used_vram_gb, total_vram_gb}
+    of the first NVIDIA GPU (the last five None when it does not say); None without
+    nvidia-smi."""
     try:
         free, temp, *rest = (_smi("--query-gpu=memory.free,temperature.gpu,power.draw,"
-                                  "enforced.power.limit,utilization.gpu") or [])[0][:5]
-        power, limit, util = (*map(_num, rest), None, None, None)[:3]
+                                  "enforced.power.limit,utilization.gpu,memory.used,"
+                                  "memory.total") or [])[0][:7]
+        power, limit, util, used, total = (*map(_num, rest), None, None, None, None, None)[:5]
         return {"free_vram_gb": float(free) / 1024, "temp_c": float(temp), "power_w": power,
-                "power_limit_w": limit, "util_pct": util}
+                "power_limit_w": limit, "util_pct": util,
+                "used_vram_gb": None if used is None else used / 1024,
+                "total_vram_gb": None if total is None else total / 1024}
+    except (IndexError, ValueError):
+        return None
+
+
+def vram_used_gb() -> Optional[float]:
+    """The first NVIDIA GPU's used VRAM (GB, every process), None without nvidia-smi: one
+    quick query, for sampling (troupe.measure)."""
+    try:
+        return float((_smi("--query-gpu=memory.used") or [])[0][0]) / 1024
     except (IndexError, ValueError):
         return None
 
@@ -589,6 +613,7 @@ class Watchdog:
         g = gpu_status() or {}
         return {"ram": free_ram_gb(), "temp": g.get("temp_c"), "watts": g.get("power_w"),
                 "limit": g.get("power_limit_w"), "util": g.get("util_pct"),
+                "vram": g.get("used_vram_gb"), "vram_total": g.get("total_vram_gb"),
                 "perf": cpu_perf_limit() if heavy else None}  # typeperf: only when it matters
 
     def _ours(self, pid: int) -> bool:
@@ -691,6 +716,7 @@ class Watchdog:
                     and (self.next_line is None or now >= self.next_line)):
             self.next_line = now + STATE_EVERY_S
             line = (f"GPU {_n(temp)} °C {_n(watts)}/{_n(limit)} W {_n(util)} % | "
+                    f"VRAM {_n(r.get('vram'), '.1f')}/{_n(r.get('vram_total'), '.1f')} GB used | "
                     f"CPU limit {_n(perf)} % | RAM {_n(ram, '.1f')} GB free | "
                     f"lock {by or 'free'} | heavy {len(targets)}, paused {len(self.suspended)}"
                     + "".join(f" | {d}" for d in done))

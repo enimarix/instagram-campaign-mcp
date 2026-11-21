@@ -66,6 +66,8 @@ def render_shot(cfg, shot):
     stage.camera(cam["kind"], frames, spec["wide"], spec["center"], head, look)
     out = os.path.join(os.path.abspath(cfg["out"]), shot["id"])
     os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "stats.json"), "w", encoding="utf-8") as f:
+        json.dump(texture_stats(), f)
     s.render.image_settings.file_format = "PNG"
     if shot.get("stills"):
         for f in shot["stills"]:
@@ -75,6 +77,16 @@ def render_shot(cfg, shot):
     else:
         s.render.filepath = os.path.join(out, "f_")
         bpy.ops.render.render(animation=True)
+
+
+def texture_stats():
+    """What the scene's images weigh at render time (step 177's VRAM diet): their count, MB
+    uncompressed (no mipmaps) and the biggest ones."""
+    imgs = [i for i in bpy.data.images if i.users and i.size[0]]
+    size = {i.name: i.size[0] * i.size[1] * i.channels * (4 if i.is_float else 1) for i in imgs}
+    big = sorted(imgs, key=lambda i: -size[i.name])[:8]
+    return {"images": len(imgs), "texture_mb": round(sum(size.values()) / 2**20, 1),
+            "largest": [[i.name, *i.size] for i in big]}
 
 
 def main():
