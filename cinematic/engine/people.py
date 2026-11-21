@@ -15,6 +15,7 @@ import retarget
 
 ACTIONS = json.load(open(os.path.join(kit.ENGINE, "..", "actions.json"), encoding="utf-8"))
 GARMENTS = json.load(open(os.path.join(kit.ENGINE, "..", "cast.json"), encoding="utf-8"))["_garments"]
+CLOTH_GAP = 0.015  # garments sit this far off the body (m): no skin through them
 TOP_SIZE = 512  # the recoloured garment texture (crush_textures caps clothes there anyway)
 LIBRARY = os.path.join(kit.TOOLS, "anim", "Animation Library[Standard]", "Godot",
                        "AnimationLibrary_Godot_Standard.glb")
@@ -48,7 +49,19 @@ def build(ch, name=None):
     services.FaceService.load_targets(body, load_microsoft_visemes=False, load_meta_visemes=True,
                                       load_arkit_faceunits=True)
     services.FaceService.interpolate_targets(body)
+    cover(body.parent, ch["clothes"])
     return body, body.parent
+
+
+def cover(rig, clothes, gap=CLOTH_GAP):
+    """Every garment pushed `gap` metres out along its normals (after the pose): the body
+    under it no longer pokes through at the neckline and chest (the skin-coloured holes in
+    close-ups, step 164), the more so on a muscled or heavy phenotype."""
+    names = [os.path.basename(c).rsplit(".", 1)[0] for c in clothes]
+    for o in rig.children_recursive:
+        if o.type == "MESH" and any(n in o.name for n in names):
+            d = o.modifiers.new("cover", "DISPLACE")
+            d.strength, d.mid_level = gap, 0.0
 
 
 def _pixels(img):
@@ -266,9 +279,28 @@ def keyed(move, times, offset=0.0):
             for t in times]
 
 
+def barbell(rig, steel):
+    """A barbell held in both hands (step 164): it stays at the middle of the two hands and
+    turns with the line between them, so it rises with a lift and goes down with a fall."""
+    o = kit.cyl("barbell", 0.016, 1.7, (0, 0, 0), steel, verts=8)  # along its local Z
+    iron = kit.mat("prop_iron", (0.08, 0.08, 0.09), rough=0.5)
+    for s in (-1, 1):
+        kit.cyl("bar_plate", 0.22, 0.07, (0, 0, s * 0.6), iron, verts=12, parent=o)
+        kit.cyl("bar_plate", 0.17, 0.05, (0, 0, s * 0.66), iron, verts=12, parent=o)
+    for bone, share in (("mixamorig:RightHand", 1.0), ("mixamorig:LeftHand", 0.5)):
+        c = o.constraints.new("COPY_LOCATION")  # the right hand, then halfway to the left
+        c.target, c.subtarget, c.influence = rig, bone, share
+    c = o.constraints.new("DAMPED_TRACK")
+    c.target, c.subtarget, c.track_axis = rig, "mixamorig:LeftHand", "TRACK_Z"
+    return o
+
+
 def prop(name, rig):
-    """A small hand prop parented to the right hand (built from kit primitives)."""
+    """A small hand prop parented to the right hand (built from kit primitives), or the
+    two-handed barbell."""
     steel = kit.mat("prop_steel", (0.75, 0.75, 0.75), metal=1.0, rough=0.3)
+    if name == "barbell":
+        return barbell(rig, steel)
     if name == "fork":
         o = kit.box("fork", (0.016, 0.02, 0.19), (0, 0, 0), steel)
     elif name == "phone":

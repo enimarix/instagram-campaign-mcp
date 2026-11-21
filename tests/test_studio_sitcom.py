@@ -69,6 +69,13 @@ def test_first_frame_is_action_not_a_static_picture():
     assert first["camera"] == {"kind": "crash", "on": "teen"}  # a crash zoom into the action
     actor = next(a for a in first["cast"] if a["who"] == "teen")
     assert actor["action"] == "phone_photo"
+    # a skit that opens on someone lying (crunches) opens wide: a crash onto a face on the
+    # floor reads upside down
+    lying = {**PROPS, "scenes": [PROPS["scenes"][1]]}
+    parts = [{**p, "scene": 0} for p in _parts(lying)]
+    first = sitcom.shot_list(lying, parts)["shots"][0]
+    assert first["camera"] == {"kind": "wide"}
+    assert any(a.get("action") == "crunch" for a in first["cast"])
 
 
 def test_speeds_freeze_reactions_and_close_ups():
@@ -79,7 +86,7 @@ def test_speeds_freeze_reactions_and_close_ups():
     last = [s for s in shots if s["set"] == "living"][-1]
     assert last["freeze"] == pytest.approx(0.9, abs=1 / 24)  # the punchline frozen
     beat = PROPS["scenes"][-1]["beats"][-1]  # a whip lands on the punchline's actor
-    assert last["camera"] == {"kind": "whip", "on": beat["who"]}
+    assert last["camera"] == {"kind": "whip", "on": beat["who"], "aim": "end"}
     slow = [s for s in shots if s["speed"] in ([1.0, 0.3], 0.3)]
     assert slow[0]["speed"] == [1.0, 0.3]  # a ramp into the slow motion
     said = [s for s in shots if s["camera"] == {"kind": "dolly", "on": "dad"}]  # the speaker's line

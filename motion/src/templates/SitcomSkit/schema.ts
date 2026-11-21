@@ -41,7 +41,7 @@ const beat = z.strictObject({
   key: screenText(24).optional(),
   /** The beat's actor: one of the scene's cast. */
   who,
-  /** What they do (cinematic/actions.json: crunch, faint, fork_up, phone_photo, cheer, shout, curl, carry_plate, or a library clip like Death01, Hit_Chest, Jump_Loop, Dance_Loop). */
+  /** What they do (cinematic/actions.json: crunch, faint, fork_up, phone_photo, cheer, shout, curl, carry_plate, bar_strain and barbell_fall (a barbell in both hands), or a library clip like Death01, Hit_Chest, Jump_Loop, Dance_Loop). */
   action: z.string().min(1),
   /** Their face (jaw_drop, outraged, shout, smile, disgust). */
   face: z.string().optional(),

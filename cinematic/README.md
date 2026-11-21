@@ -96,9 +96,14 @@ small: give them a height), and finds FBX textures moved inside their pack. The 
 absurd skits under a French voice-over. Remotion template `SitcomSkit` (`motion/README.md`)
 times the skit; `src/studio/sitcom.py` turns its parts into a shot list: a cut every 1-2 s, at
 least three angles a scene (the scene opens wide, the skit on a crash zoom into the first
-action; then reaction close-ups on the others, top-down, wide, close, whip, dolly), x10 for
-repeated gestures, a slow-mo ramp into falls, a whip onto the punchline's actor frozen on its last frame, a close-up built
-with its actor and the two nearest only. The light is a `sitcom*` preset of `sets.json`
+action, or wide when that actor lies on the floor; then reaction close-ups on the others,
+top-down, wide, close, whip, dolly), x10 for repeated gestures, a slow-mo ramp into falls, a
+whip onto the punchline's actor frozen on its last frame (camera `aim: end`: aimed where the
+actor's head is on the shot's last frame, so a faint or a fall stays in frame), a close-up
+built with its actor and the two nearest only. Every garment sits `people.CLOTH_GAP` (1.5 cm)
+off the body (`people.cover`), so no skin pokes through at the neckline in a close-up. The
+moves `bar_strain` and `barbell_fall` hold a barbell in both hands (`people.barbell`: it follows
+the middle of the hands and the line between them). The light is a `sitcom*` preset of `sets.json`
 (saturated warm key, pink fill, a turquoise / emerald side light) and the grade adds
 saturation to the PS2 look (`sitcom.GRADE`). The characters' lines get their own approved
 voice (`say_voice`: by gender, never the narrator's). Cost: about 1.7 min of Blender per second

@@ -181,13 +181,16 @@ def shot_list(props: Dict[str, Any], parts: Sequence[Dict[str, Any]]) -> Dict[st
                 continue
             j = angle.get(si, 0)
             angle[si] = j + 1
-            if j == 0:  # a scene opens wide; the skit opens on a crash zoom into the action
-                kind, on = ("crash", lead) if si == 0 else ("wide", None)
+            aim = "start"
+            if j == 0:  # a scene opens wide; the skit opens on a crash zoom into the action,
+                # unless its actor lies (a crash onto a face on the floor reads upside down)
+                lies = cinematic.ACTIONS["moves"].get(beat["action"], {}).get("lie")
+                kind, on = ("crash", lead) if si == 0 and not lies else ("wide", None)
             elif speaker and k == 0:
                 kind, on = "dolly", speaker
             elif k == n - 1 and frozen:  # a whip lands on the punchline's actor, frozen there:
-                # its whole body at ~2 m (a wide can miss a standing mark, a close-up a faint)
-                kind, on = "whip", beat["who"]
+                # its whole body at ~2 m, aimed where the action leaves it (a faint, a fall)
+                kind, on, aim = "whip", beat["who"], "end"
             else:
                 kind = ROTATION[(j - 1) % len(ROTATION)]
                 on = lead
@@ -229,7 +232,8 @@ def shot_list(props: Dict[str, Any], parts: Sequence[Dict[str, Any]]) -> Dict[st
                     a["face_at"] = round(min(duration * 0.5, 0.15 + (zlib.crc32(m["who"].encode()) % 5) * 0.06), 3)
                 cast.append(a)
             shot: Dict[str, Any] = {"set": scene["set"], "light": LIGHTS.get(scene["set"]),
-                                    "cast": cast, "camera": {"kind": kind, **({"on": on} if on else {})},
+                                    "cast": cast, "camera": {"kind": kind, **({"on": on} if on else {}),
+                                               **({"aim": aim} if aim == "end" else {})},
                                     "duration": round(duration, 4), "speed": speed,
                                     "seed": zlib.crc32(f"{si}/{bi}/{k}".encode()) % 1000}
             shots.append(shot)

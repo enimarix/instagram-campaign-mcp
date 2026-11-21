@@ -66,6 +66,9 @@ class Actor(_Model):
 class Camera(_Model):
     kind: Literal["wide", "close", "top", "whip", "crash", "dolly"] = "wide"
     on: Optional[str] = Field(None, description="The actor the close / whip / crash / dolly lands on")
+    aim: Literal["start", "end"] = Field(
+        "start", description="Where the actor is aimed at: its head on the shot's first frame, or "
+        "on its last (a frozen punchline: a faint or a fall ends in frame)")
 
 
 class Shot(_Model):

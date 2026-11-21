@@ -3,7 +3,7 @@
     blender -b -P cinematic/engine/troupe.py -- <shots.json>
 
 <shots.json>: out, fps, size, samples, texture_px (the largest image side), shots [{id, set, light, frames, speed, seed, stills,
-camera {kind, on}, cast [{who, look (its cast.json entry), spot {at, facing, seat, z}, facing,
+camera {kind, on, aim: start | end}, cast [{who, look (its cast.json entry), spot {at, facing, seat, z}, facing,
 to (a spot to walk to), action, face, face_at, offset}]}], all resolved and checked by
 troupe.py. Every shot is its own scene: the set (engine/<sets.json module>.py), the actors
 (engine/people.py) and one camera (engine/stage.py). Writes out/<id>/f_####.png (frames
@@ -61,10 +61,11 @@ def render_shot(cfg, shot):
     people.crush_textures(cfg.get("texture_px", 1024))
     stage.lights(sun or stage.sun_dir(preset), preset)
     s.frame_start, s.frame_end = 1, frames
-    s.frame_set(1)
     cam = shot["camera"]
     on = actors.get(cam.get("on"))
+    s.frame_set(frames if cam.get("aim") == "end" else 1)  # where the actor ends up, or starts
     head, look = people.head(on) if on else (None, None)
+    s.frame_set(1)
     stage.camera(cam["kind"], frames, spec["wide"], spec["center"], head, look)
     out = os.path.join(os.path.abspath(cfg["out"]), shot["id"])
     os.makedirs(out, exist_ok=True)

@@ -230,3 +230,17 @@ def test_engine_clamps_textures_and_shares_copies():
     people = (engine / "people.py").read_text(encoding="utf-8")
     assert "def crush_textures(px=1024):\n" in people and "    share_images()\n" in people
     assert '"shadow_pool_size", "256"' in (engine / "stage.py").read_text(encoding="utf-8")
+
+
+def test_a_camera_can_aim_where_the_actor_ends_and_the_barbell_moves_exist():
+    """164: a frozen punchline aims at the actor's last frame (a faint stays in frame); the
+    barbell moves are troupe actions that stand (not seats)."""
+    shot = {**SHOT, "set": "gym", "cast": [{"who": "teen", "at": "floor", "action": "barbell_fall"}],
+            "camera": {"kind": "whip", "on": "teen", "aim": "end"}}
+    j = troupe.job(troupe.validate({"shots": [shot]}).shots[0])
+    assert j["camera"] == {"kind": "whip", "on": "teen", "aim": "end"}
+    assert troupe.job(troupe.validate({"shots": [SHOT]}).shots[0])["camera"]["aim"] == "start"
+    for move in ("bar_strain", "barbell_fall"):
+        assert cinematic.ACTIONS["moves"][move]["prop"] == "barbell"
+    with pytest.raises(ValueError):
+        troupe.validate({"shots": [{**shot, "camera": {"kind": "whip", "on": "teen", "aim": "middle"}}]})
