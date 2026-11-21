@@ -13,11 +13,12 @@ import Posts, { PostPage } from './pages/Posts'
 import ReportPage from './pages/Report'
 import Settings from './pages/Settings'
 import Trends from './pages/Trends'
+import StylesPage from './styles/StylesPage'
 import TokenBanner from './TokenBanner'
 import TrendingPage from './trending/TrendingPage'
 import {
-  AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, InboxIcon, MegaphoneIcon, MoreIcon, SettingsIcon,
-  TrendsIcon,
+  AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, InboxIcon, MegaphoneIcon, MoreIcon, PaletteIcon,
+  SettingsIcon, TrendsIcon,
 } from './ui/icons'
 import { PageHeader } from './ui/PageHeader'
 import { card } from './ui/styles'
@@ -30,6 +31,7 @@ const NAV = [
   { path: '/calendar', label: 'Calendar', Icon: CalendarIcon, tab: true },
   { path: '/analytics', label: 'Analytics', Icon: ChartIcon, tab: true },
   { path: '/learnings', label: 'Learnings', Icon: BulbIcon },
+  { path: '/styles', label: 'Styles', Icon: PaletteIcon },
   { path: '/ads', label: 'Ads', Icon: MegaphoneIcon },
   { path: '/agent', label: 'Agent', Icon: AgentIcon, tab: true },
   { path: '/settings', label: 'Settings', Icon: SettingsIcon },
@@ -84,6 +86,7 @@ export default function App() {
               <Route path="/trending" element={<TrendingPage />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/learnings" element={<Learnings />} />
+              <Route path="/styles" element={<StylesPage />} />
               <Route path="/ads" element={<Ads />} />
               <Route path="/agent" element={<Agent />} />
               <Route path="/settings" element={<Settings />} />

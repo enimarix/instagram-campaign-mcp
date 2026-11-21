@@ -2,18 +2,19 @@
 files, the owner's Settings per style, and the two launch points that are not a Reel:
 « Créer une vidéo » and « même vidéo, autre style » (studio/work_orders.py); the styles
 the agent asks for and the owner's « Construire » / « Non » (studio/style_requests.py,
-156)."""
+156); the style catalog (studio/style_catalog.py, 172): every studio and Lemo-Opuscar
+style, with favourites, and the Lemo previews."""
 
 from __future__ import annotations
 
 from typing import Any, Callable, Literal, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..store import CampaignStore
-from ..studio import style_requests, styles, work_orders
+from ..studio import style_catalog, style_requests, styles, work_orders
 from ..studio.motion import MotionError
 from .assets import call, get_store
 
@@ -33,6 +34,11 @@ class StyleIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: Optional[bool] = None
     share: Optional[float] = None  # None (sent): no limit; left out: unchanged
+
+
+class FavouriteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    favourite: bool
 
 
 class CreateVideoIn(BaseModel):
@@ -91,3 +97,26 @@ def list_style_requests(status: Optional[str] = None, limit: int = Query(100, ge
 def decide_style_request(request_id: int, body: StyleRequestIn,
                          store: CampaignStore = Depends(get_store)):
     return call(style_requests.decide, store, request_id, body.decision, body.note)
+
+
+@router.get("/style-catalog")
+def style_catalog_list(request: Request, family: Optional[Literal["studio", "lemo"]] = None,
+                       q: Optional[str] = Query(None, max_length=200), favourites: bool = False,
+                       store: CampaignStore = Depends(get_store)):
+    return _call(style_catalog.catalog, store, request.app.state.settings, family=family, q=q,
+                 favourites_only=favourites)
+
+
+@router.get("/style-catalog/{style_id}/preview/{kind}")
+def style_catalog_preview(style_id: str, kind: Literal["poster", "clip"]):
+    path = style_catalog.preview_file(style_id, kind)
+    if path is None:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+    return FileResponse(path, media_type=style_catalog.media_type(kind))
+
+
+@router.patch("/style-catalog/{style_id}")
+def set_favourite(style_id: str, body: FavouriteIn, request: Request,
+                  store: CampaignStore = Depends(get_store)):
+    return _call(style_catalog.set_favourite, store, request.app.state.settings, style_id,
+                 body.favourite)

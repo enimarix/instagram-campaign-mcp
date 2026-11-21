@@ -1029,6 +1029,33 @@ export const createVideo = (body: { instruction: string; style: string | null })
 export const restyleAsset = (assetId: number, body: { style: string | null; note?: string }) =>
   post<WorkOrder>(`/api/assets/${assetId}/restyle`, body)
 
+// --- Style catalog (step 172) ---
+export type StyleFamily = 'studio' | 'lemo'
+/** A row of GET /api/style-catalog: a studio style or a Lemo-Opuscar one (id `lemo:<slug>`). */
+export type CatalogStyle = {
+  id: string
+  family: StyleFamily
+  label: string
+  essence: string | null
+  category: string | null
+  tags: string[]
+  preview: { poster: string | null; clip: string | null }
+  favourite: boolean
+  selectable: boolean
+  why_not: string | null // why it cannot be picked (✦ image generator, off in Settings)
+  credit: { text: string; url: string; licence: string; licence_url: string } | null
+}
+export const listStyleCatalog = (filter: { family?: StyleFamily; q?: string; favourites?: boolean } = {}) => {
+  const qs = new URLSearchParams()
+  if (filter.family) qs.set('family', filter.family)
+  if (filter.q) qs.set('q', filter.q)
+  if (filter.favourites) qs.set('favourites', 'true')
+  const s = qs.toString()
+  return request<CatalogStyle[]>(`/api/style-catalog${s ? `?${s}` : ''}`)
+}
+export const setStyleFavourite = (id: string, favourite: boolean) =>
+  send<CatalogStyle>('PATCH', `/api/style-catalog/${encodeURIComponent(id)}`, { favourite })
+
 /** The AI's latest decision on a video sent back for changes (156); `text` is what the
  * Inbox shows: « Refaite en Macro 3D », « Nouveau style demandé : … », « En attente : … ». */
 export type AgentDecision = {
