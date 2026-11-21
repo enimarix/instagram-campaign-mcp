@@ -191,15 +191,16 @@ def render_shots(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float
     todo = {k: s for k, s in zip(keys, shots) if not (clips / f"{k}.mp4").is_file()}
     with tempfile.TemporaryDirectory(prefix="troupe-", dir=root) as tmp:
         work = Path(tmp)
-        if todo:
-            _blender([{"id": k, **job(s), "stills": None} for k, s in todo.items()], work, timeout_s)
-            for k, s in todo.items():
-                part = work / f"{k}.mp4"
-                hold = f"tpad=stop_mode=clone:stop_duration={s.freeze:g}," if s.freeze else ""
-                ffmpeg.run(["-framerate", FPS, "-i", work / k / "f_%04d.png", "-filter_complex",
-                            f"[0:v]{hold}{grade}[v]", "-map", "[v]", "-r", FPS,
-                            "-c:v", "libx264", "-crf", "17", part], timeout_s=timeout_s)
-                part.replace(clips / f"{k}.mp4")
+        # One Blender call per shot, cached at once: a crash, a kill or a power cut (171) loses
+        # one shot, and the GPU lock is free between shots (heat pauses, other jobs).
+        for k, s in todo.items():
+            _blender([{"id": k, **job(s), "stills": None}], work, timeout_s)
+            part = work / f"{k}.mp4"
+            hold = f"tpad=stop_mode=clone:stop_duration={s.freeze:g}," if s.freeze else ""
+            ffmpeg.run(["-framerate", FPS, "-i", work / k / "f_%04d.png", "-filter_complex",
+                        f"[0:v]{hold}{grade}[v]", "-map", "[v]", "-r", FPS,
+                        "-c:v", "libx264", "-crf", "17", part], timeout_s=timeout_s)
+            part.replace(clips / f"{k}.mp4")
         listing = work / "concat.txt"
         quoted = [(clips / f"{k}.mp4").as_posix().replace("'", r"'\''") for k in keys]
         listing.write_text("".join(f"file '{q}'\n" for q in quoted), encoding="utf-8")
