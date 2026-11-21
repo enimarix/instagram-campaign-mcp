@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-21: A job waits for RAM / VRAM without holding the GPU lock (175)
+`gpu_lock.hold` used to take the lock, then wait in `guard.admit`. Now it waits for
+admission with the lock free, takes the lock, and checks `guard.blockers` again under it:
+still blocked (another job took the VRAM meanwhile), it lets the lock go and waits again.
+Same API and logs; the voice service (stdlib, loaded by path) included. Of two waiters
+admitted at once, the one that started waiting first goes first: each admitted waiter keeps
+a ticket file `<lock>.queue/<start ns>-<pid>-<n>`, touched every poll; a ticket older than
+10 s belongs to a dead waiter and is removed. Not a strict queue: a younger job whose need is
+met may still go while an older one waits for more VRAM.
+Reason: 2026-11-21 00:10-00:57 the voice load waited 47 min for VRAM while holding the lock,
+so even small Remotion renders queued behind it (the film agent's report).
+
 ## 2026-11-21: The Lemo film runner is the one agent run with a shell (173)
 A work order in a Lemo-Opuscar style (`lemo:<slug>`, owner-mode orders only) is made by
 `ig-campaign agent film <order_id>` (src/agent/film.py), started by the worker's catch-up:

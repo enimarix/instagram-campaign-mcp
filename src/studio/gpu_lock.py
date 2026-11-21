@@ -8,14 +8,16 @@ a dev's scratch studio) and the voice service (vendor/voxcpm_tts, in its own ven
 this file by path, so stdlib only) for as long as its model is loaded. A real OS lock, not a
 pid file: the OS releases it when the holder dies, even killed. Its path needs no config:
 GPU_LOCK_PATH, else ~/.ig-campaign/gpu.lock. A waiter logs who holds it every LOG_EVERY_S.
-Once it has the lock, a job also waits for free RAM and VRAM and for no game on the GPU
-(guard.admit, step 166).
+A job also waits for free RAM and VRAM and for no game on the GPU (guard.admit, step 166),
+without holding the lock while it does (175: a voice load waiting 47 min for VRAM held it,
+and every small render queued behind it).
 """
 
 from __future__ import annotations
 
 import contextlib
 import importlib.util
+import itertools
 import logging
 import os
 import sys
@@ -38,6 +40,8 @@ except ImportError:  # loaded by path (the voice service, in its own venv): guar
 log = logging.getLogger("gpu_lock")
 DEFAULT_PATH = Path.home() / ".ig-campaign" / "gpu.lock"
 LOG_EVERY_S = 30.0
+TICKET_STALE_S = 10.0  # a waiter touches its ticket every poll_s; older = it died
+_tickets = itertools.count()
 
 
 class LockTimeout(TimeoutError):
@@ -107,20 +111,46 @@ def held_by(path: Union[str, Path, None] = None) -> Optional[str]:
         return "?"
 
 
+def _older_ready(queue: Path, mine: str) -> bool:
+    """Is a live waiter that started before `mine` admitted too (its ticket fresh)? Stale
+    tickets (a waiter that died) are removed."""
+    try:
+        names = sorted(n for n in os.listdir(queue) if n < mine)
+    except OSError:
+        return False
+    for name in names:
+        try:
+            age = time.time() - (queue / name).stat().st_mtime
+        except OSError:
+            continue  # it just went
+        if age < TICKET_STALE_S:
+            return True
+        with contextlib.suppress(OSError):
+            (queue / name).unlink()
+    return False
+
+
 @contextlib.contextmanager
 def hold(what: str, path: Union[str, Path, None] = None, *, timeout_s: Optional[float] = None,
          poll_s: float = 0.5, log_every_s: float = LOG_EVERY_S, need_vram_gb: float = 0.0,
          min_free_ram_gb: Optional[float] = None) -> Iterator[None]:
-    """Hold the machine's GPU lock for `what` (shown to waiters, with this pid). Waits as
-    long as it takes unless timeout_s is given, logging who holds it meanwhile; then, still
-    holding it, as long as guard.admit says (need_vram_gb free, min_free_ram_gb free RAM:
-    None = GUARD_MIN_FREE_RAM_GB), whatever timeout_s."""
+    """Hold the machine's GPU lock for `what` (shown to waiters, with this pid), once
+    guard.blockers says it may start (need_vram_gb free, min_free_ram_gb free RAM: None =
+    GUARD_MIN_FREE_RAM_GB). Waits for admission WITHOUT the lock (guard.admit, whatever
+    timeout_s), then for the lock (LockTimeout past timeout_s of lock waiting), then checks
+    again under it: still blocked, it lets the lock go and waits again (175). Of two waiters
+    admitted at once, the one that started waiting first goes first (a ticket file each)."""
     path = Path(path).expanduser() if path else default_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     holder = path.with_name(path.name + ".holder")
+    queue = path.with_name(path.name + ".queue")
+    floor = guard.ram_floor(min_free_ram_gb)
+    mine = f"{time.time_ns():020d}-{os.getpid()}-{next(_tickets)}"
+    ticket = queue / mine
     next_log: Optional[float] = None
+    start, lock_waited = time.monotonic(), 0.0
 
-    def waiting(waited: float) -> None:
+    def waiting(waited: float, ahead: bool) -> None:
         nonlocal next_log
         if next_log is None or waited >= next_log:
             next_log = waited + log_every_s
@@ -128,12 +158,39 @@ def hold(what: str, path: Union[str, Path, None] = None, *, timeout_s: Optional[
                 by = holder.read_text(encoding="utf-8") or "?"
             except OSError:
                 by = "?"
-            log.warning("%s: waiting for the GPU (held by %s) for %.0f s", what, by, waited)
+            by = "a job that waited longer" if ahead else by
+            log.warning("%s: waiting for the GPU (held by %s) for %.0f s", what, by,
+                        time.monotonic() - start)
 
-    start = time.monotonic()
-    with file_lock(path, timeout_s=timeout_s, poll_s=poll_s, on_wait=waiting):
-        holder.write_text(f"pid {os.getpid()}: {what}", encoding="utf-8")
-        if next_log is not None:
-            log.warning("%s: got the GPU after waiting %.0f s", what, time.monotonic() - start)
-        guard.admit(what, need_vram_gb, min_free_ram_gb)
-        yield
+    with open(path, "a+b") as f:
+        while True:
+            guard.admit(what, need_vram_gb, floor)  # the lock is free meanwhile
+            queue.mkdir(exist_ok=True)
+            ticket.touch()
+            try:
+                t0 = time.monotonic()
+                while True:
+                    ahead = _older_ready(queue, mine)
+                    if not ahead and _try_lock(f):
+                        break
+                    waited = lock_waited + time.monotonic() - t0
+                    if timeout_s is not None and waited >= timeout_s:
+                        raise LockTimeout(f"{path.name} still locked after {timeout_s:g} s")
+                    waiting(waited, ahead)
+                    time.sleep(poll_s)
+                    ticket.touch()  # still waiting: others see it fresh
+                lock_waited += time.monotonic() - t0
+            finally:
+                with contextlib.suppress(OSError):
+                    ticket.unlink()
+            if not guard.blockers(need_vram_gb, floor):  # checked again, under the lock
+                break
+            _unlock(f)  # e.g. VRAM taken since: wait again without holding it
+        try:
+            holder.write_text(f"pid {os.getpid()}: {what}", encoding="utf-8")
+            if next_log is not None:
+                log.warning("%s: got the GPU after waiting %.0f s", what,
+                            time.monotonic() - start)
+            yield
+        finally:
+            _unlock(f)
