@@ -10,7 +10,8 @@ one), it has no run started today, it isn't running and its file exists. Three c
   starting due runs detached one at a time, each once the last run and its renders are done
   (166) (a run missed while the PC was off starts after the next logon, same day),
   and the light run the owner's scheduled work orders (136) and change requests (147) ask
-  for, or new capability re-wakes (156) (order_run);
+  for, or new capability re-wakes (156) (order_run); before those, the oldest scheduled
+  Lemo-Opuscar order goes to the film runner (film_run, 173);
 - the website's Settings page: overview() (next and last run per playbook).
 
 install_schedule() registers the OS side: on Windows a logon task for `up` and one daily
@@ -36,6 +37,7 @@ import structlog
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
 from ..studio import styles, work_orders
+from . import film
 from .packet import RUNS
 from .runner import (
     AGENT_DIR,
@@ -60,15 +62,17 @@ ORDER_READERS = tuple(p for p, (_, s) in RUNS.items()
                       if s and ("work_orders" in s or "revisions" in s))
 # the newest thing the light run is for: a scheduled order, or a wanting-changes comment
 # (written or edited by the owner; the agent's digest doesn't touch updated_at) on an asset
-# still `revision_requested` (147). MAX skips NULLs; both columns are to_iso().
+# still `revision_requested` (147). MAX skips NULLs; both columns are to_iso(). Lemo-Opuscar
+# orders are the film runner's (173), never the light run's.
+_AGENT_ORDER = "status = 'scheduled' AND COALESCE(style, '') NOT LIKE 'lemo:%'"
 _NEWEST_WORK = (
     "SELECT MAX(t) FROM (SELECT MAX(scheduled_at) AS t FROM work_orders"
-    " WHERE status = 'scheduled'"
+    f" WHERE {_AGENT_ORDER}"
     " UNION ALL SELECT MAX(f.updated_at) FROM feedback f JOIN assets a ON a.id = f.asset_id"
     " WHERE f.wants_changes = 1 AND a.status = 'revision_requested')")
 # 156: something the light run would look at again when the studio can make more
 _WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_requested')"
-            " OR EXISTS (SELECT 1 FROM work_orders WHERE status = 'scheduled')")
+            f" OR EXISTS (SELECT 1 FROM work_orders WHERE {_AGENT_ORDER})")
 CAPABILITIES_KEY = "style_capabilities"  # worker_state: {styles, gained_at}
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
@@ -260,6 +264,40 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     return ORDER_PLAYBOOK
 
 
+def film_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
+             start: Callable[..., Any], check: Optional[Callable[..., Any]] = None
+             ) -> Optional[int]:
+    """The oldest scheduled Lemo-Opuscar order starts the film runner (173). Returns its id
+    when started, else None. Not while a film runs (one at a time; orders a dead film left
+    in_production are skipped first, film.close_orphans), nor past LEMO_FILMS_PER_DAY, nor
+    while the agent preflight fails (asked again ORDER_RETRY later); the Lemo orders'
+    blocked_reason says why when it is the cap or the preflight."""
+    try:
+        film.check_film(store, settings, now)
+    except AgentRunRefused:
+        return None
+    except AgentError as e:  # today's films are made
+        if film.next_order(store):
+            work_orders.set_blocked(store, str(e), films=True)
+        return None
+    film.close_orphans(store)
+    order = film.next_order(store)
+    if not order:
+        return None
+    failed = store.get_state("order_preflight_failed_at")
+    if failed and now - parse_iso(failed) < ORDER_RETRY:
+        return None
+    try:
+        (check or preflight)(settings)
+        start(store, settings, order["id"])
+    except AgentError as e:  # the CLI is missing or signed out
+        store.set_state("order_preflight_failed_at", to_iso(now))
+        work_orders.set_blocked(store, f"le film ne peut pas démarrer : {e}", films=True)
+        return None
+    work_orders.set_blocked(store, None, films=True)
+    return order["id"]
+
+
 def busy(store: CampaignStore) -> Optional[str]:
     """Why the catch-up starts no run now (166: never back to back), else None: a run is
     running (one whose runner is gone is closed first, 155), or renders are queued."""
@@ -273,11 +311,14 @@ def busy(store: CampaignStore) -> Optional[str]:
 
 def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              start: Optional[Callable[..., Any]] = None,
-             now: Optional[Callable[[], datetime]] = None) -> List[str]:
-    """Start the first due playbook detached (runs.start_run), else the work orders' run if
-    they need one (order_run); nothing while busy(): one run, then the next waits for it
-    and its renders. Never raises: the worker lives.
+             now: Optional[Callable[[], datetime]] = None,
+             start_film: Optional[Callable[..., Any]] = None) -> List[str]:
+    """Start the first due playbook detached (runs.start_run), else a Lemo film (film_run,
+    runs.start_film), else the work orders' run if they need one (order_run); nothing while
+    busy(): one run, then the next waits for it and its renders. Never raises: the worker
+    lives.
     ponytail: a run's row appears a second or two after its start, well within a tick."""
+    from .runs import start_film as start_film_run
     from .runs import start_run
 
     now = now or utcnow  # looked up per call (a default argument would freeze it)
@@ -293,6 +334,10 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
                 break
             except AgentError as e:
                 print(f"agent catch-up: {e}", file=sys.stderr, flush=True)
+        if not started:
+            order_id = film_run(store, settings, now(), start=start_film or start_film_run)
+            if order_id is not None:
+                started.append(f"film {order_id}")
         if not started and order_run(store, settings, now(), start=start or start_run):
             started.append(ORDER_PLAYBOOK)
     except Exception as e:  # noqa: BLE001 - e.g. database locked: next tick

@@ -22,6 +22,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler agent run daily-produce  # locked-down Claude Code run (058)
   python -m src.scheduler agent check         # is the Claude Code CLI there and signed in?
   python -m src.scheduler agent run-due       # run playbooks due per AGENT_SCHEDULE (061)
+  python -m src.scheduler agent film 12       # make Lemo-Opuscar work order 12 into a film (173)
   python -m src.scheduler agent install-schedule [--remove]  # OS autostart + daily runs
   python -m src.scheduler downloader setup|update|status  # Reel downloader service (063a)
   python -m src.scheduler restore <backup> [--yes]  # put a nightly backup back (097)
@@ -311,9 +312,14 @@ def _agent(args: argparse.Namespace) -> int:
             print(json.dumps(runs, indent=2, default=str))
             return 0 if all(r["status"] == "succeeded" for r in runs) else 1
         try:
-            run = run_agent(store, settings, args.playbook, max_turns=args.max_turns,
-                            timeout_s=args.timeout * 60 if args.timeout else None,
-                            dry_run=args.dry_run)
+            if args.agent_command == "film":
+                from .agent.film import run_film
+
+                run = run_film(store, settings, args.order_id)
+            else:
+                run = run_agent(store, settings, args.playbook, max_turns=args.max_turns,
+                                timeout_s=args.timeout * 60 if args.timeout else None,
+                                dry_run=args.dry_run)
         finally:
             store.close()
     except AgentError as e:
@@ -480,6 +486,8 @@ def main(argv: list[str] | None = None) -> None:
     ar.add_argument("--timeout", type=float, metavar="MIN",
                     help="Wall-clock limit in minutes (default AGENT_TIMEOUT_MINUTES)")
     agent.add_parser("check", help="Preflight only: CLI found and signed in")
+    af = agent.add_parser("film", help="Make a Lemo-Opuscar work order into a film (173)")
+    af.add_argument("order_id", type=int, help="A scheduled work order in a lemo:<slug> style")
     agent.add_parser("run-due", help="Run every playbook due per AGENT_SCHEDULE, in turn")
     ais = agent.add_parser("install-schedule",
                            help="Start `up` at logon and the daily runs via the OS scheduler")
