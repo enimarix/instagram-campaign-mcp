@@ -681,7 +681,7 @@ class Watchdog:
         if done or ((targets or self.suspended)
                     and (self.next_line is None or now >= self.next_line)):
             self.next_line = now + STATE_EVERY_S
-            line = (f"GPU {_n(temp)} °C {_n(watts)}/{_n(limit)} W {_n(r.get('util'))} % | "
+            line = (f"GPU {_n(temp)} °C {_n(watts)}/{_n(limit)} W {_n(util)} % | "
                     f"CPU limit {_n(perf)} % | RAM {_n(ram, '.1f')} GB free | "
                     f"lock {by or 'free'} | heavy {len(targets)}, paused {len(self.suspended)}"
                     + "".join(f" | {d}" for d in done))
