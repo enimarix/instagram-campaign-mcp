@@ -185,9 +185,11 @@ def test_api(store, settings, tmp_path):
         assert tc.get("/api/style-catalog/lemo:watercolor/preview/x").status_code == 422
 
 
-def test_cli_refuses_unknown_slug(capsys):
+def test_cli_refuses_unknown_slug(capsys, monkeypatch):
     from src import scheduler
 
+    # configure_logging would bind loggers to capsys's stream, closed after this test.
+    monkeypatch.setattr(scheduler, "configure_logging", lambda *a: None)
     with pytest.raises(SystemExit) as e:
         scheduler.main(["styles", "fetch-previews", "nope"])
     assert e.value.code == 1 and "not in the library: nope" in capsys.readouterr().err
