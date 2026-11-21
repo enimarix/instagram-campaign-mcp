@@ -247,11 +247,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--exit-with-pid", type=int, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    gpu_lock.guard.lower_self()  # step 166: so is the model worker, its child
+    gpu_lock.guard.lower_self()  # step 166 (+ its CPUs, 171): so is the model worker, its child
     if args.exit_with_pid:
         threading.Thread(target=_exit_with, args=(args.exit_with_pid,), daemon=True).start()
     settings, voices = Settings.from_env(), load_voices(args.voices)
-    app = create_app(Worker(functools.partial(Engine, settings.steps, settings.cfg)), settings,
+    app = create_app(Worker(functools.partial(Engine, settings.steps, settings.cfg,
+                                              gpu_lock.guard.heavy_cpus())), settings,
                      voices)
     threading.Thread(target=_unload_when_idle, args=(app.state.unload_if_idle,),
                      daemon=True).start()

@@ -36,16 +36,20 @@ class WorkerFailed(RuntimeError):
 class Engine:
     """VoxCPM2 + Whisper. take() returns (wav bytes, duration_s, Whisper words)."""
 
-    def __init__(self, steps: int, cfg: float):
-        self.steps, self.cfg = steps, cfg
+    def __init__(self, steps: int, cfg: float, threads: int = 0):
+        self.steps, self.cfg, self.threads = steps, cfg, threads  # threads 0: the libraries'
         self.model = self.asr = None
 
     def load(self) -> None:
+        import torch
         from faster_whisper import WhisperModel  # lazy: CI has neither
         from voxcpm import VoxCPM
 
+        if self.threads:  # the CPUs the guard gives the voice (step 171): no oversubscription
+            torch.set_num_threads(self.threads)
         self.model = VoxCPM.from_pretrained(MODEL_ID, load_denoiser=False)
-        self.asr = WhisperModel(WHISPER_ID, device="cpu", compute_type="int8")
+        self.asr = WhisperModel(WHISPER_ID, device="cpu", compute_type="int8",
+                                cpu_threads=self.threads)
 
     def take(self, text: str, card: str, card_text: str):
         import numpy as np

@@ -8,6 +8,26 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-21: A heat budget: heavy jobs use half the CPUs and the watchdog cools the laptop (171)
+Every heavy child (Blender, Remotion, ffmpeg, the voice service and its model worker) runs on
+the first `GUARD_CPU_SHARE` (0.5) of the logical CPUs (affinity, inherited by its children:
+8 of 16 = 4 physical cores) with matching thread counts (Blender `-t`, ffmpeg `-threads`,
+Remotion `--concurrency` <= half, torch / Whisper threads). The resource guard's watchdog
+(166) now also pauses the processes under whoever holds the GPU lock (a dev script,
+`gpu-run.py`; checked on the lock itself, never the stale `.holder` file) and pauses to cool:
+GPU >= 83 °C until <= 74 °C (was 88 / 80); 60 s at >= 95 % of the GPU power limit or with
+the CPU throttled (Windows `% Performance Limit` < 80: no CPU temperature without admin
+drivers) -> 3 min; after `GUARD_MAX_BUSY_MIN` (15) minutes of continuous GPU work -> 3 min
+(duty cycle). Heat never kills a job any more (paused, it cools); only RAM still short after
+3 min does. Time spent paused does not count against a render's timeout. The watchdog writes
+`data/logs/guard.log` (a state line every 30 s while heavy work runs, one per action, each
+synced to disk, rotated at 4 MB). Windows power plans stay the owner's.
+Reason: 2026-11-21 01:41 the laptop (i7-11800H + RTX 3070 Laptop at 130 W, High performance
+plan, 230 W adapter) cut its own power (Kernel-Power 41, bugcheck 0) under ONE Blender render
+correctly alone under the GPU lock for 18 min: 16 CPU threads + the GPU flat out. The old
+watchdog watched only the studio's own children, at 88 °C, with no CPU signal and no log
+that survived the crash.
+
 ## 2026-11-20: A Meta block pauses the studio's Graph calls, posts wait (167)
 A Graph error that means Meta blocked the studio, not one request (code 200 subcode 5258005
 "API access blocked.", code 368 temporarily blocked for policy, code 190 subcode 460/463/467 on

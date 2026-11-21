@@ -215,6 +215,21 @@ class InstagramMCPSettings(BaseSettings):
         True, description="Pause the studio's heavy jobs while free RAM or the GPU temperature"
         " is critical"
     )
+    # Heat budget (step 171: the laptop powered itself off under one long Blender render)
+    guard_cpu_share: float = Field(
+        0.5, gt=0, le=1, description="Share of the logical CPUs a heavy job may use (its"
+        " affinity and thread counts)"
+    )
+    guard_suspend_temp_c: float = Field(
+        83.0, gt=0, description="GPU temperature (°C) that pauses heavy jobs to cool"
+    )
+    guard_resume_temp_c: float = Field(
+        74.0, gt=0, description="GPU temperature (°C) at or under which paused jobs resume"
+    )
+    guard_max_busy_min: float = Field(
+        15.0, ge=0, description="Minutes of continuous heavy work before a 3-minute cooling"
+        " pause (0: no duty cycle)"
+    )
 
     # --- Housekeeping -----------------------------------------------------
     # Once a day (src/studio/housekeeping.py). Liked assets are archived only past best_before.

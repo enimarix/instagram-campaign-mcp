@@ -55,6 +55,11 @@ SCHEMA_TIMEOUT_S = 60.0
 BUNDLE_TIMEOUT_S = 300.0
 STILL_TIMEOUT_S = 120.0
 RENDER_CONCURRENCY = 4  # Chrome tabs per render; 2 renders in parallel (step 006a)
+
+
+def _concurrency() -> int:
+    """Chrome tabs per render: at most half the job's CPUs (171, the heat budget)."""
+    return max(1, min(RENDER_CONCURRENCY, guard.heavy_cpus() // 2))
 TAIL_CHARS = 2000
 
 def _paper_line(labels: Sequence[Any]) -> str:
@@ -323,7 +328,7 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
     with tempfile.TemporaryDirectory(prefix="motion-", dir=out.parent) as work:
         raw = Path(work) / "raw.mp4"
         _render(template, staged, raw, Path(work), timeout_s=timeout_s,
-                extra=["--concurrency", RENDER_CONCURRENCY])
+                extra=["--concurrency", _concurrency()])
         if ffmpeg.probe(raw).has_audio:  # a voiced video is normalised by its voice (161)
             voice = listen.voice_track({"kind": "motion", "props": v["props"]}, media_root)
             recipe.normalize_loudness(raw, out, timeout_s=timeout_s,
@@ -356,7 +361,7 @@ def render_end_card(media_root: PathLike, props: Dict[str, Any], backdrop: Optio
     with tempfile.TemporaryDirectory(prefix="endcard-", dir=out.parent) as work:
         clip = Path(work) / "card.mp4"
         _render("EndCard", staged, clip, Path(work), timeout_s=timeout_s,
-                extra=["--concurrency", RENDER_CONCURRENCY])
+                extra=["--concurrency", _concurrency()])
         os.replace(clip, out)  # atomic: a parallel render of the same card is harmless
     return out
 

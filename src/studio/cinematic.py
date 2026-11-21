@@ -252,10 +252,10 @@ def blender(args: Sequence[Any], what: str, timeout_s: float) -> None:
     """THE way to launch Blender (studio renders, previews, macro plates, dev scripts:
     `python -m src.studio.cinematic <blender args>`): under the machine's GPU lock, admitted
     for free RAM / VRAM and no game (145, 166), at low priority. tests/test_guard.py fails on
-    a launch anywhere else."""
+    a launch anywhere else. Its threads match its share of the CPUs (171)."""
     exe = find_blender()
     with guard.gpu(what, "blender"):
-        _run([exe, *args], "Blender", timeout_s)
+        _run([exe, "-t", guard.heavy_cpus(), *args], "Blender", timeout_s)
 
 
 def _voice_path(p: Props, media_root: PathLike) -> Optional[Path]:
