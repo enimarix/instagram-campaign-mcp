@@ -66,7 +66,7 @@ export function StylePicker({ value, onChange, autoLabel = "Auto (l'IA choisit)"
           </p>
         ) : value === null && <p className="mt-1 text-xs text-muted">L'IA choisit le style qui va le mieux à l'idée.</p>}
       {gallery && (
-        <Sheet title="Tous les styles" onClose={() => setGallery(false)}>
+        <Sheet title="Tous les styles" wide onClose={() => setGallery(false)}>
           <div className="mt-3">
             <StyleGallery selectedId={value} onSelect={(id, s) => { // the video's own style: the server says so
               setPicked(s)

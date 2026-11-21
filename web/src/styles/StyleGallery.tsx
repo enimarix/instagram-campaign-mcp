@@ -133,7 +133,7 @@ export function StyleGallery({ onSelect, selectedId }: { onSelect?: (id: string,
     })
   }
   const grid = (list: CatalogStyle[]) => (
-    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-3 @xl:grid-cols-3 @3xl:grid-cols-4">
       {list.map((s) => <StyleCard key={s.id} style={s} selected={s.id === selectedId}
         onOpen={() => setOpen(s.id)} onToggle={() => toggle(s)} />)}
     </ul>
@@ -142,7 +142,7 @@ export function StyleGallery({ onSelect, selectedId }: { onSelect?: (id: string,
   if (error) return <p role="alert" className="text-sm text-danger">Styles indisponibles : {error}</p>
   if (!all) return <Skeleton className="h-64" />
   return (
-    <div className="space-y-4">
+    <div className="@container space-y-4"> {/* columns follow the gallery's own width: a page or a sheet */}
       <div className="space-y-2">
         <input type="search" aria-label="Chercher un style" placeholder="Chercher : aquarelle, cartoon, carte…"
           value={q} onChange={(e) => setQ(e.target.value)} className={`${field} w-full`} />

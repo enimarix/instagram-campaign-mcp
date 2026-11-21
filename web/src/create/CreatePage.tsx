@@ -68,7 +68,7 @@ function StylesField({ catalog, value, onChange, onGalleryClosed }: {
       </div>
       {full && <p className="mt-1 text-xs text-muted">{MAX_STYLES} styles au plus : retire-en un pour en choisir un autre.</p>}
       {gallery && (
-        <Sheet title="Tous les styles" onClose={close}>
+        <Sheet title="Tous les styles" wide onClose={close}>
           <div className="mt-3">
             <StyleGallery selectedId={null} onSelect={(id) => { onChange(value.includes(id) ? value : toggleStyle(value, id)); close() }} />
           </div>
