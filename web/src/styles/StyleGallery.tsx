@@ -61,7 +61,7 @@ function StyleCard({ style, onOpen, onToggle, selected }: {
 }
 
 function Detail({ style, onClose, onToggle, onSelect }: {
-  style: CatalogStyle; onClose: () => void; onToggle: () => void; onSelect?: (id: string) => void
+  style: CatalogStyle; onClose: () => void; onToggle: () => void; onSelect?: (id: string, style: CatalogStyle) => void
 }) {
   const { poster, clip } = style.preview
   return (
@@ -89,7 +89,7 @@ function Detail({ style, onClose, onToggle, onSelect }: {
             {style.favourite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
           </Button>
           {onSelect && (
-            <Button variant="primary" disabled={!style.selectable} onClick={() => onSelect(style.id)}>
+            <Button variant="primary" disabled={!style.selectable} onClick={() => onSelect(style.id, style)}>
               Choisir ce style
             </Button>
           )}
@@ -102,7 +102,7 @@ function Detail({ style, onClose, onToggle, onSelect }: {
 /** Every style (studio + Lemo-Opuscar) as cards: search, family and category filters, the
  * « Favoris » row first, a tap opens the detail sheet. With `onSelect` it is a picker (174):
  * the sheet gets « Choisir ce style » (only for selectable styles). */
-export function StyleGallery({ onSelect, selectedId }: { onSelect?: (id: string) => void; selectedId?: string | null }) {
+export function StyleGallery({ onSelect, selectedId }: { onSelect?: (id: string, style: CatalogStyle) => void; selectedId?: string | null }) {
   const [all, setAll] = useState<CatalogStyle[]>()
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
