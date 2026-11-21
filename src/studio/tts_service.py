@@ -49,6 +49,7 @@ def spawn(settings: InstagramMCPSettings, log_path: Path = LOG_PATH,
         env["GPU_LOCK_PATH"] = settings.gpu_lock_path
     # the studio's resource guard (166): its RAM floor, and no model load in the startup grace
     env["GUARD_MIN_FREE_RAM_GB"] = str(settings.guard_min_free_ram_gb)
+    env["GUARD_CPU_SHARE"] = str(settings.guard_cpu_share)  # its CPUs and torch threads (171)
     env["GUARD_NOT_BEFORE"] = str(time.time() + settings.guard_startup_grace_min * 60)
     cmd = command(settings)
     log_path.parent.mkdir(parents=True, exist_ok=True)

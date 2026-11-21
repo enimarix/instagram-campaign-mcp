@@ -90,6 +90,23 @@ def file_lock(path: Union[str, Path], *, timeout_s: Optional[float] = None,
             _unlock(f)
 
 
+def held_by(path: Union[str, Path, None] = None) -> Optional[str]:
+    """Who holds the GPU lock now ("pid N: what", "?" when unsaid), None while it is free (the
+    .holder file outlives its holder: only the lock itself says it is held). Checks by taking
+    the lock for an instant, so a job trying at that very moment retries next poll."""
+    path = Path(path).expanduser() if path else default_path()
+    if not path.exists():
+        return None
+    with open(path, "a+b") as f:
+        if _try_lock(f):
+            _unlock(f)
+            return None
+    try:
+        return path.with_name(path.name + ".holder").read_text(encoding="utf-8") or "?"
+    except OSError:
+        return "?"
+
+
 @contextlib.contextmanager
 def hold(what: str, path: Union[str, Path, None] = None, *, timeout_s: Optional[float] = None,
          poll_s: float = 0.5, log_every_s: float = LOG_EVERY_S, need_vram_gb: float = 0.0,

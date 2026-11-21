@@ -170,8 +170,10 @@ def run(args: Sequence[PathLike], *, timeout_s: float,
         log_path: Optional[PathLike] = None) -> RunResult:
     """Run `ffmpeg FIXED_ARGS *args`. Kills it and raises FFmpegTimeout past `timeout_s`;
     raises FFmpegError on a non-zero exit. The full stderr goes to `log_path` if given.
-    stdout is discarded: write outputs to files, not to `pipe:`."""
-    cmd = [find_ffmpeg(), *FIXED_ARGS, *map(str, args)]
+    stdout is discarded: write outputs to files, not to `pipe:`. The (last) output encodes
+    with guard.heavy_cpus() threads (171)."""
+    *head, out = map(str, args)
+    cmd = [find_ffmpeg(), *FIXED_ARGS, *head, "-threads", str(guard.heavy_cpus()), out]
     start = time.monotonic()
     timed_out = False
     try:
