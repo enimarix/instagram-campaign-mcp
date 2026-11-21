@@ -428,6 +428,20 @@ class InstagramMCPSettings(BaseSettings):
         " wait for the next scheduled run"
     )
 
+    # --- Lemo films (173) ---------------------------------------------------
+    # An order in a Lemo-Opuscar style (`lemo:<slug>`, LEMO_LIBRARY) is made by the film
+    # runner (src/agent/film.py): Claude Code with a shell, in <AGENT_WORKSPACE>/films/<id>/.
+    lemo_skill_dir: str = Field(
+        "", description="The lemo-opuscar plugin skill folder (SKILL.md + scripts/); empty ="
+        " the newest one in the Claude plugin cache"
+    )
+    lemo_film_max_min: float = Field(
+        90.0, gt=0, description="Wall-clock limit of one film; the CLI is killed after it"
+    )
+    lemo_films_per_day: int = Field(
+        3, ge=0, description="Films started per owner-local day (each one costs many tokens)"
+    )
+
     # --- Winner scoring ---------------------------------------------------
     winner_min_age_hours: float = Field(
         48.0, description="Posts younger than this are not judged yet"

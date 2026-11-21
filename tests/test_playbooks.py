@@ -43,7 +43,8 @@ def test_daily_produce_drives_the_whole_batch():
             "wait_for_renders", "get_asset_frames", "submit_asset"} <= named
 
 
-@pytest.mark.parametrize("path", PLAYBOOKS, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [p for p in PLAYBOOKS if p.stem not in runner.TEMPLATES],
+                         ids=lambda p: p.name)
 def test_every_playbook_has_a_dry_run_section(path):
     text = path.read_text(encoding="utf-8")
     assert re.search(r"^#+ .*dry run", text, re.I | re.M), "no '## Dry run' section"

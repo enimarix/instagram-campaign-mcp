@@ -15,12 +15,13 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from .runner import AGENT_DIR, REPO, _playbook_file, check_lock
+from .runner import AGENT_DIR, REPO, TEMPLATES, _playbook_file, check_lock
 
 
 def list_playbooks(agent_dir: Optional[Path] = None) -> List[str]:
     books = (agent_dir or AGENT_DIR) / "playbooks"
-    return sorted(p.stem for p in books.glob("*.md") if p.name != "README.md")
+    return sorted(p.stem for p in books.glob("*.md")
+                  if p.name != "README.md" and p.stem not in TEMPLATES)
 
 
 def _compact(run: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,13 +67,25 @@ def start_run(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     AgentRunRefused: it is already running."""
     name = _playbook_file(playbook, agent_dir or AGENT_DIR).stem
     check_lock(store, name, settings.agent_timeout_minutes * 60)
+    _detached(["agent", "run", name], popen)
+    return {"started": True, "playbook": name}
+
+
+def start_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int, *,
+               popen: Optional[Callable[..., Any]] = None) -> Dict[str, Any]:
+    """Start `agent film <order_id>` detached (src/agent/film.py; the film runner takes
+    its own lock and daily cap)."""
+    _detached(["agent", "film", str(order_id)], popen)
+    return {"started": True, "order_id": order_id}
+
+
+def _detached(args: List[str], popen: Optional[Callable[..., Any]]) -> None:
     if sys.platform == "win32":
         detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
                   | subprocess.DETACHED_PROCESS}
     else:
         detach = {"start_new_session": True}
     (popen or subprocess.Popen)(
-        [sys.executable, "-m", "src.scheduler", "agent", "run", name], cwd=REPO,
+        [sys.executable, "-m", "src.scheduler", *args], cwd=REPO,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         **detach)
-    return {"started": True, "playbook": name}

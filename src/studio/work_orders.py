@@ -11,6 +11,9 @@ they want, their exact instruction. Four origins:
 
 style (138, src/studio/styles.py): the style button the owner pressed; None = Auto (the
 agent picks). The idea made for the order is in that style (check_idea, create_idea).
+A Lemo-Opuscar style (`lemo:<slug>`, 173, src/studio/lemo.py) is for owner-mode orders
+only: the film runner (src/agent/film.py) makes those, never the agent (for_agent leaves
+them out; set_blocked(films=True) is their own wait reason).
 
 Modes:
 - inspired: an original video on the same idea or format; nothing of the Reel is reused
@@ -35,7 +38,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, to_iso, utcnow
-from . import dm_picks, styles
+from . import dm_picks, lemo, styles
 from .assets import InvalidTransition, transition
 from .downloader import _same_post, permalink
 
@@ -100,6 +103,17 @@ def list_orders(store: CampaignStore, status: Optional[str] = None, limit: int =
     return [_view(r) for r in store._select(_ROWS, filters, order, limit)]
 
 
+def _style(store: CampaignStore, style: Optional[str], mode: str) -> Optional[str]:
+    """A style an order may ask for: None (Auto), an enabled studio style, or a style of the
+    Lemo-Opuscar library for an owner-mode order (ValueError otherwise)."""
+    if not lemo.is_lemo(style):
+        return styles.check_style(store, style)
+    if mode != "owner":
+        raise ValueError(f"a Lemo-Opuscar style ({style}) is for your own orders only, not"
+                         f" mode {mode}")
+    return lemo.check_style(style)
+
+
 def _instruction(text: Optional[str]) -> Optional[str]:
     text = (text or "").strip() or None
     if text and len(text) > INSTRUCTION_MAX:
@@ -131,7 +145,7 @@ def create_orders(store: CampaignStore, items: Sequence[Dict[str, Any]]) -> List
         if not source["url"]:
             raise ValueError(f"Reel {source_id} has no permalink")
         instruction = _instruction(item.get("instruction"))
-        style = styles.check_style(store, item.get("style"))
+        style = _style(store, item.get("style"), mode)
         if source_id in [r[0] for r in rows]:
             raise ValueError(f"Reel {source_id} is in the list twice")
         rows.append((source_id, mode, instruction, style))
@@ -185,7 +199,7 @@ def set_instruction(store: CampaignStore, order_id: int, instruction: str,
     if mode is not None and mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
     order = get_order(store, order_id)
-    style = order["style"] if style is ... else styles.check_style(store, style)
+    style = order["style"] if style is ... else _style(store, style, mode or order["mode"])
     now = to_iso(utcnow())
     with store._tx() as c:
         moved = c.execute(
@@ -218,7 +232,7 @@ def create_video(store: CampaignStore, instruction: str,
     text = _instruction(instruction)
     if not text:
         raise ValueError("write the topic or the instruction")
-    return _insert_owner_order(store, "create", text, styles.check_style(store, style))
+    return _insert_owner_order(store, "create", text, _style(store, style, "owner"))
 
 
 def restyle(store: CampaignStore, asset_id: int, style: Optional[str],
@@ -229,14 +243,16 @@ def restyle(store: CampaignStore, asset_id: int, style: Optional[str],
     is no such video."""
     asset = store.get_asset(asset_id)
     current = store.get_idea(asset["idea_id"])["style"]
-    style = styles.check_style(store, style)
+    style = _style(store, style, "owner")
     if style is not None and style == current:
         raise ValueError(f"video {asset_id} is already in style {style!r}: pick another one")
     if style is None:
         other = f" que {current}" if current else ""
         how = f"dans un autre style{other}, au choix de l'IA"
     else:
-        how = f"en style « {styles.get_style(store, style)['label']} » ({style})"
+        label = (lemo.style_info(style) if lemo.is_lemo(style)
+                 else styles.get_style(store, style))["label"]
+        how = f"en style « {label} » ({style})"
     text = (f"Même vidéo, autre style : refais la vidéo {asset_id} (même sujet, même script,"
             f" même message) {how}.")
     note = (note or "").strip()
@@ -392,9 +408,12 @@ def open_by_source(store: CampaignStore, source_ids: Sequence[int]) -> Dict[int,
 def for_agent(store: CampaignStore, status: Optional[str] = "scheduled",
               limit: int = 50) -> List[Dict[str, Any]]:
     """What the agent sees of the orders (status None: all), oldest first. A change order
-    carries from_video: the idea of the video to remake (its hook, script, template)."""
+    carries from_video: the idea of the video to remake (its hook, script, template).
+    Lemo-Opuscar orders are left out: the film runner makes them (173)."""
     out = []
     for o in list_orders(store, status, limit, newest=False):
+        if lemo.is_lemo(o["style"]):
+            continue
         row = {k: o[k] for k in AGENT_KEYS}
         if o["from_asset_id"]:
             asset = store.get_asset(o["from_asset_id"])
@@ -406,9 +425,12 @@ def for_agent(store: CampaignStore, status: Optional[str] = "scheduled",
     return out
 
 
-def set_blocked(store: CampaignStore, reason: Optional[str]) -> int:
-    """Why the scheduled orders still wait (None: they don't); returns how many changed."""
+def set_blocked(store: CampaignStore, reason: Optional[str], *, films: bool = False) -> int:
+    """Why the scheduled orders still wait (None: they don't): the agent's, or with films
+    the Lemo-Opuscar ones (the film runner's); returns how many changed."""
+    which = "LIKE" if films else "NOT LIKE"
     with store._tx() as c:
         return c.execute("UPDATE work_orders SET blocked_reason=?, updated_at=?"
-                         " WHERE status='scheduled' AND blocked_reason IS NOT ?",
-                         (reason, to_iso(utcnow()), reason)).rowcount
+                         " WHERE status='scheduled' AND blocked_reason IS NOT ?"
+                         f" AND COALESCE(style, '') {which} ?",
+                         (reason, to_iso(utcnow()), reason, lemo.PREFIX + "%")).rowcount
