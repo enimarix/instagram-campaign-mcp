@@ -47,7 +47,7 @@ def main():
     people.dress(rig, ch, ch.get("name", "actor"))
     rig.location = ch.get("location", (0, 0, 0))
     people.decimate(body, rig)
-    people.crush_textures()
+    people.crush_textures(CFG.get("texture_px", 1024))
     if sampled:
         retarget.apply(rig, *sampled, skip=clip.get("skip", ()), offsets=clip.get("offsets"))
     stage.lights(sun_dir, cfg=CFG)

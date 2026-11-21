@@ -2,12 +2,13 @@
 
     blender -b -P cinematic/engine/troupe.py -- <shots.json>
 
-<shots.json>: out, fps, size, samples, shots [{id, set, light, frames, speed, seed, stills,
+<shots.json>: out, fps, size, samples, texture_px (the largest image side), shots [{id, set, light, frames, speed, seed, stills,
 camera {kind, on}, cast [{who, look (its cast.json entry), spot {at, facing, seat, z}, facing,
 to (a spot to walk to), action, face, face_at, offset}]}], all resolved and checked by
 troupe.py. Every shot is its own scene: the set (engine/<sets.json module>.py), the actors
 (engine/people.py) and one camera (engine/stage.py). Writes out/<id>/f_####.png (frames
-1..frames) or out/<id>/still_<n>.png for each frame in `stills`.
+1..frames) or out/<id>/still_<n>.png for each frame in `stills`, and out/<id>/stats.json
+(the scene's texture memory, 177).
 """
 import importlib
 import json
@@ -57,7 +58,7 @@ def render_shot(cfg, shot):
         if move.get("lie"):
             people.ground(body, rig)
         actors[a["who"]] = rig
-    people.crush_textures()
+    people.crush_textures(cfg.get("texture_px", 1024))
     stage.lights(sun or stage.sun_dir(preset), preset)
     s.frame_start, s.frame_end = 1, frames
     s.frame_set(1)
@@ -67,6 +68,8 @@ def render_shot(cfg, shot):
     stage.camera(cam["kind"], frames, spec["wide"], spec["center"], head, look)
     out = os.path.join(os.path.abspath(cfg["out"]), shot["id"])
     os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "stats.json"), "w", encoding="utf-8") as f:
+        json.dump(texture_stats(), f)
     s.render.image_settings.file_format = "PNG"
     if shot.get("stills"):
         for f in shot["stills"]:
@@ -76,6 +79,16 @@ def render_shot(cfg, shot):
     else:
         s.render.filepath = os.path.join(out, "f_")
         bpy.ops.render.render(animation=True)
+
+
+def texture_stats():
+    """What the scene's images weigh at render time (step 177's VRAM diet): their count, MB
+    uncompressed (no mipmaps) and the biggest ones."""
+    imgs = [i for i in bpy.data.images if i.users and i.size[0]]
+    size = {i.name: i.size[0] * i.size[1] * i.channels * (4 if i.is_float else 1) for i in imgs}
+    big = sorted(imgs, key=lambda i: -size[i.name])[:8]
+    return {"images": len(imgs), "texture_mb": round(sum(size.values()) / 2**20, 1),
+            "largest": [[i.name, *i.size] for i in big]}
 
 
 def main():

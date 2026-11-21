@@ -22,11 +22,12 @@ def reset(cfg):
     s.render.resolution_x, s.render.resolution_y = cfg.get("size", [720, 1280])
     s.render.filter_size = 0.8
     e = s.eevee
+    # VRAM diet (177: the NVIDIA driver stalled under troupe scenes on the 8 GB laptop): a
+    # 256 MB shadow pool (default 512); ray tracing stays at Blender's half resolution; no
+    # volumetric settings (no set has a volume: nothing is allocated for them).
     for attr, val in [("taa_render_samples", cfg.get("samples", 64)), ("use_shadows", True), ("shadow_ray_count", 2),
-                      ("shadow_step_count", 8), ("use_raytracing", True), ("use_fast_gi", True),
-                      ("fast_gi_method", "GLOBAL_ILLUMINATION"), ("fast_gi_distance", 1.5),
-                      ("volumetric_tile_size", "4"), ("volumetric_samples", 64), ("use_volumetric_shadows", True),
-                      ("volumetric_end", 8.0)]:
+                      ("shadow_step_count", 8), ("shadow_pool_size", "256"), ("use_raytracing", True),
+                      ("use_fast_gi", True), ("fast_gi_method", "GLOBAL_ILLUMINATION"), ("fast_gi_distance", 1.5)]:
         if hasattr(e, attr):
             try:
                 setattr(e, attr, val)

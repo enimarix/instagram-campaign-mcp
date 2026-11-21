@@ -63,7 +63,14 @@ for every shot not cached yet). Example: `shotlists/proof.json`.
   resolved shot and the engine's files); the shots end to end are the track
   (`<media root>/troupe/tracks/`). Cost: `shotlists/proof.json` (8 shots, 28 actors built,
   11 s of video) took 18.6 min, about 1.7 minutes per second of video (a one-actor 1 s shot:
-  ~1.1 min). Cached shots cost nothing on a re-render.
+  ~1.1 min). Cached shots cost nothing on a re-render. Each uncached shot is its own Blender
+  call (step 177): a crash loses one shot.
+- VRAM (step 177): every scene image is shared (one copy per file) and crushed to 1024 px for
+  faces and outfits (`cinematic.TEXTURE_PX`), 512 for the rest; the shadow pool is 256 MB.
+  `python -m src.studio.troupe measure <shots.json> <out> [shot] [frame]` renders one frame
+  (default: the shot with the most actors, its middle frame) and reports Blender's peak VRAM
+  (nvidia-smi, minus the baseline) and the scene's texture MB (`<out>/measure.json`, the
+  still beside it). Proof dinner of 7: 2.29 GB -> 1.20 GB, textures 601 -> 121 MB.
 
 | Piece | Source | License |
 |---|---|---|
@@ -129,3 +136,11 @@ the photoreal plates, `motion/src/templates/Macro3D/` composes the word-by-word 
 
 
 GPU backend: every Blender launch uses `--gpu-backend vulkan` (step 176; OpenGL powered the laptop off). Override with `CINEMATIC_GPU_BACKEND`.
+
+GPU clock cap (step 177): the RTX 3070 Laptop boosts to ~2100 MHz (rated ~1600) and that
+boost was what powered the PC off (and the DPC_WATCHDOG bluescreen) under Blender, not VRAM.
+The owner's admin logon task `GPUClockCap` runs `nvidia-smi -lgc 210,1500` at every logon
+(the cap lasts until a reboot). With it the 8-shot proof (`shotlists/proof.json`, diet on)
+passed: 12.9 min, 130.8 W peak, 3.1 GB VRAM. guard.log lines show the graphics clock
+(`clock 1500 MHz`) beside the VRAM: a clock above ~1600 means the cap is missing. The studio
+never sets clocks itself (a Windows / NVIDIA setting: the owner's).

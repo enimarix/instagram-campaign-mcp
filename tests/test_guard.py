@@ -112,11 +112,27 @@ def test_blockers_name_ram_vram_a_game_and_the_grace(monkeypatch):
     assert guard.blockers(guard.VRAM_GB["voice"], 8.0) == []
 
 
+def test_gpu_status_reads_used_vram(monkeypatch):
+    """177: guard.log shows the used VRAM; troupe.measure samples it."""
+    rows = {"--query-gpu=memory.used": [["2150"]]}
+    monkeypatch.setattr(guard, "_smi", lambda q: rows.get(q, [["5000", "61", "98.5", "130.0",
+                                                               "96", "3192", "8192", "1500"]]))
+    g = guard.gpu_status()
+    assert g["free_vram_gb"] == pytest.approx(5000 / 1024) and g["power_w"] == 98.5
+    assert (g["used_vram_gb"], g["total_vram_gb"]) == pytest.approx((3192 / 1024, 8.0))
+    assert g["clock_mhz"] == 1500  # 177: shows whether the owner's clock cap is on
+    assert guard.vram_used_gb() == pytest.approx(2150 / 1024)
+    monkeypatch.setattr(guard, "_smi", lambda q: [["5000", "61", "[N/A]", "[N/A]", "[N/A]"]])
+    old = guard.gpu_status()  # an older nvidia-smi answer
+    assert old["used_vram_gb"] is None and old["clock_mhz"] is None
+
+
 def test_no_nvidia_smi_means_no_gpu_check(monkeypatch):
     monkeypatch.setattr(guard, "free_ram_gb", lambda: None)  # unknown: no RAM check either
     monkeypatch.setattr(guard, "gpu_processes", lambda: pytest.fail("no GPU to look at"))
     assert guard.gpu_status() is None  # conftest: GUARD_NVIDIA_SMI names nothing
     assert guard.blockers(7.0, 8.0) == []
+    assert guard.vram_used_gb() is None
 
 
 def test_admit_waits_and_says_why(caplog):
@@ -403,7 +419,7 @@ def test_watchdog_guards_the_gpu_lock_holders_processes():
 def test_guard_log_has_a_line_per_action_and_every_30_s(tmp_path):
     log = tmp_path / "logs" / "guard.log"
     probe = {"ram": 18.2, "temp": 71.0, "watts": 98.0, "limit": 130.0, "util": 96.0,
-             "perf": 100.0}
+             "perf": 100.0, "vram": 2.14, "vram_total": 8.0, "clock": 1500.0}
     box = Box(probe, probe, probe, {**probe, "temp": 84.0}, log_path=log)
     dog = box.dog(children=(11,))
     for t in (0, 10, 30, 31):
@@ -411,9 +427,12 @@ def test_guard_log_has_a_line_per_action_and_every_30_s(tmp_path):
         dog.tick()
     lines = log.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 3  # 0 s, 30 s, and the pause at 31 s
-    assert lines[0].endswith("GPU 71 °C 98/130 W 96 % | CPU limit 100 % | RAM 18.2 GB free | "
-                             "lock pid 7: Blender (dev) | heavy 1, paused 0")
-    assert lines[2].endswith("GPU 84 °C 98/130 W 96 % | CPU limit 100 % | RAM 18.2 GB free | "
+    assert lines[0].endswith("GPU 71 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used, clock 1500 MHz | "
+                             "CPU limit 100 % | "
+                             "RAM 18.2 GB free | lock pid 7: Blender (dev) | heavy 1, paused 0")
+    assert lines[2].endswith("GPU 84 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used, clock 1500 MHz | "
+                             "CPU limit 100 % | "
+                             "RAM 18.2 GB free | "
                              "lock pid 7: Blender (dev) | heavy 1, paused 1 | paused 1 heavy "
                              "job process(es) (GPU 84 °C): free RAM 18.2 GB, GPU 84 °C")
 
@@ -474,15 +493,25 @@ def test_heavy_cpus_is_the_share_of_the_logical_cpus(monkeypatch):
     assert guard.heavy_cpus() == 1
 
 
+def test_heavy_jobs_leave_cpu_0_to_windows(monkeypatch):
+    """177: CPU 0 takes most interrupts and the NVIDIA driver's DPCs (the bluescreen's)."""
+    monkeypatch.setattr(os, "cpu_count", lambda: 16)
+    assert guard.cpu_set(8) == range(1, 9)
+    assert guard.cpu_set(15) == range(1, 16)
+    assert guard.cpu_set(16) == range(0, 16)  # every CPU: CPU 0 too
+    monkeypatch.setattr(os, "cpu_count", lambda: 1)
+    assert guard.cpu_set(1) == range(0, 1)
+
+
 @pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no CPU affinity")
-def test_run_pins_the_child_to_the_first_cpus(monkeypatch):
+def test_run_pins_the_child_to_cpus_after_cpu_0(monkeypatch):
     if (os.cpu_count() or 1) < 2:
         pytest.skip("one CPU: nothing to pin")
     monkeypatch.setenv("GUARD_CPU_SHARE", "0.5")
     n = guard.heavy_cpus()
     # A pinned process never spins up more than its CPUs
     out = guard.run([PY, "-c", AFFINITY], capture_output=True, text=True, timeout=60)
-    assert int(out.stdout) == (1 << n) - 1  # CPUs 0..n-1
+    assert int(out.stdout) == ((1 << n) - 1) << 1  # CPUs 1..n
 
 
 def test_tools_get_thread_counts_to_match(monkeypatch, tmp_path):
