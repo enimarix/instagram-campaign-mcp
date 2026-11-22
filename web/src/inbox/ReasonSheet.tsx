@@ -14,9 +14,10 @@ type Props = {
   at?: number
   onSave: (fb: CommentIn) => void
   onClose: () => void
-  /** Change only: « même vidéo, autre style » (138), a new work order, this video stays.
+  /** Change only: « même vidéo, autre style » (138), a new work order. 181: the text and
+   * reason chips typed above go with it, and the video leaves the Inbox.
    * style null: another one the AI picks; `style` here: the video's own (not offered). */
-  onRestyle?: (style: string | null) => void
+  onRestyle?: (style: string | null, extra: { note?: string; reasons: string[] }) => void
   style?: string | null
 }
 
@@ -76,7 +77,10 @@ export default function ReasonSheet({ reasons, at, onSave, onClose, onRestyle, s
           {restyling && (
             <div className="mt-2 space-y-3">
               <StylePicker value={newStyle} onChange={setNewStyle} autoLabel="Au choix de l'IA" exclude={style} all />
-              <Button variant="primary" className="w-full" onClick={() => onRestyle(newStyle)}>Refaire dans ce style</Button>
+              <Button variant="primary" className="w-full" onClick={() => onRestyle(newStyle, { reasons: picked, ...(text.trim() && { note: text.trim() }) })}>
+                Refaire dans ce style
+              </Button>
+              <p className="text-sm text-muted">Ton texte et les raisons cochées partent avec. Cette vidéo quitte l'Inbox.</p>
             </div>
           )}
         </details>

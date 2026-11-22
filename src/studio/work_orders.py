@@ -35,9 +35,11 @@ twice is two orders. A DM order's pick follows it (in_production, skipped).
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, to_iso, utcnow
+from ..taxonomy import validate_many
 from . import dm_picks, lemo, styles
 from .assets import InvalidTransition, transition
 from .downloader import _same_post, permalink
@@ -246,11 +248,15 @@ def create_video(store: CampaignStore, instruction: str,
 
 
 def restyle(store: CampaignStore, asset_id: int, style: Optional[str],
-            note: Optional[str] = None) -> Dict[str, Any]:
+            note: Optional[str] = None, reasons: Sequence[str] = (), *,
+            retire: bool = False) -> Dict[str, Any]:
     """« Même vidéo, autre style »: an order to remake our video `asset_id` (same topic,
     script and message) in `style` (None: another one the agent picks), with the owner's
-    optional note. ValueError when the video is already in that style; KeyError when there
-    is no such video."""
+    optional note and reason codes (they go in the instruction). ValueError when the video
+    is already in that style; KeyError when there is no such video.
+    `retire` (the owner's Inbox, 181): the note and reasons are also saved as a comment on
+    the video (the agent learns from it), and a `ready` video leaves the Inbox (archived:
+    the remake replaces it)."""
     asset = store.get_asset(asset_id)
     current = store.get_idea(asset["idea_id"])["style"]
     style = _style(store, style, "owner")
@@ -266,8 +272,19 @@ def restyle(store: CampaignStore, asset_id: int, style: Optional[str],
     text = (f"Même vidéo, autre style : refais la vidéo {asset_id} (même sujet, même script,"
             f" même message) {how}.")
     note = (note or "").strip()
-    return _insert_owner_order(store, "change", _instruction(f"{text} {note}" if note else text),
-                               style, asset_id)
+    reasons = validate_many("feedback_reasons", reasons)  # before anything is written
+    extra = " ".join(x for x in (
+        f"Raisons : {', '.join(reasons)}." if reasons else "",
+        f"Et aussi : {note}" if note else "") if x)
+    order = _insert_owner_order(store, "change", _instruction(f"{text} {extra}" if extra else text),
+                                style, asset_id)
+    if retire:
+        if note or reasons:
+            store.add_feedback(asset_id, text=note or None, reason_codes=reasons)
+        if asset["status"] == "ready":
+            with contextlib.suppress(InvalidTransition):  # moved meanwhile: it stays
+                transition(store, asset_id, "archived", actor="owner")
+    return order
 
 
 def remade_idea(store: CampaignStore, order: Dict[str, Any]) -> Optional[int]:

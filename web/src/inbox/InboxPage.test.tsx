@@ -327,9 +327,11 @@ describe('InboxPage feed', () => {
       expect(within(sheet).getByRole('button', { name: 'Watercolor Brush' }).getAttribute('aria-pressed')).toBe('true')
       expect(within(sheet).getByText('Soft washes.', { exact: false })).toBeTruthy()
       expect(within(sheet).queryByText(/L'IA choisit le style/)).toBeNull()
+      vi.useFakeTimers()
       fireEvent.click(within(sheet).getByRole('button', { name: 'Refaire dans ce style' }))
-      await screen.findByText(/la même vidéo dans un autre style/)
-      expect(posts(calls)).toEqual([['/api/assets/1/restyle', { style: 'lemo:watercolor' }]])
+      expect(screen.getByText(/la même vidéo dans un autre style/)).toBeTruthy()
+      await closeUndoWindow()
+      await waitFor(() => expect(posts(calls)).toEqual([['/api/assets/1/restyle', { style: 'lemo:watercolor', reasons: [] }]]))
     })
   })
 
@@ -564,7 +566,7 @@ describe('InboxPage feed', () => {
       expect(posts(calls)).toEqual([])
     })
 
-    it('« même vidéo, autre style » sends a restyle order; the video stays (138)', async () => {
+    it('« même vidéo, autre style » sends the note and reasons with the style; the video leaves the Inbox (181)', async () => {
       const style = (id: string, label: string) => ({ id, label, description: null, templates: [], end_card: null,
         address: null, enabled: true, share: null, preview: { still: null, clip: null } })
       const calls = stubApi({
@@ -582,10 +584,15 @@ describe('InboxPage feed', () => {
       fireEvent(details, new Event('toggle'))
       fireEvent.click(await within(sheet).findByRole('button', { name: '3D 8-bit' }))
       expect(within(sheet).queryByRole('button', { name: 'Papier' })).toBeNull() // its own style
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Too long' }))
+      fireEvent.change(within(sheet).getByRole('textbox', { name: 'What to change' }), { target: { value: ' hook plus court ' } })
+      vi.useFakeTimers()
       fireEvent.click(within(sheet).getByRole('button', { name: 'Refaire dans ce style' }))
-      expect(await screen.findByText(/la même vidéo dans un autre style/)).toBeTruthy()
-      expect(posts(calls)).toEqual([['/api/assets/1/restyle', { style: 'voxel' }]])
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      expect(cards()).toEqual(['Video 2']) // out of the feed at once (Undo for 5 s)
+      expect(screen.getByText(/la même vidéo dans un autre style/)).toBeTruthy()
+      await closeUndoWindow()
+      await waitFor(() => expect(posts(calls)).toEqual([
+        ['/api/assets/1/restyle', { style: 'voxel', reasons: ['too_long'], note: 'hook plus court' }]]))
     })
   })
 

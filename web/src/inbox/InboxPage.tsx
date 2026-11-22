@@ -228,15 +228,12 @@ export default function InboxPage() {
     })
   }
 
-  // « Même vidéo, autre style » (138): a new work order; this video stays where it is.
-  async function restyle(a: Asset, style: string | null) {
+  // « Même vidéo, autre style » (138): a new work order with the sheet's text and reasons;
+  // 181: the video leaves the Inbox (archived by the server), with the usual Undo.
+  function restyle(a: Asset, style: string | null, extra: { note?: string; reasons: string[] }) {
     setChangeFor(null)
-    try {
-      await restyleAsset(a.id, { style })
-      toast({ message: "Envoyé à l'IA : la même vidéo dans un autre style (Trending, Mes envois)." })
-    } catch (e) {
-      toast({ message: `Non envoyé : ${errorMessage(e)}` })
-    }
+    decide(a, { status: 'archived' }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).",
+      async () => { await restyleAsset(a.id, { style, ...extra }) })
   }
 
   const openChange = (a: Asset) => setChangeFor({ asset: a, at: videoOf(a)?.currentTime ?? 0 })
@@ -403,7 +400,7 @@ export default function InboxPage() {
           at={changeFor.at}
           onClose={() => setChangeFor(null)}
           onSave={(fb) => change(changeFor.asset, fb)}
-          onRestyle={(style) => void restyle(changeFor.asset, style)}
+          onRestyle={(style, extra) => restyle(changeFor.asset, style, extra)}
           style={changeFor.asset.style}
         />
       )}
