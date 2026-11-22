@@ -158,3 +158,15 @@ def test_route_is_a_thin_door_behind_the_login(store, agent_dir):
     with TestClient(create_app(cfg(ui_password="secret-pass-1234"), store=store),
                     base_url=LOCAL) as tc:
         assert tc.get("/api/planning").status_code == 401
+
+
+def test_an_order_the_last_run_left_waits_for_the_next_run(store, agent_dir, monkeypatch):
+    s = cfg(agent_schedule="daily-produce@03:00")
+    _run(store, "daily-produce", NOW - timedelta(hours=7), minutes=20)
+    mine = _order(store, monkeypatch, "Plus tard", minutes_ago=60)
+    _run(store, "daily-revise", NOW - timedelta(minutes=30), minutes=5)  # saw it, left it
+    items = planning.build_planning(store, s, NOW)["items"]
+    assert not any(i["kind"] == "order_run" for i in items)
+    order = next(i for i in items if i["ids"].get("order_id") == mine)
+    assert order["waits_on"] == "next_ai_run"
+    assert parse_iso(order["est_start"]) == datetime(2026, 11, 18, 2, tzinfo=UTC)

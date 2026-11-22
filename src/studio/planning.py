@@ -60,7 +60,7 @@ def _engine(recipe: Any) -> str:
     return TEMPLATE_ENGINES.get(recipe.get("template"), "remotion")
 
 
-def style_engine(style: Optional[str]) -> str:
+def _style_engine(style: Optional[str]) -> str:
     if lemo.is_lemo(style):
         return "film"
     return STYLE_ENGINES.get(style or "", "remotion")
@@ -227,9 +227,11 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                       _run_s(store, schedule.ORDER_PLAYBOOK),
                       "Tes commandes et demandes de changement lancent le run léger.",
                       waits_on=waits, source="agent"))
-        why_here = "L'IA l'écrit dans ce run, puis son rendu suit celui d'avant."
+        why_here = ("Le dernier run l'a vue et l'a laissée : elle attend le prochain run prévu."
+                    if why == "seen" else
+                    "L'IA l'écrit dans ce run, puis son rendu suit celui d'avant.")
         for o in work_orders.for_agent(store, "scheduled"):
-            engine = style_engine(o["style"])
+            engine = _style_engine(o["style"])
             add(_item("next", "change_request" if o["source"] == "change" else "work_order",
                       _title(o["instruction"], f"Commande {o['id']}"), cursor,
                       render_s[engine], why_here, waits_on=waits, source=o["source"],
