@@ -43,3 +43,4 @@ export const StarIcon = icon(<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 
 export const PaletteIcon = icon(<><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-1.8a2 2 0 0 0-1.5 3.3A1.6 1.6 0 0 1 12 22z" /><circle cx="7.5" cy="10.5" r="1" /><circle cx="12" cy="7" r="1" /><circle cx="16.5" cy="10.5" r="1" /></>)
 export const MicIcon = icon(<><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8" /></>)
 export const CreateIcon = icon(<><rect x="3" y="3" width="18" height="18" rx="5" /><path d="M12 8v8M8 12h8" /></>)
+export const PlanningIcon = icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><path d="M6 7v10M11 5h9M11 12h9M11 19h9" /><circle cx="6" cy="12" r="2" /></>)

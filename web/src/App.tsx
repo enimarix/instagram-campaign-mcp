@@ -9,6 +9,7 @@ import Agent from './pages/Agent'
 import Analytics from './pages/Analytics'
 import Breakdowns from './pages/Breakdowns'
 import Learnings from './pages/Learnings'
+import Planning from './pages/Planning'
 import Placeholder from './pages/Placeholder'
 import Posts, { PostPage } from './pages/Posts'
 import ReportPage from './pages/Report'
@@ -20,7 +21,7 @@ import TrendingPage from './trending/TrendingPage'
 import VoicesPage from './voices/VoicesPage'
 import {
   AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, CreateIcon, InboxIcon, MegaphoneIcon, MicIcon, MoreIcon, PaletteIcon,
-  SettingsIcon, TrendsIcon,
+  PlanningIcon, SettingsIcon, TrendsIcon,
 } from './ui/icons'
 import { PageHeader } from './ui/PageHeader'
 import { card } from './ui/styles'
@@ -30,6 +31,8 @@ import { ToastProvider } from './ui/Toast'
 const NAV = [
   { path: '/inbox', label: 'Inbox', Icon: InboxIcon, tab: true },
   { path: '/create', label: 'Créer', Icon: CreateIcon, tab: true },
+  // 185: behind « More » on the phone: a 7th tab would squeeze every label at 375 px
+  { path: '/planning', label: 'Planning', Icon: PlanningIcon },
   { path: '/trending', label: 'Trending', Icon: TrendsIcon, tab: true },
   { path: '/calendar', label: 'Calendar', Icon: CalendarIcon, tab: true },
   { path: '/analytics', label: 'Analytics', Icon: ChartIcon }, // 174: its tab went to Créer
@@ -81,6 +84,7 @@ export default function App() {
               <Route path="/" element={<Navigate to="/inbox" replace />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/create" element={<CreatePage />} />
+              <Route path="/planning" element={<Planning />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/analytics/posts" element={<Posts />} />

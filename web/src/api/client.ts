@@ -1118,3 +1118,26 @@ export const listStyleRequests = () => request<StyleRequest[]>('/api/style-reque
 /** « Construire » (accepted) or « Non » (declined), with an optional note. */
 export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'declined'; note?: string }) =>
   send<StyleRequest>('PATCH', `/api/style-requests/${id}`, body)
+
+/** GET /api/planning (185): the chain of what the studio makes next, every time estimated. */
+export type PlanningWait = 'gpu_busy' | 'agent_running' | 'order_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
+export type PlanningItem = {
+  section: 'running' | 'next' | 'planned'
+  kind: 'render' | 'film' | 'order_run' | 'agent_run' | 'work_order' | 'change_request'
+  title: string
+  source: string | null
+  ids: { order_id?: number; asset_id?: number; pick_id?: number; run_id?: number }
+  style: string | null
+  engine: string | null
+  voice: string | null
+  est_start: string | null
+  est_duration_s: number | null
+  est_ready: string | null
+  estimated: boolean
+  why_here: string
+  waits_on: PlanningWait | null
+  stage: string | null
+  progress: number | null
+  picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
+}
+export const getPlanning = () => request<{ now: string; items: PlanningItem[] }>('/api/planning')

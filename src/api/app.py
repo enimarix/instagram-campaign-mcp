@@ -38,6 +38,7 @@ from . import (
     learnings,
     media,
     permissions,
+    planning,
     reactions,
     render,
     reports,
@@ -221,6 +222,7 @@ def create_app(
     app.include_router(ads.router)
     app.include_router(styles.router)
     app.include_router(voices.router)
+    app.include_router(planning.router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 
