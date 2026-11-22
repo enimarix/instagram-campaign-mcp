@@ -304,10 +304,7 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
                 return
             stale = utcnow() - stale_after
             store.requeue_stale_render_jobs(stale)  # first: a crashed job keeps its place
-            # ponytail: one job per tick (the head of the line); a second slot (concurrency
-            # above 1) fills on the next tick
-            first = line.next_in_line(store, settings, utcnow())
-            ids = [first["id"]] if first and first["kind"] == "render" else []
+            ids = line.renders_next(store, settings, utcnow(), free)  # every free slot
             for job in store.claim_render_jobs(free, stale_before=stale, ids=ids):
                 running[job["id"]] = asyncio.create_task(asyncio.to_thread(run, job))
         except Exception as e:  # noqa: BLE001 - e.g. database locked: try next tick

@@ -260,3 +260,50 @@ def test_a_render_on_its_timer_holds_no_agent_run_back(store):
     line.set_timer(store, "render", job, NOW + timedelta(hours=1))
     assert schedule.busy(store, now=NOW) is None  # the due playbooks and the light run go
     assert schedule.busy(store, now=NOW + timedelta(hours=2)) == "renders are waiting"
+
+
+def test_renders_next_fills_free_slots_in_line_order_and_stops_at_a_film(store, monkeypatch):
+    s = cfg()
+    r1 = _render(store, NOW - timedelta(minutes=50))
+    timed = _render(store, NOW - timedelta(minutes=45))
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=40))
+    r3 = _render(store, NOW - timedelta(minutes=30))
+    line.set_timer(store, "render", timed, NOW + timedelta(hours=1))
+    assert line.renders_next(store, s, NOW, 3) == [r1]  # the film after it goes first
+    run = store.start_agent_run("daily-learn")  # the film cannot start: skipped
+    assert line.renders_next(store, s, NOW, 3) == [r1, r3]
+    assert line.renders_next(store, s, NOW, 1) == [r1]
+    store.finish_agent_run(run["id"], "succeeded")
+    line.start_now(store, "film", film)
+    assert line.renders_next(store, s, NOW, 3) == []
+
+
+async def test_the_render_loop_fills_both_slots_in_one_tick_in_line_order(
+        store, monkeypatch, tmp_path):
+    import threading
+
+    monkeypatch.setattr(worker, "keep_awake", nullcontext)
+    monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: True)
+    r1 = _render(store, utcnow() - timedelta(minutes=30))
+    r2 = _render(store, utcnow() - timedelta(minutes=20))
+    r3 = _render(store, utcnow() - timedelta(minutes=10))
+    line.start_now(store, "render", r3)  # the line: r3, r1, r2
+    gate, ran = threading.Event(), []
+
+    def run(job):
+        ran.append(job["id"])
+        gate.wait(5)
+
+    s = cfg(media_root=str(tmp_path), render_concurrency=2)
+    loop = asyncio.create_task(worker.render_loop(store, s, run=run, interval=30))
+    try:  # the next claim is 30 s away: both slots fill in the first one
+        deadline = time.monotonic() + 5
+        while len(ran) < 2 and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+        assert sorted(ran) == sorted([r3, r1])
+        assert store.get_render_job(r2)["state"] == "queued"
+    finally:
+        gate.set()
+        loop.cancel()
+        with suppress(asyncio.CancelledError):
+            await loop

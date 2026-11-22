@@ -5,7 +5,8 @@ An item's place is its arrival (a render job's created_at, a film order's schedu
 unless the owner pressed « start now »: line_pos < 0 puts it ahead of every waiting item
 (the latest press first), never stopping the running one. A timer (not_before, UTC) skips
 the item until then without blocking the ones behind it. next_in_line() is the one place
-that decides the head: the render loop claims it when it is a render (worker.render_loop),
+that decides the head: the render loop claims it when it is a render (renders_next: as many as it has free
+slots, in line order, worker.render_loop),
 the catch-up starts it when it is a film (schedule.film_run), and the Planning page lists
 the line by calling head() again on a simulated clock (planning.build_planning).
 
@@ -65,6 +66,17 @@ def next_in_line(store: CampaignStore, settings: InstagramMCPSettings, now: date
                  ) -> Optional[Dict[str, Any]]:
     """The head of the line: what starts next once nothing heavy runs, or None."""
     return head(waiting(store), now, films=films_ready(store, settings, now))
+
+
+def renders_next(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+                 n: int) -> List[int]:
+    """The render loop's claim: up to `n` render job ids, in line order, head() after
+    head(); stops at a film at the head (it goes first, the renders behind it wait)."""
+    items, films, out = waiting(store), films_ready(store, settings, now), []
+    while len(out) < n and (first := head(items, now, films=films)) and             first["kind"] == "render":
+        out.append(first["id"])
+        items = items[items.index(first) + 1:]  # the ones skipped stay skipped at `now`
+    return out
 
 
 def _set(store: CampaignStore, kind: str, item_id: int, sets: str, args: tuple) -> None:
