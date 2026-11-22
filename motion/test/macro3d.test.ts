@@ -149,7 +149,8 @@ test("labels and counters", () => {
 });
 
 test("the engine knows every subject and move the template can ask for (cinematic/engine/macro.py)", () => {
-  const engine = readFileSync(new URL("../../cinematic/engine/macro.py", import.meta.url), "utf8");
+  // CRLF on a Windows checkout (core.autocrlf) would hide the closing "}\n"
+  const engine = readFileSync(new URL("../../cinematic/engine/macro.py", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const block = (name: string) => engine.slice(engine.indexOf(`${name} = {`), engine.indexOf("}\n", engine.indexOf(`${name} = {`)));
   const keys = (src: string) => [...src.matchAll(/"(\w+)":/g)].map((m) => m[1]);
   assert.deepEqual(keys(block("SUBJECTS")).sort(), [...SUBJECTS].sort());

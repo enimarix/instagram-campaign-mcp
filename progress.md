@@ -619,7 +619,7 @@ them are marked `[HUMAN Hn]` above; everything else can proceed against placehol
 
 
 - 177 follow-up: alert the owner (or hold Blender) when guard sees the graphics clock above ~1600 MHz (the cap missing after a driver update or a failed logon task).
-- 164 follow-up: Sitcom polish on branch `team-up/164b-sitcom-polish` (b6c3916, 61fba86, unrendered): no skin gaps at recoloured collars, the frozen punchline aimed at the actor's end position, a barbell for gym beats, a readable opener, end card centred. Render one sample to check the look, then merge.
+- 164 follow-up: Sitcom polish merged to main 2026-11-22 (from `team-up/164b-sitcom-polish`, still unrendered): no skin gaps at recoloured collars, the frozen punchline aimed at the actor's end position, a barbell for gym beats, a readable opener, end card centred. The next Sitcom 3D render is the first look at it.
 - 164 follow-up: the sitcom stories must be funny and about macroBody's world (owner 2026-11-22: « nobody will ever watch them »): strengthen the sitcom writing rules in the playbook / script schema (hook, one clear joke, payoff).
 
 - Guard follow-up (2026-11-22): the voice service's model worker (a multiprocessing child of vendor/voxcpm_tts/server.py) is reported as « waiting for a game (another program on the GPU) » in a waiting job's log line; name it « the voice model (ours) » instead, so the owner is not alarmed.
