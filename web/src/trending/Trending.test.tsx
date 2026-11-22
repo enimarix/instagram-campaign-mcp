@@ -318,6 +318,8 @@ describe('Mes envois', () => {
 
   it('lists DM orders with sender, age, status, instruction and the feed link', async () => {
     stubApi({ 'GET /api/work-orders?source=mine': [200, [
+      order(5, { status: 'analysed', analysis: { why: 'Le hook promet un résultat.', summary: 'Promesse claire en 2 s.',
+        timeline: [{ t: 0, d: 4, e: 'Hook : la promesse' }] } }),
       order(4, { status: 'analysed', own_reel: true, instruction: 'ça a bien marché, analyse-la', analysis: 'Le hook tient 3 s.' }),
       order(3, { status: 'in_feed', asset_id: 42, instruction: 'analyse-la', mode: 'inspired' }),
       order(2, { status: 'skipped', skip_reason: 'pas un Reel' }),
@@ -325,11 +327,14 @@ describe('Mes envois', () => {
     ]] })
     renderPage('/trending?tab=envois')
     const list = await screen.findByRole('list', { name: 'Mes envois' })
-    const [analysed, feed, skipped, blocked] = within(list).getAllByRole('listitem')
+    const [timed, analysed, feed, skipped, blocked] = within(list).getAllByRole('listitem')
     expect(within(analysed).getByText('Analysé')).toBeTruthy()
     expect(within(analysed).getByText('Ton Reel')).toBeTruthy()
     expect(within(analysed).getByText('Ta consigne · Mon instruction')).toBeTruthy()
     expect(within(analysed).getByText("Analyse de l'IA : Le hook tient 3 s.")).toBeTruthy()
+    expect(within(timed).getByText("Analyse de l'IA : Promesse claire en 2 s.")).toBeTruthy() // 182: an object
+    expect(within(timed).getByText('Le hook promet un résultat.')).toBeTruthy()
+    expect(within(timed).getByText('Hook : la promesse', { exact: false })).toBeTruthy()
     expect(within(feed).queryByText('Ton Reel')).toBeNull()
     expect(within(feed).getByText('Dans ton feed')).toBeTruthy()
     expect(within(feed).getByText('envoyé par @amine_xenima, il y a 2 h')).toBeTruthy()
