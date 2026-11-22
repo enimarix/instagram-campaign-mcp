@@ -687,6 +687,16 @@ CREATE TABLE style_requests (
 CREATE INDEX idx_style_requests_status ON style_requests(status, id);
 """
 
+# Migration 26: the heavy line (186, src/studio/line.py). Renders and Lemo film orders
+# wait by arrival (created_at / scheduled_at); line_pos < 0: « start now » (lower = pressed
+# later, ahead of every waiting item), NULL: by arrival; not_before (UTC ISO): a timer.
+LINE_SCHEMA = """
+ALTER TABLE render_jobs ADD COLUMN line_pos INTEGER;
+ALTER TABLE render_jobs ADD COLUMN not_before TEXT;
+ALTER TABLE work_orders ADD COLUMN line_pos INTEGER;
+ALTER TABLE work_orders ADD COLUMN not_before TEXT;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -697,7 +707,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
                          AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
                          AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA,
-                         STYLE_REQUESTS_SCHEMA]
+                         STYLE_REQUESTS_SCHEMA, LINE_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -1981,21 +1991,32 @@ class CampaignStore:
         return self._select("SELECT * FROM render_jobs", {"state": state, "asset_id": asset_id},
                             "id DESC", limit)
 
-    def claim_render_jobs(self, limit: int, stale_before: datetime) -> List[Dict[str, Any]]:
-        """Re-queue running jobs whose heartbeat is older than `stale_before` (a crashed
-        worker's), then move up to `limit` queued jobs, oldest first, to running (attempts + 1).
-        One write transaction, so two workers never claim the same job."""
-        if limit <= 0:
-            return []
-        now = to_iso(utcnow())
+    def requeue_stale_render_jobs(self, stale_before: datetime) -> None:
+        """Running jobs whose heartbeat is older than `stale_before` (a crashed worker's)
+        back to queued; they keep their place in the line (created_at, line_pos)."""
         with self._tx() as c:
             c.execute("UPDATE render_jobs SET state='queued', updated_at=?"
-                      " WHERE state='running' AND heartbeat_at < ?", (now, to_iso(stale_before)))
+                      " WHERE state='running' AND heartbeat_at < ?",
+                      (to_iso(utcnow()), to_iso(stale_before)))
+
+    def claim_render_jobs(self, limit: int, stale_before: datetime,
+                          ids: Optional[Sequence[int]] = None) -> List[Dict[str, Any]]:
+        """requeue_stale_render_jobs, then move up to `limit` queued jobs to running
+        (attempts + 1): those of `ids` (the head of the line, studio/line.py), or with no
+        ids the oldest first. One UPDATE, so two workers never claim the same job."""
+        if limit <= 0:
+            return []
+        self.requeue_stale_render_jobs(stale_before)
+        if ids is not None and not ids:
+            return []
+        only = f" AND id IN ({','.join('?' * len(ids))})" if ids else ""
+        now = to_iso(utcnow())
+        with self._tx() as c:
             rows = c.execute(
                 "UPDATE render_jobs SET state='running', attempts=attempts+1, progress=0,"
                 " started_at=?, heartbeat_at=?, updated_at=? WHERE id IN"
-                " (SELECT id FROM render_jobs WHERE state='queued' ORDER BY id LIMIT ?)"
-                " RETURNING *", (now, now, now, limit)).fetchall()
+                f" (SELECT id FROM render_jobs WHERE state='queued'{only} ORDER BY id LIMIT ?)"
+                " RETURNING *", (now, now, now, *(ids or ()), limit)).fetchall()
         return sorted((_decode(r) for r in rows), key=lambda j: j["id"])
 
     def touch_render_jobs(self, job_ids: Sequence[int]) -> None:

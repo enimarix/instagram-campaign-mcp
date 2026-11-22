@@ -40,12 +40,15 @@ def _order(store, monkeypatch, text, style=None, minutes_ago=10):
     return work_orders._insert_owner_order(store, "create", text, style)["id"]
 
 
-def _job(store, template, state, **fields):
+def _job(store, template, state, created_at=None, **fields):
     idea = store.add_idea("motion", hook=f"Idée {template}", batch_date="2026-11-17")
     recipe = {"kind": "motion", "template": template, "props": {}}
     asset = store.add_asset(idea["id"], batch_date="2026-11-17", recipe=recipe)
     job = store.add_render_job(asset["id"], f"k{asset['id']}")
     store.update_render_job(job["id"], state=state, **fields)
+    if created_at:  # the line's arrival
+        with store._tx() as c:
+            c.execute("UPDATE render_jobs SET created_at=? WHERE id=?", (created_at, job["id"]))
     return asset["id"]
 
 
@@ -71,7 +74,7 @@ def test_chain_follows_the_worker_order_and_each_start_is_the_last_ready(
     _job(store, "CinematicSkit", "done", render_ms=600_000)  # a real Blender render: 600 s
     running = _job(store, "FactQuest", "running", progress=0.5,
                    started_at=to_iso(NOW - timedelta(seconds=60)))
-    queued = _job(store, "CinematicSkit", "queued")
+    queued = _job(store, "CinematicSkit", "queued", created_at=to_iso(NOW - timedelta(hours=1)))
     film = _order(store, monkeypatch, "Un film", "lemo:watercolor")
     mine = _order(store, monkeypatch, "Pourquoi on a faim le soir")
     with store._tx() as c:  # a DM'd Reel without a note waits for the owner
@@ -84,9 +87,9 @@ def test_chain_follows_the_worker_order_and_each_start_is_the_last_ready(
     got = [(i["section"], i["kind"], i["ids"].get("asset_id") or i["ids"].get("order_id"))
            for i in items]
     assert got[:6] == [("running", "render", running), ("next", "render", queued),
-                       ("next", "agent_run", None), ("next", "film", film),
+                       ("next", "film", film), ("next", "agent_run", None),
                        ("next", "order_run", None), ("next", "work_order", mine)]
-    assert items[2]["title"] == "Run daily-learn"  # due at 10:00, not started: catch_up's first
+    assert items[3]["title"] == "Run daily-learn"  # due at 10:00, not started: after the line
     assert got[6][1] == "work_order" and items[6]["waits_on"] == "needs_instruction"
     assert items[6]["est_start"] is None
     # the running render: halfway after 60 s -> 60 s left

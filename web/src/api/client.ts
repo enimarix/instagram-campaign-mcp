@@ -1120,13 +1120,13 @@ export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'd
   send<StyleRequest>('PATCH', `/api/style-requests/${id}`, body)
 
 /** GET /api/planning (185): the chain of what the studio makes next, every time estimated. */
-export type PlanningWait = 'gpu_busy' | 'agent_running' | 'order_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
+export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'order_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
 export type PlanningItem = {
   section: 'running' | 'next' | 'planned'
   kind: 'render' | 'film' | 'order_run' | 'agent_run' | 'work_order' | 'change_request'
   title: string
   source: string | null
-  ids: { order_id?: number; asset_id?: number; pick_id?: number; run_id?: number }
+  ids: { order_id?: number; asset_id?: number; pick_id?: number; run_id?: number; job_id?: number }
   style: string | null
   engine: string | null
   voice: string | null
@@ -1136,8 +1136,15 @@ export type PlanningItem = {
   estimated: boolean
   why_here: string
   waits_on: PlanningWait | null
+  not_before: string | null // a waiting render's or film's timer (UTC ISO)
   stage: string | null
   progress: number | null
   picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
 }
 export const getPlanning = () => request<{ now: string; items: PlanningItem[] }>('/api/planning')
+/** The heavy line (186): a waiting render (its job id) or film (its order id). */
+export type LineKind = 'render' | 'film'
+export const startNow = (kind: LineKind, id: number) => send<unknown>('POST', `/api/planning/${kind}/${id}/start-now`)
+/** `at` UTC ISO, null clears the timer. */
+export const setTimer = (kind: LineKind, id: number, at: string | null) =>
+  send<{ not_before: string | null }>('PUT', `/api/planning/${kind}/${id}/timer`, { at })
