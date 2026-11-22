@@ -1,12 +1,12 @@
 {
-  "_note": "Voices of the studio's voice-over (step 038, owner's casting 2026-11-19). <id>.wav is the voice card: every script is cloned from it (vendor/voxcpm_tts). card_text is what the card says. styles = the video styles the voice suits (motion/src/registry.ts STYLES, plus clean and live); address = tu / vous it suits (brand.json address).",
+  "_note": "Voices of the studio's voice-over (step 038, owner's casting 2026-11-19). <id>.wav is the voice card: every script is cloned from it (vendor/voxcpm_tts). card_text is what the card says. styles = the video styles the voice suits (motion/src/registry.ts STYLES, plus clean and live); sitcom: coach_energique narrates, conteur_grave and douce_nuit voice the characters' lines (src/studio/sitcom.py); address = tu / vous it suits (brand.json address).",
   "voices": [
     {
       "id": "conteur_grave",
       "label": "Conteur grave",
       "description": "French man in his fifties, deep warm storyteller, gentle humour. The default voice.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["paper", "clean", "voxel", "pixel", "blender", "cutaway", "editorial", "cinema", "macro3d"],
+      "styles": ["paper", "clean", "voxel", "pixel", "blender", "cutaway", "editorial", "cinema", "macro3d", "sitcom"],
       "address": ["vous"],
       "default": true
     },
@@ -15,7 +15,7 @@
       "label": "Coach énergique",
       "description": "Young French woman, bright energetic fitness coach, friendly and motivating, upbeat. For humour, tips and challenges said with tu.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["pixel", "voxel", "live"],
+      "styles": ["pixel", "voxel", "live", "sitcom"],
       "address": ["tu"]
     },
     {
@@ -23,7 +23,7 @@
       "label": "Douce nuit",
       "description": "French woman, soft intimate late-night voice, calm, close to the microphone. For evening stories, cravings at night, sleep, calm moments.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["paper", "clean", "blender", "editorial", "cinema"],
+      "styles": ["paper", "clean", "blender", "editorial", "cinema", "sitcom"],
       "address": ["vous", "tu"]
     }
   ]

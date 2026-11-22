@@ -370,7 +370,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:
    - **tagline**: one short line tied to the payoff, in the video's address (e.g. « Fini
-     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D), `cta`
+     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D, SitcomSkit), `cta`
      (QuizChest) or `tagline` (BossBattle, DialogStory, PixelSkit); no line = the app's own.
    - **accent**: the macro colour of the topic: `protein`, `carbs`, `fat`, `kcal`, or
      `brand` (emerald) when none fits; on the templates that take an `accent` prop.
@@ -388,7 +388,21 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    the first frame, no text cut off or overflowing, nothing hidden in the bottom third
    (Instagram's caption area), nothing crowded. Fix the props and preview again (at most
    2 previews per idea). Macro3D previews render Blender stills (about a minute): one is
-   enough.
+   enough. SitcomSkit previews build each still's set and actors (a few minutes): one is
+   enough, at most 3 frames.
+   **SitcomSkit (« Sitcom 3D »)**: write the skit as scenes, not as one long text. Each scene
+   = a `set` (dinner, living, gym, kitchen, restaurant, beach), its `cast` (troupe ids from
+   the template's schema; 5-8 different characters across the skit, each with a `role` when
+   it speaks: « Toi », « Tonton Karim ») and 1-4 `beats`. A beat = ONE action (`who` +
+   `action`: crunch, faint, fork_up, phone_photo, cheer, shout, Death01, Hit_Chest...),
+   ONE narrator line (tu, short, said over the action), maybe a `say` (a character's short
+   shout in its own voice, under 48 characters), maybe a `number` (the key fact, counted;
+   a stated fact needs its source in `citations`) and `speed` x10 for a repeated gesture,
+   slowmo for a fall. The hook is 6 words at most and plays over the first beat's action;
+   the last beat is the punchline (the picture freezes on it); `outro` is the share line.
+   The studio cuts every 1-2 s between wide, reaction close-ups and top-down shots by
+   itself: never describe cameras. Narrate with `coach_energique`; the characters' voices
+   are picked by the studio.
 4. `render_motion(template=…, props=…, idea_id=…, caption=…)` for every idea; send them in
    parallel. Keep every returned job id in your wait list.
 

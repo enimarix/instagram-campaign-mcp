@@ -96,6 +96,9 @@ def test_shot_key_follows_what_blender_draws():
         assert troupe.shot_key(other, "e1") != key, change
     assert troupe.shot_key(shot, "e2") != key  # an engine edit re-renders
     assert troupe.shot_key(troupe.validate({"shots": [SHOT]}).shots[0], "e1") == key
+    # another grade re-renders; the default one keeps the shots already cached (164)
+    assert troupe.shot_key(shot, "e1", troupe.cinematic.GRADE) == key
+    assert troupe.shot_key(shot, "e1", "scale=1080:1920") != key
 
 
 def test_engine_hash_covers_the_registries(monkeypatch, tmp_path):

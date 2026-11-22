@@ -44,6 +44,7 @@ def main():
         sampled = retarget.sample(os.path.abspath(glb), clip["action"], frames)
     sun_dir = dining.build(CFG)
     body, rig = people.build(ch)
+    people.dress(rig, ch, ch.get("name", "actor"))
     rig.location = ch.get("location", (0, 0, 0))
     people.decimate(body, rig)
     people.crush_textures(CFG.get("texture_px", 1024))

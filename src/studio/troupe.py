@@ -106,6 +106,9 @@ class Shot(_Model):
                 raise ValueError(f"{a.who}: sitting actions go on seat spots, others elsewhere")
             if a.face is not None and a.face not in FACES:
                 raise ValueError(f"face must be one of {', '.join(FACES)}")
+        tops = [(cinematic.CAST[w]["clothes"][0], tuple(cinematic.CAST[w].get("top") or ())) for w in who]
+        if len(set(tops)) != len(tops):  # 164: never two in the same top (cast.json `top`)
+            raise ValueError("two actors of the shot wear the same top (give one a cast.json top)")
         if self.camera.kind in ON_ACTOR and self.camera.on not in who:
             raise ValueError(f"a {self.camera.kind} camera lands on an actor of the shot (camera.on)")
         return self
@@ -158,9 +161,11 @@ def engine_hash() -> str:
     return h.hexdigest()[:12]
 
 
-def shot_key(shot: Shot, engine: str) -> str:
+def shot_key(shot: Shot, engine: str, grade: str = cinematic.GRADE) -> str:
     spec = {**job(shot), "freeze": shot.freeze, "engine": engine, "size": SIZE, "samples": SAMPLES,
             "texture_px": cinematic.TEXTURE_PX}
+    if grade != cinematic.GRADE:  # 164: the default grade keeps the shots already cached
+        spec["grade"] = grade
     return hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -175,12 +180,14 @@ def _blender(jobs: List[Dict[str, Any]], out: Path, timeout_s: float) -> None:
                       max(timeout_s, 120 + n * S_PER_FRAME + actors * S_PER_ACTOR))
 
 
-def render_shots(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float) -> str:
-    """The track of the shot list (rendering the shots not cached yet): its media path."""
+def render_shots(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float,
+                 grade: str = cinematic.GRADE) -> str:
+    """The track of the shot list (rendering the shots not cached yet), each shot graded with
+    `grade` (an ffmpeg filter from the 720x1280 frames to 1080x1920 yuv420p): its media path."""
     shots = validate(data).shots
     root = Path(media_root) / "troupe"
     engine = engine_hash()
-    keys = [shot_key(s, engine) for s in shots]
+    keys = [shot_key(s, engine, grade) for s in shots]
     track = root / "tracks" / f"{hashlib.sha256('/'.join(keys).encode()).hexdigest()[:16]}.mp4"
     if track.is_file():
         return media.relative(media_root, track)
@@ -197,7 +204,7 @@ def render_shots(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float
             part = work / f"{k}.mp4"
             hold = f"tpad=stop_mode=clone:stop_duration={s.freeze:g}," if s.freeze else ""
             ffmpeg.run(["-framerate", FPS, "-i", work / k / "f_%04d.png", "-filter_complex",
-                        f"[0:v]{hold}{cinematic.GRADE}[v]", "-map", "[v]", "-r", FPS,
+                        f"[0:v]{hold}{grade}[v]", "-map", "[v]", "-r", FPS,
                         "-c:v", "libx264", "-crf", "17", part], timeout_s=timeout_s)
             part.replace(clips / f"{k}.mp4")
         listing = work / "concat.txt"

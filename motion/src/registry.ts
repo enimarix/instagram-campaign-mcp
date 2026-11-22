@@ -30,13 +30,15 @@ import { pixelCinemaSchema, timelineOf as pixelCinemaTimeline } from "./template
 import { Macro3D } from "./templates/Macro3D/Macro3D";
 import { coverOf as macro3dCover, shotsOf as macro3dShots, type Shot } from "./templates/Macro3D/layout";
 import { macro3dSchema, timelineOf as macro3dTimeline } from "./templates/Macro3D/schema";
+import { SitcomSkit } from "./templates/SitcomSkit/SitcomSkit";
+import { coverOf as sitcomCover, layoutOf as sitcomLayout, type Part, sitcomSchema } from "./templates/SitcomSkit/schema";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné", macro3d: "Macro 3D" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné", macro3d: "Macro 3D", sitcom: "Sitcom 3D" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -50,8 +52,8 @@ export type Template<S extends z.ZodType> = {
   coverFrame?: (props: z.infer<S>) => number;
   /** What happens when (assets.timeline, step 110); none = the whole video as one event. */
   events?: (props: z.infer<S>) => Event[];
-  /** Shots another engine renders before the template (Macro3D: the Blender plates, src/studio/macro3d.py). */
-  plates?: (props: z.infer<S>) => Shot[];
+  /** Shots another engine renders before the template (Macro3D: the Blender plates, src/studio/macro3d.py; SitcomSkit: its timed parts, shot by src/studio/sitcom.py). */
+  plates?: (props: z.infer<S>) => Shot[] | Part[];
   /** Where the voice file plays when the template pauses it: from audio_s on it plays at video at_s (the QC listens there, step 158); none = the whole file from 0. */
   voiceParts?: (props: z.infer<S>) => VoicePart[];
 };
@@ -476,6 +478,60 @@ export const templates = {
         ...scriptEvents(timeline, FPS, [...p.scenes.map(scene), "end card tagline"], p).filter((e) => !e.e.startsWith("end hold")),
         { t: endStart / FPS, d: (total - endStart) / FPS, e: "end card (macro3d): a beam lands on the mB tile, Marco's thumbs-up, macroBody, 7 jours gratuits, macrobody.fr" },
       ];
+    },
+  }),
+  SitcomSkit: template({
+    style: "sitcom",
+    component: SitcomSkit,
+    schema: sitcomSchema,
+    defaultProps: {
+      hook: "Tu loggues même le dîner ?",
+      scenes: [
+        {
+          set: "dinner",
+          cast: [
+            { who: "teen", role: "Toi", at: "stand1", action: "phone_photo" },
+            { who: "dad", at: "seat1", action: "fork_up" },
+            { who: "mum", at: "seat3", action: "fork_up" },
+            { who: "grandma", at: "stand0" },
+            { who: "uncle", at: "seat2", action: "fork_up" },
+          ],
+          beats: [
+            { line: "Tu prends chaque plat en photo pour tes calories.", key: "chaque plat", who: "teen", action: "phone_photo", react: "outraged", speed: "normal", sfx: "clatter" },
+            { line: "Toute la famille attend, la fourchette en l'air.", who: "dad", action: "fork_up", face: "outraged", speed: "normal", say: { who: "dad", text: "On peut manger ?" } },
+            { line: "Et Mamie n'a pas tenu.", key: "Mamie", who: "grandma", action: "faint", speed: "slowmo", sfx: "gasp" },
+          ],
+        },
+      ],
+      outro: "Une photo suffit. Mange chaud.",
+      address: "tu",
+      accent: "brand",
+      citations: [],
+      music: "music-sitcom",
+      loop: false,
+    },
+    durationInFrames: (p) => Math.round(sitcomLayout(p).total * FPS),
+    coverFrame: () => sitcomCover(FPS),
+    plates: (p) => sitcomLayout(p).parts,
+    voiceParts: (p) => sitcomLayout(p).voiceParts,
+    events: (p) => {
+      const { parts, spoken, cardStart, total } = sitcomLayout(p);
+      const said = (x: Part) => spoken.find((s) => (x.part === "say" ? s.say?.scene === x.scene && s.say.beat === x.beat : s.start_s >= x.start_s - 1e-6 && !s.say));
+      const events: Event[] = parts.map((x) => {
+        const s = p.scenes[x.scene];
+        const b = s.beats[x.beat];
+        const what =
+          x.part === "hook" ? "hook card"
+          : x.part === "say" ? `${b.say?.who} says it in their own voice (bubble)`
+          : x.part === "freeze" ? "punchline freeze (flash, hit)"
+          : `scene ${x.scene + 1} (${s.set}${s.label ? `, « ${s.label} »` : ""}): ${b.who} ${b.action}${b.speed !== "normal" ? ` ${b.speed}` : ""}${b.number ? `, big number ${b.number.value}${b.number.unit ? ` ${b.number.unit}` : ""}` : ""}`;
+        const text = x.part === "freeze" ? undefined : said(x)?.text;
+        return { t: x.start_s, d: x.end_s - x.start_s, e: what, ...(text ? { text } : {}) };
+      });
+      if (p.music !== "none") events.push({ t: 0, d: total, e: `music bed (${p.music})` });
+      if (p.voice?.audioSrc) events.push({ t: 0, d: cardStart, e: "voice-over reads the lines (paused for the characters' lines and the freeze)" });
+      events.push({ t: cardStart, d: total - cardStart, e: "end card (sitcom): sunburst, the panel boings in, « APPLAUDISSEZ » lights up, mB tile, macroBody, 7 jours gratuits, macrobody.fr" });
+      return events;
     },
   }),
 };

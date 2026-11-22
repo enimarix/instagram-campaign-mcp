@@ -235,6 +235,25 @@
   lines?: each scene, then the outro}, `plate?` (set by the studio), `music`
   (`music-cutaway-c` default, `-b`, `music-dusk`, `music-nocturne`, none), `loop`, `safeZone`.
   Still: `npm run still:macro3d` (no plate: the void).
+- `SitcomSkit` (`src/templates/SitcomSkit/`, style `sitcom`, « Sitcom 3D », step 164): an
+  absurd 3D sitcom skit played by the Blender troupe (`cinematic/README.md`: 16 characters, 6
+  sets, actions). The AI writes scenes (`set`, `label?` slate, `cast` [{who, role?, at?,
+  action?}], 1-4 `beats` [{line (the narrator, tu), key?, who, action, face?, react?, speed
+  normal | x10 | slowmo, say? {who, text} (a character's short line in its own voice),
+  number? {value, from?, unit?, decimals} (the key fact, big, counting), sfx? boing | whoosh |
+  clatter | gasp | hit | pop}]); a troupe of 5-8 across the skit, the hook 6 words at most.
+  `schema.ts` `layoutOf` times it on the video's clock: the hook over the first beat's action,
+  each beat's line, its character line (the narrator's voice file pauses: `voiceParts`), the
+  punchline frozen (`FREEZE_S`); those parts are the template's `plates`, which
+  `src/studio/sitcom.py` turns into the troupe's shot list (a cut every 1-2 s, 3+ angles a
+  scene, x10 / slow-mo ramps, close-ups on the reactions, a crash zoom into the first action)
+  and renders before the Remotion pass (`plate`). On top (`kit.tsx`): the hook slammed in word
+  by word on a pink band, bold karaoke captions (ink outlines, the word being said yellow, the
+  key word in an emerald pill), speech bubbles with the speaker's role, the big number in the
+  accent, scene slates, a flash and push-in on the freeze; foley through `<Sfx>` (a whoosh
+  into each scene, the beats' sounds, a pop on each bubble, a hit on the freeze), the
+  `music-sitcom` groove ducked under every voice. Examples `props/sitcomskit*.json`. Still:
+  `npm run still:sitcom` (no plate).
 - End cards (`src/endcards/`, steps 130, 137): `<EndCard style=…>` picks the style's animated
   card; every template ends on its style's card. Fixed base (`base.tsx`: mB tile, wordmark,
   « 7 jours gratuits », macrobody.fr) adapted per video by the props in `schema.ts`: `tagline?`,
@@ -254,7 +273,10 @@
   tile, which glows, under the clean stack in light text. `macro3d` (step 154): the black studio
   void, a beam sweeps across onto the glossy mB tile (a specular glint runs over it), Marco's
   thumbs-up beside it (`cameo` marco | none), the wordmark rises, the tagline, the emerald pill,
-  macrobody.fr underlined in the accent. Composition `EndCard`
+  macrobody.fr underlined in the accent. `sitcom` (step 164): a TV title card: orange and pink
+  sunburst rays turning over a turquoise floor, a cream panel with an ink outline boings in, the
+  « APPLAUDISSEZ » sign flickers on (`cameo` applause | none), the clean stack inside the panel.
+  Composition `EndCard`
   (`EndCardClip`) renders one card alone; Track A recipes use it (src/studio/motion.py
   `render_end_card`). Stills: `npm run still:endcard`, `npm run still:endcards`.
 - Checks: `npm run lint`, `npm run typecheck`, `npm test` (`node --test`, pure helpers in `test/`).

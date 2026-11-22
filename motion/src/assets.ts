@@ -56,6 +56,11 @@ export const ASSETS = {
   "music-cutaway-c": { ...audio("music-cutaway-c", "music"), loopStart_s: 4.4 },
   "music-nocturne": audio("music-nocturne", "music"),
   "sfx-thunder": audio("sfx-thunder", "sfx"),
+  // Sitcom (step 164): the bouncy bed and the cartoon foley.
+  "music-sitcom": audio("music-sitcom", "music"),
+  "sfx-boing": audio("sfx-boing", "sfx"),
+  "sfx-clatter": audio("sfx-clatter", "sfx"),
+  "sfx-gasp": audio("sfx-gasp", "sfx"),
 } as const satisfies Record<string, Entry>;
 
 export type AssetId = keyof typeof ASSETS;

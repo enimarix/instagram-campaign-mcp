@@ -74,6 +74,7 @@ export const MUSIC_LUFS = {
   "music-cutaway-b": -16.9,
   "music-cutaway-c": -17.1,
   "music-nocturne": -23.9,
+  "music-sitcom": -19.7,
 } as const;
 export const BED_LUFS = -17;
 /** Gain that brings bed `id` down to BED_LUFS when it is louder (1 otherwise). */
@@ -98,6 +99,9 @@ export const SFX_PEAK_LUFS = {
   "sfx-rip": -18.1,
   "sfx-swish": -25.7,
   "sfx-thunder": -17.9,
+  "sfx-boing": -12.6,
+  "sfx-clatter": -14.0,
+  "sfx-gasp": -26.5,
 } as const;
 export type SfxId = keyof typeof SFX_PEAK_LUFS;
 /**
