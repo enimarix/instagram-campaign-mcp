@@ -73,6 +73,9 @@ _NEWEST_WORK = (
 # 156: something the light run would look at again when the studio can make more
 _WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_requested')"
             f" OR EXISTS (SELECT 1 FROM work_orders WHERE {_AGENT_ORDER})")
+# what catch_up starts first, once nothing is busy: a due playbook, else the oldest Lemo
+# film, else the light run for the orders; the Planning page (185) lists them in this order
+CATCH_UP_ORDER = ("playbook", "film", "orders")
 CAPABILITIES_KEY = "style_capabilities"  # worker_state: {styles, gained_at}
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
@@ -195,6 +198,50 @@ def capability_gained(store: CampaignStore, now: datetime) -> Optional[datetime]
     return parse_iso(gained) if gained else None
 
 
+def _order_runs_today(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
+                      ) -> Tuple[str, int]:
+    """(owner-local day, at-once runs started that day)."""
+    day = _local(settings, now).date().isoformat()
+    used = store.get_state("order_runs") or {}
+    return day, used.get("count", 0) if used.get("day") == day else 0
+
+
+def order_wait(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+               gained: Optional[datetime] = None) -> Tuple[Optional[str], Optional[datetime]]:
+    """Why the light run would not start now, read-only (order_run and the Planning page,
+    185, share it): (None, newest) when it would, else (why, newest): `nothing` (no order or
+    change request waits), `order_grace` (newest less than ORDER_RUN_DEBOUNCE_MINUTES old),
+    `seen` (a run that reads them started since: it has them), `daily_cap`, `preflight`
+    (failed less than ORDER_RETRY ago). newest: the newest request, or `gained` (new
+    capability) while something waits (156)."""
+    with store._tx() as c:
+        newest = c.execute(_NEWEST_WORK).fetchone()[0]
+        times = [parse_iso(newest)] if newest else []
+        if gained and c.execute(_WAITING).fetchone()[0]:
+            times.append(gained)
+    if not times:
+        return "nothing", None
+    newest = max(times)
+    if now - newest < timedelta(minutes=settings.order_run_debounce_minutes):
+        return "order_grace", newest
+    # ponytail: the last 10 runs per reader; more than 10 since the newest request is unseen.
+    since = [r for p in ORDER_READERS for r in store.list_agent_runs(p, limit=10)
+             if parse_iso(r["started_at"]) >= newest]
+    if any(r["summary"] != DEAD_RUN for r in since):
+        return "seen", newest
+    # a run a restart killed never had them (155), nor the start that made it
+    started = store.get_state("order_run_started_at")  # before its own row exists
+    if started and parse_iso(started) >= newest and not any(
+            parse_iso(r["started_at"]) >= parse_iso(started) for r in since):
+        return "seen", newest
+    if _order_runs_today(store, settings, now)[1] >= settings.max_order_runs_per_day:
+        return "daily_cap", newest
+    failed = store.get_state("order_preflight_failed_at")
+    if failed and now - parse_iso(failed) < ORDER_RETRY:
+        return "preflight", newest
+    return None, newest
+
+
 def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
               start: Callable[..., Any], check: Optional[Callable[..., Any]] = None
               ) -> Optional[str]:
@@ -205,46 +252,22 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
     wakes nothing until a newer one comes; a run closed as dead by a restart doesn't
     count, 155) or still runs (one run at a time), fewer than
     MAX_ORDER_RUNS_PER_DAY at-once runs started today (owner-local), and the agent
-    preflight passes (asked again ORDER_RETRY after a failure). Otherwise they keep waiting
-    and the orders' blocked_reason says why when it is the cap, the preflight or the
-    playbook. New capability (capability_gained: a style or template went live) counts as
-    the newest request while a video waits for changes or an order is scheduled (156), so
-    every one is looked at again."""
+    preflight passes (asked again ORDER_RETRY after a failure): order_wait. Otherwise they
+    keep waiting and the orders' blocked_reason says why when it is the cap, the preflight
+    or the playbook. New capability (capability_gained: a style or template went live)
+    counts as the newest request while a video waits for changes or an order is scheduled
+    (156), so every one is looked at again."""
     gained = capability_gained(store, now)
-    with store._tx() as c:
-        newest = c.execute(_NEWEST_WORK).fetchone()[0]
-        times = [parse_iso(newest)] if newest else []
-        if gained and c.execute(_WAITING).fetchone()[0]:
-            times.append(gained)
-    if not times:
-        return None
-    newest = max(times)
-    if now - newest < timedelta(minutes=settings.order_run_debounce_minutes):
-        return None
     for playbook in ORDER_READERS:  # first: it closes a run whose runner is gone (155)
         try:
             check_lock(store, playbook, settings.agent_timeout_minutes * 60)
         except AgentRunRefused:
             return None
-    # ponytail: the last 10 runs per reader; more than 10 since the newest request is unseen.
-    since = [r for p in ORDER_READERS for r in store.list_agent_runs(p, limit=10)
-             if parse_iso(r["started_at"]) >= newest]
-    if any(r["summary"] != DEAD_RUN for r in since):
-        return None
-    # a run a restart killed never had them (155), nor the start that made it
-    started = store.get_state("order_run_started_at")  # before its own row exists
-    if started and parse_iso(started) >= newest and not any(
-            parse_iso(r["started_at"]) >= parse_iso(started) for r in since):
-        return None
-    day = _local(settings, now).date().isoformat()
-    used = store.get_state("order_runs") or {}
-    count = used.get("count", 0) if used.get("day") == day else 0
-    if count >= settings.max_order_runs_per_day:
+    why, _ = order_wait(store, settings, now, gained)
+    if why == "daily_cap":
         work_orders.set_blocked(store, f"today's {settings.max_order_runs_per_day} at-once"
                                 " runs are used: it waits for the next scheduled run")
-        return None
-    failed = store.get_state("order_preflight_failed_at")
-    if failed and now - parse_iso(failed) < ORDER_RETRY:
+    if why:
         return None
     # ponytail: the preflight (`claude auth status`, ~1 s) blocks the worker's loop once
     # per order run; move it to a thread if it ever gets slow.
@@ -257,6 +280,7 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
         store.set_state("order_preflight_failed_at", to_iso(now))
         work_orders.set_blocked(store, f"the agent cannot start: {e}")
         return None
+    day, count = _order_runs_today(store, settings, now)
     store.set_state("order_preflight_failed_at", None)
     store.set_state("order_run_started_at", to_iso(now))
     store.set_state("order_runs", {"day": day, "count": count + 1})
@@ -323,23 +347,30 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
 
     now = now or utcnow  # looked up per call (a default argument would freeze it)
 
+    def playbook() -> Optional[str]:
+        for name in due_runs(store, settings, now()):
+            try:
+                (start or start_run)(store, settings, name)
+                return name
+            except AgentError as e:
+                print(f"agent catch-up: {e}", file=sys.stderr, flush=True)
+        return None
+
+    def film() -> Optional[str]:
+        order_id = film_run(store, settings, now(), start=start_film or start_film_run)
+        return None if order_id is None else f"film {order_id}"
+
+    steps = {"playbook": playbook, "film": film,
+             "orders": lambda: order_run(store, settings, now(), start=start or start_run)}
     started = []
     try:
         if busy(store):
             return started
-        for playbook in due_runs(store, settings, now()):
-            try:
-                (start or start_run)(store, settings, playbook)
-                started.append(playbook)
+        for step in CATCH_UP_ORDER:
+            got = steps[step]()
+            if got:
+                started.append(got)
                 break
-            except AgentError as e:
-                print(f"agent catch-up: {e}", file=sys.stderr, flush=True)
-        if not started:
-            order_id = film_run(store, settings, now(), start=start_film or start_film_run)
-            if order_id is not None:
-                started.append(f"film {order_id}")
-        if not started and order_run(store, settings, now(), start=start or start_run):
-            started.append(ORDER_PLAYBOOK)
     except Exception as e:  # noqa: BLE001 - e.g. database locked: next tick
         print(f"agent catch-up failed: {e!r}", file=sys.stderr, flush=True)
     if started:
