@@ -99,8 +99,11 @@ def queue_asset(
     if problem:
         raise QueueRefused("caption", problem)
 
+    ig_audio = (asset["recipe"] or {}).get("ig_audio")  # the track Instagram plays (178)
     payload = {"video_path": asset["file_path"], "caption": asset["caption"] or "",
-               "audio_name": asset["audio_name"],
+               "audio_name": None if ig_audio else asset["audio_name"],
+               "audio_configuration": ig_audio and {k: ig_audio[k] for k in (
+                   "audio_id", "audio_volume", "video_volume")},
                "thumb_offset_ms": (asset["recipe"] or {}).get("thumb_offset_ms"),
                "ai_generated": ai_generated(asset, idea), "trial_graduation": trial}
     post = store.schedule("reel", {k: v for k, v in payload.items() if v is not None},

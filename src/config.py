@@ -298,6 +298,9 @@ class InstagramMCPSettings(BaseSettings):
     # starts, and stops it on exit. TTS_SERVER_HF_HOME = its model cache (HF_HOME).
     tts_server_python: Optional[str] = Field(None, description="Voice service venv python")
     tts_server_hf_home: Optional[str] = Field(None, description="HF_HOME for the voice service")
+    # Step 178: CPJKU/beat_this (MIT) in its own venv, CPU only (src/studio/music.py has the
+    # install lines). Unset = data/tools/beats when it exists, else the stdlib beat finder.
+    beats_python: Optional[str] = Field(None, description="Python of the beat_this tool venv")
     tts_cache_dir: str = Field(
         str(APP_HOME / "data" / "cache" / "tts"), description="Synthesized audio cache"
     )

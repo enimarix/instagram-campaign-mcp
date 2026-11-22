@@ -32,6 +32,7 @@ from .studio import (
     dm_picks,
     downloader,
     motion,
+    music,
     production,
     remix,
     research,
@@ -750,15 +751,19 @@ async def preview_motion(template: str, props: Dict[str, Any],
 @mcp.tool(annotations=LOCAL_WRITE)
 async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[int] = None,
                         asset_id: Optional[int] = None, caption: Optional[str] = None,
-                        voice: Optional[str] = None) -> Dict[str, Any]:
+                        voice: Optional[str] = None,
+                        music_audio_id: Optional[str] = None) -> Dict[str, Any]:
     """Queue a motion render and return at once with the job id: a new asset for idea_id,
     or a re-render of asset_id (failed asset: same asset; ready: a new child asset).
     Templates with a script get their voice-over (TTS) first unless props carry `voice`.
     The template must be in the idea's style (an idea without one takes the template's).
+    `music_audio_id` (a track fetched with fetch_music): the scenes start on its beats and
+    the drop, the template's own bed is off, and the Reel is published with that Instagram
+    track attached (voiced videos only); pass it again on a re-render to keep the track.
     The worker renders; the asset becomes `ready`, or `failed` with QC reasons."""
     out = await _studio(motion.queue_motion_render, store(), get_settings(), template=template,
                         props=props, idea_id=idea_id, asset_id=asset_id, caption=caption,
-                        voice=voice)
+                        voice=voice, music_audio_id=music_audio_id)
     return {"asset_id": out["asset"]["id"], "job_id": out["job"]["id"],
             "state": out["job"]["state"]}
 
@@ -773,6 +778,29 @@ async def find_sfx(query: str, limit: int = 5) -> Dict[str, Any]:
     Its level is set from its measured peak, under the voice. A CC BY sound's `credit` is
     added to the caption by submit_asset; CC0 needs none."""
     return await _studio(sfx.find_sfx, query, min(limit, 20))
+
+
+@mcp.tool(annotations=READ)
+async def trending_music(query: Optional[str] = None,
+                         audio_type: str = "music") -> Dict[str, Any]:
+    """Instagram's trending audio right now (Audio API), or a search with `query` ("gym",
+    "phonk", "lofi"). audio_type `music`: for our business account, the royalty-free
+    library: fresh, little-known tracks, the safe pick. `original_sound`: the viral sounds of
+    the moment, often carrying famous songs that can still get a Reel muted. Each has an
+    audio_id for fetch_music."""
+    tracks = await _studio_async(music.trending(client(), query, audio_type))
+    return {"tracks": tracks}
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                      open_world_hint=True))
+async def fetch_music(audio_id: str) -> Dict[str, Any]:
+    """Download a track from trending_music (once) and find its beat: tempo, beats,
+    downbeats and the drop (where the drums kick in). Then pass the audio_id to
+    render_motion(music_audio_id=...) to cut the video on it. Returns the beat summary."""
+    meta = await _studio_async(music.fetch(client(), get_settings().media_root, audio_id))
+    return {k: meta[k] for k in ("audio_id", "title", "artist", "duration_s", "bpm", "drop_s")
+            } | {"beats": len(meta["beats"]), "downbeats": meta["downbeats"][:16]}
 
 
 # ----------------------------------------------------------------------
@@ -1299,6 +1327,10 @@ AGENT_TOOLS = frozenset({
     # (fetch on demand from Openverse when nothing fits); read + cache only, the licence
     # rule and the caption credits live in src/studio/sfx.py.
     "find_sfx",
+    # Music (step 178): Instagram's trending tracks, read + a local copy for the beat; the
+    # track is attached at publish (the owner's approval still decides what goes out).
+    "trending_music",
+    "fetch_music",
     # Ads (096; 128: the owner decides what is promoted): propose and stop tests, read
     # results. No agent tool launches or activates (the owner's Approve in the website is
     # the only launch), unkills, changes a setting or reaches the writer; stop ->

@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, to_iso, utcnow
-from . import ffmpeg, media, motion
+from . import ffmpeg, media, motion, music
 from .assets import DESCRIPTION_CHARS, InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
 from .qc import run_qc
@@ -43,9 +43,21 @@ WARNING_CHARS = 300
 Progress = Callable[[float], None]
 
 
+class IgAudio(BaseModel):
+    """An Instagram track attached at publish (src/studio/music.py), never in the file."""
+    model_config = ConfigDict(extra="forbid")
+    audio_id: str = Field(pattern=r"^\d{5,25}$")
+    title: Optional[str] = None
+    artist: Optional[str] = None
+    track: str  # media path of the local copy: beats and the review preview only
+    audio_volume: int = Field(ge=1, le=100)
+    video_volume: int = Field(100, ge=1, le=100)
+
+
 class _Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     thumb_offset_ms: Optional[int] = Field(None, ge=0)
+    ig_audio: Optional[IgAudio] = None
 
 
 class FfmpegRecipe(_Envelope):
@@ -78,6 +90,8 @@ def validate_recipe(value: Any, media_root: PathLike) -> Dict[str, Any]:
     if isinstance(env, FfmpegRecipe):
         for rel in env.inputs.values():
             media.resolve(media_root, rel)
+    if env.ig_audio:
+        media.resolve(media_root, env.ig_audio.track)
     return env.model_dump(mode="json", exclude_none=True)
 
 
@@ -158,7 +172,12 @@ def render_files(asset: Dict[str, Any], media_root: PathLike, progress: Progress
                       end_card=end_card)
         timeline = recipe_timeline(env.recipe, info.duration, env.clip_timeline or ())
     progress(0.8)
-    ffmpeg.run(["-i", video, *PREVIEW_ARGS, "-preset", preset, preview], timeout_s=timeout_s)
+    mix: List[Any] = []
+    if env.ig_audio:  # the review preview plays the track as Instagram will; the master stays clean
+        mix = ["-i", media.resolve(media_root, env.ig_audio.track),
+               *music.preview_args(env.ig_audio.model_dump())]
+    ffmpeg.run(["-i", video, *mix, *PREVIEW_ARGS, "-preset", preset, preview],
+               timeout_s=timeout_s)
     progress(0.9)
     at = POSTER_AT_S if cover_ms is None else cover_ms / 1000
     at = max(min(at, info.duration - 0.1), 0.0)  # a frame that exists in short clips

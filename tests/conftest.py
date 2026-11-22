@@ -26,6 +26,7 @@ os.environ.update({
     "AGENT_LOG_DIR": str(_TMP / "logs" / "agent"),
     "GPU_LOCK_PATH": str(_TMP / "gpu" / "gpu.lock"),
     "CLAUDE_BIN": str(_TMP / "no-claude-in-tests"),  # never a real AI run from a test
+    "BEATS_PYTHON": str(_TMP / "no-beat-this"),  # 178: never the real beat_this venv
     "LEMO_LIBRARY": str(_TMP / "no-lemo-library"),  # 172: tests build a tiny fake one
     "LEMO_SKILL_DIR": str(_TMP / "no-lemo-skill"),  # 173: never the owner's plugin skill
     # Step 166: the resource guard never waits on, probes or pauses the real machine in a

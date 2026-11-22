@@ -557,6 +557,18 @@ class InstagramClient(GraphClient):
     async def get_media(self, media_id: str) -> Dict[str, Any]:
         return await self._make_request("GET", media_id, params={"fields": MEDIA_FIELDS})
 
+    async def search_audio(self, audio_type: str, query: Optional[str] = None
+                           ) -> List[Dict[str, Any]]:
+        """Instagram Audio API (2026-06-01): the trending `music` / `original_sound`, or a
+        search with `query`. Facebook Login tokens only."""
+        params = {"audio_type": audio_type, "user_id": self.account_id,
+                  **({"search_query": query} if query else {})}
+        return (await self._make_request("GET", "ig_audio", params=params)).get("audio", [])
+
+    async def get_audio(self, audio_id: str) -> Dict[str, Any]:
+        """One audio of the Audio API, with a fresh `download_url` (~1.5 days)."""
+        return await self._make_request("GET", audio_id, params={"user_id": self.account_id})
+
     async def get_media_insights(
         self,
         media_id: str,
@@ -868,12 +880,15 @@ class InstagramClient(GraphClient):
         trial_graduation: Optional[str] = None,
         video_path: Optional[str] = None,
         ai_generated: bool = False,
+        audio_configuration: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Publish a Reel from a public `video_url` or a local `video_path` (relative to
         the media root, sent with the resumable upload). trial_graduation=MANUAL|
         SS_PERFORMANCE makes it a trial Reel shown to non-followers first.
         `ai_generated` sets `is_ai_generated=true` on the container (Instagram's AI info
-        label); AILabelRefused when Meta refuses it."""
+        label); AILabelRefused when Meta refuses it. `audio_configuration` ({audio_id,
+        audio_volume, video_volume}, Audio API) attaches an Instagram track; it replaces
+        `audio_name` (one or the other)."""
         if bool(video_url) == bool(video_path):
             raise InvalidMedia("Give exactly one of video_url or video_path for a Reel.")
         _check_caption(caption, self.settings.max_hashtags)
@@ -886,7 +901,8 @@ class InstagramClient(GraphClient):
             "cover_url": cover_url,
             "thumb_offset": thumb_offset_ms,
             "share_to_feed": share_to_feed,
-            "audio_name": audio_name,
+            "audio_name": None if audio_configuration else audio_name,
+            "audio_configuration": audio_configuration,
             "collaborators": collaborators,
             "location_id": location_id,
             "is_ai_generated": True if ai_generated else None,
