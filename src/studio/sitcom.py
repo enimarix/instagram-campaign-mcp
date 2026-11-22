@@ -12,8 +12,9 @@ punchline frozen, and the action running from the very first frame (a crash zoom
 beat). Blender renders the shots (cached), the template draws the captions, the big numbers, the
 speech bubbles and the end card over them (src/studio/motion.py).
 
-Character lines get their own voice (`voice_says`): an approved voice other than the narrator's,
-picked by the character's gender, so a skit never sounds like one person.
+Character lines get their own voice (`voice_says`): a voice other than the narrator's, picked by
+the character's gender among the voices the owner keeps on (voices.say_cast; SAY_VOICES when
+none is given), so a skit never sounds like one person.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from __future__ import annotations
 import math
 import zlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
 from . import cinematic, ffmpeg, media, troupe
@@ -45,22 +46,24 @@ REACT_FACES = ("jaw_drop", "outraged", "disgust", "shout")
 SPEEDS = {"normal": 1.0, "x10": 10.0, "slowmo": 0.3}
 # Character lines: an approved voice (brand/voices/voices.json) by gender, never the narrator's.
 SAY_VOICES = {"male": ("conteur_grave", "douce_nuit"), "female": ("douce_nuit", "conteur_grave")}
-NARRATOR = "coach_energique"
+NARRATOR = "energique_femme"  # 2026-11-22 casting (coach_energique is off)
 
 
 def _gender(who: str) -> str:
     return "male" if cinematic.CAST[who]["phenotype"].get("gender", 0.5) >= 0.5 else "female"
 
 
-def say_voice(who: str, narrator: Optional[str]) -> str:
-    """The voice of `who`'s lines: its gender's approved voice, the other one when the
-    narrator already speaks with it."""
-    first, other = SAY_VOICES[_gender(who)]
+def say_voice(who: str, narrator: Optional[str],
+              cast: Optional[Dict[str, Tuple[str, str]]] = None) -> str:
+    """The voice of `who`'s lines: its gender's first voice in `cast` (default SAY_VOICES),
+    the other one when the narrator already speaks with it."""
+    first, other = (cast or SAY_VOICES)[_gender(who)]
     return other if first == (narrator or NARRATOR) else first
 
 
 def voice_says(props: Dict[str, Any], settings: InstagramMCPSettings,
-               narrator: Optional[str]) -> Dict[str, Any]:
+               narrator: Optional[str],
+               cast: Optional[Dict[str, Tuple[str, str]]] = None) -> Dict[str, Any]:
     """`props` with each character line's `seconds` (and `audioSrc` when the provider makes
     audio) filled, one TTS call per line in the character's own voice. Props whose lines are
     all filled come back unchanged (the same object)."""
@@ -72,7 +75,7 @@ def voice_says(props: Dict[str, Any], settings: InstagramMCPSettings,
             say = b.get("say")
             if say and "seconds" not in say:
                 synth = provider.synthesize(" ".join(say["text"].split()),
-                                            say_voice(say["who"], narrator))
+                                            say_voice(say["who"], narrator, cast))
                 say = {**say, "seconds": round(max(0.4, synth.duration_s), 3)}
                 if synth.audio_path:
                     from .motion import store_voice  # motion imports us

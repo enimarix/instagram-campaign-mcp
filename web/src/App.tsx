@@ -17,8 +17,9 @@ import Trends from './pages/Trends'
 import StylesPage from './styles/StylesPage'
 import TokenBanner from './TokenBanner'
 import TrendingPage from './trending/TrendingPage'
+import VoicesPage from './voices/VoicesPage'
 import {
-  AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, CreateIcon, InboxIcon, MegaphoneIcon, MoreIcon, PaletteIcon,
+  AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, CreateIcon, InboxIcon, MegaphoneIcon, MicIcon, MoreIcon, PaletteIcon,
   SettingsIcon, TrendsIcon,
 } from './ui/icons'
 import { PageHeader } from './ui/PageHeader'
@@ -34,6 +35,7 @@ const NAV = [
   { path: '/analytics', label: 'Analytics', Icon: ChartIcon }, // 174: its tab went to Créer
   { path: '/learnings', label: 'Learnings', Icon: BulbIcon },
   { path: '/styles', label: 'Styles', Icon: PaletteIcon },
+  { path: '/voices', label: 'Voix', Icon: MicIcon },
   { path: '/ads', label: 'Ads', Icon: MegaphoneIcon },
   { path: '/agent', label: 'Agent', Icon: AgentIcon, tab: true },
   { path: '/settings', label: 'Settings', Icon: SettingsIcon },
@@ -90,6 +92,7 @@ export default function App() {
               <Route path="/trends" element={<Trends />} />
               <Route path="/learnings" element={<Learnings />} />
               <Route path="/styles" element={<StylesPage />} />
+              <Route path="/voices" element={<VoicesPage />} />
               <Route path="/ads" element={<Ads />} />
               <Route path="/agent" element={<Agent />} />
               <Route path="/settings" element={<Settings />} />

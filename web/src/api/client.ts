@@ -1062,6 +1062,25 @@ export const listStyleCatalog = (filter: { family?: StyleFamily; q?: string; fav
 export const setStyleFavourite = (id: string, favourite: boolean) =>
   send<CatalogStyle>('PATCH', `/api/style-catalog/${encodeURIComponent(id)}`, { favourite })
 
+/** A voice-over voice (Voix page): `sample` is a URL to listen to, `sample_text` what it
+ * says; only `enabled` voices are used for videos (at least one stays on). */
+export type Voice = {
+  id: string
+  label: string
+  description: string | null
+  use_for: string | null // the scenes the AI picks this voice for
+  styles: string[]
+  address: string[]
+  default: boolean // the fallback when no voice fits a video
+  designed: boolean
+  enabled: boolean
+  sample_text: string | null
+  sample: string | null
+}
+export const listVoices = () => request<Voice[]>('/api/voices')
+export const setVoiceEnabled = (id: string, enabled: boolean) =>
+  send<Voice>('PATCH', `/api/voices/${encodeURIComponent(id)}`, { enabled })
+
 /** The AI's latest decision on a video sent back for changes (156); `text` is what the
  * Inbox shows: « Refaite en Macro 3D », « Nouveau style demandé : … », « En attente : … ». */
 export type AgentDecision = {

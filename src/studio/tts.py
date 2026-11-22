@@ -25,7 +25,7 @@ import httpx
 import structlog
 
 from ..config import InstagramMCPSettings
-from . import ffmpeg
+from . import ffmpeg, voices
 
 logger = structlog.get_logger(__name__)
 
@@ -187,7 +187,10 @@ class HttpProvider:
         s = self.s
         parts = [self.name, voice, text, s.tts_http_url, s.tts_http_method.upper(),
                  s.tts_http_body_template, s.tts_http_response, s.tts_http_audio_field]
-        return hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
+        recipe = voices.recipe(voice)  # a designed voice re-tuned under the same id: new audio
+        if recipe is not None:
+            parts.append(recipe)
+        return hashlib.sha256(json.dumps(parts, sort_keys=True).encode("utf-8")).hexdigest()
 
     def synthesize(self, text: str, voice: Optional[str] = None) -> Synthesis:
         lines = script_lines(text)

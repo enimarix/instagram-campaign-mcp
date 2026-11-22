@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
-from . import ffmpeg, frames, media, motion, render, stt
+from . import ffmpeg, frames, media, motion, render, stt, voices
 from .assets import transition
 from .reactions import next_reaction_piece
 from .recipe import (
@@ -183,7 +183,7 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
         if settings.tts_provider == "none":
             raise ValueError("no TTS engine is set up (TTS_PROVIDER=none), so there is no"
                              " voice-over: a remix with a script is refused (never faked)")
-        synth = get_provider(settings).synthesize(script, voice)
+        synth = get_provider(settings).synthesize(script, voices.check_voice(store, voice))
         if synth.duration_s > length + 0.05:
             raise ValueError(f"the voice-over is {synth.duration_s:.1f} s, longer than the"
                              f" {length:.1f} s clip: shorten the script or widen the trim")

@@ -844,8 +844,10 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
                        trim_start_s: Optional[float] = None, trim_end_s: Optional[float] = None,
                        layout: Literal["pip", "split"] = "pip",
                        captions: Optional[List[Dict[str, Any]]] = None,
-                       caption: Optional[str] = None) -> Dict[str, Any]:
+                       caption: Optional[str] = None,
+                       voice: Optional[str] = None) -> Dict[str, Any]:
     """Queue a reaction remix of a clip for a remix idea of that source and return at once.
+    `voice`: a voice id from voices.json for the voice-over (default: the default voice).
     Commentary rules (refused otherwise): `script` is the voice-over, YOUR commentary on
     this specific clip (what happens, why it works); a piece of the owner's reaction reel
     is added; the creator is credited on screen, and the caption you submit must contain
@@ -857,7 +859,7 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
     muted with no captions) may be a reason to pick another clip."""
     out = await _studio(remix.render_remix, store(), get_settings(), idea_id, source_id,
                         hook=hook, script=script, trim=(trim_start_s, trim_end_s),
-                        layout=layout, captions=captions, caption=caption)
+                        layout=layout, captions=captions, caption=caption, voice=voice)
     return {"asset_id": out["asset"]["id"], "job_id": out["job"]["id"],
             "state": out["job"]["state"],
             "reaction_piece": {k: out["piece"][k] for k in ("piece_id", "start_s", "end_s")},

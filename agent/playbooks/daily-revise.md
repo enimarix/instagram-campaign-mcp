@@ -59,12 +59,14 @@ fits, `create_idea(style=…)`.
 2. `inspired`: an **original** video on the same idea or format, nothing of the Reel
    reused: `create_idea(track="motion", work_order_id=<id>, …)` with no `source_id`, then
    `list_motion_templates` (once), `preview_motion` and
-   `render_motion(template=…, props=…, idea_id=…)`.
+   `render_motion(template=…, props=…, idea_id=…, voice=<id>)`, the voice picked from
+   `voices.json` by what the video is (its `use_for`), as in daily-produce.
 3. `react`: a commentary remix with credit: `download_reel(<the order's source_id, or its
    permalink>)`, then watch it as in step 3 below (`list_sources`, `get_clip_frames`,
    `set_clip_timeline`),
    `create_idea(track="remix", source_id=<the source download_reel returned>,
-   work_order_id=<id>, …)` and `render_remix` with a clip-specific voice-over, the trim of
+   work_order_id=<id>, …)` and `render_remix` with a clip-specific voice-over (and a `voice`
+   picked from `voices.json` for what the reaction is), the trim of
    the part you react to and the credit. Refused or not reactable:
    `skip_work_order(id, "<one-line reason>")`; failed: leave it `scheduled` for the night
    run.
@@ -137,7 +139,8 @@ you change the style, not that you stop. For each request (newest first):
    "<one line: why this style meets the note>", style=<id>)`. It returns a « même vidéo,
    autre style » work order: make it now as in step 0 (`create_idea(…,
    work_order_id=<its id>)`, same topic, script and message, a template of that style,
-   `render_motion(…, idea_id=…)`). The old video is archived once the new one is
+   `render_motion(…, idea_id=…, voice=<id>)`, the voice picked as above, or the owner's
+   when the note names one). The old video is archived once the new one is
    submitted.
 4. **No enabled style can**: `request_style(kind="reference" or "invented", …,
    unblocks_asset_ids=[<this video and every other waiting one it fits>])`: what is

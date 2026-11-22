@@ -5,11 +5,14 @@ HTTP service the studio's `http` TTS provider calls (TTS_HTTP_RESPONSE=json).
   POST /tts {"text": "<one script line per line>", "voice": "<id>"}
        -> {"audio": <base64 wav>, "words": [{"text", "start_s", "end_s"}, ...], "take": {...}}
        `words` holds one span per script line, its text as written (speech.line_spans).
-  GET  /health -> {"model", "loaded", "worker_pid", "voices", "default_voice", "settings"}
+  GET  /health -> {"model", "loaded", "worker_pid", "voices", "default_voice", "settings",
+       "recipes"} (settings: steps / cfg are the cloned voices'; a designed voice uses its recipe)
        (at once)
 
-The owner's approved settings (by ear): the whole script in ONE take, cfg 1.6, 30 steps,
-cloned from the voice card as continuation (prompt wav + text) AND reference. Each take is
+The owner's approved settings (by ear): the whole script in ONE take. A designed voice
+(`recipe` in voices.json, casting of 2026-11-22) is made from its style + seed at its cfg and
+steps, then its tempo; a cloned voice (no recipe) at cfg 1.6, 30 steps, from the voice card
+as continuation (prompt wav + text) AND reference. Each take is
 transcribed by Whisper (CPU, so VRAM stays under 8 GB with VoxCPM2 loaded) and compared to
 the text; under VOXCPM_MIN_SCORE the take is redone, up to VOXCPM_MAX_TAKES, and the best
 take is kept. One request at a time.
@@ -44,7 +47,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from engine_worker import MODEL_ID, WHISPER_ID, Engine, Worker, WorkerFailed
 from speech import line_spans, score, speak, take_text
@@ -61,6 +64,7 @@ VOICES_DIR = REPO / "brand" / "voices"
 
 
 class Settings(BaseModel):
+    """steps / cfg: the cloned voices' (a designed voice takes its recipe's); the rest: all."""
     steps: int = 30
     cfg: float = 1.6
     max_takes: int = 3
@@ -76,24 +80,51 @@ class Settings(BaseModel):
                    idle_unload_s=float(env("VOXCPM_IDLE_UNLOAD_S", 120)))
 
 
+class Recipe(BaseModel):
+    """A designed voice (owner's casting, 2026-11-22): VoxCPM2 voice design, `(style)` before
+    the text, no prompt continuation (cloning a take lost its energy). Take n uses seed +
+    1000 * (n - 1); `reference` (a wav beside voices.json) keeps a timbre; `tempo` is played
+    after (ffmpeg atempo, pitch unchanged)."""
+    style: str = Field(min_length=1)
+    seed: int
+    cfg: float = Field(2.0, gt=0, le=10)
+    steps: int = Field(30, ge=1, le=100)
+    reference: Optional[str] = None
+    tempo: float = Field(1.0, ge=0.5, le=2.0)  # atempo's range is 0.5-100; past 2x is noise
+
+
 class Voice(BaseModel):
     id: str
     label: str
     description: str
-    card_text: str
+    card_text: str = ""  # cloned voices: what the card says
     styles: List[str] = []
     address: List[str] = []
     default: bool = False
-    card: Path  # the clip that defines the voice: <voices dir>/<id>.wav
+    recipe: Optional[Recipe] = None  # designed voice; None: cloned from the card
+    card: Path  # cloned voices: the clip that defines the voice; designed: a sample to hear
+
+    def take_params(self) -> Dict[str, Any]:
+        """What the engine needs for a take (picklable: it crosses to the worker)."""
+        if self.recipe is None:
+            return {"card": str(self.card), "card_text": self.card_text}
+        r = self.recipe.model_dump()
+        r["reference"] = str(self.card.parent / r["reference"]) if r["reference"] else None
+        return {"recipe": r}
 
 
 def load_voices(folder: Path = VOICES_DIR) -> Dict[str, Voice]:
-    """voices.json entries whose card wav exists; ValueError when there is no default voice."""
+    """voices.json entries whose card wav (and reference) exists; ValueError when there is
+    no default voice or a cloned voice has no card_text."""
     entries = json.loads((folder / "voices.json").read_text(encoding="utf-8"))["voices"]
     voices = {e["id"]: Voice(**e, card=folder / f"{e['id']}.wav") for e in entries}
-    missing = [v.id for v in voices.values() if not v.card.is_file()]
+    missing = [v.id for v in voices.values() if not v.card.is_file()
+               or (v.recipe and v.recipe.reference and not (folder / v.recipe.reference).is_file())]
     if missing:
         raise ValueError(f"voice cards missing in {folder}: {missing}")
+    textless = [v.id for v in voices.values() if v.recipe is None and not v.card_text]
+    if textless:
+        raise ValueError(f"cloned voices need their card_text: {textless}")
     if sum(v.default for v in voices.values()) != 1:
         raise ValueError("voices.json must mark exactly one voice `default: true`")
     return voices
@@ -108,7 +139,7 @@ def synthesize(engine: Worker, settings: Settings, script: str, voice: Voice) ->
     best, scores = None, []
     for n in range(1, settings.max_takes + 1):
         t0 = time.perf_counter()
-        audio, duration, words = engine.take(spoken, voice)
+        audio, duration, words = engine.take(spoken, voice, n)
         heard = " ".join(w["text"] for w in words)
         s = round(score(spoken, heard), 3)
         scores.append(s)
@@ -178,7 +209,8 @@ def create_app(engine: Worker, settings: Settings, voices: Dict[str, Voice], *,
         return {"model": MODEL_ID, "loaded": engine.model is not None,
                 "worker_pid": getattr(engine.model, "pid", None),  # the studio's watchdog (166)
                 "voices": sorted(voices), "default_voice": default,
-                "settings": settings.model_dump()}
+                "settings": settings.model_dump(),
+                "recipes": {v.id: v.recipe.model_dump() for v in voices.values() if v.recipe}}
 
     @app.post("/tts")
     def tts(req: TTSRequest) -> Dict[str, Any]:  # sync: FastAPI runs it in a thread

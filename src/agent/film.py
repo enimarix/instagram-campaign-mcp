@@ -42,7 +42,7 @@ from dotenv import dotenv_values
 
 from ..config import ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from ..studio import lemo, sfx, work_orders
+from ..studio import lemo, sfx, voices, work_orders
 from ..studio.production import qc_summary
 from ..studio.seed import local_today
 from .proc import started as process_started
@@ -217,6 +217,7 @@ def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
         exe = preflight(settings)
         ws = prepare_workspace(settings, order_id, lemo.film_brief(
             settings, order, style, _from_video(store, order)))
+        voices.agent_copy(store, ws / "voices.json")  # the voices the owner keeps on
         idea = store.add_idea("motion", hook=(order["instruction"] or style["label"])[:200],
                               style=order["style"], batch_date=local_today(settings.timezone))
         work_orders.start(store, order_id, idea)

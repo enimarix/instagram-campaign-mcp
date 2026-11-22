@@ -53,6 +53,7 @@ from . import (  # render.py imports us
     sfx,
     sitcom,
     styles,
+    voices,
 )
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
@@ -201,15 +202,17 @@ def validate_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_props(template: str, props: Dict[str, Any], settings: InstagramMCPSettings,
-                voice: Optional[str] = None) -> Dict[str, Any]:
+                voice: Optional[str] = None,
+                cast: Optional[Dict[str, Tuple[str, str]]] = None) -> Dict[str, Any]:
     """`props` with `voice` filled from the TTS provider (line timings, plus the audio copied
     to `<media root>/voice/` when there is a voice). Templates without a script, or props
-    that already carry a voice, come back unchanged."""
+    that already carry a voice, come back unchanged. `cast`: the sitcom's character voices
+    (voices.say_cast)."""
     script = SCRIPTS.get(template)
     if script is None:
         return props
     if template == sitcom.TEMPLATE:  # each character line in its own voice
-        props = sitcom.voice_says(props, settings, voice)
+        props = sitcom.voice_says(props, settings, voice, cast)
     if "voice" in props:
         return props
     lines = [" ".join(line.split()) for line in script(props)]  # one script line per line
@@ -434,7 +437,17 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
         # lines; moving the narrator alone would desync them. Remotion templates only.
         raise ValueError(f"{template} cannot take an Instagram track yet: use its own bed")
     v = validate_props(template, props)  # before TTS: build_props needs well-formed props
-    voiced = build_props(template, v["props"], settings, voice)
+    cast = None
+    if settings.tts_provider != "none":  # only voices the owner keeps on (Voix page)
+        if "voice" not in v["props"]:  # a new voice-over; a re-render keeps its own audio
+            voice = voices.check_voice(store, voice)
+        elif voice is None:  # the sitcom compares character voices with the narrator's
+            # ponytail: the props keep no voice id, so the default stands in for the
+            # narrator; storing the id in the recipe would make this exact.
+            voice = voices.default_voice(store)
+        if template == sitcom.TEMPLATE:
+            cast = voices.say_cast(store)
+    voiced = build_props(template, v["props"], settings, voice, cast)
     if voiced is not v["props"]:
         v = validate_props(template, voiced)
     env: Dict[str, Any] = {"kind": "motion", "template": template, "props": v["props"]}

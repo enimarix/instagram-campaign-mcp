@@ -253,7 +253,7 @@ def test_queue_motion_render_cuts_on_the_track_and_stores_ig_audio(store, tmp_pa
     monkeypatch.setattr(motion, "list_templates", lambda: [{"id": "Hello", "style": "pixel"}])
     lines = [{"text": "h", "start_s": 0.0, "end_s": 1.0}, {"text": "x", "start_s": 1.2, "end_s": 2.0}]
     voiced = _voiced(tmp_path, lines)
-    monkeypatch.setattr(motion, "build_props", lambda t, p, s, v=None: {**p, **voiced})
+    monkeypatch.setattr(motion, "build_props", lambda t, p, s, v=None, cast=None: {**p, **voiced})
     monkeypatch.setattr(music, "retime_voice", lambda src, old, new, dest: src)
     aid = _fetched(tmp_path)
     s = _settings(tmp_path)

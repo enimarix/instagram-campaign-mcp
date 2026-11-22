@@ -45,6 +45,7 @@ from . import (
     sources,
     stock,
     styles,
+    voices,
     worker,
 )
 from . import settings as settings_routes
@@ -219,6 +220,7 @@ def create_app(
     app.include_router(alerts_router)
     app.include_router(ads.router)
     app.include_router(styles.router)
+    app.include_router(voices.router)
     _serve_website(app, Path(settings.web_dist))  # catch-all: keep it last
     return app
 

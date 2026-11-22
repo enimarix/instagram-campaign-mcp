@@ -273,7 +273,10 @@ and its steps are how a reaction is made, for the orders too.
      would fit any clip is a bad script;
    - the trim: only the best part, the part you react to, and the voice-over's moments,
      both picked from the clip's timeline (its seconds);
-   - `layout` `pip` unless a split screen shows the moment better.
+   - `layout` `pip` unless a split screen shows the moment better;
+   - `voice`: picked from `voices.json` like a motion video's (phase 8): what this
+     reaction is (humour and quick reactions: an energetic voice; a story or an
+     explanation: a storyteller).
    Add the job id to the wait list of phase 9.
 6. `mark_dm_pick(id, "in_production")`. It becomes `posted` by itself when the video is
    published.
@@ -360,12 +363,17 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 2. For each new idea, build the props from the idea: the hook, the script split into the
    template's parts, the citations in the template's `citations` prop when it has one.
    Voice-over is added by the studio: never put a `voice` prop in the props.
-   **Pick the voice, per video.** Read `voices.json` in your working directory (once per
-   run) and pass the chosen `id` as `render_motion(..., voice=<id>)`: a voice whose
-   `styles` holds the template's `style` and whose `address` holds the video's tu / vous
-   (match the script's tone to its `description`). When several fit, or none, use the
-   `default` voice (`conteur_grave`). Write numbers, units and times as the viewer should
+   **Pick the voice, per video, from what the video is.** Read `voices.json` in your
+   working directory (once per run) and pass the chosen `id` as
+   `render_motion(..., voice=<id>)`. Keep the voices whose `styles` hold the template's
+   `style` and whose `address` holds the video's tu / vous; among them, pick the one whose
+   `use_for` matches this script: storytelling or explaining vs. energy and hooks (tips,
+   challenges, humour, ads), and the speaker's gender when the script speaks as a woman or
+   as a man. Two scripts of different kinds in one batch get different voices; vary
+   between voices that fit equally. The `default` voice is only for when none fits. Only
+   the voices listed there are on: never pass another id. Write numbers, units and times as the viewer should
    read them (308 kcal, 21 h, macrobody.fr): the studio spells them out for the voice.
+   Anything in brackets is shown in the captions but not said: no stage directions.
    **The end card, per video.** Every template ends on its style's animated end card (the
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:
@@ -413,7 +421,8 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    slowmo for a fall. The hook is 6 words at most and plays over the first beat's action;
    the last beat is the punchline (the picture freezes on it); `outro` is the share line.
    The studio cuts every 1-2 s between wide, reaction close-ups and top-down shots by
-   itself: never describe cameras. Narrate with `coach_energique`; the characters' voices
+   itself: never describe cameras. Narrate with an energetic « tu » voice from `voices.json`
+   (`energique_femme` when it is listed, else the closest one listed); the characters' voices
    are picked by the studio.
 4. `render_motion(template=…, props=…, idea_id=…, caption=…, music_audio_id=…)` for every idea; send them in
    parallel. Keep every returned job id in your wait list.

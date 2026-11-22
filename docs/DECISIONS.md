@@ -8,6 +8,28 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-22: Voices are designed recipes, picked on the Voix page (owner's re-casting)
+The owner found the cloned voices robotic ("AI slop"). Six casting rounds by ear
+(`data/voice-trials/`, rated on a phone page) settled it: a voice is a VoxCPM2 **recipe**, not a
+cloned clip: `(style description)` before the text, a seed, cfg 2.0, 30 steps, an optional
+reference wav for the timbre, and a tempo played after (ffmpeg atempo, pitch unchanged). Each
+retake uses the next seed (seed + 1000). Three voices are on: `souriante` (the new default),
+`energique_femme`, `energique_homme`; the cloned `conteur_grave`, `coach_energique`,
+`douce_nuit` stay in `voices.json`, turned off. `<id>.wav` is now a sample to hear for a
+designed voice. The owner turns voices on / off on the new Voix page (`/voices`, stored in the
+studio state like the styles); only voices on are used: the agent's `voices.json` lists them
+alone, and `render_motion` / `render_remix` refuse another one (no voice = the default if on,
+else the first on); a re-render that keeps its voice-over is not re-checked. At least one
+stays on. The Lemo film agent gets the same list (by instruction: it calls the service
+itself). The sitcom narrates with an energetic tu voice that is on (`energique_femme` first); its characters speak in voices on,
+picked by each voice's `gender`. A designed voice's recipe is part of the TTS cache key, so
+re-tuning a voice under the same id makes new audio. Bracketed parts of a script are shown in
+the captions but never said (a stage direction read aloud sounds wrong, and a leading bracket
+would be read as a voice instruction).
+Reason: in the rounds, cloning a liked take onto a new script lost its energy and sounded
+robotic (round 5); re-running the same recipe on a new script was rated top on two seeds
+for all three voices (round 6). OmniVoice (VoiceStudio) was tried and rated "super bad".
+
 ## 2026-11-21: Blender's VRAM diet, heavy jobs off CPU 0, one Blender call per shot (177)
 Every Blender scene's images are shared (one copy per file) and crushed: faces and outfits to
 1024 px (`cinematic.TEXTURE_PX`), the rest 512; the EEVEE shadow pool is 256 MB (default

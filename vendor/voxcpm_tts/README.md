@@ -8,7 +8,8 @@ voices. The studio calls it through its generic `http` TTS provider (`src/studio
   `{"audio": <base64 wav, 48 kHz>, "words": [{"text", "start_s", "end_s"}], "take": {...}}`.
   `words` holds one span per script line, its text as written, so captions match the voice.
   Empty voice = the default voice; an unknown voice = HTTP 400 listing the ids.
-- `GET /health` → model, `loaded` (true/false), voices, default voice, settings. Answers at
+- `GET /health` → model, `loaded` (true/false), voices, default voice, settings (their steps /
+  cfg are the cloned voices'), `recipes` (each designed voice's). Answers at
   once, loaded or not.
 
 ## What it does per request
@@ -65,9 +66,23 @@ CPU before casting it to bfloat16).
 
 ## Voices
 
-`brand/voices/<id>.wav` (the card: the clip that defines the voice) + `brand/voices/voices.json`
-(id, label, description, `card_text`, `styles`, `address`, one `default: true`). Approved by the
-owner on 2026-11-19: `conteur_grave` (default), `coach_energique`, `douce_nuit`.
+`brand/voices/voices.json` (id, label, description, `styles`, `address`, one `default: true`,
+`enabled`) + `brand/voices/<id>.wav`. Two kinds (docs/DECISIONS.md 2026-11-22):
+
+- **Designed** (`recipe`: `style`, `seed`, `cfg`, `steps`, optional `reference` wav beside
+  voices.json, `tempo`): every script is made as `(style)text` from the seed, no prompt
+  continuation; a redone take uses seed + 1000; `tempo` (0.5-2) is played after with ffmpeg
+  atempo. Bracketed parts of a script are shown, never said (`speech.unbracket`): a stage
+  direction read aloud sounds wrong, and a bracket at the start would be read as a voice
+  instruction.
+  `<id>.wav` is only a sample to hear. The owner's re-casting of 2026-11-22: `souriante`
+  (default), `energique_femme`, `energique_homme`.
+- **Cloned** (no recipe): `<id>.wav` is the card and `card_text` what it says, cloned as
+  continuation + reference at cfg 1.6 / 30 steps. 2026-11-19: `conteur_grave`,
+  `coach_energique`, `douce_nuit` (turned off since the re-casting).
+
+Which voices are used is the owner's choice on the studio's Voix page; this service serves
+every voice in the file.
 
 ## Setup (Windows, NVIDIA GPU with 8 GB)
 
@@ -98,8 +113,8 @@ Its output goes to `data/logs/tts.log`. To run it by hand instead:
 
 | Variable | Default | |
 |---|---|---|
-| `VOXCPM_STEPS` | 30 | diffusion steps (approved; never lower by default) |
-| `VOXCPM_CFG` | 1.6 | guidance (approved) |
+| `VOXCPM_STEPS` | 30 | diffusion steps of the cloned voices (approved; never lower by default) |
+| `VOXCPM_CFG` | 1.6 | guidance of the cloned voices (approved); a designed voice uses its recipe's |
 | `VOXCPM_MAX_TAKES` | 3 | takes per request at most |
 | `VOXCPM_MIN_SCORE` | 0.9 | a take at or above this is kept at once |
 | `VOXCPM_IDLE_UNLOAD_S` | 120 | idle seconds before the worker is stopped and the GPU freed |

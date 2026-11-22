@@ -48,12 +48,14 @@ $remake
   through the GPU lock command (the service takes the lock itself: inside it, it would wait
   forever). The first call loads the model (~35 s); then ~1 s of compute per second of
   speech or more. On 503, retry once after 30 s.
-- Voices: `conteur_grave` (deep warm man), `coach_energique` (bright young woman coach),
-  `douce_nuit` (soft intimate woman). The library's Kokoro / edge-tts voices are NOT
-  approved for macroBody.
-- Address: « vous » by default (explainers, calm or painterly styles) with `conteur_grave`
-  or `douce_nuit`; « tu » for humour, coaching or a playful style, with `coach_energique`.
-  The owner's instruction wins when it says. Write your choice in TREATMENT.md.
+- Voices: read `voices.json` in your working folder: the voices the owner keeps on, each
+  with its `description` and `address` (tu / vous). Use only those ids; the library's
+  Kokoro / edge-tts voices are NOT approved for macroBody.
+- Address: « vous » by default (explainers, calm or painterly styles); « tu » for humour,
+  coaching or a playful style. Pick the voice whose `address` fits and whose `use_for` matches
+  the film (storytelling vs. energy, the speaker's gender); the `default` one only when
+  none fits. The owner's instruction wins when it says. Write your choice in
+  TREATMENT.md.
 - VoxCPM2 can garble short or unusual phrasings: if a take mis-says a word, rewrite the line.
 - Mix: the voice clearly on top, music ducked well under it, always.
 

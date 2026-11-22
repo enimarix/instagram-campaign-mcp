@@ -37,7 +37,7 @@ from pydantic import SecretStr
 
 from ..config import APP_HOME, ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from ..studio import guard
+from ..studio import guard, voices
 from ..studio.power import keep_awake
 from . import packet
 from .proc import is_gone
@@ -306,6 +306,7 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     try:
         config = prepare_workspace(settings, name, agent_dir=agent_dir)
         ws = config.parent.parent
+        voices.agent_copy(store, ws / VOICES.name)  # the voices the owner keeps on only
         work = packet.write_packet(store, settings, name, ws)
         if work["skip"]:
             raise packet.NothingToDo

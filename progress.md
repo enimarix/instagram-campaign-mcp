@@ -290,6 +290,7 @@ The owner declined the first 8-bit FactQuest render ("not good at all") and aske
 ## Done
 
 <!-- - [x] 000 — <title> — PR #<n> (<date>) — <one-line outcome> -->
+- [x] 184 — Voices re-cast as designed VoxCPM2 recipes + the Voix page (2026-11-22) — owner found the cloned voices robotic; six casting rounds by ear picked souriante, energique_femme, energique_homme (recipe: style + seed + cfg 2.0 + 30 steps + tempo); /voices to hear each sample and switch voices on / off; only voices on reach a video (agent + film voices.json, render_motion / render_remix, sitcom cast by gender); the AI picks each video's voice by scene (`use_for`), the default is only a fallback; brackets shown, not said; recipe in the TTS cache key.
 - [x] 183 — An « Annuler » button on Mes envois — PR #193 (2026-11-22) — the owner can drop an envoi the AI has not started (waiting for an instruction or scheduled), with a confirm, as in « Créer »'s pile.
 - [x] 182 — Mes envois shows the AI's Reel analysis instead of a blank page — PR #192 (2026-11-22) — an analysed order stores {why, summary, timeline}; the page rendered it as text and React blanked the whole Trending page. Summary, why it works and the timeline now show.
 - [x] 181 — « Même vidéo, autre style » carries the note and retires the video — PR #191 (2026-11-22) — owner: the video stayed in the Inbox and the text typed in the sheet was ignored. Now the note + ticked reasons go into the change order and are saved as a comment, and the ready video is archived (5 s Undo); the agent's own restyle is unchanged.

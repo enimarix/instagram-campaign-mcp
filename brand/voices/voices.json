@@ -1,30 +1,173 @@
 {
-  "_note": "Voices of the studio's voice-over (step 038, owner's casting 2026-11-19). <id>.wav is the voice card: every script is cloned from it (vendor/voxcpm_tts). card_text is what the card says. styles = the video styles the voice suits (motion/src/registry.ts STYLES, plus clean and live); sitcom: coach_energique narrates, conteur_grave and douce_nuit voice the characters' lines (src/studio/sitcom.py); address = tu / vous it suits (brand.json address).",
+  "_note": "Voices of the studio's voice-over (step 038; owner's casting 2026-11-19, re-cast 2026-11-22). A voice with a `recipe` is DESIGNED: VoxCPM2 makes every script from its style + seed (vendor/voxcpm_tts); <id>.wav is a sample to listen to (sample_text is what it says). A voice without one is CLONED from <id>.wav (card_text is what it says). `enabled` is the default of the owner's on/off (Voix page; the owner's choice lives in the studio's state and wins). use_for = the scenes the voice is for (the AI picks a voice per video from it); styles = the video styles the voice suits; address = tu / vous; gender picks the sitcom's character voices among the voices on (src/studio/voices.py say_cast).",
   "voices": [
+    {
+      "id": "souriante",
+      "label": "Souriante",
+      "description": "French woman, warm, bright and smiling, engaging storyteller with a steady lively pace.",
+      "sample_text": "Arrête de compter tes pas. Sérieux. Dix mille pas, c'est bien. Mais si tu manges trois cents calories de trop chaque soir, tu fais du surplace. Le vrai levier, c'est ton assiette.",
+      "styles": [
+        "paper",
+        "clean",
+        "voxel",
+        "pixel",
+        "blender",
+        "cutaway",
+        "editorial",
+        "cinema",
+        "macro3d",
+        "sitcom",
+        "live"
+      ],
+      "address": [
+        "vous",
+        "tu"
+      ],
+      "default": true,
+      "enabled": true,
+      "recipe": {
+        "style": "warm, bright and smiling, engaging storyteller, steady lively pace",
+        "seed": 67,
+        "cfg": 2.0,
+        "steps": 30,
+        "reference": "souriante.ref.wav",
+        "tempo": 1.08
+      },
+      "gender": "female",
+      "use_for": "Storytelling and explainers: a story told from start to end, how the body works, calm or warm moments, empathy (cravings, tiredness, doubts), evening and sleep topics. A woman's voice for a female persona."
+    },
+    {
+      "id": "energique_femme",
+      "label": "Énergique (femme)",
+      "description": "French woman in her late twenties, energetic and upbeat, punchy and smiling, fast but clear: hooks from the first word. For tips, challenges and ads said with tu.",
+      "sample_text": "Arrête de compter tes pas. Sérieux. Dix mille pas, c'est bien. Mais si tu manges trois cents calories de trop chaque soir, tu fais du surplace. Le vrai levier, c'est ton assiette.",
+      "styles": [
+        "paper",
+        "clean",
+        "voxel",
+        "pixel",
+        "blender",
+        "cutaway",
+        "editorial",
+        "cinema",
+        "macro3d",
+        "sitcom",
+        "live"
+      ],
+      "address": [
+        "tu"
+      ],
+      "enabled": true,
+      "recipe": {
+        "style": "A French woman in her late twenties, energetic and upbeat, punchy, smiling, fast but clear, grabs attention from the first word, casual everyday spoken French, recorded in a quiet studio, clean crisp close-microphone sound, high fidelity, no background noise",
+        "seed": 132,
+        "cfg": 2.0,
+        "steps": 30,
+        "tempo": 1.0
+      },
+      "gender": "female",
+      "use_for": "Energy and hooks: quick tips, challenges, myths busted, humour, ads and promos, sitcom narration, any fast punchy script said with tu. A woman's voice for a female persona."
+    },
+    {
+      "id": "energique_homme",
+      "label": "Énergique (homme)",
+      "description": "French man in his early thirties, energetic and upbeat, punchy and smiling, fast but clear: hooks from the first word. For tips, challenges and ads said with tu.",
+      "sample_text": "Arrête de compter tes pas. Sérieux. Dix mille pas, c'est bien. Mais si tu manges trois cents calories de trop chaque soir, tu fais du surplace. Le vrai levier, c'est ton assiette.",
+      "styles": [
+        "paper",
+        "clean",
+        "voxel",
+        "pixel",
+        "blender",
+        "cutaway",
+        "editorial",
+        "cinema",
+        "macro3d",
+        "sitcom",
+        "live"
+      ],
+      "address": [
+        "tu"
+      ],
+      "enabled": true,
+      "recipe": {
+        "style": "A French man in his early thirties, energetic and upbeat, punchy, smiling, fast but clear, grabs attention from the first word, casual everyday spoken French, recorded in a quiet studio, clean crisp close-microphone sound, high fidelity, no background noise",
+        "seed": 122,
+        "cfg": 2.0,
+        "steps": 30,
+        "tempo": 1.0
+      },
+      "gender": "male",
+      "use_for": "Energy and hooks with a man's voice: gym and training, quick tips, challenges, myths busted, humour, ads, any fast punchy script said with tu; a male persona or a guy talking to guys."
+    },
     {
       "id": "conteur_grave",
       "label": "Conteur grave",
       "description": "French man in his fifties, deep warm storyteller, gentle humour. The default voice.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["paper", "clean", "voxel", "pixel", "blender", "cutaway", "editorial", "cinema", "macro3d", "sitcom"],
-      "address": ["vous"],
-      "default": true
+      "styles": [
+        "paper",
+        "clean",
+        "voxel",
+        "pixel",
+        "blender",
+        "cutaway",
+        "editorial",
+        "cinema",
+        "macro3d",
+        "sitcom"
+      ],
+      "address": [
+        "vous"
+      ],
+      "default": false,
+      "enabled": false,
+      "sample_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
+      "gender": "male",
+      "use_for": "(off since 2026-11-22) Deep male storyteller."
     },
     {
       "id": "coach_energique",
       "label": "Coach énergique",
       "description": "Young French woman, bright energetic fitness coach, friendly and motivating, upbeat. For humour, tips and challenges said with tu.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["pixel", "voxel", "live", "sitcom"],
-      "address": ["tu"]
+      "styles": [
+        "pixel",
+        "voxel",
+        "live",
+        "sitcom"
+      ],
+      "address": [
+        "tu"
+      ],
+      "default": false,
+      "enabled": false,
+      "sample_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
+      "gender": "female",
+      "use_for": "(off since 2026-11-22) Bright female coach."
     },
     {
       "id": "douce_nuit",
       "label": "Douce nuit",
       "description": "French woman, soft intimate late-night voice, calm, close to the microphone. For evening stories, cravings at night, sleep, calm moments.",
       "card_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
-      "styles": ["paper", "clean", "blender", "editorial", "cinema", "sitcom"],
-      "address": ["vous", "tu"]
+      "styles": [
+        "paper",
+        "clean",
+        "blender",
+        "editorial",
+        "cinema",
+        "sitcom"
+      ],
+      "address": [
+        "vous",
+        "tu"
+      ],
+      "default": false,
+      "enabled": false,
+      "sample_text": "Bonjour, je suis la voix de Macro Body. Je vous raconte des histoires courtes, simples et vraies.",
+      "gender": "female",
+      "use_for": "(off since 2026-11-22) Soft late-night female voice."
     }
   ]
 }

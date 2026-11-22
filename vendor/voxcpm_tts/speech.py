@@ -80,12 +80,25 @@ def speak(text: str) -> str:
     return _AMOUNT.sub(_amount, text)
 
 
+def unbracket(line: str) -> str:
+    """What is said of a line with brackets: the bracketed part is shown (captions), never
+    said: « (rires) Tu connais » → « Tu connais », « soir (vers 21 h). » → « soir. ». A
+    stage direction read aloud sounds wrong, and VoxCPM2 reads a bracketed block at the
+    start of the text as a voice instruction (a designed voice's style goes there)."""
+    if "(" not in line and ")" not in line:
+        return line.strip()
+    line = re.sub(r"\([^()]*\)", " ", line).replace("(", " ").replace(")", " ")
+    line = re.sub(r"\s+([,.!?…:;])", r"\1", " ".join(line.split()))
+    line = re.sub(r",(?=[.!?…:;,])", "", line)
+    return line.strip(" ,;:")
+
+
 def take_text(lines: Sequence[str]) -> str:
-    """One take for the whole script: lines joined, each a capitalised, closed sentence.
-    (The capital matters: VoxCPM2 reads the card text + this text as one string, and
-    "…vraies.vingt" came out as « point vingt ».)"""
+    """One take for the whole script: lines joined, each a capitalised, closed sentence,
+    bracketed parts left unsaid (unbracket). (The capital matters: VoxCPM2 reads the card
+    text + this text as one string, and "…vraies.vingt" came out as « point vingt ».)"""
     out = []
-    for line in (raw.strip() for raw in lines):
+    for line in (unbracket(raw) for raw in lines):
         if line:
             line = line[0].upper() + line[1:]
             out.append(line if line[-1] in ".!?…:;," else line + ".")

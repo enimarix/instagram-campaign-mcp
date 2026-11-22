@@ -18,6 +18,7 @@ from __future__ import annotations
 import io
 import multiprocessing
 import os
+import subprocess
 import threading
 from typing import Any, Callable, Optional
 
@@ -27,6 +28,21 @@ MODEL_ID = "openbmb/VoxCPM2"
 # peak (step 146). VOXCPM_WHISPER: another hub id or a local converted folder.
 WHISPER_ID = os.environ.get("VOXCPM_WHISPER", "mobiuslabsgmbh/faster-whisper-large-v3-turbo")
 PEAK = 0.99  # never clip; loudness is the studio's loudnorm (step 033)
+
+
+def atempo(wav, sr: int, tempo: float):
+    """`wav` (float32 mono) played `tempo` times faster, pitch unchanged (ffmpeg atempo,
+    through pipes). The casting's approved speed-ups were made exactly this way."""
+    import numpy as np
+    import soundfile as sf
+
+    buf = io.BytesIO()
+    sf.write(buf, wav, sr, format="WAV", subtype="FLOAT")
+    out = subprocess.run(["ffmpeg", "-v", "error", "-f", "wav", "-i", "pipe:0",
+                          "-af", f"atempo={tempo}", "-f", "wav", "-c:a", "pcm_f32le", "pipe:1"],
+                         input=buf.getvalue(), capture_output=True, check=True, timeout=120).stdout
+    faster, _ = sf.read(io.BytesIO(out), dtype="float32")
+    return np.asarray(faster, dtype=np.float32)
 
 
 class WorkerFailed(RuntimeError):
@@ -51,17 +67,31 @@ class Engine:
         self.asr = WhisperModel(WHISPER_ID, device="cpu", compute_type="int8",
                                 cpu_threads=self.threads)
 
-    def take(self, text: str, card: str, card_text: str):
+    def take(self, text: str, params: dict, attempt: int = 1):
+        """One take. params (server.Voice.take_params): {"recipe": {style, seed, cfg, steps,
+        reference, tempo}} for a designed voice, else {"card", "card_text"} to clone."""
         import numpy as np
         import soundfile as sf
         import torch
         import torchaudio
 
-        wav = self.model.generate(text=text, prompt_wav_path=card, prompt_text=card_text,
-                                  reference_wav_path=card, cfg_value=self.cfg,
-                                  inference_timesteps=self.steps)
+        r = params.get("recipe")
+        if r:
+            seed = r["seed"] + 1000 * (attempt - 1)  # a redone take is another seed
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+            ref = {"reference_wav_path": r["reference"]} if r.get("reference") else {}
+            wav = self.model.generate(text=f"({r['style']}){text}", cfg_value=r["cfg"],
+                                      inference_timesteps=r["steps"], **ref)
+        else:
+            card = params["card"]
+            wav = self.model.generate(text=text, prompt_wav_path=card,
+                                      prompt_text=params["card_text"], reference_wav_path=card,
+                                      cfg_value=self.cfg, inference_timesteps=self.steps)
         sr = self.model.tts_model.sample_rate
         wav = np.asarray(wav, dtype=np.float32)
+        if r and r.get("tempo", 1.0) != 1.0:  # before the peak limit: atempo can overshoot
+            wav = atempo(wav, sr, r["tempo"])
         peak = float(np.abs(wav).max()) if wav.size else 0.0
         if peak > PEAK:
             wav *= PEAK / peak
@@ -84,8 +114,8 @@ class Engine:
 
 
 def serve(conn, make_engine: Callable[[], Any]) -> None:
-    """The worker process: load, say ("ready", None), then answer each (text, card,
-    card_text) with ("ok", (audio, duration_s, words, vram_gb)) or ("error", why). Returns
+    """The worker process: load, say ("ready", None), then answer each (text, params,
+    attempt) with ("ok", (audio, duration_s, words, vram_gb)) or ("error", why). Returns
     (the process exits) when the service closes the pipe; exits at once if the service dies
     (its GPU lock is then gone: this worker must not keep the GPU through a load or a take)."""
     threading.Thread(target=_exit_with_parent, daemon=True).start()
@@ -102,11 +132,11 @@ def serve(conn, make_engine: Callable[[], Any]) -> None:
     conn.send(("ready", None))
     while True:
         try:
-            text, card, card_text = conn.recv()
+            text, params, attempt = conn.recv()
         except (EOFError, OSError):  # the service unloaded us or died
             return
         try:
-            conn.send(("ok", (*engine.take(text, card, card_text), engine.vram_gb())))
+            conn.send(("ok", (*engine.take(text, params, attempt), engine.vram_gb())))
         except BaseException as e:  # noqa: BLE001 - the service drops this worker
             conn.send(("error", f"take failed: {type(e).__name__}: {e}"))
             return
@@ -149,9 +179,9 @@ class Worker:
         child.close()  # ours closed: the pipe breaks when the worker dies
         self._answer()
 
-    def take(self, text: str, voice):
+    def take(self, text: str, voice, attempt: int = 1):
         try:
-            self.conn.send((text, str(voice.card), voice.card_text))
+            self.conn.send((text, voice.take_params(), attempt))
         except OSError:
             raise WorkerFailed("the engine process is gone") from None
         audio, duration, words, self._vram = self._answer()

@@ -58,6 +58,20 @@ def test_one_take_closes_each_line_as_a_sentence():
         "Vingt et une heures. Une pizza ? Trop."
 
 
+@pytest.mark.parametrize("line, said", [
+    ("(rires) Tu connais", "Tu connais"),  # never said, never a voice instruction
+    ("le soir (vers 21 h).", "le soir."),
+    ("Ouais (vraiment), moi aussi", "Ouais, moi aussi"),
+    ("a ) b (c", "a b c"),
+    ("(pause)", ""),
+    ("Une pomme ?", "Une pomme ?"),  # no bracket: untouched
+])
+def test_bracketed_parts_are_shown_not_said(line, said):
+    assert speech.unbracket(line) == said
+    assert "(" not in speech.take_text([line])
+    assert speech.take_text(["(pause)", "fin"]) == "Fin."
+
+
 def test_score_compares_normalised_words():
     meant = "Vingt-et-une heures… Il vous reste 308 kcal."
     assert speech.score(meant, meant) == 1.0
@@ -92,9 +106,25 @@ def test_studio_grouping_alone_would_misplace_spelled_numbers():
 # --- voices -----------------------------------------------------------------------------
 def test_brand_voices_load_with_one_default():
     voices = server.load_voices()
-    assert sorted(voices) == ["coach_energique", "conteur_grave", "douce_nuit"]
-    assert [v.id for v in voices.values() if v.default] == ["conteur_grave"]
-    assert all(v.card.is_file() and v.card_text and v.address for v in voices.values())
+    assert sorted(voices) == ["coach_energique", "conteur_grave", "douce_nuit",
+                              "energique_femme", "energique_homme", "souriante"]
+    assert [v.id for v in voices.values() if v.default] == ["souriante"]
+    assert all(v.card.is_file() and v.address for v in voices.values())
+    assert all(v.card_text for v in voices.values() if v.recipe is None)
+    # the casting's approved recipes (2026-11-22, data/voice-trials/round-06)
+    r = voices["souriante"].recipe
+    assert (r.seed, r.cfg, r.steps, r.tempo, r.reference) == (67, 2.0, 30, 1.08, "souriante.ref.wav")
+    assert (voices["energique_femme"].recipe.seed, voices["energique_homme"].recipe.seed) == (132, 122)
+
+
+def test_a_designed_voice_sends_its_recipe_and_a_cloned_one_its_card():
+    voices = server.load_voices()
+    p = voices["souriante"].take_params()
+    assert p["recipe"]["style"].startswith("warm, bright and smiling")
+    assert p["recipe"]["reference"] == str(server.VOICES_DIR / "souriante.ref.wav")
+    assert voices["energique_homme"].take_params()["recipe"]["reference"] is None
+    assert voices["douce_nuit"].take_params() == {
+        "card": str(voices["douce_nuit"].card), "card_text": voices["douce_nuit"].card_text}
 
 
 def _voices_dir(tmp_path, entries, cards=("a",)):
@@ -110,6 +140,16 @@ def test_voices_need_their_card_and_exactly_one_default(tmp_path):
         server.load_voices(_voices_dir(tmp_path, [entry, {**entry, "id": "b"}]))
     with pytest.raises(ValueError, match="default"):
         server.load_voices(_voices_dir(tmp_path, [{**entry, "default": False}]))
+    with pytest.raises(ValueError, match="card_text"):
+        server.load_voices(_voices_dir(tmp_path, [{**entry, "card_text": ""}]))
+    designed = {**entry, "card_text": "", "recipe": {"style": "s", "seed": 1, "reference": "r.wav"}}
+    with pytest.raises(ValueError, match="missing"):  # its reference wav
+        server.load_voices(_voices_dir(tmp_path, [designed]))
+    assert server.load_voices(_voices_dir(tmp_path, [designed], cards=("a", "r")))["a"].recipe
+    for bad in ({"tempo": 0.4}, {"tempo": 2.5}, {"steps": 0}, {"cfg": 0}, {"style": ""}):
+        broken = {**designed, "recipe": {**designed["recipe"], **bad}}
+        with pytest.raises(ValueError):  # refused at start, not a failing worker at each take
+            server.load_voices(_voices_dir(tmp_path, [broken], cards=("a", "r")))
 
 
 # --- takes and the HTTP shape -----------------------------------------------------------
@@ -118,6 +158,7 @@ class FakeEngine:
 
     def __init__(self, heard, model=None):
         self.heard, self.texts, self.model, self.loads = list(heard), [], model, 0
+        self.attempts = []
 
     def load(self):
         self.loads += 1
@@ -126,8 +167,9 @@ class FakeEngine:
     def unload(self):
         self.model = None
 
-    def take(self, text, voice):
+    def take(self, text, voice, attempt=1):
         self.texts.append((text, voice.id))
+        self.attempts.append(attempt)
         n = len(self.texts)
         said = self.heard[n - 1].split()
         words = [{"text": w, "start_s": i * 0.5, "end_s": i * 0.5 + 0.4}
@@ -166,6 +208,7 @@ def test_bad_takes_are_redone_and_the_best_is_kept():
     engine = FakeEngine(["Il reste des calories. Une pomme", "Prop", "Il reste des calories"])
     out = server.synthesize(engine, server.Settings(max_takes=3), SCRIPT, voice)
     assert len(engine.texts) == 3 and _decoded(out) == "take1"
+    assert engine.attempts == [1, 2, 3]  # a designed voice redoes a take with the next seed
     assert out["take"]["score"] == max(out["take"]["scores"]) < 0.9
     engine = FakeEngine(["Prop", GOOD, GOOD])
     out = server.synthesize(engine, server.Settings(max_takes=3), SCRIPT, voice)
@@ -187,11 +230,14 @@ def test_http_shape_default_voice_and_errors():
     app = server.create_app(engine, server.Settings(), server.load_voices())
     http = TestClient(app)
     health = http.get("/health").json()
-    assert not health["loaded"] and health["default_voice"] == "conteur_grave"
+    assert not health["loaded"] and health["default_voice"] == "souriante"
     assert health["worker_pid"] is None  # no model worker yet (166: the watchdog's target)
-    assert health["voices"] == ["coach_energique", "conteur_grave", "douce_nuit"]
+    assert health["recipes"]["souriante"]["tempo"] == 1.08  # what designed voices really use
+    assert "conteur_grave" not in health["recipes"]
+    assert health["voices"] == ["coach_energique", "conteur_grave", "douce_nuit",
+                                "energique_femme", "energique_homme", "souriante"]
     body = http.post("/tts", json={"text": SCRIPT, "voice": ""}).json()
-    assert set(body) == {"audio", "words", "take"} and body["take"]["voice"] == "conteur_grave"
+    assert set(body) == {"audio", "words", "take"} and body["take"]["voice"] == "souriante"
     assert all(set(w) == {"text", "start_s", "end_s"} for w in body["words"])
     r = http.post("/tts", json={"text": SCRIPT, "voice": "robot"})
     assert r.status_code == 400 and "conteur_grave" in r.json()["detail"]
@@ -277,7 +323,7 @@ class ChildEngine:
             with gpu_lock.file_lock(self.hang_holding):
                 time.sleep(60)
 
-    def take(self, text, card, card_text):
+    def take(self, text, params, attempt=1):
         if "crash" in text.lower():
             os._exit(3)
         words = [{"text": w, "start_s": i * 0.5, "end_s": i * 0.5 + 0.4}
@@ -475,4 +521,4 @@ def test_no_voice_service_without_tts_server_python():
 
 def test_only_the_small_cards_are_committed():
     sizes = [p.stat().st_size for p in (ROOT / "brand" / "voices").glob("*.wav")]
-    assert len(sizes) == 3 and max(sizes) < 1_000_000
+    assert len(sizes) == 7 and max(sizes) < 1_000_000  # 6 cards / samples + 1 reference
