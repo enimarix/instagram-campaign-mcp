@@ -280,11 +280,11 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
                       interval: float = RENDER_TICK, stale_after: timedelta = RENDER_STALE
                       ) -> None:
     """Render queued jobs in line order (studio/line.py: none starts while a film that
-    arrived earlier waits for the catch-up), up to settings.render_concurrency at once, each in a thread so
-    the loop stays responsive; heartbeat running jobs; keep the PC awake while any runs;
-    claim nothing while the media disk is under the floor; run daily_housekeeping between
-    batches. Runs until cancelled (a job cut off then is re-queued once its heartbeat is
-    stale)."""
+    arrived earlier waits for the catch-up), up to settings.render_concurrency at once,
+    each in a thread so the loop stays responsive; heartbeat running jobs; keep the PC
+    awake while any runs; claim nothing while the media disk is under the floor; run
+    daily_housekeeping between batches. Runs until cancelled (a job cut off then is
+    re-queued once its heartbeat is stale)."""
     run = run or functools.partial(render.run_job, store, settings.media_root)
     running: Dict[int, asyncio.Task] = {}
     disk_warned = float("-inf")
