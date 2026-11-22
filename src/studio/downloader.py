@@ -33,7 +33,7 @@ import httpx
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_dt, to_iso
-from . import downloader_service, media
+from . import downloader_service, ffmpeg, media
 from .sources import check_rights
 
 PROVIDER = "instagram_reel"  # sources.provider of a Reel first seen by a download
@@ -165,18 +165,25 @@ class YtDlpProvider:
         if info.get("_type") == "playlist" or info.get("availability") == "private":
             raise Refused("private account" if info.get("availability") == "private"
                           else "not a single video (a carousel)")
-        # One file with picture and sound (DASH parts would need a merge), best first.
-        videos = [f for f in info.get("formats") or [info]
-                  if f.get("url") and f.get("vcodec") not in (None, "none")]
+        # One file with picture and sound, best first; else (Instagram serves only DASH
+        # parts since 2026-11, 180) the best picture and the best sound, merged after fetch.
+        formats = [f for f in info.get("formats") or [info] if f.get("url")]
+        videos = [f for f in formats if f.get("vcodec") not in (None, "none")]
         if not videos:
             raise Refused("not a video")
-        formats = [f for f in videos if f.get("acodec") != "none"]
-        if not formats:
-            raise ProviderFailed("yt-dlp found no single file with picture and sound")
-        best = max(formats, key=lambda f: (f.get("height") or 0, f.get("tbr") or 0))
+        rank = lambda f: (f.get("height") or 0, str(f.get("vcodec")).startswith("avc"),  # noqa: E731
+                          f.get("tbr") or 0)
+        full = [f for f in videos if f.get("acodec") not in (None, "none")]
+        sounds = [f for f in formats if f.get("vcodec") in (None, "none")
+                  and f.get("acodec") not in (None, "none")]
+        if not full and not sounds:
+            raise ProviderFailed("yt-dlp found no file with sound")
+        best = max(full or videos, key=rank)
+        audio = None if full else max(sounds, key=lambda f: f.get("abr") or f.get("tbr") or 0)
         if not info.get("channel"):
             raise ProviderFailed("yt-dlp found no creator username")
-        return {"video_url": best["url"], "author": info["channel"],
+        return {"video_url": best["url"], "audio_url": audio and audio["url"],
+                "author": info["channel"],
                 "caption": info.get("description"), "views": info.get("view_count"),
                 "likes": info.get("like_count"), "duration_s": info.get("duration")}
 
@@ -213,6 +220,29 @@ def fetch_video(url: str, dest: Path, max_bytes: int, *,
         part.unlink(missing_ok=True)
         raise
     return size
+
+
+def fetch_reel(reel: Dict[str, Any], dest: Path, max_bytes: int) -> int:
+    """The video of a provider's find() to `dest`: one file, or the DASH picture and sound
+    (`audio_url`, 180) fetched apart from Instagram's CDN and joined without re-encoding."""
+    if not reel.get("audio_url"):
+        return fetch_video(reel["video_url"], dest, max_bytes)
+    parts = [dest.with_name(f"{dest.stem}.{k}.part") for k in ("v", "a")]
+    try:
+        size = fetch_video(reel["video_url"], parts[0], max_bytes)
+        size += fetch_video(reel["audio_url"], parts[1], max_bytes - size)
+        joined = dest.with_name(dest.stem + ".join.mp4")
+        try:
+            ffmpeg.run(["-i", parts[0], "-i", parts[1], "-map", "0:v:0", "-map", "1:a:0",
+                        "-c", "copy", "-movflags", "+faststart", joined], timeout_s=TIMEOUT_S)
+        except ffmpeg.FFmpegError as e:
+            joined.unlink(missing_ok=True)
+            raise ProviderFailed(f"could not join the picture and sound: {e}") from None
+        os.replace(joined, dest)
+        return size
+    finally:
+        for p in parts:
+            p.unlink(missing_ok=True)
 
 
 def providers(settings: InstagramMCPSettings) -> List[ClipDownloader]:
@@ -299,8 +329,8 @@ def download_reel(store: CampaignStore, settings: InstagramMCPSettings,
     for provider in providers(settings):
         try:
             reel = provider.find(url)
-            size = fetch_video(reel["video_url"], folder / "clip.mp4",
-                               int(settings.max_download_mb * 1_000_000))
+            size = fetch_reel(reel, folder / "clip.mp4",
+                              int(settings.max_download_mb * 1_000_000))
         except Refused as e:
             reason = f"{provider.name}: {e}"
             _record_failure(store, source["id"], reason, now)

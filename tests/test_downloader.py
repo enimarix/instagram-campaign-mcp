@@ -168,11 +168,36 @@ def test_only_ytdlp_gets_cookies_and_none_by_default(store, cfg, ytdlp):
 
 
 @respx.mock
-def test_ytdlp_dash_only_is_a_failure_not_a_refusal(store, cfg, ytdlp):
+def test_ytdlp_dash_parts_are_fetched_and_joined(store, cfg, ytdlp, monkeypatch):
+    """180: Instagram serves only DASH parts; the best picture + best sound are joined."""
+    respx.get(API).mock(side_effect=httpx.ConnectError("refused"))
+    FakeYDL.info["formats"] = [
+        {"url": "https://x.fbcdn.net/v-vp9.mp4", "vcodec": "vp9", "acodec": "none", "height": 1920},
+        {"url": "https://x.fbcdn.net/v-avc.mp4", "vcodec": "avc1", "acodec": "none", "height": 1920},
+        {"url": "https://x.fbcdn.net/v-low.mp4", "vcodec": "avc1", "acodec": "none", "height": 640},
+        {"url": "https://x.fbcdn.net/a.m4a", "vcodec": "none", "acodec": "mp4a", "abr": 128}]
+    respx.get("https://x.fbcdn.net/v-avc.mp4").mock(return_value=httpx.Response(200, content=VIDEO))
+    respx.get("https://x.fbcdn.net/a.m4a").mock(return_value=httpx.Response(200, content=b"aac"))
+    seen = []
+
+    def fake_run(args, timeout_s):
+        seen.append([str(a) for a in args])
+        Path(args[-1]).write_bytes(b"joined")
+
+    monkeypatch.setattr(D.ffmpeg, "run", fake_run)
+    r = run(store, cfg)
+    assert (r["status"], r["provider"]) == ("downloaded", "ytdlp")
+    clip = Path(cfg.media_root) / r["source"]["local_path"]
+    assert clip.read_bytes() == b"joined" and not list(clip.parent.glob("*.part"))
+    assert "-c" in seen[0] and seen[0][seen[0].index("-c") + 1] == "copy"  # never re-encoded
+
+
+@respx.mock
+def test_ytdlp_without_any_sound_is_a_failure_not_a_refusal(store, cfg, ytdlp):
     respx.get(API).mock(side_effect=httpx.ConnectError("refused"))
     FakeYDL.info["formats"] = FakeYDL.info["formats"][:1]
     r = run(store, cfg)
-    assert r["status"] == "failed" and "no single file" in r["reason"]
+    assert r["status"] == "failed" and "no file with sound" in r["reason"]
 
 
 @respx.mock
