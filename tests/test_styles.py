@@ -298,6 +298,26 @@ def test_brief_lists_the_enabled_styles(store, settings, tmp_path, monkeypatch):
     assert b["quotas"]["styles"] == {"voxel": {"count": 0, "limit": 3}}
 
 
+def test_inbox_restyle_sends_the_note_and_retires_the_video(tc, store, settings):
+    """181: from the Inbox, the note + reasons go with the style, become a comment, and the
+    ready video leaves the Inbox (archived); a bad reason writes nothing."""
+    from src.studio.assets import transition
+    idea = _idea(store, settings, "Le sel", style="paper")
+    ready = store.add_asset(idea["id"])
+    transition(store, ready["id"], "ready", actor="worker")
+    assert tc.post(f"/api/assets/{ready['id']}/restyle",
+                   json={"style": "cinema", "reasons": ["nope"]}).status_code == 422
+    assert store.get_asset(ready["id"])["status"] == "ready"
+    assert not work_orders.list_orders(store, source="mine")
+    r = tc.post(f"/api/assets/{ready['id']}/restyle",
+                json={"style": "cinema", "note": "hook plus court", "reasons": ["too_slow"]})
+    assert r.status_code == 200
+    assert r.json()["instruction"].endswith("Raisons : too_slow. Et aussi : hook plus court")
+    assert store.get_asset(ready["id"])["status"] == "archived"
+    [fb] = store.list_feedback(ready["id"])
+    assert (fb["text"], fb["reason_codes"]) == ("hook plus court", ["too_slow"])
+
+
 def test_style_is_a_funnel_dimension(store, settings):
     for style, hook in (("paper", "apple" * 3), ("voxel", "brick" * 3)):
         idea = _idea(store, settings, hook, style=style)

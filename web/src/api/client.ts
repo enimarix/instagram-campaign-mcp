@@ -1029,7 +1029,7 @@ export const setStyle = (id: string, body: { enabled?: boolean; share?: number |
 /** « Créer une vidéo »: a topic or instruction and a style (null: Auto) -> a work order. */
 export const createVideo = (body: { instruction: string; style: string | null }) => post<WorkOrder>('/api/work-orders', body)
 /** « Même vidéo, autre style »: a work order to remake this video (style null: the AI picks another). */
-export const restyleAsset = (assetId: number, body: { style: string | null; note?: string }) =>
+export const restyleAsset = (assetId: number, body: { style: string | null; note?: string; reasons?: string[] }) =>
   post<WorkOrder>(`/api/assets/${assetId}/restyle`, body)
 
 // --- Style catalog (step 172) ---

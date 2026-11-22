@@ -7,7 +7,7 @@ style, with favourites, and the Lemo previews."""
 
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -51,6 +51,7 @@ class RestyleIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     style: Optional[str] = None  # None: another style the agent picks
     note: Optional[str] = None
+    reasons: List[str] = []  # 181: the change sheet's reason chips go with the note
 
 
 class StyleRequestIn(BaseModel):
@@ -84,7 +85,9 @@ def create_video(body: CreateVideoIn, store: CampaignStore = Depends(get_store))
 
 @router.post("/assets/{asset_id}/restyle")
 def restyle(asset_id: int, body: RestyleIn, store: CampaignStore = Depends(get_store)):
-    return _call(work_orders.restyle, store, asset_id, body.style, body.note)
+    # 181: the owner's restyle also saves the note as a comment and retires the video
+    return _call(work_orders.restyle, store, asset_id, body.style, body.note, body.reasons,
+                 retire=True)
 
 
 @router.get("/style-requests")
