@@ -10,7 +10,7 @@
         {"who": "uncle", "role": "Tonton Karim", "at": "seat2", "action": "fork_up"},
         {"who": "kid_girl", "at": "seat5", "action": "fork_up"},
         {"who": "aunt", "at": "seat6", "action": "fork_up"},
-        {"who": "grandma", "role": "Mamie", "at": "stand0", "action": "Idle_Loop"}
+        {"who": "grandma", "role": "Mamie", "at": "door", "action": "Idle_Loop"}
       ],
       "beats": [
         {"line": "Chaque plat passe en photo avant la première bouchée.", "key": "Chaque plat", "who": "teen", "action": "phone_photo", "react": "outraged", "sfx": "ov:1e2b8d6a-9c61-4f96-8cf6-004e6682728b"},

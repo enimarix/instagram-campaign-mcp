@@ -66,7 +66,7 @@ def render_shot(cfg, shot):
     s.frame_set(frames if cam.get("aim") == "end" else 1)  # where the actor ends up, or starts
     head, look = people.head(on) if on else (None, None)
     s.frame_set(1)
-    stage.camera(cam["kind"], frames, spec["wide"], spec["center"], head, look)
+    stage.camera(cam["kind"], frames, spec["wide"], spec["center"], head, look, high=cam.get("aim") == "end")
     out = os.path.join(os.path.abspath(cfg["out"]), shot["id"])
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "stats.json"), "w", encoding="utf-8") as f:

@@ -111,9 +111,13 @@ def _ease(u):
     return u * u * (3 - 2 * u)
 
 
-def camera(kind, frames, wide, center, head=None, look=None):
+FLOOR_HEAD = 0.6  # a head lower than this (m) lies on the floor
+
+
+def camera(kind, frames, wide, center, head=None, look=None, high=False):
     """The shot's camera. wide: the set's establishing camera; center: what `top` looks at;
-    head / look: the named actor's head and the way its face looks (close-ups).
+    head / look: the named actor's head and the way its face looks (close-ups); high: looks
+    down on the actor from ~50 degrees (a frozen punchline: over the table, never behind it).
     Kinds: wide, close (reaction close-up), top (top-down), whip (a fast pan landing on the
     actor), crash (crash zoom on the actor), dolly (slow push in on the actor)."""
     s = bpy.context.scene
@@ -121,7 +125,11 @@ def camera(kind, frames, wide, center, head=None, look=None):
     s.camera = o
     pos, aim = Vector(wide["pos"]), Vector(wide["look_at"])
     if head is not None:
-        face = Vector((look.x, look.y, 0)).normalized() if abs(look.z) < 0.8 else look
+        if head.z < FLOOR_HEAD or high:  # lying on the floor, or falling: from above (164)
+            tilt = 0.35 if head.z < FLOOR_HEAD else 0.75
+            face = (Vector((look.x, look.y, 0)).normalized() * tilt + Vector((0, -0.05, 1))).normalized()
+        else:
+            face = Vector((look.x, look.y, 0)).normalized() if abs(look.z) < 0.8 else look
         near, aim = head + face * 0.85 + Vector((0, 0, 0.04)), head - Vector((0, 0, 0.03))
     if kind == "top":
         c = Vector(center)

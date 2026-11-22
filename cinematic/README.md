@@ -99,7 +99,8 @@ least three angles a scene (the scene opens wide, the skit on a crash zoom into 
 action, or wide when that actor lies on the floor; then reaction close-ups on the others,
 top-down, wide, close, whip, dolly), x10 for repeated gestures, a slow-mo ramp into falls, a
 whip onto the punchline's actor frozen on its last frame (camera `aim: end`: aimed where the
-actor's head is on the shot's last frame, so a faint or a fall stays in frame), a close-up
+actor's head is on the shot's last frame, from ~50 degrees above, so a faint or a fall stays in
+frame; any on-actor camera looks from above at a head on the floor), a close-up
 built with its actor and the two nearest only. Every garment sits `people.CLOTH_GAP` (1.5 cm)
 off the body (`people.cover`), so no skin pokes through at the neckline in a close-up. The
 moves `bar_strain` and `barbell_fall` hold a barbell in both hands (`people.barbell`: it follows
