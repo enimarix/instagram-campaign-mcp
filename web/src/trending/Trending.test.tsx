@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import type { FeedItem, RefreshResult, Style, SuggestedTopics, Watch, WorkOrder } from '../api/client'
@@ -314,6 +314,24 @@ describe('Mes envois', () => {
     renderPage('/trending?tab=envois')
     expect(screen.getByRole('tab', { name: 'Mes envois' }).getAttribute('aria-selected')).toBe('true')
     expect(await screen.findByText(/Envoie un Reel en DM à @macrobody\.fr depuis ton compte, avec ou sans description\./)).toBeTruthy()
+  })
+
+  it('« Annuler » drops an envoi the AI has not started, after a confirm (183)', async () => {
+    const calls = stubApi({
+      'GET /api/work-orders?source=mine': [[200, [order(2), order(1, { status: 'in_production', instruction: 'fais-la' })]], [200, [order(1, { status: 'in_production', instruction: 'fais-la' })]]],
+      'DELETE /api/research/work-orders/2': [204, null],
+    })
+    renderPage('/trending?tab=envois')
+    const list = await screen.findByRole('list', { name: 'Mes envois' })
+    expect(within(within(list).getByRole('listitem', { name: 'Envoi 1' })).queryByRole('button', { name: 'Annuler' })).toBeNull()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    const two = within(list).getByRole('listitem', { name: 'Envoi 2' })
+    fireEvent.click(within(two).getByRole('button', { name: 'Annuler' }))
+    expect(calls.some((c) => c.key.startsWith('DELETE'))).toBe(false) // said no
+    fireEvent.click(within(two).getByRole('button', { name: 'Annuler' }))
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Envoi 2' })).toBeNull())
+    expect(calls.map((c) => c.key)).toContain('DELETE /api/research/work-orders/2')
+    expect(confirm).toHaveBeenCalledTimes(2)
   })
 
   it('lists DM orders with sender, age, status, instruction and the feed link', async () => {
