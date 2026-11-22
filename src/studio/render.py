@@ -58,7 +58,6 @@ class _Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     thumb_offset_ms: Optional[int] = Field(None, ge=0)
     ig_audio: Optional[IgAudio] = None
-    sfx_credits: Optional[List[str]] = None  # CC BY sounds (motion.py, sfx.missing_credits)
 
 
 class FfmpegRecipe(_Envelope):

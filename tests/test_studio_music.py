@@ -52,6 +52,39 @@ def test_silence_has_no_beat():
     assert m == {"bpm": None, "beats": [], "downbeats": [], "drop_s": None}
 
 
+def test_beat_this_grid_is_used_and_the_drop_still_found():
+    given = {"beats": [1.0 + k * 0.5 for k in range(56)],
+             "downbeats": [1.0 + k * 2.0 for k in range(14)]}
+    m = music.beat_map(_song(), given)
+    assert abs(m["bpm"] - 120) < 3
+    assert m["beats"][:3] == [round(round(t * music.FPS) / music.FPS, 3) for t in (1.0, 1.5, 2.0)]
+    assert len(m["downbeats"]) == 14 and abs(m["drop_s"] - 17.0) < 0.1
+
+
+def test_beat_this_missing_or_failing_falls_back(monkeypatch, tmp_path):
+    monkeypatch.setattr(music, "beats_python", lambda: None)
+    assert music.beat_this(tmp_path / "t.m4a") is None
+    monkeypatch.setattr(music, "beats_python", lambda: "py")
+    monkeypatch.setattr(music.ffmpeg, "run", lambda *a, **k: None)
+    calls = []
+
+    class Done:
+        returncode, stderr = 0, ""
+        stdout = 'loading\n{"beats": [0.5, 1.0], "downbeats": [0.5]}\n'
+
+    def run(cmd, **kw):
+        calls.append((cmd, kw["env"]))
+        return Done
+
+    monkeypatch.setattr(music.guard, "run", run)
+    assert music.beat_this(tmp_path / "t.m4a") == {"beats": [0.5, 1.0], "downbeats": [0.5]}
+    cmd, env = calls[0]
+    assert cmd[:3] == ["py", "-I", str(music.RUNNER)] and cmd[3].endswith("track.wav")
+    assert env["CUDA_VISIBLE_DEVICES"] == "" and env["OMP_NUM_THREADS"].isdigit()  # CPU only
+    Done.returncode, Done.stderr = 1, "boom"
+    assert music.beat_this(tmp_path / "t.m4a") is None
+
+
 GRID = {"bpm": 120.0, "beats": [i * 0.5 for i in range(80)],
         "downbeats": [i * 2.0 for i in range(20)], "drop_s": 8.0}
 

@@ -704,10 +704,15 @@ is documented). Checked live on macrobody.fr (business): `music` is the royalty-
 (little-known tracks, the owner's wish), the chart hits only come as `original_sound`.
 Decision: a voiced motion video may take an Instagram track (`ig_audio` in the recipe) instead
 of the template's bed (music-only videos later: the clean master must pass QC on its own). The track is never in our file: the local copy only gives the beat map
-(src/studio/music.py, stdlib + ffmpeg) and the owner's review preview; publish attaches it by
+(src/studio/music.py) and the owner's review preview; publish attaches it by
 id. The voice lines move onto the beats, downbeats and the drop, so every template's scene
 cuts land on the beat. A fixed `audio_volume` replaces the ducking (the track set 15 LU under
 the -14 LUFS voice). Our own beds stay the default and the fallback.
+Beats come from CPJKU/beat_this (MIT, model final0, CPU only, ~8 s a track) in its own venv
+`data/tools/beats` (603 MB, torch CPU; install lines in music.py), not the studio's venv,
+which keeps torch out (as for Earshot, step 149). Measured on 12 trending tracks against
+beat_this, a stdlib finder scored beats F 54 and downbeats F 37, librosa 58: half the cuts
+would land off the beat. The stdlib finder stays as the fallback when the venv is missing.
 Open: whether Instagram plays an attached track from 0:00 (the sync assumes it) needs one
 test publish the owner approves; Instagram's mixing level is unknown, so the preview mirrors
 the volumes literally.

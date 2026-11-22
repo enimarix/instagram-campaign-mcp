@@ -16,10 +16,16 @@ the chart hits only come as `original_sound`.
 - `on_beats()` moves the voice lines onto that grid: every template starts a scene when a
   line starts (motion/src/lib/timeline.ts), so every template cuts on the beat.
 
-Beat finding is stdlib + ffmpeg (no numpy): 5-band energy flux, tempo by autocorrelation, beats
-by dynamic programming (Ellis 2007), downbeat = the beat phase with the most kick energy.
-ponytail: 4/4 and a steady tempo assumed (library tracks are); CPJKU/beat_this (MIT, CPU
-`small0`) if the grid slips on real tracks.
+Beats and downbeats come from CPJKU/beat_this (MIT, ISMIR 2024; model `final0`, CPU, ~4 s a
+track) run in its own venv by `beat_this_run.py`, so torch never enters the studio's venv:
+
+    uv venv data/tools/beats --python 3.12
+    uv pip install --python data/tools/beats/Scripts/python.exe torch --index-url https://download.pytorch.org/whl/cpu
+    uv pip install --python data/tools/beats/Scripts/python.exe beat-this==1.1.0 soundfile soxr einops rotary-embedding-torch tqdm
+
+Without it (CI, a fresh machine) the stdlib finder steps in: 5-band energy flux, tempo by
+autocorrelation, beats by dynamic programming (Ellis 2007), downbeat = the beat phase with the
+most kick energy; about librosa's quality, 4/4 and a steady tempo assumed.
 """
 
 from __future__ import annotations
@@ -27,9 +33,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import math
+import os
 import re
 import statistics
+import subprocess
+import sys
 import tempfile
 from array import array
 from operator import mul
@@ -39,8 +49,12 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import ffmpeg, media, recipe
+from ..config import APP_HOME, get_settings
+from . import ffmpeg, guard, media, recipe
 
+log = logging.getLogger("music")
+RUNNER = Path(__file__).with_name("beat_this_run.py")
+BEAT_THIS_TIMEOUT_S = 300.0
 AUDIO_ID = re.compile(r"^\d{5,25}$")
 AUDIO_TYPES = ("music", "original_sound")
 SR = 11025
@@ -197,26 +211,34 @@ def track_beats(onset: Sequence[float], period: int) -> List[int]:
     return beats[::-1]
 
 
-def beat_map(bands: Sequence[Sequence[float]]) -> Dict[str, Any]:
+def beat_map(bands: Sequence[Sequence[float]],
+             given: Optional[Dict[str, List[float]]] = None) -> Dict[str, Any]:
     """{bpm, beats, downbeats, drop_s} from band energies (frames of HOP samples), the kick
-    band first. Onset = the bands' log-energy rises summed, in standard deviations: a cheap
-    spectral flux (5 bands agreed with librosa's tempo on 11 of 12 trending tracks, 2 on 8)."""
+    band first. `given`: beat_this's beats and downbeats (seconds), else the stdlib finder:
+    onset = the bands' log-energy rises summed, in standard deviations (a cheap spectral flux;
+    beats F 54 against beat_this on 12 trending tracks, librosa 58, downbeats 37). The drop
+    is found here either way, from the kick band's energy on the downbeats."""
     n = min(map(len, bands))
     fluxes = [_flux(b[:n]) for b in bands]
     kick, kick_flux = bands[0], fluxes[0]
-    onset = [sum(x) for x in zip(*fluxes)]
-    sd = statistics.pstdev(onset) if n > 1 else 0.0
-    if n < 4 * FPS or not sd:
-        return {"bpm": None, "beats": [], "downbeats": [], "drop_s": None}
-    onset = [x / sd for x in onset]  # TIGHTNESS is in these units (as librosa)
-    period = tempo_period(onset)
-    beats = track_beats(onset, period)
+    if given and len(given.get("beats") or ()) > 1:
+        beats = [round(t * FPS) for t in given["beats"]]
+        downbeats = [round(t * FPS) for t in given.get("downbeats") or ()]
+        period = statistics.median(b - a for a, b in zip(beats, beats[1:])) or 1
+    else:
+        onset = [sum(x) for x in zip(*fluxes)]
+        sd = statistics.pstdev(onset) if n > 1 else 0.0
+        if n < 4 * FPS or not sd:
+            return {"bpm": None, "beats": [], "downbeats": [], "drop_s": None}
+        onset = [x / sd for x in onset]  # TIGHTNESS is in these units (as librosa)
+        period = tempo_period(onset)
+        beats = track_beats(onset, period)
 
-    def kick_at(f: int) -> float:
-        return max(kick_flux[max(0, f - 2):f + 3])
+        def kick_at(f: int) -> float:
+            return max(kick_flux[max(0, f - 2):f + 3])
 
-    phase = max(range(4), key=lambda k: sum(map(kick_at, beats[k::4])))
-    downbeats = beats[phase::4]
+        phase = max(range(4), key=lambda k: sum(map(kick_at, beats[k::4])))
+        downbeats = beats[phase::4]
     drop = None
     if len(downbeats) > 4:
         def level(a: int, b: int) -> float:
@@ -233,11 +255,47 @@ def beat_map(bands: Sequence[Sequence[float]]) -> Dict[str, Any]:
             "drop_s": None if drop is None else round(drop / FPS, 3)}
 
 
+def beats_python() -> Optional[str]:
+    """The beat_this tool venv's python: BEATS_PYTHON, else data/tools/beats when there."""
+    s = get_settings()
+    if s.beats_python:
+        return s.beats_python
+    venv = APP_HOME / "data" / "tools" / "beats"
+    py = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    return str(py) if py.is_file() else None
+
+
+def beat_this(path: Path) -> Optional[Dict[str, List[float]]]:
+    """{beats, downbeats} (seconds) from CPJKU/beat_this, or None when its venv is missing or
+    it fails (then the stdlib finder). CPU only, at low priority on the heavy-job threads."""
+    py = beats_python()
+    if not py:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = Path(tmp) / "track.wav"  # beat_this reads WAV, not AAC
+        ffmpeg.run(["-i", path, "-vn", "-ac", "1", "-ar", 22050, wav], timeout_s=TIMEOUT_S)
+        threads = str(guard.heavy_cpus())
+        try:
+            done = guard.run([py, "-I", str(RUNNER), str(wav)], capture_output=True, text=True,
+                             encoding="utf-8", timeout=BEAT_THIS_TIMEOUT_S,
+                             env={**os.environ, "OMP_NUM_THREADS": threads,
+                                  "MKL_NUM_THREADS": threads, "CUDA_VISIBLE_DEVICES": ""})
+            out = json.loads(done.stdout.strip().splitlines()[-1]) if done.returncode == 0 else None
+        except (OSError, subprocess.TimeoutExpired, ValueError, IndexError) as e:
+            log.warning("beat_this failed, stdlib beats instead: %s", e)
+            return None
+    if out is None:
+        log.warning("beat_this failed, stdlib beats instead: %s", done.stderr.strip()[-500:])
+    return out
+
+
 def measure(path: Path) -> Dict[str, Any]:
-    """{duration_s, lufs, bpm, beats, downbeats, drop_s} of a track file."""
+    """{duration_s, lufs, bpm, beats, downbeats, drop_s, beats_by} of a track file."""
     bands = [_energy(_band(path, b)) for b in BANDS]
+    given = beat_this(path)
     return {"duration_s": round(len(bands[0]) / FPS, 3),
-            "lufs": recipe.loudness(path, timeout_s=TIMEOUT_S)[0], **beat_map(bands)}
+            "lufs": recipe.loudness(path, timeout_s=TIMEOUT_S)[0], **beat_map(bands, given),
+            "beats_by": "beat_this" if given else "stdlib"}
 
 
 # --- The voice on the beat --------------------------------------------------------------------
