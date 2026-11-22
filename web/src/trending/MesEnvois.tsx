@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { ApiError, editWorkOrder, errorMessage, listStyleCatalog, listWorkOrders, type CatalogStyle, type WorkMode, type WorkOrder } from '../api/client'
+import { ApiError, cancelWorkOrder, editWorkOrder, errorMessage, listStyleCatalog, listWorkOrders, type CatalogStyle, type WorkMode, type WorkOrder } from '../api/client'
 import { safeUrl } from '../inbox/ui'
 import { StylePicker } from '../launch/StylePicker'
 import { styleLabel, useStyles } from '../launch/useStyles'
@@ -86,7 +86,20 @@ function Analysis({ analysis: a }: { analysis: NonNullable<WorkOrder['analysis']
 
 function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; styleName: string; onChanged: () => void }) {
   const [editing, setEditing] = useState(false)
+  const toast = useToast()
   const [label, tone] = orderStatus(o)
+  const waiting = o.status === 'needs_instruction' || o.status === 'scheduled' // the AI has not started it
+
+  // 183: the owner drops an envoi the AI has not started (as in « Créer »'s pile)
+  async function cancel() {
+    if (!window.confirm(`Annuler l'envoi ${o.id} ? L'IA ne le fera pas.`)) return
+    try {
+      await cancelWorkOrder(o.id)
+    } catch (e) {
+      toast({ message: `Pas annulé : ${errorMessage(e)}` })
+    }
+    onChanged()
+  }
   const href = safeUrl(o.permalink)
   const sender = `@${o.sender_username ?? '?'}`
   const embed = embedSrc(o.embed_url)
@@ -122,6 +135,7 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
       )}
       <div className="flex flex-wrap items-center gap-2">
         {o.status === 'scheduled' && !editing && <Button size="sm" onClick={() => setEditing(true)}>Modifier la consigne</Button>}
+        {waiting && <Button size="sm" variant="ghost" onClick={() => void cancel()}>Annuler</Button>}
         {o.source === 'change' && o.from_asset_id != null && (
           <Link to={`/assets/${o.from_asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Vidéo d'origine</Link>
         )}
