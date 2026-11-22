@@ -963,6 +963,9 @@ export const createWorkOrders = (items: { source_id: number; mode: TrendMode; in
 export const cancelWorkOrder = (id: number) => request<null>(`/api/research/work-orders/${id}`, { method: 'DELETE' })
 
 export type OpenOrderStatus = 'needs_instruction' | 'scheduled' | 'in_production'
+/** The AI's analysis of a Reel (analyse only, 2026-11: an object; older ones are text). */
+export type OrderAnalysis = { why: string; summary?: string | null; timeline?: { t: number; d?: number; e: string }[] | null }
+
 export type WorkOrderStatus = OpenOrderStatus | 'in_feed' | 'analysed' | 'skipped'
 /** Where an order comes from: the Trending feed, a DM, « Créer une vidéo », « même vidéo, autre style » (138). */
 export type OrderSource = 'dm' | 'trend' | 'create' | 'change'
@@ -988,7 +991,7 @@ export type WorkOrder = {
   status: WorkOrderStatus
   skip_reason: string | null
   blocked_reason: string | null
-  analysis: string | null // status analysed: the AI's analysis, no video
+  analysis: string | OrderAnalysis | null // status analysed: the AI's analysis, no video
   idea_id: number | null
   asset_id: number | null
   updated_at: string // the last change (stage, note, block): « Créer » shows the time in stage

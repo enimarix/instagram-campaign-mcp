@@ -64,6 +64,26 @@ function origin(o: WorkOrder) {
   return `envoyé par @${o.sender_username ?? '?'}, ${ago(o.received_at ?? o.created_at)}`
 }
 
+/** The AI's analysis: text (older orders) or {summary, why, timeline} (182: an object
+ * rendered as text blanked the whole page). */
+function Analysis({ analysis: a }: { analysis: NonNullable<WorkOrder['analysis']> }) {
+  if (typeof a === 'string') return <p className="rounded-control bg-surface-2 p-3 break-words">Analyse de l'IA : {a}</p>
+  return (
+    <div className="space-y-2 rounded-control bg-surface-2 p-3 break-words">
+      <p>Analyse de l'IA : {a.summary || a.why}</p>
+      {a.summary && a.why && <p><span className="text-muted">Pourquoi ça marche : </span>{a.why}</p>}
+      {!!a.timeline?.length && (
+        <details>
+          <summary className="cursor-pointer font-medium">Déroulé seconde par seconde</summary>
+          <div className="mt-2 space-y-1">
+            {a.timeline.map((m, i) => <p key={i}><span className="tabular-nums text-muted">{Math.round(m.t)} s</span> {m.e}</p>)}
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
+
 function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; styleName: string; onChanged: () => void }) {
   const [editing, setEditing] = useState(false)
   const [label, tone] = orderStatus(o)
@@ -81,7 +101,7 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
       </div>
       {o.blocked_reason && label === 'Bloqué' && <p className="text-danger">Bloqué : {o.blocked_reason}</p>}
       {o.status === 'skipped' && o.skip_reason && <p className="text-muted">Ignoré : {o.skip_reason}</p>}
-      {o.analysis && <p className="rounded-control bg-surface-2 p-3 break-words">Analyse de l'IA : {o.analysis}</p>}
+      {o.analysis && <Analysis analysis={o.analysis} />}
       {showForm ? (
         <InstructionForm order={o} onSaved={() => { setEditing(false); onChanged() }}
           onCancel={o.status === 'scheduled' ? () => setEditing(false) : undefined} />
