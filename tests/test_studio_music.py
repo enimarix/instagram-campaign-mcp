@@ -242,3 +242,28 @@ async def test_reel_container_carries_audio_configuration(client):
                               audio_configuration=conf)
     body = _body(create.calls.last)
     assert body["audio_configuration"] == conf and "audio_name" not in body
+
+
+def test_queue_motion_render_cuts_on_the_track_and_stores_ig_audio(store, tmp_path, monkeypatch):
+    from src.studio import motion
+
+    from .test_studio_motion import VALID, _settings
+
+    monkeypatch.setattr(motion, "validate_props", lambda t, p: {**VALID, "props": p})
+    monkeypatch.setattr(motion, "list_templates", lambda: [{"id": "Hello", "style": "pixel"}])
+    lines = [{"text": "h", "start_s": 0.0, "end_s": 1.0}, {"text": "x", "start_s": 1.2, "end_s": 2.0}]
+    voiced = _voiced(tmp_path, lines)
+    monkeypatch.setattr(motion, "build_props", lambda t, p, s, v=None: {**p, **voiced})
+    monkeypatch.setattr(music, "retime_voice", lambda src, old, new, dest: src)
+    aid = _fetched(tmp_path)
+    s = _settings(tmp_path)
+    idea = store.add_idea("motion")
+    out = motion.queue_motion_render(store, s, template="Hello", props={"title": "Hi"},
+                                     idea_id=idea["id"], music_audio_id=aid)
+    recipe = out["asset"]["recipe"]
+    assert recipe["ig_audio"]["audio_id"] == aid and recipe["props"]["music"] == "none"
+    assert recipe["props"]["voice"]["lines"][1]["start_s"] == 1.5  # on the beat
+    for blender in ("CinematicSkit", "SitcomSkit"):
+        with pytest.raises(ValueError, match="cannot take an Instagram track"):
+            motion.queue_motion_render(store, s, template=blender, props={},
+                                       idea_id=idea["id"], music_audio_id=aid)

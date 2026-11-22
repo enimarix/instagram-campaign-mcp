@@ -63,6 +63,14 @@
       "end_card": "live",
       "address": "tu",
       "enabled": true
+    },
+    "sitcom": {
+      "label": "Sitcom 3D",
+      "description": "Sketch 3D absurde à plusieurs : la famille, les potes de salle, des plans qui s'enchaînent, pour l'humour.",
+      "preview": {"still": "164/sitcom-diner-cover.png", "clip": "164/sitcom-diner-phone.mp4"},
+      "end_card": "sitcom",
+      "address": "tu",
+      "enabled": true
     }
   }
 }

@@ -60,7 +60,8 @@ def sun_dir(preset):
 
 def lights(sun, preset=None, cfg=None):
     """Key = the low sun (soft shadows), coming from `sun` (unit vector toward it). Fill = warm
-    bounce from the camera side. Shadow softness is what sells the 'baked light' look."""
+    bounce from the camera side. Rim (when the preset has one) = a coloured side / back light.
+    Shadow softness is what sells the 'baked light' look."""
     p, cfg = preset or SETS["lights"]["sunset"], cfg or {}
     key = bpy.data.lights.new("key", "SUN")
     key.color, key.energy = p["sun"], cfg.get("sun_energy", p["sun_energy"])
@@ -75,6 +76,12 @@ def lights(sun, preset=None, cfg=None):
     fo.location = (0.6, -2.9, 1.7)
     fo.rotation_euler = (math.radians(80), 0, math.radians(10))
     bpy.context.collection.objects.link(fo)
+    if p.get("rim"):  # a coloured side light (the sitcom presets, step 164): video-game contrast
+        rim = bpy.data.lights.new("rim", "SUN")
+        rim.color, rim.energy, rim.angle = p["rim"], p["rim_energy"], math.radians(3)
+        ro = bpy.data.objects.new("rim", rim)
+        ro.rotation_euler = sun_dir({"sun_dir": p["rim_dir"]}).to_track_quat("Z", "Y").to_euler()
+        bpy.context.collection.objects.link(ro)
 
 
 def cut_cameras(specs):

@@ -15,7 +15,10 @@ Node: `NODE_BIN` (a full path or a command name) overrides `node` on PATH.
 Template `CinematicSkit` (style `blender`) is not Remotion: Blender renders it
 (src/studio/cinematic.py). The functions below route it there, so callers treat it like any
 motion template. Template `Macro3D` (style `macro3d`) is Remotion over Blender plates: the
-plates are rendered first (src/studio/macro3d.py) and handed to it as `plate`.
+plates are rendered first (src/studio/macro3d.py) and handed to it as `plate`. Template
+`SitcomSkit` (style `sitcom`) is Remotion over the troupe's Blender shots: its timed parts become
+a shot list (src/studio/sitcom.py, validated with the props), rendered first and handed over as
+`plate` too; its character lines get their own voices.
 """
 
 from __future__ import annotations
@@ -48,6 +51,7 @@ from . import (  # render.py imports us
     recipe,
     render,
     sfx,
+    sitcom,
     styles,
 )
 from .ffmpeg import MediaInfo, PathLike
@@ -138,6 +142,9 @@ SCRIPTS = {
                               *(_cinema_beat(b) for b in p["beats"]),
                               *([p["outro"]] if p.get("outro") else [])],
     macro3d.TEMPLATE: lambda p: [s["line"] for s in p["scenes"]] + ([p["outro"]] if p.get("outro") else []),
+    # The narrator: the hook, every beat's line, the outro (character lines: sitcom.voice_says).
+    sitcom.TEMPLATE: lambda p: [p["hook"], *(b["line"] for s in p["scenes"] for b in s["beats"]),
+                                *([p["outro"]] if p.get("outro") else [])],
 }
 
 
@@ -188,6 +195,8 @@ def validate_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
                 stdin=json.dumps(props, ensure_ascii=False))
     if not out.pop("ok"):
         raise ValueError(out["error"])
+    if template == sitcom.TEMPLATE:  # the troupe checks the cast, sets, spots and actions
+        out["shots"] = sitcom.shot_list(out["props"], out["plates"])
     return out
 
 
@@ -197,7 +206,11 @@ def build_props(template: str, props: Dict[str, Any], settings: InstagramMCPSett
     to `<media root>/voice/` when there is a voice). Templates without a script, or props
     that already carry a voice, come back unchanged."""
     script = SCRIPTS.get(template)
-    if script is None or "voice" in props:
+    if script is None:
+        return props
+    if template == sitcom.TEMPLATE:  # each character line in its own voice
+        props = sitcom.voice_says(props, settings, voice)
+    if "voice" in props:
         return props
     lines = [" ".join(line.split()) for line in script(props)]  # one script line per line
     synth = get_provider(settings).synthesize("\n".join(lines), voice)
@@ -252,11 +265,30 @@ def _stage_audio(bundle: Path, props: Dict[str, Any], media_root: PathLike) -> D
     path = media.resolve(media_root, src)
     if not path.is_file():
         raise ValueError(f"voice audio {src!r} is missing")
+    return {**props, "voice": {**props["voice"], "audioSrc": _stage_voice(bundle, path)}}
+
+
+def _stage_voice(bundle: Path, path: Path) -> str:
+    """A voice file, mixed as every render mixes it (recipe.dialogue_voice), into the bundle."""
     path = recipe.dialogue_voice(path)
     dest = bundle / "public" / "voice" / path.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(path, dest)
-    return {**props, "voice": {**props["voice"], "audioSrc": f"public/voice/{path.name}"}}
+    return f"public/voice/{path.name}"
+
+
+def _stage_says(bundle: Path, props: Dict[str, Any], media_root: PathLike) -> Dict[str, Any]:
+    """SitcomSkit: the character lines' audio into the bundle too."""
+    def stage(b: Dict[str, Any]) -> Dict[str, Any]:
+        src = (b.get("say") or {}).get("audioSrc")
+        if not src or "://" in src:
+            return b
+        path = media.resolve(media_root, src)
+        if not path.is_file():
+            raise ValueError(f"character line audio {src!r} is missing")
+        return {**b, "say": {**b["say"], "audioSrc": _stage_voice(bundle, path)}}
+    return {**props, "scenes": [{**s, "beats": [stage(b) for b in s["beats"]]}
+                                for s in props["scenes"]]}
 
 
 def _render(template: str, props: Dict[str, Any], out: Path, work: Path, *, timeout_s: float,
@@ -287,7 +319,9 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     still_props = {**v["props"]}
     if "voice" in still_props:
         still_props["voice"] = {k: x for k, x in still_props["voice"].items() if k != "audioSrc"}
-    still_props.pop("plate", None)  # Macro3D: the studio's own plates only, never one from the props
+    still_props.pop("plate", None)  # Macro3D / SitcomSkit: the studio's own plates only, never the props'
+    for say in sitcom.says(still_props) if template == sitcom.TEMPLATE else ():
+        say.pop("audioSrc", None)
     if sfx.refs(still_props):  # silent in a still, but the file must load
         sfx.stage(bundle_dir() / "public", still_props)
     folder = Path(media_root) / "previews" / render.recipe_hash([template, still_props])
@@ -295,6 +329,9 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     plates = {}
     if template == macro3d.TEMPLATE:
         plates = macro3d.plate_stills(v["plates"], frames, folder, timeout_s=STILL_TIMEOUT_S)
+    elif template == sitcom.TEMPLATE:
+        plates = sitcom.track_stills(v["shots"], {f: f / v["fps"] for f in frames}, folder,
+                                     timeout_s=STILL_TIMEOUT_S * 4)
     paths = []
     with tempfile.TemporaryDirectory(dir=folder) as work:
         for f in dict.fromkeys(frames):
@@ -331,6 +368,11 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
         track = media.resolve(media_root, macro3d.render_plates(v["plates"], media_root,
                                                                timeout_s=timeout_s))
         staged = {**staged, "plate": macro3d.stage(bundle_dir(), track, track.name)}
+    elif template == sitcom.TEMPLATE:  # the troupe's shots first, then their voices
+        track = media.resolve(media_root, sitcom.render_track(v["shots"], media_root,
+                                                              timeout_s=timeout_s))
+        staged = {**_stage_says(bundle_dir(), staged, media_root),
+                  "plate": macro3d.stage(bundle_dir(), track, track.name)}
     with tempfile.TemporaryDirectory(prefix="motion-", dir=out.parent) as work:
         raw = Path(work) / "raw.mp4"
         _render(template, staged, raw, Path(work), timeout_s=timeout_s,
@@ -387,6 +429,10 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     # 138: the template must be in the idea's style (one without takes the template's)
     styles.check_template(store, store.get_idea(
         idea_id if idea_id is not None else store.get_asset(asset_id)["idea_id"]), template)
+    if music_audio_id and template in (cinematic.TEMPLATE, sitcom.TEMPLATE):
+        # ponytail: the Blender engines time shots and character voices off the narrator
+        # lines; moving the narrator alone would desync them. Remotion templates only.
+        raise ValueError(f"{template} cannot take an Instagram track yet: use its own bed")
     v = validate_props(template, props)  # before TTS: build_props needs well-formed props
     voiced = build_props(template, v["props"], settings, voice)
     if voiced is not v["props"]:
