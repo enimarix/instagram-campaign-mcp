@@ -57,9 +57,9 @@ _TABLE = {"render": ("render_jobs", "state = 'queued'"),
           "film": ("work_orders", f"status = 'scheduled' AND {_LEMO}")}
 # A running film's own render (lemo.register_film; film._wait_render waits for it): its
 # idea's Lemo order is in_production (and the film's run is alive: film_renders).
-_FILM_RENDERS = ("SELECT j.id, j.not_before FROM render_jobs j"
-                 " JOIN assets a ON a.id = j.asset_id JOIN work_orders w ON w.idea_id = a.idea_id WHERE j.state = 'queued'"
-                 " AND w.status = 'in_production' AND substr(w.style, 1, 5) = 'lemo:'"
+_FILM_RENDERS = ("SELECT j.id, j.not_before FROM render_jobs j JOIN assets a"
+                 " ON a.id = j.asset_id JOIN work_orders w ON w.idea_id = a.idea_id"
+                 " WHERE j.state = 'queued' AND w.status = 'in_production' AND substr(w.style, 1, 5) = 'lemo:'"
                  " ORDER BY j.id")
 FILM_RENDER = ("Ce rendu est celui d'un film en cours, qui l'attend : il ne peut être ni mis"
                " en pause, ni minuté, ni retiré.")
