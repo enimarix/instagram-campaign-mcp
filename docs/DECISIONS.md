@@ -343,8 +343,10 @@ Every heavy child the studio starts (Blender, Remotion's node and Chrome, ffmpeg
 service and its model worker, agent CLI runs) runs at low priority (Windows
 BELOW_NORMAL_PRIORITY_CLASS, POSIX nice 10). A heavy GPU job, once it holds the GPU lock (145),
 also waits until free RAM >= `GUARD_MIN_FREE_RAM_GB` (8), free VRAM >= its need (voice 6 GB (measured ~5.8; 7 never fit beside the desktop apps, step 170),
-Blender 3 GB, Remotion 1.5 GB; when nvidia-smi answers) and no other program (a game, a Blender
-started by hand) uses more than 1 GB of VRAM; it logs "waiting for RAM / VRAM / a game". A
+Blender 3 GB, Remotion 1.5 GB; when nvidia-smi answers) and the card is not busy above 40 %
+(a game, a Blender started by hand; 2026-11-23, was "no other program uses more than 1 GB of
+VRAM": Windows' per-process counters gave Discord 3.4 GB and dwm 1.5 GB while the whole card
+used 0.9 GB, so every voice waited forever and each render failed « machine »); it logs "waiting for RAM / VRAM / a game". A
 watchdog in the worker of `up` checks free RAM and the GPU temperature every 10 s: under 3 GB
 or above 88 °C it suspends the studio's own heavy processes, resumes them above 6 GB and under
 80 °C, and after 3 min still bad kills the newest (its render is retried later, the voice

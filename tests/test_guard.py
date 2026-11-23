@@ -97,19 +97,22 @@ def test_suspend_and_resume_a_real_dummy_child(tmp_path):
 
 def test_blockers_name_ram_vram_a_game_and_the_grace(monkeypatch):
     monkeypatch.setattr(guard, "free_ram_gb", lambda: 5.0)
-    monkeypatch.setattr(guard, "gpu_status", lambda: {"free_vram_gb": 2.0, "temp_c": 60.0})
-    monkeypatch.setattr(guard, "gpu_processes", lambda: {4242: 3.5, 7: 0.2, os.getpid(): 5.0})
+    monkeypatch.setattr(guard, "gpu_status", lambda: {"free_vram_gb": 2.0, "temp_c": 60.0,
+                                                      "util_pct": 97.0})
     monkeypatch.setenv("GUARD_NOT_BEFORE", str(time.time() + 300))
     why = guard.blockers(3.0, 8.0)
     assert [w.split(":")[0] for w in why] == ["waiting for the startup grace", "waiting for RAM",
-                                             "waiting for VRAM", "waiting for a game (another "
-                                             "program on the GPU)"]
-    assert "pid 4242 uses 3.5 GB" in why[3] and f"pid {os.getpid()}" not in why[3]
+                                             "waiting for VRAM",
+                                             "waiting for a game (the GPU is busy)"]
+    assert why[3].endswith("97 %")
     monkeypatch.setenv("GUARD_NOT_BEFORE", "0")
     monkeypatch.setattr(guard, "free_ram_gb", lambda: 20.0)
-    monkeypatch.setattr(guard, "gpu_status", lambda: {"free_vram_gb": 7.5, "temp_c": 60.0})
-    monkeypatch.setattr(guard, "gpu_processes", lambda: {7: 0.2})
-    assert guard.blockers(guard.VRAM_GB["voice"], 8.0) == []
+    # 2026-11-23: an idle card is no game, whatever the desktop apps hold (Discord / dwm made
+    # every voice wait forever through Windows' per-process counters); util unknown: no game
+    for util in (0.0, guard.GAME_GPU_PCT, None):
+        monkeypatch.setattr(guard, "gpu_status", lambda u=util: {"free_vram_gb": 7.2,
+                                                                 "temp_c": 50.0, "util_pct": u})
+        assert guard.blockers(guard.VRAM_GB["voice"], 8.0) == []
 
 
 def test_gpu_status_reads_used_vram(monkeypatch):
@@ -129,7 +132,6 @@ def test_gpu_status_reads_used_vram(monkeypatch):
 
 def test_no_nvidia_smi_means_no_gpu_check(monkeypatch):
     monkeypatch.setattr(guard, "free_ram_gb", lambda: None)  # unknown: no RAM check either
-    monkeypatch.setattr(guard, "gpu_processes", lambda: pytest.fail("no GPU to look at"))
     assert guard.gpu_status() is None  # conftest: GUARD_NVIDIA_SMI names nothing
     assert guard.blockers(7.0, 8.0) == []
     assert guard.vram_used_gb() is None
