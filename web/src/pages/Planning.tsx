@@ -647,8 +647,8 @@ function PauseSwitch({ paused, onChanged }: { paused: string | null; onChanged: 
 }
 
 /** Planning (185): what renders next and when, in the worker's real order; a waiting render
- * or film can start now, wait for a timer (186), move (by drag and drop too, 195), be held or removed, and the whole
- * studio can pause (187). Remove follows the Inbox rule: the card leaves at once and the call
+ * or film can start now, wait for a timer (186), move (by drag and drop too, 195), be held or
+ * removed, and the whole studio can pause (187). Remove follows the Inbox rule: the card leaves at once and the call
  * fires when the 5 s undo closes, or at once when the page is hidden or left. */
 export default function Planning() {
   const [items, setItems] = useState<PlanningItem[] | null>(null)

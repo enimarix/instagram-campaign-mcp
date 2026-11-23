@@ -241,7 +241,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         pending = [i for i in line.waiting(store) if (i["kind"], i["id"]) in rows]
         held = [i for i in pending if i["not_before"] == line.HELD]  # listed after, no time
         pending = [i for i in pending if i not in held]
-        # the drag and drop's index (line.place, 195): its place among the not held, in line order
+        # the drag and drop's index (line.place, 195): the place among the not held
         index = {(i["kind"], i["id"]): n for n, i in enumerate(pending)}
         took = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
         quota = left = settings.lemo_films_per_day - film.films_today(store, settings, now)
@@ -250,8 +250,9 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
         def card(i: Dict[str, Any], start: Optional[datetime], waits: Optional[str],
                  why: str) -> Dict[str, Any]:
-            key, nb = (i["kind"], i["id"]), i["not_before"]
-            r, nb = rows[key], None if nb == line.HELD else nb
+            key = (i["kind"], i["id"])
+            r, nb = rows[key], i["not_before"]
+            nb = None if nb == line.HELD else nb
             if i["kind"] == "render":
                 engine = _engine(r["recipe"])
                 item = _item("next", "render", _title(r["hook"], r["caption"],
