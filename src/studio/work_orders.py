@@ -320,9 +320,10 @@ def recover(store: CampaignStore, stale_before: datetime) -> Dict[str, List[int]
     """202: orders a dead agent run left in_production with nothing made (no video of their
     idea, untouched since `stale_before`, the agent's time cap ago) -> {rescheduled,
     skipped}. Back to scheduled with the idea unlinked, so the next run makes them; a
-    change order whose video was sent back and got another decision since is skipped (that
-    decision replaced it). Lemo orders are the film runner's (film.close_orphans).
-    ponytail: "another decision" = the video's latest agent_decision names another order."""
+    change order whose video got another decision since (sent back or archived meanwhile)
+    is skipped: that decision replaced it. Lemo orders are the film runner's
+    (film.close_orphans). ponytail: "another decision" = the video's latest agent_decision
+    names another order; an owner's change order (no agent decision) comes back."""
     with store._tx() as c:
         rows = [dict(r) for r in c.execute(
             "SELECT w.* FROM work_orders w WHERE w.status='in_production' AND w.updated_at < ?"
@@ -331,8 +332,8 @@ def recover(store: CampaignStore, stale_before: datetime) -> Dict[str, List[int]
     out: Dict[str, List[int]] = {"rescheduled": [], "skipped": []}
     for o in rows:
         asset = store.get_asset(o["from_asset_id"]) if o["from_asset_id"] else None
-        if (o["origin"] == "change" and asset and asset["status"] == "revision_requested"
-                and (asset.get("agent_decision") or {}).get("order_id") != o["id"]):
+        decided = (asset or {}).get("agent_decision") or {}
+        if o["origin"] == "change" and decided and decided.get("order_id") != o["id"]:
             skip_order(store, o["id"], f"remplacée : la vidéo {asset['id']} a eu une autre"
                        " décision depuis (le run qui l'avait commencée s'est arrêté)")
             out["skipped"].append(o["id"])

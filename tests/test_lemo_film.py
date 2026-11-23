@@ -440,11 +440,19 @@ def test_an_order_a_dead_run_left_half_made_comes_back(store, cfg):
     aid = _sent_back_film(store, cfg)
     replaced = started(work_orders.restyle(store, aid, None, "x"))  # an earlier decision's
     feedback.decide_revision(store, aid, "waiting", "un rendu")  # another decision since
+    # was order 31: its video got another restyle since, then was archived
+    gone = _sent_back_film(store, cfg)
+    stale = started(work_orders.restyle(store, gone, None, "x"))
+    feedback.decide_revision(store, gone, "remade", "y")  # a newer order
+    transition(store, gone, "archived", actor="system")
+    # an owner's own change order (no agent decision) on an archived video comes back
+    mine = started(work_orders.restyle(store, _asset(store), "lemo:watercolor"))
     with store._tx() as c:
-        c.execute("UPDATE work_orders SET updated_at=? WHERE id IN (?,?,?,?)",
-                  (old, orphan, made, films, replaced))
+        c.execute("UPDATE work_orders SET updated_at=?, style=NULL WHERE id=?", (old, mine))
+        c.execute("UPDATE work_orders SET updated_at=? WHERE id IN (?,?,?,?,?)",
+                  (old, orphan, made, films, replaced, stale))
     got = work_orders.recover(store, utcnow() - timedelta(minutes=90))
-    assert got == {"rescheduled": [orphan], "skipped": [replaced]}
+    assert got == {"rescheduled": [orphan, mine], "skipped": [replaced, stale]}
     back = work_orders.get_order(store, orphan)
     assert (back["status"], back["idea_id"]) == ("scheduled", None)
     assert "autre décision" in work_orders.get_order(store, replaced)["skip_reason"]

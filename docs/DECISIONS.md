@@ -969,7 +969,8 @@ so one video never gets two remakes.
 An order a dead agent run left `in_production` with nothing made (run 34 was killed between
 `create_idea` and the render: order 51 stayed there for a day) goes back to `scheduled`, with
 the idea unlinked, when the next work packet is built, once it has been untouched for the
-agent's time cap (`AGENT_TIMEOUT_MINUTES`). If it was a change order and its video, still
-sent back, got another decision since, it is skipped instead. Lemo orders keep
+agent's time cap (`AGENT_TIMEOUT_MINUTES`). If it was a change order and its video got
+another decision since (still sent back, or archived meanwhile: order 31, replaced by order
+37), it is skipped instead. Lemo orders keep
 `film.close_orphans`.
 Reason: « AI never parks » (156): the owner relaunched a run for video 43 and nothing came of it.
