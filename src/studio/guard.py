@@ -11,9 +11,9 @@ Step 145's GPU lock (gpu_lock.py) keeps our own heavy jobs one at a time; this a
 - Admission: gpu_lock.hold() calls admit() before it takes the lock (and blockers() again
   once it has it, 175: a waiting job never holds the lock). The job waits (and logs
   "waiting for RAM / VRAM / a game") while free RAM < GUARD_MIN_FREE_RAM_GB (8) and, when
-  nvidia-smi answers, while free VRAM < the job's need (VRAM_GB) or another process (a game,
-  a Blender started by hand) uses more than FOREIGN_VRAM_GB, or before GUARD_NOT_BEFORE (the
-  voice service's copy of the studio's startup grace).
+  nvidia-smi answers, while free VRAM < the job's need (VRAM_GB) or the card is busy above
+  GAME_GPU_PCT (a game, a Blender started by hand: nothing of ours runs before admission), or
+  before GUARD_NOT_BEFORE (the voice service's copy of the studio's startup grace).
 - Watchdog (studio side, the worker of `up`): every EVERY_S, free RAM < 3 GB (or the heat
   below) suspends our heavy children; RAM > 6 GB (and cool) resumes them; RAM still short
   after 3 min, the newest is killed (its render fails with the reason and is retried; the
@@ -67,7 +67,10 @@ NICE = 10
 # voice: ~5.8 GB loaded (6.7 GB card total with the ~0.9 GB desktop); 7.0 never fit beside the
 # owner's open apps, so no voiced render could start (170)
 VRAM_GB = {"voice": 6.0, "blender": 3.0, "remotion": 1.5}
-FOREIGN_VRAM_GB = 1.0  # another process above this = a game: wait
+# 2026-11-23: the GPU busy above this = a game: wait. Not Windows' per-process "GPU Process
+# Memory" counters: they gave Discord 3.4 GB and dwm 1.5 GB while the whole card used 0.9 GB,
+# so every voice waited forever. ponytail: one sample, a spike only costs a WAIT_POLL_S.
+GAME_GPU_PCT = 40.0
 MIN_FREE_RAM_GB = 8.0  # GUARD_MIN_FREE_RAM_GB overrides (0: no RAM check)
 WAIT_POLL_S = 10.0
 LOG_EVERY_S = 60.0
@@ -312,32 +315,6 @@ def cpu_perf_limit() -> Optional[float]:
     return _num(rows[1][1]) if len(rows) > 1 else None
 
 
-def gpu_processes() -> Dict[int, float]:
-    """pid -> GB of dedicated VRAM, every process using the GPU; {} when unknown. Windows:
-    the performance counters (WDDM hides per-process memory from nvidia-smi); elsewhere
-    nvidia-smi's compute apps. ponytail: typeperf counter names are English-only."""
-    used: Dict[int, float] = {}
-    if sys.platform == "win32":
-        try:
-            out = subprocess.run(["typeperf", r"\GPU Process Memory(*)\Dedicated Usage",
-                                  "-sc", "1"], capture_output=True, text=True,
-                                 timeout=PROBE_TIMEOUT_S, **_QUIET).stdout
-        except (OSError, subprocess.SubprocessError):
-            return {}
-        rows = [r for r in csv.reader(io.StringIO(out)) if len(r) > 1]
-        if len(rows) < 2:
-            return {}
-        pairs = [(re.search(r"\(pid_(\d+)_", n), v) for n, v in zip(rows[0][1:], rows[1][1:])]
-        gb = [(int(m[1]), v, 2**30) for m, v in pairs if m]
-    else:
-        gb = [(r[0], r[1], 1024) for r in _smi("--query-compute-apps=pid,used_memory") or []
-              if len(r) > 1]
-    for pid, value, unit in gb:
-        with contextlib.suppress(ValueError):
-            used[int(pid)] = used.get(int(pid), 0.0) + float(value) / unit
-    return used
-
-
 def blockers(need_vram_gb: float, min_free_ram_gb: float) -> List[str]:
     """Why a heavy job may not start now ([]: it may)."""
     why = []
@@ -353,10 +330,8 @@ def blockers(need_vram_gb: float, min_free_ram_gb: float) -> List[str]:
         if gpu["free_vram_gb"] < need_vram_gb:
             why.append(f"waiting for VRAM: {gpu['free_vram_gb']:.1f} GB free, "
                        f"{need_vram_gb:g} GB needed")
-        games = [f"pid {pid} uses {gb:.1f} GB" for pid, gb in sorted(gpu_processes().items())
-                 if gb > FOREIGN_VRAM_GB and pid != os.getpid()]
-        if games:
-            why.append(f"waiting for a game (another program on the GPU): {', '.join(games)}")
+        if (gpu.get("util_pct") or 0) > GAME_GPU_PCT:
+            why.append(f"waiting for a game (the GPU is busy): {gpu['util_pct']:.0f} %")
     return why
 
 
