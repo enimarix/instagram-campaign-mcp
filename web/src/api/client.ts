@@ -94,7 +94,8 @@ export type Asset = {
   // « Créer une vidéo » or « même vidéo, autre style » (138)
   work_order?: { id: number; mode: WorkMode; instruction: string | null; permalink: string | null; source: OrderSource; style?: string | null } | null
   style?: string | null // list rows: the idea's style (138)
-  agent_decision?: AgentDecision | null // a video sent back: what the AI decided (156)
+  agent_decision?: AgentDecision | null // a video sent back: what the AI decided (156); dropped by the check (188c)
+  awaiting_check?: boolean // list rows (188c): finished, the AI's check has not submitted it yet
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
@@ -1081,7 +1082,7 @@ export const setVoiceEnabled = (id: string, enabled: boolean) =>
 /** The AI's latest decision on a video sent back for changes (156); `text` is what the
  * Inbox shows: « Refaite en Macro 3D », « Nouveau style demandé : … », « En attente : … ». */
 export type AgentDecision = {
-  kind: 'remade' | 'restyled' | 'style_requested' | 'waiting'
+  kind: 'remade' | 'restyled' | 'style_requested' | 'waiting' | 'dropped'
   text: string
   why: string
   style: string | null
@@ -1117,10 +1118,10 @@ export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'd
   send<StyleRequest>('PATCH', `/api/style-requests/${id}`, body)
 
 /** GET /api/planning (185): the chain of what the studio makes next, every time estimated. */
-export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'held' | 'order_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
+export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'held' | 'order_grace' | 'check_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
 export type PlanningItem = {
   section: 'running' | 'next' | 'planned' | 'ideas'
-  kind: 'render' | 'film' | 'order_run' | 'agent_run' | 'work_order' | 'change_request' | 'claude_idea'
+  kind: 'render' | 'film' | 'order_run' | 'check_run' | 'agent_run' | 'work_order' | 'change_request' | 'claude_idea'
   title: string
   source: string | null
   ids: { order_id?: number; asset_id?: number; pick_id?: number; run_id?: number; job_id?: number }

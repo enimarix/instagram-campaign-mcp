@@ -14,7 +14,7 @@ does it. Before every agent run, write_packet() rebuilds `<workspace>/work/`:
 Run kinds are playbook names (RUNS): `daily-produce` (night) needs every section but
 `ads` (only `weekly-ads` reads it), the light afternoon run is a second playbook,
 `daily-revise` (the owner's work orders, DM picks included since 136, revisions,
-feedback),
+feedback), and the check run `check-renders` (188c: finished renders to check and submit),
 scheduled like any other: `AGENT_SCHEDULE=daily-produce@03:00,daily-revise@14:00`. A
 playbook not in the table gets every section.
 
@@ -44,7 +44,7 @@ from ..learning.facts import facts_for
 from ..learning.learnings import get_feedback, list_revision_requests
 from ..learning.quotas import todays_quotas
 from ..store import CampaignStore, to_iso, utcnow
-from ..studio import dm_picks, style_requests, work_orders
+from ..studio import checks, dm_picks, planned, style_requests, work_orders
 from ..studio.seed import local_today
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "agent" / "schemas"
@@ -88,7 +88,17 @@ def _facts(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
 
 
 def _quotas(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
-    return todays_quotas(store, settings, local_today(settings.timezone, now), now), 1
+    """188c: with `places` (planned.ideas_left): how many of Claude's own ideas (viral finds,
+    own ideas) the batch still takes after the owner's items, opened for take_place."""
+    day = local_today(settings.timezone, now)
+    places = planned.ideas_left(store, settings)
+    planned.open_places(store, str(day), places["ideas_left"])
+    return {**todays_quotas(store, settings, day, now), "places": places}, 1
+
+
+def _checks(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
+    out = checks.for_agent(store, now)  # 188c: finished renders waiting for their check
+    return out, len(out["renders"])
 
 
 def _dm_picks(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
@@ -122,7 +132,7 @@ SECTIONS: Dict[str, Producer] = {"work_orders": _work_orders,  # 134: first, mad
                                  "brief": _brief, "feedback": _feedback,
                                  "revisions": _revisions, "facts": _facts,
                                  "quotas": _quotas, "dm_picks": _dm_picks, "ads": _ads,
-                                 "style_requests": _style_requests}
+                                 "style_requests": _style_requests, "checks": _checks}
 # playbook -> (run_kind, sections); None = every section.
 RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
     "daily-produce": ("produce", ("work_orders", "brief", "feedback", "revisions", "facts",
@@ -130,6 +140,7 @@ RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
     "daily-revise": ("light", ("work_orders", "revisions", "feedback", "dm_picks")),
     "daily-learn": ("learn", ("facts", "brief", "style_requests")),  # 156: weekly style
     "weekly-ads": ("ads", ("ads",)),  # 096: skipped when not configured or nothing to do
+    "check-renders": ("light", ("checks",)),  # 188c: started by schedule.check_run
 }
 # playbook -> the sections that decide the skip, whatever the others count: a day with
 # nothing published or matured has nothing to analyse, unless the week's invented style

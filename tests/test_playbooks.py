@@ -40,7 +40,10 @@ def test_daily_produce_drives_the_whole_batch():
     named = set(re.findall(r"`(\w+)", text))
     assert {"get_creative_brief", "get_feedback", "add_learning", "mark_feedback_digested",
             "list_revision_requests", "create_idea", "preview_motion", "render_motion",
-            "wait_for_renders", "get_asset_frames", "submit_asset"} <= named
+            "render_remix"} <= named
+    # 188c: the check run reviews and submits the renders, the night run never waits
+    check = set(re.findall(r"`(\w+)", _book("check-renders")))
+    assert {"get_asset_frames", "render_motion", "drop_render", "submit_asset"} <= check
 
 
 @pytest.mark.parametrize("path", [p for p in PLAYBOOKS if p.stem not in runner.TEMPLATES],
@@ -73,7 +76,7 @@ def test_prepare_workspace_with_the_real_agent_folder(tmp_path):
 
 
 @pytest.mark.parametrize("name", ["daily-produce", "daily-revise", "daily-learn",
-                                  "weekly-ads"])
+                                  "weekly-ads", "check-renders"])
 def test_scheduled_playbooks_read_their_work_packet_first(name):
     from src.agent import packet
 
@@ -122,8 +125,8 @@ def test_daily_produce_makes_both_tracks_dm_picks_first():  # step 073 + 113b
                  "mark_dm_pick", "warnings"):
         assert tool in picks, tool
     assert '"in_production"' in picks and '"skipped"' in picks and "clip-specific" in picks
-    assert "reactions_plan" in text and "@<creator>" in _section(text, "Phase 10: submit")
-    assert "DM pick from @<sender>" in text
+    assert "reactions_plan" in text and "@<creator>" in picks
+    assert "DM pick from @<sender>" in _book("check-renders")  # 188c: its submit note
     # The cases a dry run meets: no clips, downloads failing, more clips than room.
     dry = _section(text, "Dry run")
     assert "download_reel" in dry and "no such clip" in dry and "reactions_plan.room" in dry
@@ -194,5 +197,5 @@ def test_no_self_score_in_the_playbooks():
     """Step 189: the agent no longer scores itself; a new version carries its change note."""
     for path in TEXTS:
         assert "self_score" not in path.read_text(encoding="utf-8"), path.name
-    assert "score" not in _section(_book("daily-produce"), "Phase 10: submit")
+    assert "score" not in _section(_book("check-renders"), "Step 3: submit the good ones")
     assert '`note` that starts with\n   "Changed: "' in _book("daily-revise")

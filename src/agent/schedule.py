@@ -10,7 +10,8 @@ one), it has no run started today, it isn't running and its file exists. Three c
   starting due runs detached one at a time, each once the last run and its renders are done
   (166) (a run missed while the PC was off starts after the next logon, same day),
   and the light run the owner's scheduled work orders (136) and change requests (147) ask
-  for, or new capability re-wakes (156) (order_run); before those, the Lemo-Opuscar order
+  for, or new capability re-wakes (156) (order_run), then the check run of finished
+  renders (188c, check_run); before those, the Lemo-Opuscar order
   at the head of the heavy line (studio/line.py, 186) goes to the film runner (film_run,
   173), even while renders wait behind it;
 - the website's Settings page: overview() (next and last run per playbook).
@@ -37,7 +38,7 @@ import structlog
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from ..studio import line, styles, work_orders
+from ..studio import checks, line, styles, work_orders
 from . import film
 from .packet import RUNS
 from .runner import (
@@ -75,9 +76,10 @@ _NEWEST_WORK = (
 _WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_requested')"
             f" OR EXISTS (SELECT 1 FROM work_orders WHERE {_AGENT_ORDER})")
 # what catch_up starts first: the Lemo film at the head of the line (186: heavy work by
-# arrival, not after the runs), else a due playbook, else the light run for the orders;
-# the Planning page (185) lists them in this order
-CATCH_UP_ORDER = ("film", "playbook", "orders")
+# arrival, not after the runs), else a due playbook, else the light run for the orders,
+# else the check run for finished renders (188c); the Planning page (185) lists them in
+# this order
+CATCH_UP_ORDER = ("film", "playbook", "orders", "checks")
 CAPABILITIES_KEY = "style_capabilities"  # worker_state: {styles, gained_at}
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
@@ -203,12 +205,58 @@ def capability_gained(store: CampaignStore, now: datetime) -> Optional[datetime]
     return parse_iso(gained) if gained else None
 
 
-def _order_runs_today(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
-                      ) -> Tuple[str, int]:
-    """(owner-local day, at-once runs started that day)."""
+def _runs_today(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+                key: str) -> Tuple[str, int]:
+    """(owner-local day, at-once `key` runs started that day): key order | check."""
     day = _local(settings, now).date().isoformat()
-    used = store.get_state("order_runs") or {}
+    used = store.get_state(f"{key}_runs") or {}
     return day, used.get("count", 0) if used.get("day") == day else 0
+
+
+def _gate(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+          newest: datetime, readers: Tuple[str, ...], key: str, cap: int) -> Optional[str]:
+    """Why an at-once run (key order | check) would not start for work as new as `newest`:
+    `seen` (a reader started since: it has it), `daily_cap`, `preflight` (failed less than
+    ORDER_RETRY ago), else None."""
+    # ponytail: the last 10 runs per reader; more than 10 since the newest request is unseen.
+    since = [r for p in readers for r in store.list_agent_runs(p, limit=10)
+             if parse_iso(r["started_at"]) >= newest]
+    if any(r["summary"] != DEAD_RUN for r in since):
+        return "seen"
+    # a run a restart killed never had them (155), nor the start that made it
+    started = store.get_state(f"{key}_run_started_at")  # before its own row exists
+    if started and parse_iso(started) >= newest and not any(
+            parse_iso(r["started_at"]) >= parse_iso(started) for r in since):
+        return "seen"
+    if _runs_today(store, settings, now, key)[1] >= cap:
+        return "daily_cap"
+    failed = store.get_state(f"{key}_preflight_failed_at")
+    if failed and now - parse_iso(failed) < ORDER_RETRY:
+        return "preflight"
+    return None
+
+
+def _launch(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, key: str,
+            playbook: str, start: Callable[..., Any], check: Optional[Callable[..., Any]]
+            ) -> Optional[str]:
+    """Preflight, then start `playbook`, counted in today's `key` runs. None when started,
+    else the AgentError's text (the CLI is missing or signed out, or no such playbook: asked
+    again ORDER_RETRY later). AgentRunRefused (it runs already) is raised.
+    ponytail: the preflight (`claude auth status`, ~1 s) blocks the worker's loop once per
+    at-once run; move it to a thread if it ever gets slow."""
+    try:
+        (check or preflight)(settings)  # looked up per call: tests patch it
+        start(store, settings, playbook)
+    except AgentRunRefused:
+        raise
+    except AgentError as e:
+        store.set_state(f"{key}_preflight_failed_at", to_iso(now))
+        return str(e)
+    day, count = _runs_today(store, settings, now, key)
+    store.set_state(f"{key}_preflight_failed_at", None)
+    store.set_state(f"{key}_run_started_at", to_iso(now))
+    store.set_state(f"{key}_runs", {"day": day, "count": count + 1})
+    return None
 
 
 def order_wait(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
@@ -217,7 +265,7 @@ def order_wait(store: CampaignStore, settings: InstagramMCPSettings, now: dateti
     185, share it): (None, newest) when it would, else (why, newest): `nothing` (no order or
     change request waits), `order_grace` (newest less than ORDER_RUN_DEBOUNCE_MINUTES old),
     `seen` (a run that reads them started since: it has them), `daily_cap`, `preflight`
-    (failed less than ORDER_RETRY ago). newest: the newest request, or `gained` (new
+    (failed less than ORDER_RETRY ago): _gate. newest: the newest request, or `gained` (new
     capability) while something waits (156)."""
     with store._tx() as c:
         newest = c.execute(_NEWEST_WORK).fetchone()[0]
@@ -229,22 +277,8 @@ def order_wait(store: CampaignStore, settings: InstagramMCPSettings, now: dateti
     newest = max(times)
     if now - newest < timedelta(minutes=settings.order_run_debounce_minutes):
         return "order_grace", newest
-    # ponytail: the last 10 runs per reader; more than 10 since the newest request is unseen.
-    since = [r for p in ORDER_READERS for r in store.list_agent_runs(p, limit=10)
-             if parse_iso(r["started_at"]) >= newest]
-    if any(r["summary"] != DEAD_RUN for r in since):
-        return "seen", newest
-    # a run a restart killed never had them (155), nor the start that made it
-    started = store.get_state("order_run_started_at")  # before its own row exists
-    if started and parse_iso(started) >= newest and not any(
-            parse_iso(r["started_at"]) >= parse_iso(started) for r in since):
-        return "seen", newest
-    if _order_runs_today(store, settings, now)[1] >= settings.max_order_runs_per_day:
-        return "daily_cap", newest
-    failed = store.get_state("order_preflight_failed_at")
-    if failed and now - parse_iso(failed) < ORDER_RETRY:
-        return "preflight", newest
-    return None, newest
+    return _gate(store, settings, now, newest, ORDER_READERS, "order",
+                 settings.max_order_runs_per_day), newest
 
 
 def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
@@ -274,23 +308,48 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
                                 " runs are used: it waits for the next scheduled run")
     if why:
         return None
-    # ponytail: the preflight (`claude auth status`, ~1 s) blocks the worker's loop once
-    # per order run; move it to a thread if it ever gets slow.
     try:
-        (check or preflight)(settings)  # looked up per call: tests patch it
-        start(store, settings, ORDER_PLAYBOOK)
+        error = _launch(store, settings, now, "order", ORDER_PLAYBOOK, start, check)
     except AgentRunRefused:
         return None
-    except AgentError as e:  # the CLI is missing or signed out, or no such playbook
-        store.set_state("order_preflight_failed_at", to_iso(now))
-        work_orders.set_blocked(store, f"the agent cannot start: {e}")
+    work_orders.set_blocked(store, error and f"the agent cannot start: {error}")
+    return None if error else ORDER_PLAYBOOK
+
+
+def check_wait(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
+               ) -> Tuple[Optional[str], Optional[datetime]]:
+    """Why the check run (188c) would not start now, read-only (check_run and the Planning
+    page share it): (None, newest) when it would, else (why, newest): `nothing` (no render
+    waits for its check, checks.waiting), `check_grace` (the newest finished less than
+    CHECK_RUN_DEBOUNCE_MINUTES ago), `seen`, `daily_cap` (MAX_CHECK_RUNS_PER_DAY),
+    `preflight`: _gate. newest: when the newest waiting render finished."""
+    newest = checks.newest(store, now)
+    if newest is None:
+        return "nothing", None
+    if now - newest < timedelta(minutes=settings.check_run_debounce_minutes):
+        return "check_grace", newest
+    return _gate(store, settings, now, newest, (checks.PLAYBOOK,), "check",
+                 settings.max_check_runs_per_day), newest
+
+
+def check_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
+              start: Callable[..., Any], check: Optional[Callable[..., Any]] = None
+              ) -> Optional[str]:
+    """Renders waiting for their check (188c) start the light check run (checks.PLAYBOOK)
+    at once: check_wait, then the preflight. Returns it when started, else None. The rest
+    of the batch still in the line holds it back through catch_up's busy() (a render waiting
+    on its timer or held does not), and nothing starts while another run runs."""
+    try:  # first: it closes a run whose runner is gone (155)
+        check_lock(store, checks.PLAYBOOK, settings.agent_timeout_minutes * 60)
+    except AgentRunRefused:
         return None
-    day, count = _order_runs_today(store, settings, now)
-    store.set_state("order_preflight_failed_at", None)
-    store.set_state("order_run_started_at", to_iso(now))
-    store.set_state("order_runs", {"day": day, "count": count + 1})
-    work_orders.set_blocked(store, None)
-    return ORDER_PLAYBOOK
+    if check_wait(store, settings, now)[0]:
+        return None
+    try:
+        error = _launch(store, settings, now, "check", checks.PLAYBOOK, start, check)
+    except AgentRunRefused:
+        return None
+    return None if error else checks.PLAYBOOK
 
 
 def film_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
@@ -347,7 +406,8 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              start_film: Optional[Callable[..., Any]] = None) -> List[str]:
     """Start the Lemo film at the head of the line (film_run, runs.start_film), else the
     first due playbook detached (runs.start_run), else the work orders' run if they need
-    one (order_run); nothing while busy(): one run, then the next waits for it and its
+    one (order_run), else the check run for finished renders (check_run, 188c); nothing
+    while busy(): one run, then the next waits for it and its
     renders (a film only for a running render, 186); nothing while the studio is paused
     (line.pause, 187). Never raises: the worker lives.
     ponytail: a run's row appears a second or two after its start, well within a tick."""
@@ -370,7 +430,8 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
         return None if order_id is None else f"film {order_id}"
 
     steps = {"playbook": playbook, "film": film,
-             "orders": lambda: order_run(store, settings, now(), start=start or start_run)}
+             "orders": lambda: order_run(store, settings, now(), start=start or start_run),
+             "checks": lambda: check_run(store, settings, now(), start=start or start_run)}
     started = []
     try:
         if line.paused(store):  # the owner paused the studio: nothing starts

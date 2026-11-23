@@ -17,6 +17,8 @@
     "clips_available": {"type": "integer", "minimum": 0},
     "batch_size": {"type": "integer"},
     "effective_batch_size": {"type": "integer"},
+    "places": {"type": "object", "required": ["orders", "change_requests", "dm_picks", "ideas_left"],
+               "additionalProperties": {"type": "integer", "minimum": 0}},
     "styles": {"type": "object",
                "additionalProperties": {"type": "object", "required": ["count", "limit"],
                                         "properties": {"count": {"type": "integer"},

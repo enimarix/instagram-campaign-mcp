@@ -8,6 +8,42 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: The night run plans, renders nothing of its own; a check run submits (188c)
+The owner (2026-11-22): the 03:00 daily-produce must not launch renders directly; Claude's new
+ideas come as cards of their own colour he reviews first, and they only fill the rest of the
+batch. daily-produce now never waits (`wait_for_renders` and its review / submit phases left
+the playbook). The owner's items it handles (scheduled work orders, change requests, DM picks)
+still render at once: they go straight into the FIFO line, where Planning can hold, move or
+remove them (lead decision, reversible: the owner asked for them). Claude's own ideas (viral
+finds and Track B) are `plan=True` cards (188b) with caption, description and sources, only
+for the places left: BATCH_SIZE minus the owner's items, counted by the packet
+(`quotas.json` `places`, the same number as the Planning placeholder's `picks_up`). The packet
+opens those places for the day and every plan call takes one (`planned.take_place`, under the
+write lock): past them `render_motion` / `render_remix` refuse with « no place left », so the
+rule does not rest on the prompt; a day no packet opened gets the same count at its first plan.
+After renders finish, a light check run (`check-renders.md`, kind `light`, packet section
+`checks`) reviews each one: frames and QC for cut text, an unreadable first frame, voice vs
+picture, the remix credit; at most 2 re-renders per video (counted over the versions the agent
+made of it; each re-render joins the line and the next check run sees it), else
+`drop_render(asset_id, why)` (a new tool, in the `agent` profile: a local write that only
+marks the video `dropped` with the reason, skips its work order with it, shown in the Inbox as
+« Écartée par l'IA : … » and in Mes envois; only the owner archives), and `submit_asset` for
+the good ones. The catch-up starts it as a fourth step after the orders (CATCH_UP_ORDER film →
+playbook → orders → checks, listed by Planning): CHECK_RUN_DEBOUNCE_MINUTES (default 5) after
+the newest finished render, not while renders wait in the line (busy(): one on a timer or held
+does not count) or any run runs, not when a check run started since (it had them), at most
+MAX_CHECK_RUNS_PER_DAY (default 8), the preflight asked again 10 min after a failure, nothing
+while paused. The Inbox hides a `ready` video waiting for its check until it is submitted;
+fallback: it shows anyway CHECK_INBOX_GRACE_HOURS (default 3) after its render finished, or at
+once while the check run cannot run (its preflight fails or its last run failed), and renders
+older than 24 h are never held back. Lemo films keep today's path (the film runner checks its
+own film; shown when ready); everything else (agent and owner-order videos, released Claude
+cards, change-request versions) goes through the check. daily-revise keeps its own wait and
+review (a follow-up may move it to the check run); daily-learn and `--dry-run` (ideas only, no
+plan or render call) are unchanged.
+Reason: the owner reviews Claude's ideas before any GPU time is spent on them, and his own
+items are never delayed by Claude's.
+
 ## 2026-11-23: The agent no longer scores its own videos (189)
 The owner: an AI scoring its own render makes no sense; a video is good by its real numbers
 (views, comments, shares) and the owner's verdict. GOAL.md §2.1 dropped the agent's

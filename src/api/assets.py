@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from ..store import CampaignStore, utcnow
-from ..studio import assets, remix, scheduling
+from ..studio import assets, checks, remix, scheduling
 from ..studio.assets import InvalidTransition
 from ..studio.media import media_url
 from ..studio.publish import QueueRefused, release_publish_check
@@ -83,12 +83,15 @@ class AssetEdit(BaseModel):
 
 
 @router.get("")
-def list_assets(batch_date: Optional[str] = None, status: Optional[str] = None,
-                verdict: Optional[str] = None, track: Optional[str] = None,
-                limit: int = Query(100, ge=1, le=500),
+def list_assets(request: Request, batch_date: Optional[str] = None,
+                status: Optional[str] = None, verdict: Optional[str] = None,
+                track: Optional[str] = None, limit: int = Query(100, ge=1, le=500),
                 store: CampaignStore = Depends(get_store)):
-    return [with_urls(a) for a in store.list_assets(
-        batch_date=batch_date, status=status, verdict=verdict, track=track, limit=limit)]
+    # awaiting_check (188c): the Inbox leaves a video out until its check submits it
+    rows = store.list_assets(batch_date=batch_date, status=status, verdict=verdict,
+                             track=track, limit=limit)
+    return [with_urls(a) for a in checks.flag(store, request.app.state.settings, rows,
+                                              utcnow())]
 
 
 @router.get("/{asset_id}")

@@ -18,6 +18,7 @@ import {
 } from '../api/client'
 import AssetCard from './AssetCard'
 import ReasonSheet from './ReasonSheet'
+import Checks from './Checks'
 import SentBack from './SentBack'
 import { Button } from '../ui/Button'
 import { EmptyState, Skeleton } from '../ui/Card'
@@ -31,9 +32,12 @@ import { changeLabel, COMMENTARY_CONFIRMATION, localDate, wallClock } from './ui
 const UNDO_MS = 5000 // the Toast's own lifetime
 const VISIBLE = 0.6 // share of a card on screen before it counts as the current one
 type Tab = 'today' | 'bench'
+/** Not the owner's yet (188c): the AI's check has not submitted it, or it dropped it. */
+const heldBack = (a: Asset) => !!a.awaiting_check || a.agent_decision?.kind === 'dropped'
 /** Still waiting for the owner's decision: these make the feed. Today: not judged yet; the
  * bench ("Saved"): saved for later (liked), waiting for a slot. */
-const open = (a: Asset, tab: Tab) => a.status === 'ready' && a.verdict === (tab === 'bench' ? 'liked' : 'none')
+const open = (a: Asset, tab: Tab) =>
+  a.status === 'ready' && a.verdict === (tab === 'bench' ? 'liked' : 'none') && !heldBack(a)
 const NOT_YET = new Set(['rendering', 'failed', 'needs_reaction']) // nothing to decide yet
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -295,7 +299,7 @@ export default function InboxPage() {
     if (i >= 0) go(i)
   }
 
-  const decided = assets?.filter((a) => !open(a, tab) && !NOT_YET.has(a.status)).length ?? 0
+  const decided = assets?.filter((a) => !open(a, tab) && !NOT_YET.has(a.status) && !heldBack(a)).length ?? 0
   const suggestion = bench?.suggestion
   const banner = suggestion && bannerKey(suggestion) !== dismissed ? suggestion : null
 
@@ -324,6 +328,7 @@ export default function InboxPage() {
           {tab === 'bench' ? bench && supply(bench) : assets && `${decided} of ${decided + feed.length} decided`}
         </p>
         {tab === 'today' && <SentBack />}
+        {tab === 'today' && assets && <Checks assets={assets} />}
         {banner && (
           <div role="region" aria-label="Saved video suggestion"
             className="mx-auto flex max-w-md flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn/12 p-3 text-sm">
