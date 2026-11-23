@@ -5,8 +5,8 @@ Computed on every call from state that already exists (no event pipeline): faile
 publishes, publishes waiting for a check, re-planned late slots, the token, the latest run
 of each agent playbook, a QC failure spike in the last batch, a stale worker heartbeat, the
 Graph breaker (Meta blocked API access, step 167), the Reel downloader's health and skipped
-DM picks, a failed website build (175), the studio paused by the owner (187). Experiment alerts come with 086's facts
-warning. Jobs whose alert is an event, not a state (the ads sync, 095), keep it with
+DM picks, a failed website build (175), the studio paused by the owner (187). Experiment
+alerts come with 086's facts warning. Jobs whose alert is an event, not a state (the ads sync, 095), keep it with
 `raise_alert`.
 
 An alert's `id` is stable (kind, or kind:subject), so the owner can dismiss it: the time is

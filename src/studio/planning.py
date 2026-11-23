@@ -156,8 +156,8 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
 def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                    ) -> Dict[str, Any]:
-    """{now, items, paused (since when the studio is paused, line.pause, else None)}: the chain (see module doc). Item: section running | next | planned,
-    kind render | film | order_run | agent_run | work_order | change_request, title,
+    """{now, items, paused}: the chain (see module doc); paused: since when the studio is
+    paused (line.pause), else None. Item: section running | next | planned, kind render | film | order_run | agent_run | work_order | change_request, title,
     source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
     why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | daily_cap |
