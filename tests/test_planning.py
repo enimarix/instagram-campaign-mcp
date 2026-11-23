@@ -173,3 +173,94 @@ def test_an_order_the_last_run_left_waits_for_the_next_run(store, agent_dir, mon
     order = next(i for i in items if i["ids"].get("order_id") == mine)
     assert order["waits_on"] == "next_ai_run"
     assert parse_iso(order["est_start"]) == datetime(2026, 11, 18, 2, tzinfo=UTC)
+
+
+def _checkable(store, minutes_ago):
+    """A video whose render finished `minutes_ago`, waiting for its check (188c)."""
+    asset = _job(store, "FactQuest", "done",
+                 finished_at=to_iso(NOW - timedelta(minutes=minutes_ago)))
+    with store._tx() as c:
+        c.execute("UPDATE assets SET status='ready' WHERE id=?", (asset,))
+    return asset
+
+
+def test_the_line_does_not_wait_for_a_running_ai_run_but_a_film_does(
+        store, agent_dir, monkeypatch):
+    # 194 #5a: the render loop never waits for an agent run (line.renders_next)
+    _run(store, "daily-produce", NOW - timedelta(minutes=5))  # running
+    film = _order(store, monkeypatch, "Un film", "lemo:watercolor", minutes_ago=30)
+    queued = _job(store, "FactQuest", "queued", created_at=to_iso(NOW - timedelta(minutes=1)))
+    items = planning.build_planning(store, cfg(), NOW)["items"]
+    run = items[0]
+    assert (run["section"], run["kind"]) == ("running", "agent_run")
+    render = next(i for i in items if i["kind"] == "render")
+    assert render["ids"]["asset_id"] == queued
+    assert parse_iso(render["est_start"]) == NOW and render["waits_on"] is None
+    nxt = next(i for i in items if i["kind"] == "film")  # it waits for the run (films_ready)
+    assert nxt["ids"]["order_id"] == film and nxt["waits_on"] == "agent_running"
+    assert nxt["est_start"] == run["est_ready"]
+    strip = planning.strip(store, NOW, items)  # the strip shows the same times
+    block = next(b for b in strip["blocks"] if b["kind"] == "render")
+    assert block["lane"] == "render" and parse_iso(block["start"]) == NOW
+    assert next(b for b in strip["blocks"] if b["kind"] == "film")["start"] == run["est_ready"]
+
+
+def test_a_waiting_order_moves_neither_the_check_run_nor_the_planned_runs(
+        store, agent_dir, monkeypatch):
+    # 194 #5b: the auditor's probe: an order the 10:30 run saw and left, a render finished
+    # 20 min ago -> the check run starts now, not after tomorrow's 03:00 run and its renders
+    s = cfg(agent_schedule="daily-produce@03:00")
+    _run(store, "daily-produce", NOW - timedelta(hours=7), minutes=20)
+    mine = _order(store, monkeypatch, "Plus tard", minutes_ago=60)
+    _run(store, "daily-revise", NOW - timedelta(minutes=30), minutes=5)  # saw it, left it
+    _checkable(store, 20)
+    items = planning.build_planning(store, s, NOW)["items"]
+    check = next(i for i in items if i["kind"] == "check_run")
+    assert parse_iso(check["est_start"]) == NOW and check["waits_on"] is None
+    order = next(i for i in items if i["ids"].get("order_id") == mine)
+    assert order["waits_on"] == "next_ai_run"
+    produce, = [i for i in items if i["section"] == "planned"]
+    at3 = datetime(2026, 11, 18, 2, tzinfo=UTC)  # 03:00 Paris
+    assert parse_iso(produce["est_start"]) == at3  # not pushed by the renders it will make
+    assert parse_iso(order["est_start"]) == at3
+
+
+def test_an_order_in_its_grace_goes_after_the_check_run_it_does_not_delay(
+        store, agent_dir, monkeypatch):
+    _order(store, monkeypatch, "Tout de suite", minutes_ago=1)  # grace: 3 min
+    _checkable(store, 20)
+    items = planning.build_planning(store, cfg(), NOW)["items"]
+    check = next(i for i in items if i["kind"] == "check_run")
+    run = next(i for i in items if i["kind"] == "order_run")
+    assert parse_iso(check["est_start"]) == NOW
+    assert run["waits_on"] == "order_grace" and run["est_start"] == check["est_ready"]
+    mine = next(i for i in items if i["kind"] == "work_order")
+    assert mine["est_start"] == run["est_ready"]  # its render follows its run
+
+    # an order run starting now goes first: the check run waits for it and its render
+    _order(store, monkeypatch, "Une autre", minutes_ago=60)
+    with store._tx() as c:
+        c.execute("UPDATE work_orders SET scheduled_at=?", (to_iso(NOW - timedelta(hours=1)),))
+    items = planning.build_planning(store, cfg(), NOW)["items"]
+    run = next(i for i in items if i["kind"] == "order_run")
+    last = [i for i in items if i["kind"] == "work_order"][-1]
+    check = next(i for i in items if i["kind"] == "check_run")
+    assert parse_iso(run["est_start"]) == NOW and check["est_start"] == last["est_ready"]
+
+
+def test_the_check_run_shows_at_its_re_check(store, agent_dir):
+    # 193: what a check run saw and left is offered again CHECK_RECHECK_HOURS after its start
+    s = cfg(check_recheck_hours=4)
+    _checkable(store, 120)
+    _run(store, "check-renders", NOW - timedelta(hours=1), minutes=6)
+    store.set_state("check_run_started_at", to_iso(NOW - timedelta(hours=1)))
+    check, = [i for i in planning.build_planning(store, s, NOW)["items"]
+              if i["kind"] == "check_run"]
+    assert check["waits_on"] == "recheck"
+    assert parse_iso(check["est_start"]) == NOW + timedelta(hours=3)
+    assert check["est_duration_s"] == 360
+
+    store.set_state("check_runs", {"day": "2026-11-17", "count": s.max_check_runs_per_day})
+    check, = [i for i in planning.build_planning(store, s, NOW)["items"]
+              if i["kind"] == "check_run"]
+    assert parse_iso(check["est_start"]) == MIDNIGHT  # today's are used

@@ -10,9 +10,10 @@ worker really takes the work today:
   blocking: line.head() again on a simulated clock, LEMO_FILMS_PER_DAY moving the next
   day's films past midnight), then a due playbook, the light run for the owner's orders
   and change requests (schedule.order_wait: grace, daily cap...) followed by each of their
-  renders, the check run of finished renders (schedule.check_wait, 188c); then the orders that wait for the owner's instruction (no time);
-- planned: the scheduled AI runs of the next 24 h as placeholders, none before the chain
-  ahead is done; the producing run says what it picks up first and how many places stay
+  renders, the check run of finished renders (schedule.check_wait, 188c; a waiting light
+  run is listed after it); then the orders that wait for the owner's instruction (no time);
+- planned: the scheduled AI runs of the next 24 h as placeholders, none before the AI's
+  runs ahead are done; the producing run says what it picks up first and how many places stay
   for Claude's own ideas.
 - ideas: Claude's planned videos waiting for the owner (src/studio/planned.py, 188b):
   outside the chain, no time until released.
@@ -21,9 +22,13 @@ Around the chain (190): the 24 h strip of its ETAs and the queued posts (strip),
 supply gauge (supply), today's history (history), and the delay warning before a move or
 « start now » (preview: the real call on a copy of the database).
 
-Every time is an estimate (`estimated: true`): each item starts when the one before is
-ready. A duration is the median of the recent real ones (render_jobs.render_ms per engine,
-agent_runs per playbook), else the constants below (docs/DECISIONS.md).
+Every time is an estimate (`estimated: true`) on two tracks (194), as the worker does: the
+heavy line starts behind the running render only (a film also waits for the running AI
+run); the AI's runs start behind the running run once the line is idle, each by catch_up's
+rules, and one waiting for its own time (a grace, the daily cap, the next run, the check's
+re-check) holds nothing after it. A duration is the median of the recent real ones
+(render_jobs.render_ms per engine, agent_runs per playbook), else the constants below
+(docs/DECISIONS.md).
 ponytail: one render at a time (RENDER_CONCURRENCY=1 here); due_runs may close a crashed
 run's row on the way, as the worker does every minute.
 """
@@ -33,7 +38,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, time, timedelta
 from statistics import median
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..agent import film, packet, schedule
 from ..config import InstagramMCPSettings
@@ -201,27 +206,32 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
     why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | check_grace |
-    daily_cap | preflight | next_ai_run | needs_instruction | None), not_before (a waiting render's or
-    film's timer, UTC ISO), stage and progress (running items), late_s (a running item past
-    its usual time, 190; else None), picks_up (the producing
-    run's placeholder), idea (a claude_idea's card: planned.cards, section ideas)."""
+    recheck | daily_cap | preflight | next_ai_run | needs_instruction | None), not_before (a
+    waiting render's or film's timer, UTC ISO), stage and progress (running items), late_s
+    (a running item past its usual time, 190; else None), picks_up (the producing run's
+    placeholder), idea (a claude_idea's card: planned.cards, section ideas)."""
     with store._tx() as c:
         jobs = [dict(r) for r in c.execute(_JOBS)]
     render_s = _render_s(store)
     voice = voices.default_voice(store)  # what a new video gets when the AI picks none
     items = _running(store, settings, now, jobs, render_s)
-    cursor = max([now, *filter(None, map(_ready, items))])
+    # Two tracks (194). The heavy line waits only for the running render: the render loop
+    # never waits for an AI run (line.renders_next), a film does (line.films_ready). The AI's
+    # runs wait for the running run and for the line to be idle (schedule.busy); one that
+    # waits for its own time (a grace, the daily cap, a later run) moves nothing after it.
+    gpu = max([now, *(_ready(i) for i in items if i["kind"] == "render")])
+    agent = max([now, *(_ready(i) for i in items if i["kind"] != "render")])
     agent_busy = any(i["kind"] != "render" for i in items)
 
-    def add(item: Dict[str, Any]) -> None:
-        nonlocal cursor
+    def add(item: Dict[str, Any]) -> datetime:
+        """Append a timed item; returns when it is ready."""
         items.append(item)
-        cursor = _ready(item) or cursor
+        return _ready(item)
 
     busy: Optional[str] = None
 
     def heavy() -> None:
-        nonlocal cursor, busy
+        nonlocal gpu, agent, busy
         rows = {("render", j["id"]): j for j in jobs if j["state"] == "queued"}
         rows.update({("film", o["id"]): o for o in work_orders.list_orders(
             store, "scheduled", newest=False) if lemo.is_lemo(o["style"])})
@@ -231,7 +241,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         took = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
         quota = left = settings.lemo_films_per_day - film.films_today(store, settings, now)
         reset, films_n, idle_at, n = _midnight(settings, now), 0, None, len(items)
-        ahead = any(i["kind"] in ("render", "film") for i in items)
+        ahead = any(i["kind"] == "render" for i in items)  # a running film holds no render
 
         def card(i: Dict[str, Any], start: Optional[datetime], waits: Optional[str],
                  why: str) -> Dict[str, Any]:
@@ -251,23 +261,24 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                          pick_id=r["pick_id"])
 
         while pending:
-            if cursor >= reset:  # the caps reset at owner-local midnight
-                left, reset = settings.lemo_films_per_day, _midnight(settings, cursor)
-            i = line.head(pending, cursor, films=left > 0)
-            if i is None:  # each one waits on its timer, or the films on tomorrow
+            if gpu >= reset:  # the caps reset at owner-local midnight
+                left, reset = settings.lemo_films_per_day, _midnight(settings, gpu)
+            # a film waits for the running AI run (line.films_ready), the renders don't
+            i = line.head(pending, gpu, films=left > 0 and gpu >= agent)
+            if i is None:  # each one waits on its timer, the films on tomorrow or the run
                 if idle_at is None:  # the line is idle: the agent runs can go (busy)
-                    idle_at, n = cursor, len(items)
-                cursor = min([t for t in (parse_iso(p["not_before"]) for p in pending
-                                          if p["not_before"]) if t > cursor]
-                             + ([reset] if left <= 0 else []))
+                    idle_at, n = gpu, len(items)
+                gpu = min([t for t in (parse_iso(p["not_before"]) for p in pending
+                                       if p["not_before"]) if t > gpu]
+                          + ([reset] if left <= 0 else []) + ([agent] if agent > gpu else []))
                 continue
             pending.remove(i)
             nb = i["not_before"]
             timer = bool(nb) and parse_iso(nb) > now
             capped = i["kind"] == "film" and films_n >= quota
-            waits = ("timer" if timer else "daily_cap" if capped
-                     else "gpu_busy" if ahead else
-                     "agent_running" if agent_busy and i["kind"] == "film" else None)
+            waits = ("timer" if timer else "daily_cap" if capped else
+                     "agent_running" if agent_busy and i["kind"] == "film" and gpu <= agent else
+                     "gpu_busy" if ahead else None)
             why = ("Lancé maintenant : il passe devant la file." if i["pos"] < 0 else
                    "Minuteur : il attend son heure sans bloquer la file." if timer else
                    "Placé par toi dans la file." if i["pos"] > 0 else
@@ -275,79 +286,108 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                    " un à la fois.")
             if i["kind"] == "film":
                 films_n, left = films_n + 1, left - 1
-            add(card(i, cursor, waits, why))
+            gpu = add(card(i, gpu, waits, why))
             ahead = True
-        if idle_at is not None:  # what waits on a timer holds no agent run back
-            cursor, chain = idle_at, items[:n]
-        else:
-            chain = items
+        # what waits on a timer holds no agent run back
+        chain = items if idle_at is None else items[:n]
+        agent = max(agent, gpu if idle_at is None else idle_at)
         busy = ("gpu_busy" if any(i["kind"] == "render" for i in chain) else
                 "agent_running" if chain else None)
         items.extend(card(i, None, "held", "En pause : il attend que tu le reprennes, sans"
                           " bloquer la file.") for i in held)
 
     def playbook() -> None:
+        nonlocal agent
         for name in schedule.due_runs(store, settings, now):
-            add(_item("next", "agent_run", f"Run {name}", cursor, _run_s(store, name),
-                      "Run prévu pas encore lancé : il passe dès que rien ne tourne.",
-                      waits_on=busy, source="agent"))
+            agent = add(_item("next", "agent_run", f"Run {name}", agent, _run_s(store, name),
+                              "Run prévu pas encore lancé : il passe dès que rien ne tourne.",
+                              waits_on=busy, source="agent"))
+
+    def requests(at: datetime, waits: Optional[str], why_here: str) -> datetime:
+        """The owner's orders and change requests the light run writes, rendered one after
+        the other from `at`; returns when the last is ready."""
+        for o in work_orders.for_agent(store, "scheduled"):
+            engine = _style_engine(o["style"])
+            at = add(_item("next", "change_request" if o["source"] == "change" else "work_order",
+                           _title(o["instruction"], f"Commande {o['id']}"), at,
+                           render_s[engine], why_here, waits_on=waits, source=o["source"],
+                           style=o["style"], engine=engine, voice=voice, order_id=o["id"],
+                           pick_id=o["pick_id"], asset_id=o["from_asset_id"]))
+        for r in list_revision_requests(store):
+            a = r["asset"]
+            engine = _engine(store.get_asset(a["id"])["recipe"])
+            at = add(_item("next", "change_request", _title(a.get("hook"), f"Vidéo {a['id']}"),
+                           at, render_s[engine], why_here, waits_on=waits, source="change",
+                           engine=engine, asset_id=a["id"]))
+        return at
+
+    later: List[Callable[[], datetime]] = []  # a waiting order run: after the check run
 
     def orders() -> None:
-        nonlocal cursor
+        nonlocal agent
         seen = store.get_state(schedule.CAPABILITIES_KEY) or {}
         gained = parse_iso(seen["gained_at"]) if seen.get("gained_at") else None
         why, newest = schedule.order_wait(store, settings, now, gained)
         if why == "nothing":
             return
-        waits = why or busy
-        if why == "seen":  # this run had them: they wait for the next run that reads them
+        if why == "seen":  # this run had them: the next run that reads them writes them
             nxt = [r["next_at"] for r in schedule.next_runs(settings, now)
                    if r["playbook"] in schedule.ORDER_READERS]
-            cursor, waits = max(cursor, min(nxt)) if nxt else cursor, "next_ai_run"
-        else:
-            if why == "order_grace":
-                cursor = max(cursor, newest + timedelta(
-                    minutes=settings.order_run_debounce_minutes))
-            elif why == "daily_cap":
-                cursor = max(cursor, _midnight(settings, now))
-            add(_item("next", "order_run", f"Run {schedule.ORDER_PLAYBOOK}", cursor,
-                      _run_s(store, schedule.ORDER_PLAYBOOK),
-                      "Tes commandes et demandes de changement lancent le run léger.",
-                      waits_on=waits, source="agent"))
-        why_here = ("Le dernier run l'a vue et l'a laissée : elle attend le prochain run prévu."
-                    if why == "seen" else
-                    "L'IA l'écrit dans ce run, puis son rendu suit celui d'avant.")
-        for o in work_orders.for_agent(store, "scheduled"):
-            engine = _style_engine(o["style"])
-            add(_item("next", "change_request" if o["source"] == "change" else "work_order",
-                      _title(o["instruction"], f"Commande {o['id']}"), cursor,
-                      render_s[engine], why_here, waits_on=waits, source=o["source"],
-                      style=o["style"], engine=engine, voice=voice, order_id=o["id"],
-                      pick_id=o["pick_id"], asset_id=o["from_asset_id"]))
-        for r in list_revision_requests(store):
-            a = r["asset"]
-            engine = _engine(store.get_asset(a["id"])["recipe"])
-            add(_item("next", "change_request", _title(a.get("hook"), f"Vidéo {a['id']}"),
-                      cursor, render_s[engine], why_here, waits_on=waits, source="change",
-                      engine=engine, asset_id=a["id"]))
-
-    def check() -> None:  # 188c: the finished renders' check, after everything before it
-        why, newest = schedule.check_wait(store, settings, now)
-        if why in ("nothing", "seen"):  # seen: the last check had them (the Inbox grace)
+            requests(max(agent, min(nxt)) if nxt else agent, "next_ai_run",
+                     "Le dernier run l'a vue et l'a laissée : elle attend le prochain run prévu.")
             return
-        start = cursor
+        at = (newest + timedelta(minutes=settings.order_run_debounce_minutes)
+              if why == "order_grace" else _midnight(settings, now) if why == "daily_cap"
+              else None)
+
+        def run() -> datetime:
+            ready = add(_item("next", "order_run", f"Run {schedule.ORDER_PLAYBOOK}",
+                              max(agent, at) if at else agent,
+                              _run_s(store, schedule.ORDER_PLAYBOOK),
+                              "Tes commandes et demandes de changement lancent le run léger.",
+                              waits_on=why or busy, source="agent"))
+            return requests(ready, why or busy,
+                            "L'IA l'écrit dans ce run, puis son rendu suit celui d'avant.")
+
+        if at is None:  # it starts now: the check run waits for it and its renders (busy)
+            agent = run()
+        else:
+            later.append(run)
+
+    def check() -> None:  # 188c: the finished renders' check, once the line is idle
+        nonlocal agent
+        why, newest = schedule.check_wait(store, settings, now)
+        if why == "nothing":
+            return
+        midnight, at = _midnight(settings, now), None
         if why == "check_grace":
-            start = max(start, newest + timedelta(minutes=settings.check_run_debounce_minutes))
+            at = newest + timedelta(minutes=settings.check_run_debounce_minutes)
         elif why == "daily_cap":
-            start = max(start, _midnight(settings, now))
-        add(_item("next", "check_run", f"Run {checks.PLAYBOOK}", start,
-                  _run_s(store, checks.PLAYBOOK, RUN_S / 3),
-                  "Les rendus finis sont vérifiés (images, contrôle) puis envoyés dans ta"
-                  " boîte, ou refaits.", waits_on=why or busy, source="agent"))
+            at = midnight
+        elif why == "seen":  # 193: what the last check left is offered again later
+            last = store.get_state("check_run_started_at")
+            if not last:
+                return
+            at = parse_iso(last) + timedelta(hours=settings.check_recheck_hours)
+            if at < midnight and schedule._runs_today(
+                    store, settings, now, "check")[1] >= settings.max_check_runs_per_day:
+                at = midnight
+            why = "recheck"
+        ready = add(_item("next", "check_run", f"Run {checks.PLAYBOOK}",
+                          max(agent, at) if at else agent,
+                          _run_s(store, checks.PLAYBOOK, RUN_S / 3),
+                          "Les rendus finis sont vérifiés (images, contrôle) puis envoyés dans"
+                          " ta boîte, ou refaits.", waits_on=why or busy, source="agent"))
+        if at is None:
+            agent = ready
 
     steps = {"film": heavy, "playbook": playbook, "orders": orders, "checks": check}
     for step in schedule.CATCH_UP_ORDER:
         steps[step]()
+    # ponytail: a waiting order run and a waiting check run may overlap on the strip (the
+    # catch-up runs them one after the other); neither moves the planned runs.
+    for run in later:
+        run()
 
     for o in work_orders.list_orders(store, "needs_instruction", newest=False):
         items.append(_item("next", "work_order", _title(o["caption_quote"], f"Commande {o['id']}"),
@@ -359,7 +399,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     for r in sorted(schedule.next_runs(settings, now), key=lambda r: r["next_at"]):
         if r["next_at"] - now > HORIZON:
             continue
-        start = max(filter(None, (r["next_at"], planned_at, cursor)))  # after the chain
+        start = max(filter(None, (r["next_at"], planned_at, agent)))  # after the AI's runs
         item = _item("planned", "agent_run", f"Run {r['playbook']}", start,
                      _run_s(store, r["playbook"]), f"Prévu chaque jour à {r['time']}."
                      if not r["weekly"] else f"Prévu chaque semaine ({r['time']}).",

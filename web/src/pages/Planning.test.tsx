@@ -396,4 +396,41 @@ describe('Planning', () => {
       await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/idea/9/release', body: { now: true } }))
     })
   })
+
+  it('a card leaving above keeps the typed timer, the open delay warning and the open sheet below (194)', async () => {
+    HTMLDialogElement.prototype.showModal = function () { this.open = true } // jsdom has none
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const other = idea({ asset_id: 8, hook: 'Autre idée' })
+    const first = [item({ title: 'Le premier', ids: { asset_id: 17, job_id: 5 } }),
+      item({ kind: 'film', title: 'Un film', ids: { order_id: 4 } }),
+      { ...other, title: 'Autre idée', ids: { asset_id: 8 } }, idea()]
+    let items = first
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/voices') return new Response('[]')
+      if (url === '/api/planning/preview') return new Response(JSON.stringify({ pushed: [{ kind: 'render', title: 'A', by_s: 900 }] }))
+      return new Response(JSON.stringify(init?.method ? {} : { now: soon(0), items }))
+    }))
+    try {
+      show()
+      const film = (await screen.findByText('Un film')).closest('article') as HTMLElement
+      fireEvent.change(within(film).getByLabelText('Minuteur'), { target: { value: '2026-11-30T14:30' } })
+      fireEvent.click(within(film).getByRole('button', { name: 'Lancer maintenant' }))
+      expect(await within(film).findByRole('alertdialog')).toBeTruthy()
+      const mine = screen.getByText('Le mythe du jus détox').closest('article') as HTMLElement
+      fireEvent.click(within(mine).getByRole('button', { name: 'Modifier' }))
+      fireEvent.change(within(await screen.findByRole('dialog', { name: "Modifier l'idée" })).getByLabelText('Légende'),
+        { target: { value: 'Ma légende' } })
+      items = [first[1], first[3]] // the first render and the first idea are done
+      await vi.advanceTimersByTimeAsync(10_000) // the poll
+      await waitFor(() => expect(screen.queryByText('Le premier')).toBeNull())
+      expect(screen.queryByText('Autre idée')).toBeNull()
+      const after = screen.getByText('Un film').closest('article') as HTMLElement
+      expect((within(after).getByLabelText('Minuteur') as HTMLInputElement).value).toBe('2026-11-30T14:30')
+      expect(within(after).getByRole('alertdialog')).toBeTruthy()
+      const sheet = screen.getByRole('dialog', { name: "Modifier l'idée" })
+      expect((within(sheet).getByLabelText('Légende') as HTMLTextAreaElement).value).toBe('Ma légende')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

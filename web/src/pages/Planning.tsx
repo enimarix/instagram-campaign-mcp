@@ -26,7 +26,7 @@ const KIND: Record<PlanningItem['kind'], string> = {
 }
 const WAIT: Record<PlanningWait, string> = {
   gpu_busy: 'attend le GPU', agent_running: 'attend la fin du run', timer: 'attend son minuteur', held: 'En pause', order_grace: 'délai après ton envoi',
-  check_grace: 'délai après le dernier rendu',
+  check_grace: 'délai après le dernier rendu', recheck: 'nouvelle vérification prévue',
   daily_cap: 'quota du jour atteint', preflight: "l'IA ne peut pas démarrer", next_ai_run: 'attend le prochain run',
   needs_instruction: 'attend ta consigne',
 }
@@ -374,12 +374,20 @@ function IdeaSheet({ idea, onClose, onDone }: { idea: ClaudeIdea; onClose: () =>
   )
 }
 
+const KEY_IDS = ['job_id', 'order_id', 'asset_id', 'run_id'] as const
+/** A card's React key: its kind and its own id (no index: a card leaving above must not
+ * remount the ones below, 194), the title for a run that has none. */
+const itemKey = (i: PlanningItem) => {
+  const id = KEY_IDS.find((k) => i.ids[k] !== undefined)
+  return id ? `${i.kind}-${id}-${i.ids[id]}` : `${i.kind}-${i.title}`
+}
+
 /** The cards of one section, joined by a line (the chain). */
 function Chain({ items, ...actions }: { items: PlanningItem[] } & Actions) {
   return (
     <ol>
       {items.map((item, n) => (
-        <li key={`${item.kind}-${item.ids.asset_id ?? item.ids.order_id ?? item.ids.run_id ?? item.title}-${n}`}>
+        <li key={itemKey(item)}>
           {n > 0 && <div aria-hidden className="ml-6 h-4 w-px bg-line" />}
           {item.kind === 'claude_idea' ? <IdeaCard item={item} {...actions} /> : <ItemCard item={item} {...actions} />}
         </li>
