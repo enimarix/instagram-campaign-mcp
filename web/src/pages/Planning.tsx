@@ -103,7 +103,7 @@ function summary(r: LaunchResult) {
   const parts = [
     r.front.length > 0 && `${n(r.front.length, 'passe', 'passent')} en tête de la file`,
     r.requested.length > 0 && `${n(r.requested.length, 'lancement demandé', 'lancements demandés')} : ${
-      r.busy ? 'démarre dès que la machine est libre' : 'démarre dans la minute'}`,
+      r.requested.length > 1 ? 'démarrent' : 'démarre'} ${r.busy ? 'dès que la machine est libre' : 'dans la minute'}`,
     r.refused.length > 0 && `${n(r.refused.length, 'refusé', 'refusés')} (${r.refused[0].message})`,
   ].filter(Boolean)
   const after = r.paused ? 'Studio en pause : rien ne démarre avant la reprise.' : 'La machine fait un seul travail lourd à la fois.'
