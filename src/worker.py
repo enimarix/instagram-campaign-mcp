@@ -282,7 +282,8 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
     """Render queued jobs in line order (studio/line.py: none starts while a film that
     arrived earlier waits for the catch-up), up to settings.render_concurrency at once,
     each in a thread so the loop stays responsive; heartbeat running jobs; keep the PC
-    awake while any runs; claim nothing while the media disk is under the floor; run
+    awake while any runs; claim nothing while the studio is paused (line.pause) or the
+    media disk is under the floor; run
     daily_housekeeping between batches. Runs until cancelled (a job cut off then is
     re-queued once its heartbeat is stale)."""
     run = run or functools.partial(render.run_job, store, settings.media_root)
@@ -293,6 +294,8 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
         nonlocal disk_warned
         try:
             store.touch_render_jobs(list(running))
+            if line.paused(store):  # the owner needs the GPU: what runs finishes
+                return
             if not housekeeping.disk_ok(settings):
                 if time.monotonic() - disk_warned >= DISK_WARN_EVERY:
                     disk_warned = time.monotonic()

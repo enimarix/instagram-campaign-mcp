@@ -8,6 +8,24 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: The owner can remove, hold and reorder the line, and pause the studio (187)
+On the Planning page each waiting render or film can be moved up or down (swapped with its
+neighbour; the whole line's order is then written as `line_pos` 1..n, so new arrivals still go
+behind and « Lancer maintenant » still goes ahead), held (« Mettre en pause »: a timer with no
+end, it blocks nothing behind it) and removed; an owner order or change request still waiting
+for the light run can be removed too. Remove follows the Inbox rule: the card leaves at once
+and nothing is sent before the 5 s undo ends, so an undo leaves the item exactly where it was.
+A removed render job ends `failed` (« retiré du planning »), the claim never takes it, and its
+asset moves `rendering` → `archived` (a new lifecycle move, owner only) unless another job of
+it is queued or running; a removed order is skipped with that reason. Running or finished
+items are refused. One « Tout mettre en pause » switch (worker_state `studio_paused`, survives
+a restart) stops everything heavy from starting: the render loop claims nothing, the catch-up
+and `agent run-due` start no film and no run (missed runs stay due for the same day); what is
+running finishes, never killed. An alert shows on every page while it is on. It is separate
+from the publishing pause: posts still publish.
+Reason: owner request 2026-11-23 (« switch order, remove them completely »), and the laptop's
+GPU is shared with the owner's own work.
+
 ## 2026-11-23: Heavy work goes in one line, first in first out; start now and timers (186)
 Renders and Lemo films wait in one line (`src/studio/line.py`), by arrival: a render job's
 `created_at`, a film order's `scheduled_at` (old rows sort exactly as before). `next_in_line`

@@ -5,7 +5,7 @@ Computed on every call from state that already exists (no event pipeline): faile
 publishes, publishes waiting for a check, re-planned late slots, the token, the latest run
 of each agent playbook, a QC failure spike in the last batch, a stale worker heartbeat, the
 Graph breaker (Meta blocked API access, step 167), the Reel downloader's health and skipped
-DM picks, a failed website build (175). Experiment alerts come with 086's facts
+DM picks, a failed website build (175), the studio paused by the owner (187). Experiment alerts come with 086's facts
 warning. Jobs whose alert is an event, not a state (the ads sync, 095), keep it with
 `raise_alert`.
 
@@ -25,7 +25,7 @@ from ..config import InstagramMCPSettings
 from ..instagram_client import INVALID_TOKEN_CODE, InstagramClient
 from ..store import CampaignStore, parse_dt, to_iso
 from ..worker import ALIVE_WITHIN, graph_breaker
-from . import downloader_service, token, website
+from . import downloader_service, line, token, website
 
 STATE_KEY = "alerts_dismissed"
 RAISED_KEY = "alerts_raised"
@@ -201,6 +201,15 @@ def _website(store: CampaignStore) -> List[Dict[str, Any]]:
                    "/settings", build.get("at"))]
 
 
+def _paused(store: CampaignStore) -> List[Dict[str, Any]]:
+    since = line.paused(store)
+    if since is None:
+        return []
+    return [_alert("studio_paused", None, "warn", "Studio en pause : rien ne démarre",
+                   "Aucun rendu, film ou run de l'IA ne démarre tant que la pause est mise ;"
+                   " ce qui tournait a fini. Reprends depuis le Planning.", "/planning", since)]
+
+
 def _dm_skipped(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
     with store._tx() as c:
         rows = c.execute("SELECT sender_username, skip_reason, updated_at FROM dm_picks"
@@ -222,7 +231,7 @@ async def alerts(store: CampaignStore, settings: InstagramMCPSettings, now: date
     found = [*_publishes(store, now), *_replanned(store, now), *_token(t),
              *_agent_runs(store), *_qc_spike(store), *_worker(store, now),
              *_graph_blocked(store, settings), *_downloader(store), *_dm_skipped(store, now),
-             *_website(store), *_raised(store, now)]
+             *_website(store), *_paused(store), *_raised(store, now)]
     dismissed = store.get_state(STATE_KEY) or {}
     shown = [a for a in found if a["id"] not in dismissed
              or (a["since"] is not None and parse_dt(a["since"]) > parse_dt(dismissed[a["id"]]))]
