@@ -449,6 +449,8 @@ def launched(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     « seen » or daily cap; the run's own preflight fails it when the CLI cannot start), a
     light run on a selection with its scope set for the packet. Returns the playbook when
     started; one already running waits (it is put back), an unknown playbook is dropped."""
+    if not launch_requests(store):  # the usual tick: no write lock taken
+        return None
     req = _edit_launches(store, lambda reqs: reqs.pop(0) if reqs else None)
     if req is None:
         return None
@@ -486,8 +488,8 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              now: Optional[Callable[[], datetime]] = None,
              start_film: Optional[Callable[..., Any]] = None) -> List[str]:
     """Start the run the owner launched (launched, 196), else the Lemo film at the head of
-    the line (film_run, runs.start_film), else the first due playbook detached (runs.start_run), else the work orders' run if they need
-    one (order_run), else the check run for finished renders (check_run, 188c); nothing
+    the line (film_run, runs.start_film), else the first due playbook detached
+    (runs.start_run), else the work orders' run if they need one (order_run), else the check run for finished renders (check_run, 188c); nothing
     while busy(): one run, then the next waits for it and its
     renders (a film only for a running render, 186); nothing while the studio is paused
     (line.pause, 187). Never raises: the worker lives.

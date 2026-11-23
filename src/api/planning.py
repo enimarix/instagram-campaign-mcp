@@ -1,8 +1,8 @@
 """Planning routes: what renders next and when, « start now », the timer, hold, move, place
 (drag and drop, 195) and remove of a waiting render or film (remove: an owner order too),
 the studio's pause switch, the delay preview (190), Claude's planned videos: release,
-edit, remove, and « Lancer » one card or many (196) (thin doors onto src/studio/planning.py, src/studio/line.py and
-src/studio/planned.py)."""
+edit, remove, and « Lancer » one card or many (196) (thin doors onto
+src/studio/planning.py, src/studio/line.py and src/studio/planned.py)."""
 
 from __future__ import annotations
 

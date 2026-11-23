@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from datetime import datetime, time, timedelta
+from functools import cache
 from statistics import median
 from typing import Any, Callable, Dict, List, Optional
 
@@ -644,9 +645,10 @@ ORDERS = ("work_order", "change_request")  # the light run, on the selection
 LAUNCHES = (*HEAVY, *ORDERS, "agent_run")
 
 
-def _order_ids(store: CampaignStore, kind: str, item_id: int) -> Dict[str, List[int]]:
-    """The waiting order (work_order: its id) or change request (its video's id) for the
-    light run, or the refusal: KeyError, ValueError."""
+def _order_ids(store: CampaignStore, kind: str, item_id: int, sent_back: Callable[[], set]
+                ) -> Dict[str, List[int]]:
+    """The waiting order (work_order: its id) or change request (its video's id, among
+    sent_back()) for the light run, or the refusal: KeyError, ValueError."""
     if kind == "work_order":
         o = work_orders.get_order(store, item_id)
         if o["status"] == "needs_instruction":
@@ -655,7 +657,7 @@ def _order_ids(store: CampaignStore, kind: str, item_id: int) -> Dict[str, List[
             raise ValueError(f"Cette commande n'attend pas le run léger (statut {o['status']}) :"
                              " seule une commande en attente peut être lancée.")
         return {"order_ids": [item_id], "asset_ids": []}
-    if item_id not in {r["asset"]["id"] for r in list_revision_requests(store)}:
+    if item_id not in sent_back():
         status = store.get_asset(item_id)["status"]
         raise ValueError(f"La vidéo {item_id} n'attend pas de changement (statut {status}, ou sa"
                          " nouvelle version est déjà en rendu).")
@@ -685,8 +687,11 @@ def launch(store: CampaignStore, settings: InstagramMCPSettings, items: List[Dic
     id, message}] (on-screen order), busy (schedule.busy: why the requests wait, else None),
     paused (line.paused)}."""
     from ..agent.runner import AgentError
+    from .motion import MotionError
 
     front, requested, refused = [], [], []
+    sent_back = cache(lambda: {r["asset"]["id"] for r in list_revision_requests(store)})
+
     orders: Dict[str, List[int]] = {"order_ids": [], "asset_ids": []}
     playbooks: List[str] = []
     for i in reversed(items):  # each start_now goes ahead of all: the first ends at the head
@@ -703,12 +708,12 @@ def launch(store: CampaignStore, settings: InstagramMCPSettings, items: List[Dic
             elif kind in HEAVY:
                 line.start_now(store, kind, item_id)
             else:
-                for k, ids in _order_ids(store, kind, item_id).items():
+                for k, ids in _order_ids(store, kind, item_id, sent_back).items():
                     orders[k] += ids
         except KeyError:
             refused.append({"kind": kind, "id": item_id, "message": "Introuvable."})
             continue
-        except (ValueError, AgentError) as e:
+        except (ValueError, AgentError, MotionError) as e:
             refused.append({"kind": kind, "id": item_id, "message": str(e)})
             continue
         (front if kind in HEAVY else requested).append({"kind": kind, "id": item_id})
