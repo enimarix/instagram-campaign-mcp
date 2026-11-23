@@ -860,7 +860,8 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
                        captions: Optional[List[Dict[str, Any]]] = None,
                        caption: Optional[str] = None,
                        voice: Optional[str] = None, plan: bool = False,
-                       description: Optional[str] = None) -> Dict[str, Any]:
+                       description: Optional[str] = None,
+                       music: str = remix.DEFAULT_MUSIC) -> Dict[str, Any]:
     """Queue a reaction remix of a clip for a remix idea of that source and return at once.
     `voice`: a voice id from voices.json for the voice-over (default: the default voice).
     Commentary rules (refused otherwise): `script` is the voice-over, YOUR commentary on
@@ -872,12 +873,14 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
     [{start_s, end_s, text}] in seconds of the trimmed part instead). Never ask for mirror,
     flip, speed or pitch changes: they do not exist. `warnings` (e.g. the clip's speech is
     muted with no captions) may be a reason to pick another clip.
+    `music`: the bed under a muted clip, one of ours (`music-...`) or `none`; pass the
+    render_args' value again on a re-render to keep it.
     plan=True: as render_motion's plan (no piece, no job: the owner releases it on the
     Planning page, the rights checked again then; 188c brings it to the night run)."""
     out = await _studio(remix.render_remix, store(), get_settings(), idea_id, source_id,
                         hook=hook, script=script, trim=(trim_start_s, trim_end_s),
                         layout=layout, captions=captions, caption=caption, voice=voice,
-                        plan=plan, description=description)
+                        plan=plan, description=description, music=music)
     piece = out["piece"]
     return {**_queued(out), "warnings": out["warnings"],
             "reaction_piece": piece and {k: piece[k] for k in ("piece_id", "start_s", "end_s")}}

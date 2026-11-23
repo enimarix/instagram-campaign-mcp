@@ -321,14 +321,22 @@ def check_wait(store: CampaignStore, settings: InstagramMCPSettings, now: dateti
     """Why the check run (188c) would not start now, read-only (check_run and the Planning
     page share it): (None, newest) when it would, else (why, newest): `nothing` (no render
     waits for its check, checks.waiting), `check_grace` (the newest finished less than
-    CHECK_RUN_DEBOUNCE_MINUTES ago), `seen`, `daily_cap` (MAX_CHECK_RUNS_PER_DAY),
-    `preflight`: _gate. newest: when the newest waiting render finished."""
+    CHECK_RUN_DEBOUNCE_MINUTES ago), `seen` (a check run started since: until
+    CHECK_RECHECK_HOURS after that start, then what it left is offered again, 193: never
+    parked), `daily_cap` (MAX_CHECK_RUNS_PER_DAY), `preflight`: _gate. newest: when the
+    newest waiting render finished."""
     newest = checks.newest(store, now)
     if newest is None:
         return "nothing", None
     if now - newest < timedelta(minutes=settings.check_run_debounce_minutes):
         return "check_grace", newest
-    return _gate(store, settings, now, newest, (checks.PLAYBOOK,), "check",
+    since = newest
+    last = store.get_state("check_run_started_at")  # _launch's
+    if last:
+        again = parse_iso(last) + timedelta(hours=settings.check_recheck_hours)
+        if newest < again <= now:  # that run saw them all and left some: they count as new
+            since = again
+    return _gate(store, settings, now, since, (checks.PLAYBOOK,), "check",
                  settings.max_check_runs_per_day), newest
 
 

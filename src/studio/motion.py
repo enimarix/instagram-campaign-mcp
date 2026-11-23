@@ -459,7 +459,8 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     ready: a child asset). Never waits for the voice: a template with a script and no voice yet
     is stored with `voice_todo` (the voice checked on now) and the render job makes it.
     `music_audio_id`: an Instagram track (fetched with music.fetch) the video is cut to and
-    published with, in place of the template's bed (step 178).
+    published with, in place of the template's bed (step 178). `description` (checked as
+    edit_asset does) is stored on the new asset or the re-render's (193).
     `plan` (188b): a new asset `planned` with its recipe, caption and description, and no
     job (job None): nothing renders or is voiced until the owner releases it
     (src/studio/planned.py); refused past the places left for Claude's ideas in its batch
@@ -468,13 +469,18 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
     if plan and asset_id is not None:
         raise ValueError("plan a new video (idea_id), not a re-render")
-    fields = checked_fields("planned", **{k: x for k, x in (
-        ("caption", caption), ("description", description)) if x is not None}) if plan else {}
+    # 193: the description is stored for every video; a queued one's caption is written
+    # again at submit_asset
+    fields = checked_fields("planned" if plan else "rendering", **{k: x for k, x in (
+        ("caption", caption if plan else None), ("description", description)) if x is not None})
     idea = store.get_idea(idea_id if idea_id is not None
                           else store.get_asset(asset_id)["idea_id"])
     env = motion_recipe(store, settings, idea, template, props, voice, music_audio_id, plan)
     if asset_id is not None:
-        return render.rerender(store, settings.media_root, asset_id, env, actor=actor)
+        out = render.rerender(store, settings.media_root, asset_id, env, actor=actor)
+        if fields:  # a re-render's description: what the new version changed
+            out["asset"] = store.update_asset(out["asset"]["id"], **fields)
+        return out
     if plan:
         from .planned import take_place  # here: planned imports this module
 
@@ -483,7 +489,7 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
                                 status="planned", **fields)
         return {"asset": asset, "job": None}
     asset = store.add_asset(idea_id, recipe=env, caption=clean_caption(caption),
-                            batch_date=idea["batch_date"])
+                            batch_date=idea["batch_date"], **fields)
     return {"asset": asset, "job": render.enqueue_render(store, asset["id"])}
 
 

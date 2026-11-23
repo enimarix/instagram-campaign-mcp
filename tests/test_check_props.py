@@ -104,19 +104,72 @@ def test_a_voiced_remix_comes_back_as_render_remix_takes_it(store, cfg, tts, ree
     transition(store, asset["id"], "ready", actor="worker")
     row = _row(store, asset["id"])
     args = row["render_args"]
-    ops = {op["op"]: op for op in asset["recipe"]["recipe"]["ops"]}
     assert args == {"tool": "render_remix", "source_id": source["id"], "hook": "Wait for it",
                     "script": SCRIPT, "voice": voices.default_voice(store),
                     "trim_start_s": 10, "trim_end_s": 30, "layout": "pip",
-                    "captions": ops["captions"]["lines"], "music": "music-overworld"}
+                    "captions": None,  # 193: the transcript's: derived again from the trim
+                    "music": "music-overworld"}
     again = remix.render_remix(store, cfg, row["idea_id"], args["source_id"],
                                hook=args["hook"], script=args["script"],
                                trim=(args["trim_start_s"], args["trim_end_s"]),
                                layout=args["layout"], captions=args["captions"],
-                               voice=args["voice"])
+                               voice=args["voice"], music=args["music"])
     env = again["asset"]["recipe"]
     assert again["job"]["state"] == "queued"
     assert env["recipe"] == asset["recipe"]["recipe"] and env["voice_todo"]["script"] == SCRIPT
+
+
+def _remix_args(store, out):
+    transition(store, out["asset"]["id"], "ready", actor="worker")
+    return _row(store, out["asset"]["id"])["render_args"]
+
+
+def _captions(asset):
+    return next(op for op in asset["recipe"]["recipe"]["ops"] if op["op"] == "captions")["lines"]
+
+
+def test_a_changed_trim_derives_the_transcript_captions_again(store, cfg, tts, reel):  # noqa: F811
+    # 193: transcript captions are not sent back, so the check's new trim re-times them
+    source = _source(store)
+    args = _remix_args(store, go(store, cfg, source, trim=(10, 30)))
+    assert args["captions"] is None
+    again = remix.render_remix(store, cfg, store.add_idea(
+        "remix", source_id=source["id"])["id"], source["id"], hook=args["hook"],
+        script=args["script"], trim=(11, 30), captions=args["captions"])["asset"]
+    assert _captions(again) == [{"start_s": 1.0, "end_s": 3.0, "text": "inside"}]
+    # written ones come back as they are
+    own = [{"start_s": 0.5, "end_s": 2.0, "text": "Regarde bien"}]
+    args = _remix_args(store, go(store, cfg, source, trim=(10, 30), captions=own))
+    assert args["captions"] == own
+
+
+def test_a_remix_keeps_its_music_and_its_description(store, cfg, tts, reel):  # noqa: F811
+    # 193: render_remix takes the card edit's music values; the description is stored
+    # without plan too, checked the same way
+    source = _source(store)
+    out = go(store, cfg, source, trim=(10, 30), music="none",
+             description="  Refait : la musique enlevée.  ")
+    assert out["asset"]["description"] == "Refait : la musique enlevée."
+    assert "music" not in out["asset"]["recipe"]["inputs"]
+    args = _remix_args(store, out)
+    assert args["music"] == "none"
+    with pytest.raises(ValueError, match="description must be"):
+        go(store, cfg, source, trim=(10, 30), description=" ")
+
+
+def test_a_motion_render_stores_its_description(store, s, fake):
+    idea = store.add_idea("motion")
+    first = motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+                                       idea_id=idea["id"], description="Le mythe du détox.")
+    assert first["asset"]["description"] == "Le mythe du détox."
+    transition(store, first["asset"]["id"], "failed", actor="worker")
+    again = motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+                                       asset_id=first["asset"]["id"],
+                                       description="Refait : le titre coupé.")
+    assert again["asset"]["description"] == "Refait : le titre coupé."
+    with pytest.raises(ValueError, match="description must be"):
+        motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+                                   idea_id=idea["id"], description="x" * 5000)
 
 
 def test_very_large_props_are_left_out_with_a_note(monkeypatch):

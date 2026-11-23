@@ -20,7 +20,8 @@ Before this run the studio wrote your work into `work/` in this workspace.
    it replaces) and `render_args`: the video's recipe as its tool takes it again (`tool`
    `render_motion`: `template`, `template_props`, `voice`, `music_audio_id`, `music`;
    `render_remix`: `source_id`, `hook`, `script`, `trim_start_s`, `trim_end_s`, `layout`,
-   `captions`, `voice`). `failure` is the render job's own error: the render crashed
+   `captions` (null: they come from the clip's transcript for the trim), `voice`, `music`).
+   `failure` is the render job's own error: the render crashed
    before QC (often before any file); null with a `qc` reason is a QC fail.
 2. The packet is a read-only snapshot; the MCP tools are the truth. Act only through
    them: they re-check everything, and a tool that disagrees with the packet wins.
@@ -41,6 +42,13 @@ Before this run the studio wrote your work into `work/` in this workspace.
 - You never wait for a re-render: it joins the studio's line and the next check run looks
   at it.
 - A tool refusal is information: change what it names; never send the same call twice.
+
+## Every video gets a decision
+
+Each video in `renders` ends this run with exactly one decision: a fix (a re-render),
+`drop_render`, or `submit_asset`. Never leave one waiting without a decision: the studio
+offers a video left undecided to a later check run again, so leaving it only delays the
+owner. Unsure? Submit it with a note saying what you doubt; the owner decides.
 
 ## Step 1: look at each video
 
@@ -69,9 +77,10 @@ exactly as it is. Never rewrite the video from memory.
   a new version and leaves the feed by itself. The voice is made again for the lines as
   they are now.
 - remix: `render_remix(idea_id=<idea_id>, source_id=…, hook=…, script=…, trim_start_s=…,
-  trim_end_s=…, layout=…, captions=…, voice=…)` with the fix (`list_sources` for its
-  credit), then `drop_render(<the old asset_id>, "replaced by a new version")`. A null
-  `script` was not kept (an older video): write it again from the frames.
+  trim_end_s=…, layout=…, captions=…, voice=…, music=…)` with the fix (`list_sources` for
+  its credit; leave out `captions` when null: a new trim takes the transcript's again),
+  then `drop_render(<the old asset_id>, "replaced by a new version")`. A null `script` was
+  not kept (an older video): write it again from the frames.
 - a `failure` with no QC reason (the render crashed: a validation error, a worker
   error): re-render it unchanged, once. If that one fails the same way, drop it with the
   error.

@@ -167,11 +167,15 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
     """Build the remix, claim the next reaction piece for the new asset and queue its render
     (the job voices the script first: voice_over): {asset, job, piece, warnings}. Everything
     else is checked before the asset is created; a piece that cannot be cut leaves the asset
-    `failed` with the reason. `plan` (188b): a `planned` asset with the recipe, caption and
-    description, no piece and no job (None): src/studio/planned.py releases it; refused past
-    the places left for Claude's ideas (planned.take_place, 188c)."""
-    fields = checked_fields("planned", **{k: x for k, x in (
-        ("caption", caption), ("description", description)) if x is not None}) if plan else {}
+    `failed` with the reason. `description` is stored either way (193); `music`: a bed
+    `music-...` or `none` (the values a planned card's edit takes). `plan` (188b): a
+    `planned` asset with the recipe, caption and description, no piece and no job (None):
+    src/studio/planned.py releases it; refused past the places left for Claude's ideas
+    (planned.take_place, 188c)."""
+    # 193: the description is stored for every video; a queued one's caption is written
+    # again at submit_asset
+    fields = checked_fields("planned" if plan else "rendering", **{k: x for k, x in (
+        ("caption", caption if plan else None), ("description", description)) if x is not None})
     env, recipe, source = _remix_env(store, settings, idea_id, source_id, hook=hook,
                                      script=script, trim=trim, layout=layout,
                                      captions=captions, music=music, voice=voice)
@@ -185,7 +189,8 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
         asset = store.add_asset(idea_id, recipe=recipe_env,
                                 batch_date=batch, status="planned", **fields)
         return {"asset": asset, "job": None, "piece": None, "warnings": warnings}
-    asset = store.add_asset(idea_id, caption=clean_caption(caption), batch_date=batch)
+    asset = store.add_asset(idea_id, caption=clean_caption(caption), batch_date=batch,
+                            **fields)
     try:
         asset, piece = attach_piece(store, settings, asset["id"], env)
     except Exception as e:
@@ -202,7 +207,8 @@ def _remix_env(store: CampaignStore, settings: InstagramMCPSettings, idea_id: in
                captions: Optional[List[Dict[str, Any]]], music: Optional[str],
                voice: Optional[str]) -> Tuple[Dict[str, Any], Recipe, Dict[str, Any]]:
     """(recipe envelope without its reaction piece, the remix, the source): every check
-    render_remix makes, the rights first."""
+    render_remix makes, the rights first. `music`: a bed `music-...`, or None / `none`."""
+    music = None if music == "none" else music
     idea = store.get_idea(idea_id)
     if idea["track"] != "remix" or idea["source_id"] != source_id:
         raise ValueError(f"idea {idea_id} must be a remix idea of source {source_id}"
@@ -247,7 +253,8 @@ def attach_piece(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
 def remix_params(env: Dict[str, Any]) -> Dict[str, Any]:
     """render_remix's arguments as a remix's recipe `env` holds them (planned.py rebuilds a
     planned one through _remix_env on an edit and at its release; the check run, 191,
-    re-renders a voiced one from them: its script and voice in `voiced_with`)."""
+    re-renders a voiced one from them: its script and voice in `voiced_with`). music: the
+    bed, or `none`."""
     ops = {op["op"]: op for op in env["recipe"]["ops"]}
     todo = env.get("voice_todo") or env.get("voiced_with") or {}
     music = env["inputs"].get("music")
@@ -255,7 +262,22 @@ def remix_params(env: Dict[str, Any]) -> Dict[str, Any]:
             "voice": todo.get("voice"), "trim": (ops["trim"]["start_s"], ops["trim"]["end_s"]),
             "layout": ops["reaction_collage"]["layout"],
             "captions": (ops.get("captions") or {}).get("lines") or None,
-            "music": Path(music).stem if music else None}
+            "music": Path(music).stem if music else "none"}
+
+
+def written_captions(env: Dict[str, Any], source: Dict[str, Any]
+                     ) -> Optional[List[Dict[str, Any]]]:
+    """The remix's captions when someone wrote them, None when they are the source's
+    transcript for its trim (193: render_remix derives them again for a changed trim)."""
+    params = remix_params(env)
+    derived = transcript_captions(source, *params["trim"])
+    if not params["captions"] or not derived:
+        return params["captions"]
+    try:  # as the Captions op stores them (text cleaned)
+        derived = Captions(lines=derived).model_dump(mode="json")["lines"]
+    except ValueError:  # a transcript build_remix could not have used: so they were written
+        return params["captions"]
+    return None if params["captions"] == derived else params["captions"]
 
 
 def replan(store: CampaignStore, settings: InstagramMCPSettings, asset: Dict[str, Any],

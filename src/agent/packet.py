@@ -89,10 +89,11 @@ def _facts(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
 
 def _quotas(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
     """188c: with `places` (planned.ideas_left): how many of Claude's own ideas (viral finds,
-    own ideas) the batch still takes after the owner's items, opened for take_place."""
+    own ideas) the batch still takes after the owner's items and the ones already planned for
+    the day, opened for take_place."""
     day = local_today(settings.timezone, now)
     places = planned.ideas_left(store, settings)
-    planned.open_places(store, str(day), places["ideas_left"])
+    places["ideas_left"] = planned.open_places(store, str(day), places["ideas_left"])
     return {**todays_quotas(store, settings, day, now), "places": places}, 1
 
 

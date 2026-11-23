@@ -32,8 +32,10 @@ import { changeLabel, COMMENTARY_CONFIRMATION, localDate, wallClock } from './ui
 const UNDO_MS = 5000 // the Toast's own lifetime
 const VISIBLE = 0.6 // share of a card on screen before it counts as the current one
 type Tab = 'today' | 'bench'
-/** Not the owner's yet (188c): the AI's check has not submitted it, or it dropped it. */
-const heldBack = (a: Asset) => !!a.awaiting_check || a.agent_decision?.kind === 'dropped'
+/** Not the owner's (188c): the AI's check has not submitted it, dropped it, or a newer
+ * version replaced it (193). */
+const heldBack = (a: Asset) =>
+  !!a.awaiting_check || !!a.replaced || a.agent_decision?.kind === 'dropped'
 /** Still waiting for the owner's decision: these make the feed. Today: not judged yet; the
  * bench ("Saved"): saved for later (liked), waiting for a slot. */
 const open = (a: Asset, tab: Tab) =>

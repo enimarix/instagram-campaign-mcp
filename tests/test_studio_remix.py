@@ -287,6 +287,9 @@ async def test_mcp_tools_call_the_services(monkeypatch):
         "asset_id": 7, "job_id": 3, "state": "queued",
         "reaction_piece": {"piece_id": 2, "start_s": 0, "end_s": 20}, "warnings": ["w"]}
     assert calls["trim"] == (10, None) and calls["layout"] == "pip"
+    assert calls["music"] == remix.DEFAULT_MUSIC
+    await srv.render_remix(1, 2, "hook", SCRIPT, music="none")  # 193: the card's values
+    assert calls["music"] == "none"
 
     def refused(*a, **kw):
         raise ValueError("commentary needs a voice-over script")

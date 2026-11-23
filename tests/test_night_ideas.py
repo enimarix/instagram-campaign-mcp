@@ -39,7 +39,7 @@ def test_the_packet_gives_the_places_left_and_opens_them(store, tmp_path, monkey
     quotas = json.loads((tmp_path / "work" / "quotas.json").read_text(encoding="utf-8"))
     assert quotas["places"] == {"orders": 1, "change_requests": 0, "dm_picks": 0,
                                 "ideas_left": 3}
-    assert store.get_state(planned.PLACES_KEY) == {"day": quotas["date"], "left": 3}
+    assert store.get_state(planned.PLACES_KEY) == {quotas["date"]: {"places": 3, "taken": 0}}
     assert work["manifest"]["sections"]["quotas"]["count"] == 1
 
 
@@ -69,6 +69,22 @@ def test_a_plan_past_the_places_left_is_refused(store, s):
     out = motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
                                      idea_id=idea["id"])
     assert out["job"]["state"] == "queued"
+
+
+def test_places_count_per_batch_day_minus_the_cards_already_planned(store, s):
+    # 193: a retried packet (or a second run of the day) opens the places again: the cards
+    # already planned for that day still count, and another day's plan keeps its own count
+    assert planned.open_places(store, DAY, 2) == 2
+    _plan(store, s)
+    assert planned.open_places(store, DAY, 2) == 1  # the retry: one place left, not two
+    other = store.add_idea("motion", hook="Demain", batch_date="2026-11-24")
+    planned.open_places(store, "2026-11-24", 1)
+    motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+                               idea_id=other["id"], plan=True)
+    _plan(store, s)  # today's last place: the other day's plan did not take it
+    with pytest.raises(ValueError, match="no place left in the 2026-11-23 batch"):
+        _plan(store, s)
+    assert planned.open_places(store, DAY, 2) == 0
 
 
 def test_a_day_no_packet_opened_counts_its_places_at_once(store, s):
@@ -156,6 +172,30 @@ def test_drop_shows_the_reason_and_skips_the_order(store):
         checks.drop(store, a, "encore")
 
 
+def test_a_fix_s_new_version_keeps_the_dm_pick_going(store):
+    # 193: the remix fix flow: render_remix makes a new version, drop_render the old one;
+    # the pick (no order) stays in_production until no version of the idea lives
+    src = store.add_source("downloader", url="https://example.org/r", author="creator",
+                           rights_basis="commentary")
+    with store._tx() as c:
+        pick = c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url,"
+                         " received_at, status, source_id, created_at, updated_at) VALUES"
+                         " ('m1', 'pal', 'https://x', 't', 'in_production', ?, 't', 't')",
+                         (src["id"],)).lastrowid
+    idea = store.add_idea("remix", source_id=src["id"], batch_date=DAY)
+    old = store.add_asset(idea["id"], batch_date=DAY)["id"]
+    new = store.add_asset(idea["id"], batch_date=DAY)["id"]  # the fix, still rendering
+    with store._tx() as c:
+        c.execute("UPDATE assets SET status='ready' WHERE id=?", (old,))
+    checks.drop(store, old, "replaced by a new version")
+    assert store._get("dm_picks", pick)["status"] == "in_production"
+    with store._tx() as c:
+        c.execute("UPDATE assets SET status='failed' WHERE id=?", (new,))
+    checks.drop(store, new, "le rendu plante deux fois")  # no version of the idea lives now
+    got = store._get("dm_picks", pick)
+    assert (got["status"], got["skip_reason"]) == ("skipped", "le rendu plante deux fois")
+
+
 # --- the trigger --------------------------------------------------------------------------
 class Starts:
     def __init__(self):
@@ -181,6 +221,22 @@ def test_check_run_debounce_seen_and_cap(store):
     _done(store, -10, now=now)  # a render finished after that start
     assert schedule.check_wait(store, s, now + timedelta(minutes=20))[0] == "daily_cap"
     assert run(20) is None and f.runs == ["check-renders"]
+
+
+def test_a_video_a_check_run_left_is_offered_again(store):
+    # 193: never parked: CHECK_RECHECK_HOURS after the run that left it, within the cap
+    from datetime import datetime, timezone
+
+    s, f = cfg(check_recheck_hours=4, max_check_runs_per_day=2), Starts()
+    now = datetime(2026, 11, 23, 1, 0, tzinfo=timezone.utc)  # 02:00 in Paris: one local day
+    run = lambda h: schedule.check_run(store, s, now + timedelta(hours=h),  # noqa: E731
+                                       start=f.start, check=f.check)
+    _done(store, 30, now=now)
+    assert run(0) == "check-renders"
+    assert schedule.check_wait(store, s, now + timedelta(hours=3.9))[0] == "seen"
+    assert run(4) == "check-renders" and len(f.runs) == 2  # it left it: offered again
+    assert schedule.check_wait(store, s, now + timedelta(hours=5))[0] == "seen"
+    assert schedule.check_wait(store, s, now + timedelta(hours=8))[0] == "daily_cap"
 
 
 def test_check_run_preflight_retry(store):
@@ -234,20 +290,22 @@ def test_the_inbox_hides_a_video_until_its_check_with_a_fallback(store):
     fresh, late = _done(store, 10), _done(store, 4 * 60)
     with TestClient(create_app(cfg(check_inbox_grace_hours=3), store=store),
                     base_url=LOCAL) as tc:
-        def flags():
+        def flags(key="awaiting_check"):
             rows = tc.get("/api/assets", params={"batch_date": DAY}).json()
-            return {a["id"]: a["awaiting_check"] for a in rows}
+            return {a["id"]: a[key] for a in rows}
 
         assert flags() == {fresh: True, late: False}  # past the grace: shown anyway
         store.update_asset(fresh, self_score_reason="")  # the check submitted it
         assert flags() == {fresh: False, late: False}
         waiting = _done(store, 5)
-        replaced = _done(store, 60 * 5)
+        replaced = _done(store, 60 * 30)  # 193: older than the horizon, still out for good
         _done(store, 1, parent=replaced, status="rendering")  # the check re-renders it
-        assert flags()[waiting] is True and flags()[replaced] is True
+        assert flags()[waiting] is True and flags("replaced")[replaced] is True
+        assert not flags("replaced")[waiting] and not flags()[replaced]
         run = store.start_agent_run(checks.PLAYBOOK)
         store.finish_agent_run(run["id"], "failed", summary="exit 1")
-        assert not flags()[waiting] and not flags()[replaced]  # failing: nothing held back
+        assert not flags()[waiting]  # failing: nothing waiting is held back
+        assert flags("replaced")[replaced] is True  # its newer version carries on
 
 
 # --- the tool and the playbooks -----------------------------------------------------------
@@ -275,7 +333,9 @@ def test_check_renders_playbook_does_the_broken_check():
     for rule in ("work/manifest.json", "checks.json", "get_asset_frames", "cut text",
                  "unreadable first frame", "voice vs picture", "the remix credit",
                  "rerenders_left", "drop_render", "submit_asset", "Work order #<id>: ",
-                 "@<creator>"):
+                 "@<creator>",
+                 # 193: never parked; the remix's music round-trips
+                 "exactly one decision", "Never leave one waiting", "music=…"):
         assert rule in text, rule
     named = set(re.findall(r"`(\w+)", text))
     assert "wait_for_renders" not in named and "create_idea" not in named

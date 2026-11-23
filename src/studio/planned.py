@@ -24,7 +24,8 @@ from . import dm_picks, line, motion, remix, render, work_orders
 from .assets import InvalidTransition, checked_fields, transition
 
 KeyPath = Tuple[Any, ...]  # keys / indices down the props to one text
-PLACES_KEY = "claude_places"  # worker_state {day, left}: take_place
+PLACES_KEY = "claude_places_by_day"  # worker_state {day: {places, taken}}: take_place (193)
+PLACES_DAYS = 7  # batch days kept
 
 
 def _planned(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
@@ -197,29 +198,47 @@ def ideas_left(store: CampaignStore, settings: InstagramMCPSettings) -> Dict[str
     return {**n, "ideas_left": max(0, settings.batch_size - sum(n.values()))}
 
 
-def open_places(store: CampaignStore, day: str, places: int) -> None:
+def _places(c: Any) -> Dict[str, Dict[str, int]]:
+    row = c.execute("SELECT value FROM worker_state WHERE key = ?", (PLACES_KEY,)).fetchone()
+    return json.loads(row[0]) if row else {}
+
+
+def _save_places(c: Any, days: Dict[str, Dict[str, int]]) -> None:
+    keep = dict(sorted(days.items())[-PLACES_DAYS:])  # ponytail: the last days only
+    c.execute("INSERT INTO worker_state (key, value, updated_at) VALUES (?, ?, ?)"
+              " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
+              " updated_at = excluded.updated_at",
+              (PLACES_KEY, json.dumps(keep), to_iso(utcnow())))
+
+
+def open_places(store: CampaignStore, day: str, places: int) -> int:
     """The producing run's packet (188c) sets the places Claude's ideas may take in `day`'s
-    batch; take_place() counts them down."""
-    store.set_state(PLACES_KEY, {"day": day, "left": places})
+    batch; take_place() counts them down. Returns the places left: `places` minus the
+    Claude cards already planned for that day (193: a retried packet or a second run of the
+    day never plans past the batch)."""
+    with store.immediate() as c:
+        days = _places(c)
+        taken = days.get(day, {}).get("taken", 0)
+        days[day] = {"places": places, "taken": taken}
+        _save_places(c, days)
+    return max(0, places - taken)
 
 
 def take_place(store: CampaignStore, settings: InstagramMCPSettings, day: str) -> None:
     """One place for a Claude idea planned in `day`'s batch (render_motion / render_remix
     plan=True), or ValueError when none is left: the hard rule that Claude's ideas only fill
-    the rest of the batch. A day no packet opened gets ideas_left() now."""
+    the rest of the batch. Each batch day counts its own (193); a day no packet opened gets
+    ideas_left() now."""
     fresh = ideas_left(store, settings)["ideas_left"]  # before the lock: it reads the store
     with store.immediate() as c:  # read-check-write: parallel plan calls take one each
-        row = c.execute("SELECT value FROM worker_state WHERE key = ?", (PLACES_KEY,)).fetchone()
-        st = json.loads(row[0]) if row else {}
-        left = st["left"] if st.get("day") == day else fresh
-        if left <= 0:
+        days = _places(c)
+        st = days.get(day) or {"places": fresh, "taken": 0}
+        if st["taken"] >= st["places"]:
             raise ValueError(f"no place left in the {day} batch for an idea of yours: the"
                              f" owner's items come first ({settings.batch_size} in all); stop"
                              " planning ideas and finish the run")
-        c.execute("INSERT INTO worker_state (key, value, updated_at) VALUES (?, ?, ?)"
-                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
-                  " updated_at = excluded.updated_at",
-                  (PLACES_KEY, json.dumps({"day": day, "left": left - 1}), to_iso(utcnow())))
+        days[day] = {**st, "taken": st["taken"] + 1}
+        _save_places(c, days)
 
 
 def cards(store: CampaignStore) -> List[Dict[str, Any]]:
@@ -242,7 +261,7 @@ def cards(store: CampaignStore) -> List[Dict[str, Any]]:
             tune = todo.get("music_audio_id") or env["props"].get("music")
         else:
             script = [{"text": todo["script"], "editable": True}] if todo.get("script") else []
-            tune = remix.remix_params(env)["music"] or "none"
+            tune = remix.remix_params(env)["music"]
         out.append({"asset_id": r["id"], "batch_date": r["batch_date"], "hook": r["hook"],
                     "style": r["style"], "recipe": env,
                     "kind": "motion" if env["kind"] == "motion" else "remix",
