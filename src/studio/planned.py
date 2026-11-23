@@ -14,15 +14,17 @@ maintenant ») or on a timer (« Minuteur »); remove() (« Retirer ») archives
 from __future__ import annotations
 
 import copy
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
-from ..store import CampaignStore
-from . import line, motion, remix, render
+from ..store import CampaignStore, to_iso, utcnow
+from . import dm_picks, line, motion, remix, render, work_orders
 from .assets import checked_fields, transition
 
 KeyPath = Tuple[Any, ...]  # keys / indices down the props to one text
+PLACES_KEY = "claude_places"  # worker_state {day, left}: take_place
 
 
 def _planned(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
@@ -166,6 +168,43 @@ def remove(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
     transition(store, asset_id, "archived", actor="owner")
     line.skip_orders(store, asset["idea_id"])
     return {"asset_id": asset_id, "removed": True}
+
+
+def ideas_left(store: CampaignStore, settings: InstagramMCPSettings) -> Dict[str, int]:
+    """The batch's places for Claude's own ideas (188c): BATCH_SIZE minus the owner's items
+    the producing run makes first (scheduled work orders, change requests, new DM picks).
+    {orders, change_requests, dm_picks, ideas_left}."""
+    from ..learning.learnings import list_revision_requests  # here: learning imports studio
+
+    n = {"orders": len(work_orders.for_agent(store, "scheduled")),
+         "change_requests": len(list_revision_requests(store)),
+         "dm_picks": len(dm_picks.for_agent(store, "new"))}
+    return {**n, "ideas_left": max(0, settings.batch_size - sum(n.values()))}
+
+
+def open_places(store: CampaignStore, day: str, places: int) -> None:
+    """The producing run's packet (188c) sets the places Claude's ideas may take in `day`'s
+    batch; take_place() counts them down."""
+    store.set_state(PLACES_KEY, {"day": day, "left": places})
+
+
+def take_place(store: CampaignStore, settings: InstagramMCPSettings, day: str) -> None:
+    """One place for a Claude idea planned in `day`'s batch (render_motion / render_remix
+    plan=True), or ValueError when none is left: the hard rule that Claude's ideas only fill
+    the rest of the batch. A day no packet opened gets ideas_left() now."""
+    fresh = ideas_left(store, settings)["ideas_left"]  # before the lock: it reads the store
+    with store.immediate() as c:  # read-check-write: parallel plan calls take one each
+        row = c.execute("SELECT value FROM worker_state WHERE key = ?", (PLACES_KEY,)).fetchone()
+        st = json.loads(row[0]) if row else {}
+        left = st["left"] if st.get("day") == day else fresh
+        if left <= 0:
+            raise ValueError(f"no place left in the {day} batch for an idea of yours: the"
+                             f" owner's items come first ({settings.batch_size} in all); stop"
+                             " planning ideas and finish the run")
+        c.execute("INSERT INTO worker_state (key, value, updated_at) VALUES (?, ?, ?)"
+                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
+                  " updated_at = excluded.updated_at",
+                  (PLACES_KEY, json.dumps({"day": day, "left": left - 1}), to_iso(utcnow())))
 
 
 def cards(store: CampaignStore) -> List[Dict[str, Any]]:

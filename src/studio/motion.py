@@ -462,7 +462,8 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     published with, in place of the template's bed (step 178).
     `plan` (188b): a new asset `planned` with its recipe, caption and description, and no
     job (job None): nothing renders or is voiced until the owner releases it
-    (src/studio/planned.py)."""
+    (src/studio/planned.py); refused past the places left for Claude's ideas in its batch
+    (planned.take_place, 188c)."""
     if (idea_id is None) == (asset_id is None):
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
     if plan and asset_id is not None:
@@ -475,6 +476,9 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     if asset_id is not None:
         return render.rerender(store, settings.media_root, asset_id, env, actor=actor)
     if plan:
+        from .planned import take_place  # here: planned imports this module
+
+        take_place(store, settings, idea["batch_date"])  # 188c: only the batch's rest
         asset = store.add_asset(idea_id, recipe=env, batch_date=idea["batch_date"],
                                 status="planned", **fields)
         return {"asset": asset, "job": None}

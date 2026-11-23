@@ -168,7 +168,8 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
     (the job voices the script first: voice_over): {asset, job, piece, warnings}. Everything
     else is checked before the asset is created; a piece that cannot be cut leaves the asset
     `failed` with the reason. `plan` (188b): a `planned` asset with the recipe, caption and
-    description, no piece and no job (None): src/studio/planned.py releases it."""
+    description, no piece and no job (None): src/studio/planned.py releases it; refused past
+    the places left for Claude's ideas (planned.take_place, 188c)."""
     fields = checked_fields("planned", **{k: x for k, x in (
         ("caption", caption), ("description", description)) if x is not None}) if plan else {}
     env, recipe, source = _remix_env(store, settings, idea_id, source_id, hook=hook,
@@ -177,7 +178,11 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
     warnings = _warnings(source, recipe, settings)
     batch = store.get_idea(idea_id)["batch_date"]
     if plan:
-        asset = store.add_asset(idea_id, recipe=render.validate_recipe(env, settings.media_root),
+        from .planned import take_place  # here: planned imports this module
+
+        recipe_env = render.validate_recipe(env, settings.media_root)
+        take_place(store, settings, batch)  # 188c: Claude's ideas only fill the batch's rest
+        asset = store.add_asset(idea_id, recipe=recipe_env,
                                 batch_date=batch, status="planned", **fields)
         return {"asset": asset, "job": None, "piece": None, "warnings": warnings}
     asset = store.add_asset(idea_id, caption=caption, batch_date=batch)

@@ -20,11 +20,12 @@ const SECTIONS: [PlanningItem['section'], string][] = [
   ['ideas', 'Idées de Claude — à valider'], ['running', 'En cours'], ['next', 'Ensuite'], ['planned', "Runs prévus de l'IA"],
 ]
 const KIND: Record<PlanningItem['kind'], string> = {
-  render: 'Rendu', film: 'Film Lemo', order_run: 'Run léger', agent_run: "Run de l'IA",
+  render: 'Rendu', film: 'Film Lemo', order_run: 'Run léger', check_run: 'Vérification', agent_run: "Run de l'IA",
   work_order: 'Commande', change_request: 'Changement', claude_idea: 'Idée de Claude',
 }
 const WAIT: Record<PlanningWait, string> = {
   gpu_busy: 'attend le GPU', agent_running: 'attend la fin du run', timer: 'attend son minuteur', held: 'En pause', order_grace: 'délai après ton envoi',
+  check_grace: 'délai après le dernier rendu',
   daily_cap: 'quota du jour atteint', preflight: "l'IA ne peut pas démarrer", next_ai_run: 'attend le prochain run',
   needs_instruction: 'attend ta consigne',
 }

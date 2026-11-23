@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Finished renders waiting for their check, oldest first (studio.checks.for_agent, 188c): ready ones not submitted yet, failed ones with the re-renders left",
+  "type": "object",
+  "required": ["max_rerenders", "renders"],
+  "additionalProperties": false,
+  "properties": {
+    "max_rerenders": {"type": "integer", "minimum": 0},
+    "renders": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "status", "idea_id", "track", "hook", "template", "style",
+                     "caption", "description", "qc", "finished_at", "rerenders_left",
+                     "work_order_id", "dm_pick_sender", "version_of"],
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {"type": "integer"},
+          "status": {"enum": ["ready", "failed"]},
+          "idea_id": {"type": "integer"},
+          "track": {"type": "string"},
+          "hook": {"type": ["string", "null"]},
+          "template": {"type": ["string", "null"]},
+          "style": {"type": ["string", "null"]},
+          "caption": {"type": ["string", "null"]},
+          "description": {"type": ["string", "null"]},
+          "qc": {"type": ["string", "null"]},
+          "finished_at": {"type": "string"},
+          "rerenders_left": {"type": "integer", "minimum": 0},
+          "work_order_id": {"type": ["integer", "null"]},
+          "dm_pick_sender": {"type": ["string", "null"]},
+          "version_of": {"type": ["integer", "null"]}
+        }
+      }
+    }
+  }
+}

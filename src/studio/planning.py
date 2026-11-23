@@ -10,7 +10,7 @@ worker really takes the work today:
   blocking: line.head() again on a simulated clock, LEMO_FILMS_PER_DAY moving the next
   day's films past midnight), then a due playbook, the light run for the owner's orders
   and change requests (schedule.order_wait: grace, daily cap...) followed by each of their
-  renders; then the orders that wait for the owner's instruction (no time);
+  renders, the check run of finished renders (schedule.check_wait, 188c); then the orders that wait for the owner's instruction (no time);
 - planned: the scheduled AI runs of the next 24 h as placeholders, none before the chain
   ahead is done; the producing run says what it picks up first and how many places stay
   for Claude's own ideas.
@@ -35,7 +35,7 @@ from ..agent import film, packet, schedule
 from ..config import InstagramMCPSettings
 from ..learning.learnings import list_revision_requests
 from ..store import CampaignStore, parse_iso, to_iso
-from . import cinematic, dm_picks, lemo, line, macro3d, planned, sitcom, voices, work_orders
+from . import checks, cinematic, lemo, line, macro3d, planned, sitcom, voices, work_orders
 
 # Fallback seconds per engine (DECISIONS: Remotion ~0.4 min per 30 s video; the 8-shot
 # Blender proof 13.1 min; Macro3D's first Blender plates 12-15 min). ponytail: ffmpeg's
@@ -146,9 +146,10 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                          source=order and order["source"], style=order and order["style"],
                          engine="film", run_id=r["id"], order_id=order and order["id"])
         else:
-            light = r["playbook"] == schedule.ORDER_PLAYBOOK
+            kind = {schedule.ORDER_PLAYBOOK: "order_run",
+                    checks.PLAYBOOK: "check_run"}.get(r["playbook"], "agent_run")
             took = max(_run_s(store, r["playbook"]), (now - start).total_seconds())
-            item = _item("running", "order_run" if light else "agent_run",
+            item = _item("running", kind,
                          f"Run {r['playbook']}", start, took,
                          "Le run de l'IA en cours : rien d'autre ne démarre avant sa fin.",
                          source="agent", run_id=r["id"])
@@ -160,11 +161,11 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                    ) -> Dict[str, Any]:
     """{now, items, paused}: the chain (see module doc); paused: since when the studio is
     paused (line.pause), else None. Item: section running | next | planned | ideas, kind
-    render | film | order_run | agent_run | work_order | change_request | claude_idea, title,
+    render | film | order_run | check_run | agent_run | work_order | change_request | claude_idea, title,
     source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
-    why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | daily_cap |
-    preflight | next_ai_run | needs_instruction | None), not_before (a waiting render's or
+    why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | check_grace |
+    daily_cap | preflight | next_ai_run | needs_instruction | None), not_before (a waiting render's or
     film's timer, UTC ISO), stage and progress (running items), picks_up (the producing
     run's placeholder), idea (a claude_idea's card: planned.cards, section ideas)."""
     with store._tx() as c:
@@ -293,7 +294,21 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                       cursor, render_s[engine], why_here, waits_on=waits, source="change",
                       engine=engine, asset_id=a["id"]))
 
-    steps = {"film": heavy, "playbook": playbook, "orders": orders}
+    def check() -> None:  # 188c: the finished renders' check, after everything before it
+        why, newest = schedule.check_wait(store, settings, now)
+        if why in ("nothing", "seen"):  # seen: the last check had them (the Inbox grace)
+            return
+        start = cursor
+        if why == "check_grace":
+            start = max(start, newest + timedelta(minutes=settings.check_run_debounce_minutes))
+        elif why == "daily_cap":
+            start = max(start, _midnight(settings, now))
+        add(_item("next", "check_run", f"Run {checks.PLAYBOOK}", start,
+                  _run_s(store, checks.PLAYBOOK, RUN_S / 3),
+                  "Les rendus finis sont vérifiés (images, contrôle) puis envoyés dans ta"
+                  " boîte, ou refaits.", waits_on=why or busy, source="agent"))
+
+    steps = {"film": heavy, "playbook": playbook, "orders": orders, "checks": check}
     for step in schedule.CATCH_UP_ORDER:
         steps[step]()
 
@@ -313,10 +328,7 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                      if not r["weekly"] else f"Prévu chaque semaine ({r['time']}).",
                      source="schedule")
         if packet.RUNS.get(r["playbook"], ("custom",))[0] == "produce":
-            n = {"orders": len(work_orders.for_agent(store, "scheduled")),
-                 "change_requests": len(list_revision_requests(store)),
-                 "dm_picks": len(dm_picks.for_agent(store, "new"))}
-            item["picks_up"] = {**n, "ideas_left": max(0, settings.batch_size - sum(n.values()))}
+            item["picks_up"] = planned.ideas_left(store, settings)
         items.append(item)
         planned_at = _ready(item)
     for card in planned.cards(store):  # Claude's ideas: not in the line, no time (188b)

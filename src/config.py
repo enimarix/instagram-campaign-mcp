@@ -430,6 +430,20 @@ class InstagramMCPSettings(BaseSettings):
         6, ge=0, description="Runs started by work orders per owner-local day; past it they"
         " wait for the next scheduled run"
     )
+    # The check run (188c): finished renders are checked and submitted by the light
+    # check-renders run (src/agent/schedule.py check_run, src/studio/checks.py).
+    check_run_debounce_minutes: float = Field(
+        5.0, ge=0, description="Wait after the newest finished render before the check run"
+        " starts (renders finishing close together are checked in one run)"
+    )
+    max_check_runs_per_day: int = Field(
+        8, ge=0, description="Check runs started per owner-local day; past it the videos show"
+        " in the Inbox after their grace"
+    )
+    check_inbox_grace_hours: float = Field(
+        3.0, ge=0, description="A ready video waiting for its check is shown in the Inbox"
+        " anyway this long after its render finished"
+    )
 
     # --- Lemo films (173) ---------------------------------------------------
     # An order in a Lemo-Opuscar style (`lemo:<slug>`, LEMO_LIBRARY) is made by the film

@@ -29,6 +29,7 @@ from .learning import experiments as experiments_
 from .logging_setup import configure_logging
 from .store import CampaignStore, parse_dt, parse_iso, to_iso, utcnow
 from .studio import (
+    checks,
     dm_picks,
     downloader,
     motion,
@@ -983,6 +984,16 @@ async def submit_asset(asset_id: int, caption: str, best_before: Optional[str] =
                          note=note)
 
 
+@mcp.tool(annotations=LOCAL_WRITE)
+async def drop_render(asset_id: int, why: str) -> Dict[str, Any]:
+    """Drop a finished video you will not submit (the check run, 188c: broken after its
+    re-renders, or not worth showing): `why` in one line is shown to the owner (« Écartée
+    par l'IA : ... » in the Inbox; a work order's video: the order is skipped with it, in
+    Mes envois). The video leaves the check list and the feed; only the owner archives it.
+    Only an unsubmitted ready or failed video the owner has not judged."""
+    return production.compact_asset(await _studio(checks.drop, store(), asset_id, why))
+
+
 @mcp.tool(annotations=LOCAL_READ)
 async def list_assets(status: Optional[str] = None, batch_date: Optional[str] = None,
                       limit: int = 50) -> Dict[str, Any]:
@@ -1290,6 +1301,7 @@ AGENT_TOOLS = frozenset({
     "get_asset_frames",  # step 057: self-review, local read of its own renders
     "wait_for_renders",
     "submit_asset",
+    "drop_render",  # 188c: the check run's « dropped, here is why »; local write, no publish
     "list_assets",
     # Learning (step 054): local reads and writes; owner rules are guarded in the service.
     "get_feedback",

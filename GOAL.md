@@ -21,7 +21,9 @@ caps and human approval.
 - **The owner** (one person, brand: *Macrobody*): reviews videos (mostly on a phone),
   comments, approves publishing, reads the daily report, approves ad budgets.
 - **The agent** (Claude, driving this repo's MCP tools): researches, writes hooks and
-  scripts, renders, queues candidates, reads feedback, writes learnings and reports.
+  scripts, queues the owner's videos and plans its own (the owner validates them on the
+  Planning page before they render), checks finished renders and submits them, reads
+  feedback, writes learnings and reports.
 - **The worker** (plain code, no AI): publishes due posts, collects insights, runs
   render jobs. Anything that must happen on time is code, not an agent.
 
@@ -552,9 +554,11 @@ account.
 
 - [ ] One command starts the API, the website and the worker on the owner's machine,
       and they start again by themselves after a reboot.
-- [ ] A scheduled agent run produces a daily batch (default 20–30 candidates, both
-      tracks) that appears in the inbox with no manual step. A run that stops half-way
-      continues the same batch when started again.
+- [ ] A scheduled agent run plans a daily batch (default 20–30 candidates, both
+      tracks): the owner's items render at once, the agent's own ideas only fill the rest
+      of the batch as cards the owner validates on the Planning page (step 188c); a check
+      run reviews each finished render and submits it to the inbox with no other manual
+      step. A run that stops half-way continues the same batch when started again.
 - [ ] In the inbox the owner can play, like, dislike, comment (with reasons), ask for
       a new version and approve on a phone.
 - [ ] Approved videos get smart, spread-out slots and are published from local files;

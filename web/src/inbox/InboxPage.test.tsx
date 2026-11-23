@@ -752,3 +752,30 @@ describe('Sent back for changes (156)', () => {
     expect(screen.queryByRole('list', { name: 'Sent back' })).toBeNull()
   })
 })
+
+describe("The AI's check (188c)", () => {
+  it('holds a video back until its check, and lists the dropped ones with the reason', async () => {
+    stubApi({
+      'GET /api/assets': [200, [
+        ...ASSETS,
+        asset(20, { self_score_reason: null, awaiting_check: true }),
+        asset(21, { self_score_reason: null, agent_decision: { kind: 'dropped', text: "Écartée par l'IA : texte coupé", why: 'texte coupé', style: null, order_id: null, request_id: null, at: '2026-11-23T04:00:00+00:00' } }),
+      ]],
+    })
+    renderPage()
+    expect(await screen.findByText('1 of 3 decided')).toBeTruthy() // neither counts
+    expect(cards()).toEqual(['Video 1', 'Video 2'])
+    expect(screen.getByText("1 vidéo en vérification par l'IA")).toBeTruthy()
+    const dropped = screen.getByRole('list', { name: 'Dropped by the AI' })
+    expect(within(dropped).getByText("Écartée par l'IA : texte coupé")).toBeTruthy()
+    expect(within(dropped).getByRole('link', { name: 'Vidéo 21' }).getAttribute('href')).toBe('/assets/21')
+  })
+
+  it('shows nothing when no video waits for its check', async () => {
+    stubApi()
+    renderPage()
+    await screen.findByRole('article', { name: 'Video 1' })
+    expect(screen.queryByText(/en vérification/)).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Dropped by the AI' })).toBeNull()
+  })
+})
