@@ -249,10 +249,9 @@ def test_a_launched_run_is_the_next_thing_on_the_ai_track(store, monkeypatch):
     assert not [i for i in items if i["section"] == "planned"]
 
 
-def test_a_launched_run_waits_for_the_renders_and_goes_before_the_film(
-        store, monkeypatch, agent_dir):
+def test_a_launched_run_waits_for_the_renders_and_goes_before_the_film(store, monkeypatch):
     s = cfg()
-    (agent_dir / "playbooks" / "check-renders.md").write_text("Run.\n")
+    (schedule.AGENT_DIR / "playbooks" / "check-renders.md").write_text("Run.\n")
     _job(store, "FactQuest", "queued", created_at=to_iso(NOW - timedelta(minutes=50)))
     _order(store, monkeypatch, "Un film", "lemo:watercolor", minutes_ago=40)
     _checkable(store, 1)  # in the check's grace: the launch bypasses it

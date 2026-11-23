@@ -20,7 +20,10 @@ worker really takes the work today:
 
 « Lancer » (196): launch() takes one card or a selection: renders, films and Claude's ideas
 to the head of the line, the owner's orders / change requests and the AI's runs as launch
-requests catch_up starts first (schedule.request_launch).
+requests catch_up starts first (schedule.request_launch). The chain times a launched run as
+the next thing on the AI track once no render waits, before the films and the other runs, and
+hides that playbook's placeholder later the same day (200). A film is an AI run there too: one
+due before the other runs could start goes first (200).
 
 Around the chain (190): the 24 h strip of its ETAs and the queued posts (strip), the
 supply gauge (supply), today's history (history), and the delay warning before a move or
