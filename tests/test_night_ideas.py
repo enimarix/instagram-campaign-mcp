@@ -379,7 +379,11 @@ class Starts:
 
 
 def test_check_run_debounce_seen_and_cap(store):
-    s, f, now = cfg(max_check_runs_per_day=1), Starts(), utcnow()
+    from datetime import datetime, timezone
+
+    # 202: a fixed clock: utcnow() after ~23:40 in Paris put "+20 min" past the cap's reset
+    s, f = cfg(max_check_runs_per_day=1), Starts()
+    now = datetime(2026, 11, 23, 1, 0, tzinfo=timezone.utc)  # 02:00 in Paris: one local day
     run = lambda m: schedule.check_run(store, s, now + timedelta(minutes=m),  # noqa: E731
                                        start=f.start, check=f.check)
     assert run(0) is None and f.runs == []  # nothing waits
