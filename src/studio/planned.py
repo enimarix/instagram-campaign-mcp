@@ -172,7 +172,8 @@ def cards(store: CampaignStore) -> List[Dict[str, Any]]:
     """The planned videos, newest batch first and oldest first inside it: {asset_id, batch_date,
     hook, style, recipe, kind motion | remix, template, script [{text, editable}], voice,
     music (a bed, or an Instagram track's audio_id), caption, description, sources (the
-    idea's citations), music_options (our beds and none; a template takes some of them)}."""
+    idea's citations), music_options (our beds and none; a template takes some of them)}.
+    `recipe` is for the Planning page's engine (build_planning drops it)."""
     rows = store._select("SELECT a.*, i.hook, i.style, i.citations FROM assets a"
                          " JOIN ideas i ON i.id = a.idea_id", {"a.status": "planned"},
                          "a.batch_date DESC, a.id", 500)

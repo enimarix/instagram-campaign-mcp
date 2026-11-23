@@ -764,7 +764,7 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
     track attached (voiced videos only); pass it again on a re-render to keep the track.
     The worker renders; the asset becomes `ready`, or `failed` with QC reasons.
     plan=True (new asset only): checked the same way, but nothing renders and no voice is
-    made: the video waits on the owner's Planning page as a « Idée de Claude » card with its
+    made: the video waits on the owner's Planning page as an « Idée de Claude » card with its
     caption and description (the idea's citations as its sources) until the owner releases
     it (state `planned`, job_id null). The night run's use of it comes with step 188c."""
     out = await _studio(motion.queue_motion_render, store(), get_settings(), template=template,
