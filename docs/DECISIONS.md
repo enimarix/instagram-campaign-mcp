@@ -14,7 +14,9 @@ known) and return at once: the recipe keeps the lines unvoiced plus `voice_todo`
 the sitcom's character voices, the Instagram track to cut on; a remix's script and clip
 length). The render job makes the voice first (`render.voice_first`, same TTS cache), stores
 the voiced recipe in place of the queued one (a retry or re-render never synthesises twice),
-then renders. A voice-service failure is retried like any render error; a voice that does
+then renders. While the model is warm, that job also makes the voices of the next
+`VOICE_AHEAD` (6) waiting voiced renders in line order (films, timers and held items passed
+over), so a batch loads the model once and waits for its idle unload once. A voice-service failure is retried like any render error; a voice that does
 not fit (a remix voice-over longer than its clip, an Instagram track shorter than the video)
 fails the job at once with the reason, where it used to be refused at queue time.
 `TTS_PROVIDER=none` still fills its reading estimate at queue time (nothing to wait for).
