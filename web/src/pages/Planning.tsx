@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import {
-  editIdea, errorMessage, getPlanning, holdItem, listVoices, moveItem, releaseIdea, removeIdea, removeItem,
-  setStudioPaused, setTimer, startNow,
-  type ClaudeIdea, type IdeaEdit, type LineKind, type PlanningItem, type PlanningWait, type Voice,
+  editIdea, errorMessage, getPlanning, holdItem, listVoices, moveItem, previewPlanning, releaseIdea, removeIdea, removeItem,
+  rerenderAsset, setStudioPaused, setTimer, startNow,
+  type ClaudeIdea, type IdeaEdit, type LineKind, type Planning as PlanningData, type PlanningHistory, type PlanningItem,
+  type PlanningPreview, type PlanningStrip, type PlanningSupply, type PlanningWait, type Voice,
 } from '../api/client'
 import { Button } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { Sheet } from '../ui/Sheet'
-import { field, link } from '../ui/styles'
+import { field, link, type Tone } from '../ui/styles'
 import { useToast } from '../ui/useToast'
 
 const POLL_MS = 10_000 // a live page, like Créer and Agent
@@ -97,6 +98,47 @@ function useAct(onDone: () => void) {
   }
   return { busy, act }
 }
+type Act = ReturnType<typeof useAct>['act']
+
+type Pushed = Awaited<ReturnType<typeof previewPlanning>>['pushed']
+
+/** The delay warning (190): before a move or « start now », what it pushes back and by how
+ * much (a dry run on the server); confirm or cancel. Nothing pushed back: it goes at once. */
+function useGuard(act: Act) {
+  const [ask, setAsk] = useState<{ pushed: Pushed; go: () => void } | null>(null)
+  const guard = async (p: PlanningPreview, fn: () => Promise<unknown>, done: string) => {
+    let pushed: Pushed = []
+    try {
+      pushed = (await previewPlanning(p)).pushed ?? []
+    } catch {
+      // no preview: the real call says why it is refused
+    }
+    if (pushed.length === 0) return void act(fn, done)
+    setAsk({ pushed, go: () => { setAsk(null); void act(fn, done) } })
+  }
+  const box = ask && <DelayWarning pushed={ask.pushed} onConfirm={ask.go} onCancel={() => setAsk(null)} />
+  return { guard, box }
+}
+
+const PUSHED_SHOWN = 5
+
+function DelayWarning({ pushed, onConfirm, onCancel }: { pushed: Pushed; onConfirm: () => void; onCancel: () => void }) {
+  const n = pushed.length
+  const what = `${n} ${pushed.every((p) => p.kind === 'render') ? 'rendu' : 'élément'}${n > 1 ? 's' : ''}`
+  return (
+    <div role="alertdialog" aria-label="Ce que ça repousse" className="mt-2 space-y-2 rounded-card border border-warn bg-warn/12 p-3">
+      <p>Repousse {what} d'environ {duration(Math.max(...pushed.map((p) => p.by_s)))}.</p>
+      <ul className="list-disc pl-5 text-muted">
+        {pushed.slice(0, PUSHED_SHOWN).map((p, k) => <li key={k}>{p.title} · +{duration(p.by_s)}</li>)}
+        {n > PUSHED_SHOWN && <li className="list-none">… {n - PUSHED_SHOWN} de plus</li>}
+      </ul>
+      <div className="flex gap-2">
+        <Button size="sm" variant="primary" onClick={onConfirm}>Confirmer</Button>
+        <Button size="sm" onClick={onCancel}>Annuler</Button>
+      </div>
+    </div>
+  )
+}
 
 /** « Minuteur »: a local date and time (sent as UTC ISO). */
 function TimerField({ when, setWhen }: { when: string; setWhen: (v: string) => void }) {
@@ -114,6 +156,7 @@ function TimerField({ when, setWhen }: { when: string; setWhen: (v: string) => v
 function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Actions) {
   const [when, setWhen] = useState('')
   const { busy, act } = useAct(onDone)
+  const { guard, box } = useGuard(act)
   const out = removal(i)
   if (!out || out.kind === 'idea') return null
   const retirer = <Button size="sm" variant="danger" disabled={busy} onClick={() => onRemove(out)}>Retirer</Button>
@@ -126,22 +169,29 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
     return act(() => setTimer(kind, id, iso), `Minuteur réglé : pas avant ${at(iso)}.`)
   }
   return (
-    <div className="flex flex-wrap items-end gap-2 pt-1">
-      <Button size="sm" variant="primary" disabled={busy}
-        onClick={() => void act(() => startNow(kind, id), 'Passe en tête de la file.')}>Lancer maintenant</Button>
-      <Button size="sm" disabled={busy} onClick={() => void act(() => moveItem(kind, id, -1), 'Monté d’une place.')}>Monter</Button>
-      <Button size="sm" disabled={busy} onClick={() => void act(() => moveItem(kind, id, 1), 'Descendu d’une place.')}>Descendre</Button>
-      <Button size="sm" disabled={busy}
-        onClick={() => void act(() => holdItem(kind, id, !held), held ? 'Repris : il retrouve sa place.' : 'En pause : il ne bloque pas la file.')}>
-        {held ? 'Reprendre' : 'Mettre en pause'}
-      </Button>
-      <TimerField when={when} setWhen={setWhen} />
-      <Button size="sm" disabled={busy || !when} onClick={() => void timer()}>Régler</Button>
-      {i.not_before && (
-        <Button size="sm" variant="ghost" disabled={busy}
-          onClick={() => void act(() => setTimer(kind, id, null), 'Minuteur retiré.')}>Retirer le minuteur</Button>
-      )}
-      {retirer}
+    <div>
+      <div className="flex flex-wrap items-end gap-2 pt-1">
+        <Button size="sm" variant="primary" disabled={busy}
+          onClick={() => void guard({ action: 'start_now', kind, id }, () => startNow(kind, id), 'Passe en tête de la file.')}>
+          Lancer maintenant
+        </Button>
+        <Button size="sm" disabled={busy}
+          onClick={() => void guard({ action: 'move', kind, id, by: -1 }, () => moveItem(kind, id, -1), 'Monté d’une place.')}>Monter</Button>
+        <Button size="sm" disabled={busy}
+          onClick={() => void guard({ action: 'move', kind, id, by: 1 }, () => moveItem(kind, id, 1), 'Descendu d’une place.')}>Descendre</Button>
+        <Button size="sm" disabled={busy}
+          onClick={() => void act(() => holdItem(kind, id, !held), held ? 'Repris : il retrouve sa place.' : 'En pause : il ne bloque pas la file.')}>
+          {held ? 'Reprendre' : 'Mettre en pause'}
+        </Button>
+        <TimerField when={when} setWhen={setWhen} />
+        <Button size="sm" disabled={busy || !when} onClick={() => void timer()}>Régler</Button>
+        {i.not_before && (
+          <Button size="sm" variant="ghost" disabled={busy}
+            onClick={() => void act(() => setTimer(kind, id, null), 'Minuteur retiré.')}>Retirer le minuteur</Button>
+        )}
+        {retirer}
+      </div>
+      {box}
     </div>
   )
 }
@@ -155,12 +205,13 @@ function ItemCard({ item: i, ...actions }: { item: PlanningItem } & Actions) {
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone={i.section === 'running' ? 'explore' : 'info'}>{KIND[i.kind]}</Chip>
         {i.waits_on && <Chip tone="warn">{WAIT[i.waits_on] ?? i.waits_on}</Chip>}
+        {!!i.late_s && <Chip tone="warn">en retard de {Math.max(1, Math.round(i.late_s / 60))} min</Chip>}
       </div>
       <h3 className="font-semibold break-words">{i.title}</h3>
       <Origin item={i} />
       {look.length > 0 && <p className="text-muted">{look.join(' · ')}</p>}
       {i.est_start && i.est_ready && i.est_duration_s !== null ? (
-        <p className="tabular-nums">
+        <p className={`tabular-nums ${i.late_s ? 'text-warn' : ''}`}>
           Début ~{at(i.est_start)} · {duration(i.est_duration_s)} · prête ~{at(i.est_ready)}
         </p>
       ) : <p className="text-muted">Pas d'heure : rien ne part sans toi.</p>}
@@ -195,6 +246,7 @@ function IdeaCard({ item: i, onDone, onRemove }: { item: PlanningItem } & Action
   const [when, setWhen] = useState('')
   const [editing, setEditing] = useState(false)
   const { busy, act } = useAct(onDone)
+  const { guard, box } = useGuard(act)
   const idea = i.idea
   if (!idea) return null
   const id = idea.asset_id
@@ -232,12 +284,14 @@ function IdeaCard({ item: i, onDone, onRemove }: { item: PlanningItem } & Action
         <Button size="sm" variant="primary" disabled={busy}
           onClick={() => void act(() => releaseIdea(id, {}), 'Validée : son rendu entre dans la file.')}>Valider</Button>
         <Button size="sm" disabled={busy}
-          onClick={() => void act(() => releaseIdea(id, { now: true }), 'Validée : elle passe en tête de la file.')}>Lancer maintenant</Button>
+          onClick={() => void guard({ action: 'release', kind: 'idea', id }, () => releaseIdea(id, { now: true }),
+            'Validée : elle passe en tête de la file.')}>Lancer maintenant</Button>
         <TimerField when={when} setWhen={setWhen} />
         <Button size="sm" disabled={busy || !when} onClick={() => void timer()}>Régler</Button>
         <Button size="sm" disabled={busy} onClick={() => setEditing(true)}>Modifier</Button>
         <Button size="sm" variant="danger" disabled={busy} onClick={() => onRemove({ kind: 'idea', id })}>Retirer</Button>
       </div>
+      {box}
       {editing && <IdeaSheet idea={idea} onClose={() => setEditing(false)} onDone={onDone} />}
     </Card>
   )
@@ -334,6 +388,122 @@ function Chain({ items, ...actions }: { items: PlanningItem[] } & Actions) {
   )
 }
 
+const LANES: [PlanningStrip['blocks'][number]['lane'], string, string][] = [
+  ['render', 'Rendus', 'bg-explore'], ['film', 'Films Lemo', 'bg-info'], ['run', "Runs de l'IA", 'bg-accent'],
+]
+const HOUR = 3_600_000
+
+/** The next 24 h (190): one lane each for renders, films and the AI's runs, from the chain's
+ * ETAs (a late one in orange), the queued posts as ticks, now at the left edge. Scrolls
+ * sideways on a phone. */
+function Strip({ strip }: { strip: PlanningStrip }) {
+  const t0 = Date.parse(strip.start)
+  const span = Date.parse(strip.end) - t0
+  const x = (iso: string) => ((Date.parse(iso) - t0) / span) * 100
+  const hours: number[] = [] // every 3 h on the hour, owner-local (the browser's)
+  for (let t = Math.ceil(t0 / HOUR) * HOUR; t < t0 + span; t += HOUR) if (new Date(t).getHours() % 3 === 0) hours.push(t)
+  const label = (b: PlanningStrip['blocks'][number]) => `${KIND[b.kind]} : ${b.title}, ${at(b.start)} → ${at(b.end)}${b.late ? ', en retard' : ''}`
+  return (
+    <section aria-label="Les prochaines 24 h" className="mb-6">
+      <h2 className="mb-2 font-semibold">Les prochaines 24 h</h2>
+      <div className="overflow-x-auto rounded-card border border-line bg-surface p-2">
+        <div className="relative min-w-[720px] pb-5">
+          {hours.map((t) => (
+            <div key={t} aria-hidden className="absolute inset-y-0 border-l border-line" style={{ left: `${x(new Date(t).toISOString())}%` }}>
+              <span className="absolute bottom-0 -translate-x-1/2 text-xs tabular-nums text-muted">
+                {new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          ))}
+          <div aria-label="Maintenant" className="absolute inset-y-0 left-0 z-10 w-0.5 bg-danger" />
+          {LANES.map(([lane, name, color]) => (
+            <ul key={lane} aria-label={name} className="relative my-1 h-6">
+              {strip.blocks.filter((b) => b.lane === lane).map((b, n) => (
+                <li key={n} title={label(b)} aria-label={label(b)}
+                  className={`absolute inset-y-0 rounded border border-surface ${b.late ? 'bg-warn' : color}`}
+                  style={{ left: `${x(b.start)}%`, width: `${x(b.end) - x(b.start)}%`, minWidth: 3 }} />
+              ))}
+            </ul>
+          ))}
+          <ul aria-label="Publications" className="relative h-3">
+            {strip.posts.map((p) => (
+              <li key={p} title={`Publication ${at(p)}`} aria-label={`Publication ${at(p)}`}
+                className="absolute inset-y-0 w-1 rounded bg-success" style={{ left: `${x(p)}%` }} />
+            ))}
+          </ul>
+        </div>
+      </div>
+      <p className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
+        {LANES.map(([lane, name, color]) => <span key={lane}><span className={`mr-1 inline-block size-2.5 rounded-sm ${color}`} />{name}</span>)}
+        <span><span className="mr-1 inline-block size-2.5 rounded-sm bg-success" />Publications</span>
+        <span><span className="mr-1 inline-block size-2.5 rounded-sm bg-warn" />En retard</span>
+      </p>
+    </section>
+  )
+}
+
+const WEEK_DAYS = 7 // the gauge's full bar
+
+/** The supply gauge (190): approved + bench videos against posts per day, orange under a day,
+ * and what the line and Claude's cards would add once done. */
+function SupplyGauge({ supply: s }: { supply: PlanningSupply }) {
+  const until = new Date(`${s.until}T12:00`).toLocaleDateString('fr-FR', { weekday: 'long' })
+  const days = s.days < 1 ? 'moins d’un jour' : `${s.days.toLocaleString('fr-FR')} jour${s.days >= 2 ? 's' : ''}`
+  const more = [s.making > 0 && `+ ${s.making} en fabrication`, s.ideas > 0 && `+ ${s.ideas} idée(s) de Claude`].filter(Boolean)
+  return (
+    <div className={`mb-6 space-y-1.5 rounded-card border bg-surface p-3 text-sm ${s.low ? 'border-warn' : 'border-line'}`}>
+      <p className={s.low ? 'text-warn' : undefined}>
+        <strong>Réserve : {days}</strong> (jusqu'à {until})
+      </p>
+      <div role="meter" aria-label="Réserve" aria-valuenow={s.days} aria-valuemin={0} aria-valuemax={WEEK_DAYS}
+        aria-valuetext={`${days}`} className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+        <div className={`h-full ${s.low ? 'bg-warn' : 'bg-success'}`} style={{ width: `${Math.min(100, (s.days / WEEK_DAYS) * 100)}%` }} />
+      </div>
+      <p className="text-muted">
+        {s.approved} approuvée(s) + {s.bench} sur le banc, {s.per_day} par jour{more.length > 0 && ` · une fois faites : ${more.join(', ')}`}
+      </p>
+    </div>
+  )
+}
+
+const DONE: Record<PlanningHistory['kind'], [string, Tone]> = {
+  done: ['Rendu fini', 'success'], failed: ['Rendu raté', 'danger'], removed: ['Retiré du planning', 'neutral'],
+  dropped: ['Écartée par la vérification', 'warn'], run: ["Run de l'IA", 'info'],
+}
+const RUN_STATUS: Record<string, string> = { running: 'en cours', succeeded: 'réussi', failed: 'échoué', cancelled: 'annulé' }
+
+/** Today's history (190), under the chain: finished renders (to the Inbox), failed ones with
+ * their reason and « Relancer » (the asset's re-render with its own recipe), removed, dropped
+ * by the check, and today's AI runs. */
+function History({ rows, onDone }: { rows: PlanningHistory[]; onDone: () => void }) {
+  const { busy, act } = useAct(onDone)
+  if (rows.length === 0) return null
+  return (
+    <section aria-label="Aujourd'hui" className="mt-6">
+      <h2 className="mb-2 font-semibold">Aujourd'hui</h2>
+      <ul className="space-y-2 text-sm">
+        {rows.map((r, n) => {
+          const [what, tone] = DONE[r.kind]
+          const { asset_id: id, recipe } = r
+          return (
+            <li key={n} className="flex flex-wrap items-center gap-2">
+              <span className="tabular-nums text-muted">{at(r.at)}</span>
+              <Chip tone={tone}>{what}</Chip>
+              <span className="break-words">{r.title}</span>
+              {r.reason && <span className="text-muted">: {r.reason}</span>}
+              {r.status && <span className="text-muted">{RUN_STATUS[r.status] ?? r.status}</span>}
+              {r.kind === 'done' && <Link to="/inbox" className={link}>Inbox</Link>}
+              {recipe && id !== null && (
+                <Button size="sm" disabled={busy}
+                  onClick={() => void act(() => rerenderAsset(id, recipe), 'Relancé : le rendu revient dans la file.')}>Relancer</Button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
 /** « Tout mettre en pause » (187): nothing heavy starts while it is on; what runs finishes. */
 function PauseSwitch({ paused, onChanged }: { paused: string | null; onChanged: (since: string | null) => void }) {
   const toast = useToast()
@@ -365,6 +535,7 @@ function PauseSwitch({ paused, onChanged }: { paused: string | null; onChanged: 
 export default function Planning() {
   const [items, setItems] = useState<PlanningItem[] | null>(null)
   const [paused, setPaused] = useState<string | null>(null)
+  const [extras, setExtras] = useState<Partial<PlanningData>>({})
   const [error, setError] = useState<string | null>(null)
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set())
   const pending = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; run: () => void }>())
@@ -372,6 +543,7 @@ export default function Planning() {
   const load = useCallback(() => getPlanning().then((p) => {
     setItems(p.items)
     setPaused(p.paused ?? null)
+    setExtras(p)
     setError(null)
   }, (e: unknown) => setError(errorMessage(e))), [])
   useEffect(() => {
@@ -440,6 +612,8 @@ export default function Planning() {
         </p>
       )}
       {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}
+      {extras.supply && <SupplyGauge supply={extras.supply} />}
+      {extras.strip && <Strip strip={extras.strip} />}
       {visible === undefined ? (!error && <Skeleton className="h-32" />) : visible.length === 0 ? (
         <EmptyState title="Rien de prévu">Aucun rendu en file, aucune commande en attente, aucun run de l'IA dans les 24 h.</EmptyState>
       ) : (
@@ -455,6 +629,7 @@ export default function Planning() {
           })}
         </div>
       )}
+      {extras.history && <History rows={extras.history} onDone={() => void load()} />}
     </section>
   )
 }

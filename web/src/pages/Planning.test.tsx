@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ClaudeIdea, PlanningItem } from '../api/client'
+import type { ClaudeIdea, Planning as PlanningData, PlanningItem } from '../api/client'
 import { ToastProvider } from '../ui/Toast'
 import Planning from './Planning'
 
@@ -273,5 +273,127 @@ describe('Planning', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('a running item past its usual time shows « en retard » in orange', async () => {
+    stub([item({ section: 'running', title: 'Le rendu actuel', progress: 0.9, late_s: 600 })])
+    show()
+    const late = await screen.findByText('en retard de 10 min')
+    expect(late.className).toContain('text-warn')
+    expect(screen.getByText(/Début ~/).className).toContain('text-warn')
+  })
+
+  describe('190 extras', () => {
+    const extras = (over: Partial<PlanningData> = {}): PlanningData => ({
+      now: soon(0), items: [], paused: null,
+      strip: { start: soon(0), end: soon(24 * 60), blocks: [], posts: [] },
+      supply: { approved: 4, bench: 2, per_day: 3, days: 2, until: '2026-11-26', low: false, making: 1, ideas: 2 },
+      history: [], ...over,
+    })
+    function stubPlanning(p: PlanningData, preview?: unknown) {
+      const calls: Call[] = []
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+        if (method === 'GET') return new Response(JSON.stringify(p))
+        if (url === '/api/planning/preview') return new Response(JSON.stringify(preview ?? { pushed: [] }))
+        return new Response('{}')
+      }))
+      return calls
+    }
+
+    it('the 24 h strip: a block per lane, a late one in orange, the posts as ticks, scrolls on a phone', async () => {
+      stubPlanning(extras({
+        items: [item({})],
+        strip: {
+          start: soon(0), end: soon(24 * 60), posts: [soon(180)],
+          blocks: [
+            { lane: 'render', kind: 'render', title: 'Le rendu', section: 'running', start: soon(0), end: soon(60), late: true },
+            { lane: 'run', kind: 'agent_run', title: 'Run daily-produce', section: 'planned', start: soon(600), end: soon(620), late: false },
+          ],
+        },
+      }))
+      show()
+      const strip = await screen.findByRole('region', { name: 'Les prochaines 24 h' })
+      expect(strip.querySelector('.overflow-x-auto')).toBeTruthy()
+      const renders = within(within(strip).getByRole('list', { name: 'Rendus' })).getAllByRole('listitem')
+      expect(renders).toHaveLength(1)
+      expect(renders[0].className).toContain('bg-warn')
+      expect(renders[0].getAttribute('aria-label')).toMatch(/^Rendu : Le rendu, .* en retard$/)
+      expect(renders[0].style.left).toBe('0%')
+      const run = within(within(strip).getByRole('list', { name: "Runs de l'IA" })).getByRole('listitem')
+      expect(run.className).toContain('bg-accent')
+      expect(parseFloat(run.style.left)).toBeCloseTo((600 / (24 * 60)) * 100, 0)
+      expect(within(within(strip).getByRole('list', { name: 'Publications' })).getAllByRole('listitem')).toHaveLength(1)
+      expect(within(strip).getByLabelText('Maintenant')).toBeTruthy()
+    })
+
+    it('the supply gauge: days, until, what is coming; orange under a day', async () => {
+      stubPlanning(extras())
+      show()
+      expect(await screen.findByText(/Réserve : 2 jours/)).toBeTruthy()
+      expect(screen.getByText(/jusqu'à jeudi/)).toBeTruthy()
+      expect(screen.getByText('4 approuvée(s) + 2 sur le banc, 3 par jour · une fois faites : + 1 en fabrication, + 2 idée(s) de Claude')).toBeTruthy()
+      expect(screen.getByRole('meter', { name: 'Réserve' }).getAttribute('aria-valuenow')).toBe('2')
+      cleanup()
+      stubPlanning(extras({ supply: { approved: 1, bench: 0, per_day: 3, days: 0.3, until: '2026-11-23', low: true, making: 0, ideas: 0 } }))
+      show()
+      const low = await screen.findByText(/Réserve : moins d’un jour/)
+      expect(low.parentElement?.className).toContain('text-warn')
+    })
+
+    it("today's history: done to the Inbox, a failure with its reason and « Relancer », the runs", async () => {
+      const recipe = { kind: 'motion', template: 'FactQuest', props: {} }
+      const row = { asset_id: null, order_id: null, run_id: null, reason: null, status: null, recipe: null }
+      const calls = stubPlanning(extras({
+        history: [
+          { ...row, kind: 'failed', at: soon(-10), title: 'Raté', asset_id: 7, reason: 'ffmpeg crashed', recipe },
+          { ...row, kind: 'dropped', at: soon(-20), title: 'Floue', asset_id: 8, reason: 'image floue' },
+          { ...row, kind: 'removed', at: soon(-30), title: 'Retirée', order_id: 3 },
+          { ...row, kind: 'done', at: soon(-40), title: 'Finie', asset_id: 6 },
+          { ...row, kind: 'run', at: soon(-50), title: 'Run daily-produce', run_id: 2, status: 'succeeded' },
+        ],
+      }))
+      show()
+      const today = await screen.findByRole('region', { name: "Aujourd'hui" })
+      const rows = within(today).getAllByRole('listitem')
+      expect(rows.map((r) => r.textContent)).toEqual([
+        expect.stringContaining('Rendu ratéRaté: ffmpeg crashed'), expect.stringContaining('Écartée par la vérificationFloue: image floue'),
+        expect.stringContaining('Retiré du planning'), expect.stringContaining('Rendu finiFinie'), expect.stringContaining('réussi'),
+      ])
+      expect(within(rows[3]).getByRole('link', { name: 'Inbox' }).getAttribute('href')).toBe('/inbox')
+      expect(within(today).getAllByRole('button', { name: 'Relancer' })).toHaveLength(1)
+      fireEvent.click(within(rows[0]).getByRole('button', { name: 'Relancer' }))
+      expect(await screen.findByText('Relancé : le rendu revient dans la file.')).toBeTruthy()
+      expect(calls).toContainEqual({ method: 'POST', url: '/api/assets/7/rerender', body: { recipe } })
+    })
+
+    it('the delay warning: what a start now pushes back, cancel sends nothing, confirm does', async () => {
+      const calls = stubPlanning(extras({ items: [item({ title: 'Le suivant', ids: { job_id: 6 } })] }),
+        { pushed: [{ kind: 'render', title: 'A', by_s: 5400 }, { kind: 'render', title: 'B', by_s: 5400 }, { kind: 'render', title: 'C', by_s: 5000 }] })
+      show()
+      fireEvent.click(await screen.findByRole('button', { name: 'Lancer maintenant' }))
+      const box = await screen.findByRole('alertdialog', { name: 'Ce que ça repousse' })
+      expect(within(box).getByText("Repousse 3 rendus d'environ 1 h 30.")).toBeTruthy()
+      expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/preview', body: { action: 'start_now', kind: 'render', id: 6 } })
+      fireEvent.click(within(box).getByRole('button', { name: 'Annuler' }))
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+      expect(calls.some((c) => c.url.endsWith('/start-now'))).toBe(false)
+      fireEvent.click(screen.getByRole('button', { name: 'Descendre' }))
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/preview', body: { action: 'move', kind: 'render', id: 6, by: 1 } }))
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Confirmer' }))
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/6/move', body: { by: 1 } }))
+    })
+
+    it("the delay warning before releasing Claude's idea with start now", async () => {
+      const calls = stubPlanning(extras({ items: [idea()] }), { pushed: [{ kind: 'film', title: 'Un film', by_s: 900 }] })
+      show()
+      fireEvent.click(await screen.findByRole('button', { name: 'Lancer maintenant' }))
+      const box = await screen.findByRole('alertdialog')
+      expect(within(box).getByText("Repousse 1 élément d'environ 15 min.")).toBeTruthy()
+      expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/preview', body: { action: 'release', kind: 'idea', id: 9 } })
+      fireEvent.click(within(box).getByRole('button', { name: 'Confirmer' }))
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/idea/9/release', body: { now: true } }))
+    })
   })
 })

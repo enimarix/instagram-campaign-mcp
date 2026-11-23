@@ -17,6 +17,10 @@ worker really takes the work today:
 - ideas: Claude's planned videos waiting for the owner (src/studio/planned.py, 188b):
   outside the chain, no time until released.
 
+Around the chain (190): the 24 h strip of its ETAs and the queued posts (strip), the
+supply gauge (supply), today's history (history), and the delay warning before a move or
+« start now » (preview: the real call on a copy of the database).
+
 Every time is an estimate (`estimated: true`): each item starts when the one before is
 ready. A duration is the median of the recent real ones (render_jobs.render_ms per engine,
 agent_runs per playbook), else the constants below (docs/DECISIONS.md).
@@ -34,8 +38,21 @@ from typing import Any, Dict, List, Optional
 from ..agent import film, packet, schedule
 from ..config import InstagramMCPSettings
 from ..learning.learnings import list_revision_requests
-from ..store import CampaignStore, parse_iso, to_iso
-from . import checks, cinematic, lemo, line, macro3d, planned, sitcom, voices, work_orders
+from ..store import CampaignStore, parse_dt, parse_iso, to_iso
+from . import (
+    checks,
+    cinematic,
+    lemo,
+    line,
+    macro3d,
+    planned,
+    render,
+    scheduling,
+    sitcom,
+    voices,
+    work_orders,
+)
+from .assets import transition
 
 # Fallback seconds per engine (DECISIONS: Remotion ~0.4 min per 30 s video; the 8-shot
 # Blender proof 13.1 min; Macro3D's first Blender plates 12-15 min). ponytail: ffmpeg's
@@ -119,6 +136,13 @@ def _title(*texts: Optional[str]) -> str:
     return " ".join(text.split())[:120]
 
 
+def _late(start: datetime, usual_s: float, now: datetime) -> Optional[int]:
+    """Seconds a running item is past its usual time (start + the median duration), else
+    None. Its est_ready never is (it moves with the pace, never before now)."""
+    late = (now - start).total_seconds() - usual_s
+    return round(late) if late >= 60 else None
+
+
 def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
              jobs: List[Dict[str, Any]], render_s: Dict[str, float]) -> List[Dict[str, Any]]:
     out = []
@@ -133,14 +157,15 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                      start, took + left, "Le rendu en cours : un seul à la fois.",
                      source=j["origin"] or "agent", style=j["style"], engine=engine,
                      asset_id=j["asset_id"], order_id=j["order_id"], pick_id=j["pick_id"])
-        out.append({**item, "stage": "rendu", "progress": p})
+        out.append({**item, "stage": "rendu", "progress": p,
+                    "late_s": _late(start, render_s[engine], now)})
     for r in store.running_agent_runs():
         start = parse_iso(r["started_at"])
         if r["playbook"] == film.PLAYBOOK:
             order = next((o for o in work_orders.list_orders(store, "in_production")
                           if lemo.is_lemo(o["style"])), None)
-            took = max(_run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60),
-                       (now - start).total_seconds())
+            usual = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
+            took = max(usual, (now - start).total_seconds())
             item = _item("running", "film", _title(order and order["instruction"], "Film Lemo"),
                          start, took, "Le film Lemo en fabrication : un à la fois.",
                          source=order and order["source"], style=order and order["style"],
@@ -148,25 +173,37 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         else:
             kind = {schedule.ORDER_PLAYBOOK: "order_run",
                     checks.PLAYBOOK: "check_run"}.get(r["playbook"], "agent_run")
-            took = max(_run_s(store, r["playbook"]), (now - start).total_seconds())
+            usual = _run_s(store, r["playbook"])
+            took = max(usual, (now - start).total_seconds())
             item = _item("running", kind,
                          f"Run {r['playbook']}", start, took,
                          "Le run de l'IA en cours : rien d'autre ne démarre avant sa fin.",
                          source="agent", run_id=r["id"])
-        out.append({**item, "stage": "en cours"})
+        out.append({**item, "stage": "en cours", "late_s": _late(start, usual, now)})
     return out
 
 
 def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                    ) -> Dict[str, Any]:
-    """{now, items, paused}: the chain (see module doc); paused: since when the studio is
-    paused (line.pause), else None. Item: section running | next | planned | ideas, kind
+    """{now, items, paused, strip, supply, history}: the chain (see chain()); paused: since
+    when the studio is paused (line.pause), else None; strip, supply, history (190): see
+    those functions."""
+    items = chain(store, settings, now)
+    return {"now": to_iso(now), "items": items, "paused": line.paused(store),
+            "strip": strip(store, now, items), "supply": supply(store, settings, now, items),
+            "history": history(store, settings, now)}
+
+
+def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
+          ) -> List[Dict[str, Any]]:
+    """The chain (see module doc). Item: section running | next | planned | ideas, kind
     render | film | order_run | check_run | agent_run | work_order | change_request | claude_idea, title,
     source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
     why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | check_grace |
     daily_cap | preflight | next_ai_run | needs_instruction | None), not_before (a waiting render's or
-    film's timer, UTC ISO), stage and progress (running items), picks_up (the producing
+    film's timer, UTC ISO), stage and progress (running items), late_s (a running item past
+    its usual time, 190; else None), picks_up (the producing
     run's placeholder), idea (a claude_idea's card: planned.cards, section ideas)."""
     with store._tx() as c:
         jobs = [dict(r) for r in c.execute(_JOBS)]
@@ -339,4 +376,146 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                               " ton « Valider ».", source="agent", style=card["style"],
                               engine=_engine(env), voice=card["voice"],
                               asset_id=card["asset_id"]), "idea": card})
-    return {"now": to_iso(now), "items": items, "paused": line.paused(store)}
+    return items
+
+
+LANES = {"render": "render", "work_order": "render", "change_request": "render",
+         "film": "film"}  # else run (the AI's runs)
+MAKES = ("render", "film", "work_order", "change_request")  # each ends as a video
+
+
+def strip(store: CampaignStore, now: datetime, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The 24 h strip (190): {start, end (UTC ISO, now → now + HORIZON), blocks [{lane render
+    | film | run, kind, title, section, start, end (clipped to the strip), late}], posts
+    [publish_at of the queued posts in the strip]}, from the chain's ETAs."""
+    end = now + HORIZON
+    blocks = []
+    for i in items:
+        start, ready = (parse_iso(i["est_start"]) if i["est_start"] else None), _ready(i)
+        if start is None or ready is None or ready <= now or start >= end:
+            continue
+        blocks.append({"lane": LANES.get(i["kind"], "run"), "kind": i["kind"],
+                       "title": i["title"], "section": i["section"],
+                       "start": to_iso(max(start, now)), "end": to_iso(min(ready, end)),
+                       "late": bool(i.get("late_s"))})
+    queued = (parse_dt(r["publish_at"]) for r in store.queue_times(since=now)
+              if r["status"] == "pending")
+    return {"start": to_iso(now), "end": to_iso(end), "blocks": blocks,
+            "posts": sorted(to_iso(at) for at in queued if now <= at <= end)}
+
+
+def supply(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+           items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The supply gauge (190): {approved (approved or queued), bench (scheduling.bench_assets),
+    per_day (MAX_POSTS_PER_DAY), days, until (owner-local date the reserve lasts to), low
+    (under a day), making (videos the line will add once done), ideas (Claude's cards)}."""
+    with store._tx() as c:
+        approved = c.execute("SELECT COUNT(*) FROM assets WHERE status IN"
+                             " ('approved', 'scheduled')").fetchone()[0]
+    bench = len(scheduling.bench_assets(store, settings, now))
+    days = (approved + bench) / settings.max_posts_per_day
+    today = schedule._local(settings, now).date()
+    return {"approved": approved, "bench": bench, "per_day": settings.max_posts_per_day,
+            "days": round(days, 1), "until": (today + timedelta(days=int(days))).isoformat(),
+            "low": days < 1,
+            "making": sum(i["section"] in ("running", "next") and i["kind"] in MAKES
+                          and i["est_ready"] is not None for i in items),
+            "ideas": sum(i["section"] == "ideas" for i in items)}
+
+
+_DAY_JOBS = ("SELECT j.id, j.asset_id, j.state, j.failure, j.finished_at,"
+             " a.status AS asset_status, a.recipe, a.caption, i.hook FROM render_jobs j"
+             " JOIN assets a ON a.id = j.asset_id JOIN ideas i ON i.id = a.idea_id"
+             " WHERE j.state IN ('done', 'failed') AND j.finished_at >= ?"
+             " ORDER BY j.finished_at DESC, j.id DESC")
+_DAY_DROPS = ("SELECT a.id, a.caption, a.agent_decision, i.hook FROM assets a"
+              " JOIN ideas i ON i.id = a.idea_id"
+              " WHERE json_extract(a.agent_decision, '$.kind') = 'dropped'"
+              " AND json_extract(a.agent_decision, '$.at') >= ? ORDER BY a.id")
+# Not the order of a removed render's video (line.skip_orders): that render is listed.
+_DAY_ORDERS = ("SELECT w.id, w.instruction, w.updated_at FROM work_orders w"
+               " WHERE w.status = 'skipped' AND w.skip_reason = ? AND w.updated_at >= ?"
+               " AND NOT EXISTS (SELECT 1 FROM render_jobs j JOIN assets a ON a.id = j.asset_id"
+               " WHERE a.idea_id = w.idea_id AND j.failure = ?) ORDER BY w.id")
+
+
+def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
+            ) -> List[Dict[str, Any]]:
+    """Today's history (190, since owner-local midnight), newest first: [{kind done | failed
+    | removed | dropped | run, at, title, asset_id, order_id, run_id, reason (failed,
+    dropped), status (run), recipe (a failed render whose video can be rendered again with
+    it: POST /api/assets/{id}/rerender; else None)}]."""
+    local = schedule._local(settings, now)
+    since = to_iso(local.replace(hour=0, minute=0, second=0, microsecond=0))
+
+    def row(kind: str, at: str, title: str, **extra: Any) -> Dict[str, Any]:
+        return {"kind": kind, "at": at, "title": title, "asset_id": None, "order_id": None,
+                "run_id": None, "reason": None, "status": None, "recipe": None, **extra}
+
+    out, offered = [], set()
+    with store._tx() as c:
+        jobs = c.execute(_DAY_JOBS, (since,)).fetchall()
+        drops = c.execute(_DAY_DROPS, (since,)).fetchall()
+        orders = c.execute(_DAY_ORDERS, (line.REMOVED, since, line.REMOVED)).fetchall()
+    for j in jobs:
+        kind = ("done" if j["state"] == "done" else
+                "removed" if j["failure"] == line.REMOVED else "failed")
+        failed = kind == "failed"
+        retry = failed and j["asset_status"] == "failed" and j["asset_id"] not in offered
+        offered.add(j["asset_id"])  # « Relancer » once per video: on its newest job
+        out.append(row(kind, j["finished_at"],
+                       _title(j["hook"], j["caption"], f"Vidéo {j['asset_id']}"),
+                       asset_id=j["asset_id"], reason=_title(j["failure"]) if failed else None,
+                       recipe=json.loads(j["recipe"]) if retry else None))
+    for a in drops:
+        why = json.loads(a["agent_decision"])
+        out.append(row("dropped", why["at"], _title(a["hook"], a["caption"], f"Vidéo {a['id']}"),
+                       asset_id=a["id"], reason=why.get("why")))
+    out.extend(row("removed", o["updated_at"], _title(o["instruction"], f"Commande {o['id']}"),
+                   order_id=o["id"]) for o in orders)
+    # ponytail: the last 50 runs; more than 50 runs a day is not a real case.
+    out.extend(row("run", r["started_at"], f"Run {r['playbook']}", run_id=r["id"],
+                   status=r["status"])
+               for r in store.list_agent_runs(limit=50) if r["started_at"] >= since)
+    return sorted(out, key=lambda r: r["at"], reverse=True)
+
+
+PREVIEWS = ("start_now", "move", "release")
+
+
+def _key(item: Dict[str, Any]) -> tuple:
+    return item["section"], item["kind"], item["title"], tuple(sorted(item["ids"].items()))
+
+
+def preview(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+            action: str, kind: str, item_id: int, by: int = 0) -> Dict[str, Any]:
+    """The delay warning (190): what « Lancer maintenant » (start_now), « Monter » /
+    « Descendre » (move, by -1 / 1) or releasing Claude's idea with start now (release, kind
+    idea, item_id its video) would push back: the real calls run on a copy of the database,
+    the chain built again. {pushed: [{kind, title, by_s}]} in chain order; the real call's
+    errors (KeyError, ValueError)."""
+    if action not in PREVIEWS:
+        raise ValueError(f"action must be one of {', '.join(PREVIEWS)}")
+    # ponytail: copies the whole database (2 MB today: milliseconds); a SAVEPOINT on a
+    # dedicated connection if it grows past what a click can wait for.
+    copy = CampaignStore(":memory:")
+    try:
+        with store._tx() as c:
+            c.backup(copy._conn)
+        if action == "start_now":
+            line.start_now(copy, kind, item_id)
+        elif action == "move":
+            line.move(copy, kind, item_id, by)
+        else:  # planned.release minus its checks: they change no time
+            transition(copy, item_id, "rendering", actor="owner")
+            line.start_now(copy, "render", render.enqueue_render(copy, item_id)["id"])
+        after = {_key(i): _ready(i) for i in chain(copy, settings, now) if i["est_ready"]}
+    finally:
+        copy.close()
+    pushed = []
+    for i in chain(store, settings, now):
+        moved = after.get(_key(i))
+        by_s = (moved - _ready(i)).total_seconds() if moved and i["est_ready"] else 0
+        if by_s >= 60:
+            pushed.append({"kind": i["kind"], "title": i["title"], "by_s": round(by_s)})
+    return {"pushed": pushed}
