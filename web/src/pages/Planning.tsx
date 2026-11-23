@@ -406,6 +406,8 @@ function arrange(items: PlanningItem[], order: string[] | null) {
 }
 
 type Place = (item: PlanningItem, index: number) => Promise<unknown>
+const EDGE_PX = 80 // a drag this close to the screen's top / bottom scrolls the page
+const SCROLL_PX = 12 // per frame
 
 /** Drag and drop (195): a waiting render or film (it has a line_index) is dragged by its grip
  * with the mouse or a finger (pointer events on the window; the grip's touch-none keeps the
@@ -431,13 +433,32 @@ function useDrag(items: PlanningItem[], onPlace?: Place) {
       const r = list.current?.querySelector(`[data-drag="${k}"]`)?.getBoundingClientRect()
       return r ? r.top + r.height / 2 : 0
     }
-    const move = (ev: PointerEvent) => {
+    let y = e.clientY
+    const reorder = () => {
       const rest = now.filter((k) => k !== key)
-      const to = rest.filter((k) => middle(k) < ev.clientY).length
+      const to = rest.filter((k) => middle(k) < y).length
       const next = [...rest.slice(0, to), key, ...rest.slice(to)]
       if (next.join() !== now.join()) setOrder((now = next))
     }
+    const move = (ev: PointerEvent) => {
+      y = ev.clientY
+      reorder()
+    }
+    // Near the screen's top or bottom edge the page scrolls: a tall card's neighbour is often
+    // off screen, on a phone above all.
+    let frame = 0
+    const roll = () => {
+      const by = y < EDGE_PX ? -SCROLL_PX : y > window.innerHeight - EDGE_PX ? SCROLL_PX : 0
+      const page = document.scrollingElement
+      if (by && page) {
+        page.scrollTop += by
+        reorder()
+      }
+      frame = requestAnimationFrame(roll)
+    }
+    frame = requestAnimationFrame(roll)
     const end = (ev: PointerEvent) => {
+      cancelAnimationFrame(frame)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', end)
       window.removeEventListener('pointercancel', end)
