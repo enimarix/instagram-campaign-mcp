@@ -74,7 +74,8 @@ exactly as it is. Never rewrite the video from memory.
   voice=<voice>, music_audio_id=<music_audio_id>, asset_id=<asset_id>)` (leave out the
   ones that are null); `list_motion_templates` (once per run) when you need the
   template's schema for the fix. A failed asset renders again in place; a ready one gets
-  a new version and leaves the feed by itself. The voice is made again for the lines as
+  a new version and leaves the feed by itself (it comes back in your list if the new
+  version fails or is dropped: judge it again as it is). The voice is made again for the lines as
   they are now.
 - remix: `render_remix(idea_id=<idea_id>, source_id=…, hook=…, script=…, trim_start_s=…,
   trim_end_s=…, layout=…, captions=…, voice=…, music=…)` with the fix (`list_sources` for

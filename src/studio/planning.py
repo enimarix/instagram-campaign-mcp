@@ -388,10 +388,10 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         elif why == "daily_cap":
             at = midnight
         elif why == "seen":  # 193: what the last check left is offered again later
-            last = store.get_state("check_run_started_at")
+            last = schedule.check_started_at(store)
             if not last:
                 return
-            at = parse_iso(last) + timedelta(hours=settings.check_recheck_hours)
+            at = last + timedelta(hours=settings.check_recheck_hours)
             if at < midnight and schedule._runs_today(
                     store, settings, now, "check")[1] >= settings.max_check_runs_per_day:
                 at = midnight

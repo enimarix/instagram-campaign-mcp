@@ -248,6 +248,16 @@ def test_an_order_in_its_grace_goes_after_the_check_run_it_does_not_delay(
     assert parse_iso(run["est_start"]) == NOW and check["est_start"] == last["est_ready"]
 
 
+def test_the_re_check_follows_an_owner_launched_check_run(store, agent_dir):
+    # 199 (#9): no _launch time (the owner launched it): its row starts the re-check clock
+    _checkable(store, 120)
+    _run(store, "check-renders", NOW - timedelta(hours=1), minutes=6)
+    check, = [i for i in planning.build_planning(store, cfg(check_recheck_hours=4), NOW)[
+        "items"] if i["kind"] == "check_run"]
+    assert check["waits_on"] == "recheck"
+    assert parse_iso(check["est_start"]) == NOW + timedelta(hours=3)
+
+
 def test_the_check_run_shows_at_its_re_check(store, agent_dir):
     # 193: what a check run saw and left is offered again CHECK_RECHECK_HOURS after its start
     s = cfg(check_recheck_hours=4)

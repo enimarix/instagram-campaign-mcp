@@ -164,9 +164,11 @@ def release(store: CampaignStore, settings: InstagramMCPSettings, asset_id: int,
 
 def remove(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
     """« Retirer »: the planned video is archived (the page's 5 s undo sends nothing before
-    it ends), and the order it was made for skipped unless another video of it lives."""
+    it ends), its place in its batch day given back (give_place), and the order it was made
+    for skipped unless another video of it lives."""
     asset = _planned(store, asset_id)
     transition(store, asset_id, "archived", actor="owner")
+    give_place(store, asset["batch_date"])
     line.skip_orders(store, asset["idea_id"])
     return {"asset_id": asset_id, "removed": True}
 
@@ -213,12 +215,16 @@ def _save_places(c: Any, days: Dict[str, Dict[str, int]]) -> None:
 
 def open_places(store: CampaignStore, day: str, places: int) -> int:
     """The producing run's packet (188c) sets the places Claude's ideas may take in `day`'s
-    batch; take_place() counts them down. Returns the places left: `places` minus the
-    Claude cards already planned for that day (193: a retried packet or a second run of the
-    day never plans past the batch)."""
+    batch; take_place() counts them down. The day's first packet fixes them, a later one
+    may only lower them (199: once the first run made the owner's items, ideas_left() grows
+    back; the batch stays the batch). Returns the places left: the day's places minus the
+    Claude cards already planned for it (193: a retried packet or a second run of the day
+    never plans past the batch)."""
     with store.immediate() as c:
         days = _places(c)
-        taken = days.get(day, {}).get("taken", 0)
+        st = days.get(day)
+        places = min(places, st["places"]) if st else places
+        taken = st["taken"] if st else 0
         days[day] = {"places": places, "taken": taken}
         _save_places(c, days)
     return max(0, places - taken)
@@ -239,6 +245,16 @@ def take_place(store: CampaignStore, settings: InstagramMCPSettings, day: str) -
                              " planning ideas and finish the run")
         days[day] = {**st, "taken": st["taken"] + 1}
         _save_places(c, days)
+
+
+def give_place(store: CampaignStore, day: str) -> None:
+    """A removed Claude card gives its place in `day`'s batch back (199: the cap is how many
+    of Claude's ideas wait or get made); a released one keeps it."""
+    with store.immediate() as c:
+        days = _places(c)
+        if days.get(day, {}).get("taken"):
+            days[day]["taken"] -= 1
+            _save_places(c, days)
 
 
 def cards(store: CampaignStore) -> List[Dict[str, Any]]:

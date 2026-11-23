@@ -131,6 +131,23 @@ def test_a_request_whose_run_is_already_running_is_kept(store):
     assert store.get_state(packet.SCOPE_KEY) is None  # no stale scope for the next run
 
 
+def test_a_start_that_raises_drops_the_request_said_with_no_stale_scope(store):
+    # 199 (#14): never lost silently, never a scope the next light run would take
+    from src.studio import alerts
+
+    schedule.request_launch(store, "daily-revise", NOW, order_ids=[3])
+
+    def broken(*a):
+        raise OSError("python.exe introuvable")
+
+    assert schedule.launched(store, cfg(), NOW, start=broken) is None
+    assert schedule.launch_requests(store) == []
+    assert store.get_state(packet.SCOPE_KEY) is None
+    alert = store.get_state(alerts.RAISED_KEY)["agent_launch:daily-revise"]
+    assert "python.exe introuvable" in alert["detail"] and alert["severity"] == "error"
+    assert any(a["id"] == "agent_launch:daily-revise" for a in alerts._raised(store, NOW))
+
+
 def test_the_light_run_on_a_selection_sees_only_it(store, monkeypatch, tmp_path):
     s = cfg()
     mine = _order(store, monkeypatch, "La mienne", minutes_ago=2)  # in its grace
