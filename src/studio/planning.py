@@ -36,6 +36,7 @@ run's row on the way, as the worker does every minute.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import datetime, time, timedelta
 from statistics import median
 from typing import Any, Callable, Dict, List, Optional
@@ -209,7 +210,9 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     recheck | daily_cap | preflight | next_ai_run | needs_instruction | None), not_before (a
     waiting render's or film's timer, UTC ISO), stage and progress (running items), late_s
     (a running item past its usual time, 190; else None), picks_up (the producing run's
-    placeholder), idea (a claude_idea's card: planned.cards, section ideas)."""
+    placeholder), idea (a claude_idea's card: planned.cards, section ideas), line_index (a
+    waiting render's or film's place among the line's items not held, for line.place; held:
+    None)."""
     with store._tx() as c:
         jobs = [dict(r) for r in c.execute(_JOBS)]
     render_s = _render_s(store)
@@ -238,6 +241,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         pending = [i for i in line.waiting(store) if (i["kind"], i["id"]) in rows]
         held = [i for i in pending if i["not_before"] == line.HELD]  # listed after, no time
         pending = [i for i in pending if i not in held]
+        # the drag and drop's index (line.place, 195): its place among the not held, in line order
+        index = {(i["kind"], i["id"]): n for n, i in enumerate(pending)}
         took = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
         quota = left = settings.lemo_films_per_day - film.films_today(store, settings, now)
         reset, films_n, idle_at, n = _midnight(settings, now), 0, None, len(items)
@@ -245,20 +250,22 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
         def card(i: Dict[str, Any], start: Optional[datetime], waits: Optional[str],
                  why: str) -> Dict[str, Any]:
-            r, nb = rows[(i["kind"], i["id"])], i["not_before"]
-            nb = None if nb == line.HELD else nb
+            key, nb = (i["kind"], i["id"]), i["not_before"]
+            r, nb = rows[key], None if nb == line.HELD else nb
             if i["kind"] == "render":
                 engine = _engine(r["recipe"])
-                return _item("next", "render", _title(r["hook"], r["caption"],
+                item = _item("next", "render", _title(r["hook"], r["caption"],
                                                       f"Vidéo {r['asset_id']}"),
                              start, render_s[engine], why, waits_on=waits, not_before=nb,
                              source=r["origin"] or "agent", style=r["style"], engine=engine,
                              asset_id=r["asset_id"], order_id=r["order_id"],
                              pick_id=r["pick_id"], job_id=r["id"])
-            return _item("next", "film", _title(r["instruction"], f"Film {r['id']}"), start,
-                         took, why, waits_on=waits, not_before=nb, source=r["source"],
-                         style=r["style"], engine="film", order_id=r["id"],
-                         pick_id=r["pick_id"])
+            else:
+                item = _item("next", "film", _title(r["instruction"], f"Film {r['id']}"),
+                             start, took, why, waits_on=waits, not_before=nb,
+                             source=r["source"], style=r["style"], engine="film",
+                             order_id=r["id"], pick_id=r["pick_id"])
+            return {**item, "line_index": index.get(key)}
 
         while pending:
             if gpu >= reset:  # the caps reset at owner-local midnight
@@ -484,29 +491,38 @@ def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     """Today's history (190, since owner-local midnight), newest first: [{kind done | failed
     | removed | dropped | run, at, title, asset_id, order_id, run_id, reason (failed,
     dropped), status (run), recipe (a failed render whose video can be rendered again with
-    it: POST /api/assets/{id}/rerender; else None)}]."""
+    it: POST /api/assets/{id}/rerender; else None), tries (failed: how many of the video's
+    renders failed today)}]. A video's failures are one row (195): its newest, with its
+    reason."""
     local = schedule._local(settings, now)
     since = to_iso(local.replace(hour=0, minute=0, second=0, microsecond=0))
 
     def row(kind: str, at: str, title: str, **extra: Any) -> Dict[str, Any]:
         return {"kind": kind, "at": at, "title": title, "asset_id": None, "order_id": None,
-                "run_id": None, "reason": None, "status": None, "recipe": None, **extra}
+                "run_id": None, "reason": None, "status": None, "recipe": None, "tries": None,
+                **extra}
 
-    out, offered = [], set()
+    out = []
     with store._tx() as c:
         jobs = c.execute(_DAY_JOBS, (since,)).fetchall()
         drops = c.execute(_DAY_DROPS, (since,)).fetchall()
         orders = c.execute(_DAY_ORDERS, (line.REMOVED, since, line.REMOVED)).fetchall()
-    for j in jobs:
-        kind = ("done" if j["state"] == "done" else
-                "removed" if j["failure"] == line.REMOVED else "failed")
+    kinds = [("done" if j["state"] == "done" else
+              "removed" if j["failure"] == line.REMOVED else "failed") for j in jobs]
+    tries = Counter(j["asset_id"] for j, kind in zip(jobs, kinds) if kind == "failed")
+    shown = set()
+    for j, kind in zip(jobs, kinds):
         failed = kind == "failed"
-        retry = failed and j["asset_status"] == "failed" and j["asset_id"] not in offered
-        offered.add(j["asset_id"])  # « Relancer » once per video: on its newest job
+        if failed:  # one row per video: its newest failure
+            if j["asset_id"] in shown:
+                continue
+            shown.add(j["asset_id"])
+        retry = failed and j["asset_status"] == "failed"
         out.append(row(kind, j["finished_at"],
                        _title(j["hook"], j["caption"], f"Vidéo {j['asset_id']}"),
                        asset_id=j["asset_id"], reason=_title(j["failure"]) if failed else None,
-                       recipe=json.loads(j["recipe"]) if retry else None))
+                       recipe=json.loads(j["recipe"]) if retry else None,
+                       tries=tries[j["asset_id"]] if failed else None))
     for a in drops:
         why = json.loads(a["agent_decision"])
         out.append(row("dropped", why["at"], _title(a["hook"], a["caption"], f"Vidéo {a['id']}"),

@@ -1141,6 +1141,7 @@ export type PlanningItem = {
   late_s?: number | null // a running item past its usual time (190)
   picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
   idea?: ClaudeIdea // a claude_idea's card (section ideas, 188b)
+  line_index?: number | null // a waiting render's or film's place among the line's not held (placeItem, 195)
 }
 /** A video Claude planned (188b): nothing renders or is voiced until « Valider ». */
 export type ClaudeIdea = {
@@ -1188,6 +1189,7 @@ export type PlanningHistory = {
   reason: string | null
   status: string | null
   recipe: Record<string, unknown> | null
+  tries: number | null // failed: how many of the video's renders failed today (one row per video, 195)
 }
 export type Planning = {
   now: string
@@ -1217,6 +1219,9 @@ export const holdItem = (kind: LineKind, id: number, held: boolean) =>
 /** Swap with the neighbour: -1 up, 1 down. */
 export const moveItem = (kind: LineKind, id: number, by: -1 | 1) =>
   send<unknown>('POST', `/api/planning/${kind}/${id}/move`, { by })
+/** Drag and drop (195): to `index` among the other waiting items not held (0 the head). */
+export const placeItem = (kind: LineKind, id: number, index: number) =>
+  send<unknown>('POST', `/api/planning/${kind}/${id}/place`, { index })
 /** Out of the line for good (order: an owner order / change request, by its order id). */
 export const removeItem = (kind: LineKind | 'order', id: number) =>
   send<unknown>('POST', `/api/planning/${kind}/${id}/remove`)

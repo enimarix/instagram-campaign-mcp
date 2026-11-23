@@ -210,6 +210,29 @@ def move(store: CampaignStore, kind: str, item_id: int, by: int) -> Dict[str, An
     return {"kind": kind, "id": item_id, "line_pos": to + 1}
 
 
+def place(store: CampaignStore, kind: str, item_id: int, index: int) -> Dict[str, Any]:
+    """The Planning page's drag and drop (195): the item goes to `index` among the other
+    waiting items that are not held (0 = the head, their count = the end); held ones keep
+    their place. Then the whole line's order is written as line_pos 1..n, like move()."""
+    if kind not in KINDS:
+        raise ValueError(f"kind must be one of {', '.join(KINDS)}")
+    with store.immediate() as c:  # read-then-write, like move()
+        items = [dict(r) for r in c.execute(_WAITING)]
+        me = next((i for i in items if (i["kind"], i["id"]) == (kind, item_id)), None)
+        if me is not None:
+            items.remove(me)
+            free = [n for n, i in enumerate(items) if i["not_before"] != HELD]
+            if not 0 <= index <= len(free):
+                raise ValueError(f"index must be between 0 and {len(free)}")
+            items.insert(free[index] if index < len(free) else
+                         free[-1] + 1 if free else len(items), me)
+            for pos, i in enumerate(items, 1):
+                _update(c, i["kind"], i["id"], "line_pos = ?", (pos,))
+    if me is None:
+        _refuse(store, kind, item_id)
+    return {"kind": kind, "id": item_id, "index": index}
+
+
 def remove(store: CampaignStore, kind: str, item_id: int) -> Dict[str, Any]:
     """« Retirer »: a waiting render job fails with REMOVED (the claim never takes it) and
     its asset is archived unless another job of it is queued or running (the order in
