@@ -135,6 +135,8 @@ def render_args(env: Optional[Dict[str, Any]], source_id: Optional[int]
         return args
     if "reaction" not in env["inputs"]:  # not a reaction remix (none is made since 069)
         return None
+    # ponytail: the packet keeps 50 caption lines (packet.MAX_ITEMS); a remix is at most
+    # REMIX_MAX_CLIP_S long, far fewer lines. Cap here like the props if that ever bites.
     params = remix.remix_params(env)
     start, end = params.pop("trim")
     return {"tool": "render_remix", "source_id": source_id, **params,
