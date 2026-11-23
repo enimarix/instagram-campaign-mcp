@@ -142,7 +142,8 @@ def _agent_runs(store: CampaignStore) -> List[Dict[str, Any]]:
 def _qc_spike(store: CampaignStore) -> List[Dict[str, Any]]:
     with store._tx() as c:
         rows = c.execute("SELECT batch_date, status, qc, updated_at FROM assets WHERE"
-                         " batch_date = (SELECT MAX(batch_date) FROM assets)").fetchall()
+                         " status <> 'planned' AND batch_date = (SELECT MAX(batch_date)"
+                         " FROM assets WHERE status <> 'planned')").fetchall()
     failed = [r for r in rows
               if r[1] == "failed" and json.loads(r[2] or "{}").get("passed") is False]
     if not rows or len(failed) < QC_SPIKE * len(rows):

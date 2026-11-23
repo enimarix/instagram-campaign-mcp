@@ -1122,8 +1122,8 @@ export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'd
 /** GET /api/planning (185): the chain of what the studio makes next, every time estimated. */
 export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'held' | 'order_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
 export type PlanningItem = {
-  section: 'running' | 'next' | 'planned'
-  kind: 'render' | 'film' | 'order_run' | 'agent_run' | 'work_order' | 'change_request'
+  section: 'running' | 'next' | 'planned' | 'ideas'
+  kind: 'render' | 'film' | 'order_run' | 'agent_run' | 'work_order' | 'change_request' | 'claude_idea'
   title: string
   source: string | null
   ids: { order_id?: number; asset_id?: number; pick_id?: number; run_id?: number; job_id?: number }
@@ -1140,6 +1140,23 @@ export type PlanningItem = {
   stage: string | null
   progress: number | null
   picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
+  idea?: ClaudeIdea // a claude_idea's card (section ideas, 188b)
+}
+/** A video Claude planned (188b): nothing renders or is voiced until « Valider ». */
+export type ClaudeIdea = {
+  asset_id: number
+  batch_date: string
+  hook: string | null
+  style: string | null
+  kind: 'motion' | 'remix'
+  template: string | null
+  script: { text: string; editable: boolean }[] // the spoken lines, in order
+  voice: string | null
+  music: string | null // a bed (music-…), none, or an Instagram track's audio_id
+  caption: string | null
+  description: string | null
+  sources: { url: string; title?: string }[]
+  music_options: string[]
 }
 /** paused: since when the studio is paused (« Tout mettre en pause », 187), else null. */
 export const getPlanning = () => request<{ now: string; items: PlanningItem[]; paused: string | null }>('/api/planning')
@@ -1158,4 +1175,10 @@ export const moveItem = (kind: LineKind, id: number, by: -1 | 1) =>
 /** Out of the line for good (order: an owner order / change request, by its order id). */
 export const removeItem = (kind: LineKind | 'order', id: number) =>
   send<unknown>('POST', `/api/planning/${kind}/${id}/remove`)
+/** « Valider » (now: « Lancer maintenant »; at: the timer, UTC ISO). */
+export const releaseIdea = (assetId: number, body: { now?: boolean; at?: string }) =>
+  send<unknown>('POST', `/api/planning/idea/${assetId}/release`, body)
+export type IdeaEdit = { voice?: string; music?: string; lines?: string[]; caption?: string; description?: string }
+export const editIdea = (assetId: number, body: IdeaEdit) => send<unknown>('PATCH', `/api/planning/idea/${assetId}`, body)
+export const removeIdea = (assetId: number) => send<unknown>('POST', `/api/planning/idea/${assetId}/remove`)
 export const setStudioPaused = (paused: boolean) => send<{ paused: string | null }>('PUT', '/api/planning/pause', { paused })

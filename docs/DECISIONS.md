@@ -8,6 +8,30 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: Claude plans a video; the owner releases it from the Planning page (188b)
+A new asset status, `planned`, starts a video Claude plans instead of queueing:
+`render_motion` / `render_remix` take `plan=True` (and a `description`) rather than a new
+`plan_video` tool, so the plan goes through the very checks a render gets (props, style, voice
+on, Instagram track, rights) and the agent profile keeps the two tools it already had. A
+planned video has its full recipe (the voice still a `voice_todo`), caption and description,
+and no render job, no TTS, no file, no reaction piece; its sources are the idea's citations.
+It is not in the line and has no ETA. The Planning page lists them first, in their own colour
+(token `idea`: Sweetie lime `#a7f070` dark, `#3f6212` light, AA on every surface), newest
+batch first. The owner can edit the voice, the music (a bed, none, or a fetched Instagram
+track), the spoken lines (those that are one prop text; a line joined from several, such as
+PaperStory strips, is shown locked), caption and description, each re-checked on save.
+« Valider » checks it all again (a remix: its rights, then it claims its reaction piece) and
+moves it `planned` → `rendering` (owner only) with its render arriving in the line now;
+« Lancer maintenant » and « Minuteur » release it the same way plus `line.start_now` /
+`line.set_timer`; « Retirer » moves it `planned` → `archived` after the 5 s client undo.
+`list_assets` (the Inbox, the agent's list) leaves planned assets out unless asked by status;
+the funnel and the QC-spike alert ignore them; housekeeping and the bench only ever look at
+`ready` / `archived`, so a planned video never expires. The status is added by editing the
+assets table's CHECK in place (SQLite's documented procedure for a widened CHECK, migration
+27): rebuilding it is refused by the tables that reference it.
+Reason: owner request 2026-11-22 (« a new idea made from Claude must be in a widget with
+another color, and I can review it before it runs »); 188c points the night run at it.
+
 ## 2026-11-23: The voice-over is made by the render job, not when a video is queued (188a)
 `render_motion` / `render_remix` (and an owner re-render) check the props and the voice (on,
 known) and return at once: the recipe keeps the lines unvoiced plus `voice_todo` (the voice,

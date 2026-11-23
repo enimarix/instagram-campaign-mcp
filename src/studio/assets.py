@@ -24,6 +24,8 @@ MOVES: Dict[Tuple[str, str], Set[str]] = {
     ("rendering", "failed"): {"worker"},
     ("failed", "rendering"): {"agent", "owner"},  # re-render
     ("rendering", "archived"): {"owner"},  # removed from the Planning before its render (187)
+    ("planned", "rendering"): {"owner"},  # « Valider » on Claude's idea card (188b)
+    ("planned", "archived"): {"owner"},  # « Retirer » on it
     ("needs_reaction", "rendering"): {"owner"},  # owner uploads a reaction take
     ("ready", "approved"): {"owner"},  # owner only
     ("ready", "revision_requested"): {"owner"},  # comment that asks for changes
@@ -115,12 +117,17 @@ def edit_asset(store: CampaignStore, asset_id: int, **fields: Any) -> Dict[str, 
 
     Only the keys given change; ValueError names the problem.
     """
+    return store.update_asset(asset_id, **checked_fields(store.get_asset(asset_id)["status"],
+                                                         **fields))
+
+
+def checked_fields(status: str, **fields: Any) -> Dict[str, Any]:
+    """edit_asset's checks for an asset in `status`: the fields as stored, or ValueError."""
     unknown = set(fields) - set(EDITABLE)
     if unknown:
         raise ValueError(f"only {' and '.join(EDITABLE)} can be edited,"
                          f" not {', '.join(sorted(unknown))}")
     if "caption" in fields:
-        status = store.get_asset(asset_id)["status"]
         if status in ("scheduled", "publish_check", "published"):
             raise ValueError(f"the caption can't change once the asset is {status}"
                              " (cancel the queued post first)")
@@ -140,4 +147,4 @@ def edit_asset(store: CampaignStore, asset_id: int, **fields: Any) -> Dict[str, 
         if not 1 <= len(text) <= DESCRIPTION_CHARS:
             raise ValueError(f"description must be 1-{DESCRIPTION_CHARS} characters")
         fields["description"] = text
-    return store.update_asset(asset_id, **fields)
+    return fields

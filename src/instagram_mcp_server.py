@@ -752,7 +752,8 @@ async def preview_motion(template: str, props: Dict[str, Any],
 async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[int] = None,
                         asset_id: Optional[int] = None, caption: Optional[str] = None,
                         voice: Optional[str] = None,
-                        music_audio_id: Optional[str] = None) -> Dict[str, Any]:
+                        music_audio_id: Optional[str] = None, plan: bool = False,
+                        description: Optional[str] = None) -> Dict[str, Any]:
     """Queue a motion render and return at once with the job id: a new asset for idea_id,
     or a re-render of asset_id (failed asset: same asset; ready: a new child asset).
     Templates with a script get their voice-over (TTS), made by the render job, unless props
@@ -761,12 +762,22 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
     `music_audio_id` (a track fetched with fetch_music): the scenes start on its beats and
     the drop, the template's own bed is off, and the Reel is published with that Instagram
     track attached (voiced videos only); pass it again on a re-render to keep the track.
-    The worker renders; the asset becomes `ready`, or `failed` with QC reasons."""
+    The worker renders; the asset becomes `ready`, or `failed` with QC reasons.
+    plan=True (new asset only): checked the same way, but nothing renders and no voice is
+    made: the video waits on the owner's Planning page as an « Idée de Claude » card with its
+    caption and description (the idea's citations as its sources) until the owner releases
+    it (state `planned`, job_id null). The night run's use of it comes with step 188c."""
     out = await _studio(motion.queue_motion_render, store(), get_settings(), template=template,
                         props=props, idea_id=idea_id, asset_id=asset_id, caption=caption,
-                        voice=voice, music_audio_id=music_audio_id)
-    return {"asset_id": out["asset"]["id"], "job_id": out["job"]["id"],
-            "state": out["job"]["state"]}
+                        voice=voice, music_audio_id=music_audio_id, plan=plan,
+                        description=description)
+    return _queued(out)
+
+
+def _queued(out: Dict[str, Any]) -> Dict[str, Any]:
+    job = out["job"]
+    return {"asset_id": out["asset"]["id"], "job_id": job and job["id"],
+            "state": job["state"] if job else out["asset"]["status"]}
 
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
@@ -846,7 +857,8 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
                        layout: Literal["pip", "split"] = "pip",
                        captions: Optional[List[Dict[str, Any]]] = None,
                        caption: Optional[str] = None,
-                       voice: Optional[str] = None) -> Dict[str, Any]:
+                       voice: Optional[str] = None, plan: bool = False,
+                       description: Optional[str] = None) -> Dict[str, Any]:
     """Queue a reaction remix of a clip for a remix idea of that source and return at once.
     `voice`: a voice id from voices.json for the voice-over (default: the default voice).
     Commentary rules (refused otherwise): `script` is the voice-over, YOUR commentary on
@@ -857,14 +869,16 @@ async def render_remix(idea_id: int, source_id: int, hook: str, script: str,
     our music and its speech shown as captions from its transcript (captions: your own
     [{start_s, end_s, text}] in seconds of the trimmed part instead). Never ask for mirror,
     flip, speed or pitch changes: they do not exist. `warnings` (e.g. the clip's speech is
-    muted with no captions) may be a reason to pick another clip."""
+    muted with no captions) may be a reason to pick another clip.
+    plan=True: as render_motion's plan (no piece, no job: the owner releases it on the
+    Planning page, the rights checked again then; 188c brings it to the night run)."""
     out = await _studio(remix.render_remix, store(), get_settings(), idea_id, source_id,
                         hook=hook, script=script, trim=(trim_start_s, trim_end_s),
-                        layout=layout, captions=captions, caption=caption, voice=voice)
-    return {"asset_id": out["asset"]["id"], "job_id": out["job"]["id"],
-            "state": out["job"]["state"],
-            "reaction_piece": {k: out["piece"][k] for k in ("piece_id", "start_s", "end_s")},
-            "warnings": out["warnings"]}
+                        layout=layout, captions=captions, caption=caption, voice=voice,
+                        plan=plan, description=description)
+    piece = out["piece"]
+    return {**_queued(out), "warnings": out["warnings"],
+            "reaction_piece": piece and {k: piece[k] for k in ("piece_id", "start_s", "end_s")}}
 
 
 # ----------------------------------------------------------------------

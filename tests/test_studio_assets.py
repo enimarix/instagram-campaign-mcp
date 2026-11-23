@@ -28,12 +28,14 @@ FORBIDDEN = {
     "rendering": "approved", "ready": "published", "failed": "ready",
     "needs_reaction": "ready", "revision_requested": "ready", "approved": "published",
     "scheduled": "ready", "publish_check": "scheduled", "published": "approved",
-    "archived": "ready",
+    "archived": "ready", "planned": "ready",
 }
 
 
 def _asset_in(store, status, **fields):
     idea = store.add_idea("motion", pillar="myths", hook_type="pov")
+    if status == "planned":  # Claude's idea, made so (188b)
+        return store.add_asset(idea["id"], status="planned", **fields)
     if status == "needs_reaction":  # nothing enters it any more (072): an old row
         asset = store.add_asset(idea["id"], **fields)
         with store._tx() as c:
@@ -169,7 +171,7 @@ def test_one_forbidden_move_per_status(store, frm, to):
 
 def test_forbidden_table_covers_every_status():
     statuses = {s for move in MOVES for s in move}
-    assert set(FORBIDDEN) == statuses == set(PATH) | {"needs_reaction"}
+    assert set(FORBIDDEN) == statuses == set(PATH) | {"needs_reaction", "planned"}
 
 
 @pytest.mark.parametrize("frm,to,actor", [

@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
 from . import ffmpeg, frames, media, motion, render, stt, voices
-from .assets import transition
+from .assets import checked_fields, transition
 from .reactions import next_reaction_piece
 from .recipe import (
     EVENT_CHARS,
@@ -162,11 +162,42 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
                  trim: Optional[Sequence[float]] = None, layout: str = "pip",
                  captions: Optional[List[Dict[str, Any]]] = None,
                  caption: Optional[str] = None, music: Optional[str] = DEFAULT_MUSIC,
-                 voice: Optional[str] = None) -> Dict[str, Any]:
+                 voice: Optional[str] = None, plan: bool = False,
+                 description: Optional[str] = None) -> Dict[str, Any]:
     """Build the remix, claim the next reaction piece for the new asset and queue its render
     (the job voices the script first: voice_over): {asset, job, piece, warnings}. Everything
     else is checked before the asset is created; a piece that cannot be cut leaves the asset
-    `failed` with the reason."""
+    `failed` with the reason. `plan` (188b): a `planned` asset with the recipe, caption and
+    description, no piece and no job (None): src/studio/planned.py releases it."""
+    fields = checked_fields("planned", **{k: x for k, x in (
+        ("caption", caption), ("description", description)) if x is not None}) if plan else {}
+    env, recipe, source = _remix_env(store, settings, idea_id, source_id, hook=hook,
+                                     script=script, trim=trim, layout=layout,
+                                     captions=captions, music=music, voice=voice)
+    warnings = _warnings(source, recipe, settings)
+    batch = store.get_idea(idea_id)["batch_date"]
+    if plan:
+        asset = store.add_asset(idea_id, recipe=render.validate_recipe(env, settings.media_root),
+                                batch_date=batch, status="planned", **fields)
+        return {"asset": asset, "job": None, "piece": None, "warnings": warnings}
+    asset = store.add_asset(idea_id, caption=caption, batch_date=batch)
+    try:
+        asset, piece = attach_piece(store, settings, asset["id"], env)
+    except Exception as e:
+        store.update_asset(asset["id"], qc={"passed": False, "reason": f"remix: {e}"})
+        transition(store, asset["id"], "failed", actor="worker")
+        raise
+    return {"asset": asset, "job": render.enqueue_render(store, asset["id"]), "piece": piece,
+            "warnings": warnings}
+
+
+def _remix_env(store: CampaignStore, settings: InstagramMCPSettings, idea_id: int,
+               source_id: int, *, hook: str, script: Optional[str],
+               trim: Optional[Sequence[float]], layout: str,
+               captions: Optional[List[Dict[str, Any]]], music: Optional[str],
+               voice: Optional[str]) -> Tuple[Dict[str, Any], Recipe, Dict[str, Any]]:
+    """(recipe envelope without its reaction piece, the remix, the source): every check
+    render_remix makes, the rights first."""
     idea = store.get_idea(idea_id)
     if idea["track"] != "remix" or idea["source_id"] != source_id:
         raise ValueError(f"idea {idea_id} must be a remix idea of source {source_id}"
@@ -191,20 +222,44 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
     if any(isinstance(op, Music) for op in recipe.ops):
         inputs["music"] = _music_file(settings, music)
     clip = {"clip_timeline": t} if (t := source["stats"].get("timeline")) else {}
-    asset = store.add_asset(idea_id, caption=caption, batch_date=idea["batch_date"])
-    try:
-        piece = next_reaction_piece(store, settings, length, asset_id=asset["id"])
-        env = render.validate_recipe({"kind": "ffmpeg", "recipe": recipe.model_dump(mode="json"),
-                                      "inputs": {**inputs, "reaction": piece["path"]},
-                                      **clip, **todo},
-                                     settings.media_root)
-        asset = store.update_asset(asset["id"], recipe=env)
-    except Exception as e:
-        store.update_asset(asset["id"], qc={"passed": False, "reason": f"remix: {e}"})
-        transition(store, asset["id"], "failed", actor="worker")
-        raise
-    return {"asset": asset, "job": render.enqueue_render(store, asset["id"]), "piece": piece,
-            "warnings": _warnings(source, recipe, settings)}
+    env = {"kind": "ffmpeg", "recipe": recipe.model_dump(mode="json"), "inputs": inputs,
+           **clip, **todo}
+    return env, recipe, source
+
+
+def attach_piece(store: CampaignStore, settings: InstagramMCPSettings, asset_id: int,
+                 env: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """(asset, piece): the next piece of the active reaction reel, claimed for the asset, in
+    its recipe `env` (render_remix; a planned remix at its release)."""
+    trim = env["recipe"]["ops"][0]  # build_remix's first
+    piece = next_reaction_piece(store, settings, trim["end_s"] - trim["start_s"],
+                                asset_id=asset_id)
+    env = render.validate_recipe({**env, "inputs": {**env["inputs"], "reaction": piece["path"]}},
+                                 settings.media_root)
+    return store.update_asset(asset_id, recipe=env), piece
+
+
+def remix_params(env: Dict[str, Any]) -> Dict[str, Any]:
+    """render_remix's arguments as a planned remix's recipe `env` holds them (planned.py
+    rebuilds it through _remix_env on an edit and at its release)."""
+    ops = {op["op"]: op for op in env["recipe"]["ops"]}
+    todo = env.get("voice_todo") or {}
+    music = env["inputs"].get("music")
+    return {"hook": ops["hook_text"]["text"], "script": todo.get("script"),
+            "voice": todo.get("voice"), "trim": (ops["trim"]["start_s"], ops["trim"]["end_s"]),
+            "layout": ops["reaction_collage"]["layout"],
+            "captions": (ops.get("captions") or {}).get("lines") or None,
+            "music": Path(music).stem if music else None}
+
+
+def replan(store: CampaignStore, settings: InstagramMCPSettings, asset: Dict[str, Any],
+           **changes: Any) -> Dict[str, Any]:
+    """A planned remix's recipe rebuilt with `changes` (script, voice, music: a bed or None)
+    through every check render_remix makes (rights included), without a piece."""
+    idea = store.get_idea(asset["idea_id"])
+    env, _, _ = _remix_env(store, settings, idea["id"], idea["source_id"],
+                           **{**remix_params(asset["recipe"]), **changes})
+    return render.validate_recipe(env, settings.media_root)
 
 
 def voice_over(env: Dict[str, Any], settings: InstagramMCPSettings, todo: Dict[str, Any]
