@@ -54,7 +54,8 @@ _REPLACED_IDS = (
     " UNION SELECT p.parent_asset_id FROM assets p JOIN replaced r ON p.id = r.id"
     "  WHERE p.parent_asset_id IS NOT NULL) ")
 _WAITING = (
-    _REPLACED_IDS + "SELECT a.id, a.idea_id, a.parent_asset_id, a.status, a.caption, a.description, a.qc,"
+    _REPLACED_IDS
+    + "SELECT a.id, a.idea_id, a.parent_asset_id, a.status, a.caption, a.description, a.qc,"
     " a.recipe, json_extract(a.recipe, '$.template') AS template, i.track, i.hook, i.style,"
     f" i.source_id, {_FINISHED} AS finished_at,"
     # the last job's reason when it failed: a render crash (a QC fail has none)
