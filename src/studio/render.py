@@ -4,7 +4,8 @@ Render jobs (GOAL.md §3.1, §3.2, §4.3): render an asset from its recipe into 
 `assets.recipe` is an envelope (docs/DECISIONS.md):
   {"kind": "ffmpeg", "recipe": <Recipe>, "inputs": {"source": <media path>, ...}}  Track A
   {"kind": "motion", "template": <id>, "props": {...}}                             Track B
-plus an optional `thumb_offset_ms` (cover frame, also sent to Instagram); a remix may carry
+plus an optional `thumb_offset_ms` (cover frame, also sent to Instagram) and `voice_todo` (a
+voice-over the job makes before rendering, step 188a: VoiceTodo); a remix may carry
 its source's `clip_timeline` (step 119) for the asset's timeline. Motion recipes
 render through src/studio/motion.py (Remotion); their cover is the template's cover frame.
 
@@ -30,6 +31,7 @@ from .assets import DESCRIPTION_CHARS, InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
 from .qc import run_qc
 from .recipe import DEFAULT_PRESET, DEFAULT_TIMEOUT_S, Recipe, recipe_timeline, render
+from .tts import TTSError
 
 MAX_ATTEMPTS = 3
 FAILURE_CHARS = 2000
@@ -54,10 +56,23 @@ class IgAudio(BaseModel):
     video_volume: int = Field(100, ge=1, le=100)
 
 
+class VoiceTodo(BaseModel):
+    """A voice-over the render job makes before rendering (step 188a, voice_first): queueing
+    never waits for the voice service. The lines are the recipe's own text (motion: the
+    template's script, motion.SCRIPTS; remix: `script`)."""
+    model_config = ConfigDict(extra="forbid")
+    voice: Optional[str] = None  # checked on at queue time; None = the engine's default
+    cast: Optional[Dict[str, List[str]]] = None  # SitcomSkit character voices (voices.say_cast)
+    music_audio_id: Optional[str] = None  # motion: the Instagram track, applied once voiced
+    script: Optional[str] = None  # remix: the voice-over text
+    max_s: Optional[float] = None  # remix: the trimmed clip it must fit in
+
+
 class _Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     thumb_offset_ms: Optional[int] = Field(None, ge=0)
     ig_audio: Optional[IgAudio] = None
+    voice_todo: Optional[VoiceTodo] = None
 
 
 class FfmpegRecipe(_Envelope):
@@ -206,11 +221,32 @@ def auto_description(idea: Dict[str, Any], asset: Dict[str, Any]) -> str:
     return text[:DESCRIPTION_CHARS]
 
 
+def voice_first(store: CampaignStore, asset: Dict[str, Any], settings: InstagramMCPSettings
+                ) -> Dict[str, Any]:
+    """The asset, its recipe's `voice_todo` made first (step 188a: the TTS runs here, in the
+    worker, in line order). The voiced recipe replaces the queued one, so a retry or a
+    re-render never synthesises it again; a recipe without `voice_todo` (no voice to make, or
+    queued before 188a with its audio filled) is untouched. TTSError when the voice service
+    fails (retried like any render error), ValueError when the voice does not fit."""
+    env = dict(asset["recipe"] or {})
+    if "voice_todo" not in env:
+        return asset
+    todo = env.pop("voice_todo")
+    from . import remix  # remix imports us
+    try:
+        env = (motion.voice_recipe(env, settings, todo) if env["kind"] == "motion"
+               else remix.voice_over(env, settings, todo))
+    except TTSError as e:
+        raise TTSError(f"voice-over failed: {e}", status=e.status) from None
+    return store.update_asset(asset["id"], recipe=validate_recipe(env, settings.media_root))
+
+
 def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
             render_fn: Callable[..., Tuple[MediaInfo, Dict[str, Any]]] = render_files,
             qc_fn: Callable[..., Dict[str, Any]] = run_qc,
             settings: Optional[InstagramMCPSettings] = None) -> Dict[str, Any]:
-    """Render one claimed job (state running), then run the quality check (src/studio/qc.py):
+    """Render one claimed job (state running): its voice-over first when the recipe still
+    needs one (voice_first), then the render and the quality check (src/studio/qc.py):
     the asset becomes `ready` (and a `revision_requested` parent it replaces is archived), or
     `failed` with the reasons in `assets.qc`; the asset keeps the render's timeline and gets
     an automatic description if it has none (auto_description). Errors are retried
@@ -224,14 +260,16 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
     if job["attempts"] > MAX_ATTEMPTS:  # re-queued after crashes during every attempt
         return _fail(store, job, f"gave up after {MAX_ATTEMPTS} attempts (worker stopped)")
     start = time.monotonic()
+    settings = settings or get_settings()
     try:
         idea = store.get_idea(asset["idea_id"])
+        asset = voice_first(store, asset, settings)
         info, files = render_fn(asset, media_root,
                                 lambda p: store.update_render_job(job_id, progress=p))
         notes = files.pop("render_warnings", [])
         qc = qc_fn({**asset, "timeline": files.get("timeline"),  # this render's (149, 158)
                     "voice_parts": files.pop("voice_parts", None)}, idea, files["file_path"],
-                   media_root, settings or get_settings())
+                   media_root, settings)
         if notes:
             qc = {**qc, "warnings": [*qc.get("warnings", []), *notes]}
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason

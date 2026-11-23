@@ -8,6 +8,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 import src.instagram_mcp_server as srv
 from src.studio import ffmpeg, production, recipe, remix
+from src.studio import render as render_jobs
 from src.studio.assets import transition
 from src.studio.recipe import Recipe, Trim, recipe_timeline, render
 from src.studio.render import FfmpegRecipe
@@ -15,6 +16,7 @@ from src.studio.tts import LineTiming, Synthesis
 from tests.test_api_media import _settings
 from tests.test_studio_ffmpeg import needs_ffmpeg
 from tests.test_studio_recipe import assert_spec, make_clip
+from tests.test_studio_render import FAR_PAST
 
 SCRIPT = "Watch his face at second three.\nThat is why this one works."
 LINES = [{"start_s": 1.0, "end_s": 3.0, "text": "before the trim"},
@@ -173,8 +175,12 @@ def test_render_remix_claims_the_piece_with_the_asset_id(store, cfg, root, tts, 
     env = asset["recipe"]
     assert env["kind"] == "ffmpeg" and env["inputs"]["reaction"] == out["piece"]["path"]
     assert env["inputs"]["source"] == s["local_path"]
-    assert env["inputs"]["voice"] == "voice/voice-abc.wav"
     assert env["inputs"]["music"] == "music/music-overworld.wav"
+    # 188a: the render job makes the voice-over
+    assert "voice" not in env["inputs"] and tts.said == []
+    assert env["voice_todo"]["script"] == SCRIPT and env["voice_todo"]["max_s"] == 20
+    env = render_jobs.voice_first(store, asset, cfg)["recipe"]
+    assert env["inputs"]["voice"] == "voice/voice-abc.wav" and "voice_todo" not in env
     for rel in ("voice/voice-abc.wav", "music/music-overworld.wav", out["piece"]["path"]):
         assert (root / rel).is_file(), rel
     assert tts.said == [SCRIPT]
@@ -203,10 +209,14 @@ def test_no_tts_engine_is_refused(store, root, reel):
     assert store.list_assets() == [] and store.get_reaction_reel(reel["id"])["cursor_s"] == 0
 
 
-def test_voice_longer_than_the_clip_is_refused(store, cfg, tts, reel):
+def test_voice_longer_than_the_clip_fails_the_render(store, cfg, root, tts, reel):
     tts.duration_s = 30.0
-    with pytest.raises(ValueError, match="shorten the script"):
-        go(store, cfg, _source(store), trim=(0, 10))
+    out = go(store, cfg, _source(store), trim=(0, 10))
+    job = render_jobs.run_job(store, root, store.claim_render_jobs(1, stale_before=FAR_PAST)[0],
+                         settings=cfg, render_fn=pytest.fail)
+    assert job["state"] == "failed" and job["attempts"] == 1  # a ValueError: no retry
+    assert "shorten the script" in job["failure"]
+    assert store.get_asset(out["asset"]["id"])["status"] == "failed"
 
 
 def test_idea_must_be_a_remix_of_that_source(store, cfg, tts, reel):

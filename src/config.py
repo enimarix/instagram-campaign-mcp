@@ -292,7 +292,7 @@ class InstagramMCPSettings(BaseSettings):
     # and up to 3 takes, one request at a time: a 40 s script can take ~8 min, and parallel
     # render_motion calls queue behind each other. A hung local service is the only thing
     # this cuts short, so it is generous.
-    tts_timeout_s: float = Field(3600.0, gt=0, description="TTS request timeout in seconds")
+    tts_timeout_s: float = Field(1200.0, gt=0, description="TTS request timeout in seconds")
     # Set to the python of the voice service's venv: `ig-campaign up` then starts
     # vendor/voxcpm_tts/server.py on TTS_HTTP_URL's port, waits for it before the worker
     # starts, and stops it on exit. TTS_SERVER_HF_HOME = its model cache (HF_HOME).

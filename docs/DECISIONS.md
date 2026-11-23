@@ -8,6 +8,22 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: The voice-over is made by the render job, not when a video is queued (188a)
+`render_motion` / `render_remix` (and an owner re-render) check the props and the voice (on,
+known) and return at once: the recipe keeps the lines unvoiced plus `voice_todo` (the voice,
+the sitcom's character voices, the Instagram track to cut on; a remix's script and clip
+length). The render job makes the voice first (`render.voice_first`, same TTS cache), stores
+the voiced recipe in place of the queued one (a retry or re-render never synthesises twice),
+then renders. A voice-service failure is retried like any render error; a voice that does
+not fit (a remix voice-over longer than its clip, an Instagram track shorter than the video)
+fails the job at once with the reason, where it used to be refused at queue time.
+`TTS_PROVIDER=none` still fills its reading estimate at queue time (nothing to wait for).
+`TTS_TIMEOUT_S` default goes from 3600 s to 1200 s: one request now comes from the one render
+job running (`RENDER_CONCURRENCY` 1), so it covers a 90 s script's three takes and the model
+load, not a queue of agent calls. `preview_motion` stills stay voice-less (reading timings).
+Reason: queueing must be instant and every heavy step in line order (186), for the Planning
+page's Claude cards (188b) and a night run that synthesises nothing at 03:00 (188c).
+
 ## 2026-11-23: The owner can remove, hold and reorder the line, and pause the studio (187)
 On the Planning page each waiting render or film can be moved up or down (swapped with its
 neighbour; the whole line's order is then written as `line_pos` 1..n, so new arrivals still go
