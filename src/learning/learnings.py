@@ -67,8 +67,9 @@ def change_outcome(store: CampaignStore, revised: Dict[str, Any],
                    labels: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """A revised video (step 133): the version the owner sent back (before), what they
     asked (its wants-changes comments), what the agent says it changed (the new version's
-    self_score_reason), and the owner's decision on the new version: approved, declined
-    (with its motives), sent_back (asked_again: more changes), archived or pending."""
+    submit note, stored in self_score_reason; None when it left none), and the owner's
+    decision on the new version: approved, declined (with its motives), sent_back
+    (asked_again: more changes), archived or pending."""
     labels = labels or _labels()
     before = revised["parent_asset_id"]
 
@@ -84,7 +85,7 @@ def change_outcome(store: CampaignStore, revised: Dict[str, Any],
                else "sent_back" if sent_back
                else "archived" if revised["status"] == "archived" else "pending")
     return {"before_asset_id": before, "after_asset_id": revised["id"],
-            "asked": comments(before, True), "changed": revised["self_score_reason"],
+            "asked": comments(before, True), "changed": revised["self_score_reason"] or None,
             "outcome": outcome,
             "decline_motives": comments(revised["id"], False) if outcome == "declined" else [],
             "asked_again": sent_back}

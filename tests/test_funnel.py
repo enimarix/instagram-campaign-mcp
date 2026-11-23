@@ -1,4 +1,4 @@
-"""Step 077: studio funnel, like-rate, calibration, waste and reasons (src/learning/funnel.py)."""
+"""Step 077: studio funnel, like-rate, waste and reasons (src/learning/funnel.py)."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -23,13 +23,13 @@ def settings():
 
 
 def _asset(store, day, *, track="motion", hook="question", template="FactQuest", qc=True,
-           status="ready", verdict="none", approved=False, score=None, best_before=None,
+           status="ready", verdict="none", approved=False, best_before=None,
            updated_at=None, reasons=(), render_ms=(), file_path="d/video.mp4"):
     idea = store.add_idea(track, hook_type=hook, batch_date=day)
     recipe = {"kind": "motion", "template": template} if track == "motion" else {"kind": "ffmpeg"}
     a = store.add_asset(idea["id"], batch_date=day, recipe=recipe,
-                        qc={"passed": True} if qc else None, self_score=score,
-                        best_before=best_before, file_path=file_path)
+                        qc={"passed": True} if qc else None, best_before=best_before,
+                        file_path=file_path)
     with store._tx() as c:  # tests set the end state directly
         c.execute("UPDATE assets SET status=?, verdict=?, approved_at=?, updated_at=? WHERE id=?",
                   (status, verdict, to_iso(NOW) if approved else None,
@@ -99,22 +99,11 @@ def test_like_rate_and_rolling(store, settings):
     ]
 
 
-def test_calibration(store, settings):
-    for s in (9, 8, 7, 6, 5, 4):  # 6 scored: top 5 = 9..5, liked 9 and 7
-        _asset(store, "2026-11-16", score=s, verdict="liked" if s in (9, 7, 4) else "disliked")
-    _asset(store, "2026-11-16", score=10)  # unreviewed: ignored
-    for s in (3, 3, 2, 2, 1):  # exactly 5
-        _asset(store, "2026-11-15", score=s, verdict="liked" if s > 1 else "disliked")
-    for s in (8, 8, 8, 8):  # fewer than 5: skipped
-        _asset(store, "2026-11-14", score=s, verdict="liked")
-
-    cal = taste(store, settings, days=3, now=NOW)["calibration"]
-    assert cal["days"] == [
-        {"date": "2026-11-15", "scored": 5, "top_liked": 4, "top_n": 5},
-        {"date": "2026-11-16", "scored": 6, "top_liked": 2, "top_n": 5},
-    ]
-    # liked: 9 7 4 3 3 2 2 8 8 8 8 -> 62/11; disliked: 8 6 5 1 -> 5.0
-    assert cal["mean_self_score"] == {"liked": 5.64, "disliked": 5.0}
+def test_no_self_score_calibration(store, settings):
+    """Step 189: the agent no longer scores itself, so taste has no calibration block."""
+    _asset(store, "2026-11-16", verdict="liked")
+    assert set(taste(store, settings, days=3, now=NOW)) == {
+        "since", "until", "like_rate", "waste", "reasons"}
 
 
 def test_waste_and_reasons(store, settings):

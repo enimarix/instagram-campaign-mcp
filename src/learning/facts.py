@@ -15,7 +15,7 @@ yesterday). Posts are scored like rank_posts (analytics.scored_posts). Per windo
   engagement index, with n (small_sample when n < 3, as in the tag breakdowns).
 - movers: views gained between a post's two most recent snapshots taken before the window
   ends, the later one taken in the window; top 5 up.
-- funnel: 077's funnel totals and taste calibration for the window's batch days.
+- funnel: 077's funnel totals for the window's batch days.
 Not per window:
 - experiments: the open experiments with matured n and median index per variant, and a
   warning for one that got no approved video in the last 3 batch days
@@ -40,7 +40,7 @@ from ..studio.seed import local_today
 from .analytics import scored_posts, studio_side
 from .breakdowns import _group
 from .experiments import report_section
-from .funnel import funnel, taste
+from .funnel import funnel
 from .retention import retention_all
 
 WINDOWS = {"yesterday": 1, "last_7_days": 7}
@@ -120,7 +120,6 @@ def _window(store: CampaignStore, settings: InstagramMCPSettings, scored: Scored
                and within(snap["posted_at"], _min_age(s["group"], cfg))]
     noon = datetime.combine(last, time(12), tz)  # any time of `last` makes it 077's "today"
     days = (last - first).days + 1
-    calibration = taste(store, settings, days=days, now=noon)["calibration"]
     return {
         "since": first.isoformat(), "until": last.isoformat(),
         "published": {"count": len(published),
@@ -131,8 +130,7 @@ def _window(store: CampaignStore, settings: InstagramMCPSettings, scored: Scored
         "losers": [scored_row(snap, s) for snap, s in matured if s["verdict"] == LOSER],
         "slots": _slots(matured, tz),
         "movers": _movers(store, scored, start, end),
-        "funnel": {**funnel(store, settings, days=days, now=noon)["totals"],
-                   "calibration": calibration},
+        "funnel": funnel(store, settings, days=days, now=noon)["totals"],
     }
 
 

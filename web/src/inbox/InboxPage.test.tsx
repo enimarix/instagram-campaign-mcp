@@ -7,15 +7,15 @@ import { ToastProvider } from '../ui/Toast'
 import InboxPage from './InboxPage'
 
 const asset = (id: number, fields: Partial<Asset> = {}): Asset => ({
-  id, status: 'ready', verdict: 'none', self_score: 5, self_score_reason: 'ok',
+  id, status: 'ready', verdict: 'none', self_score_reason: 'ok',
   caption: `caption ${id}`, batch_date: '2026-11-17', preview_url: `/api/media/${id}.mp4`,
   thumbnail_url: null, track: 'motion', strategy: 'exploit', ...fields,
 })
 
 const ASSETS = [
-  asset(1, { self_score: 9, self_score_reason: 'strong hook', strategy: 'explore',
+  asset(1, { self_score_reason: 'strong hook', strategy: 'explore',
     description: 'A knight jumps over three facts.' }),
-  asset(2, { self_score: 7 }),
+  asset(2, { self_score_reason: '' }),
   asset(3, { status: 'scheduled' }), // decided earlier
   asset(4, { status: 'rendering' }), // nothing to decide yet
 ]
@@ -132,8 +132,7 @@ describe('InboxPage feed', () => {
     expect(video.getAttribute('preload')).toBe('auto')
     expect(card(2).querySelector('video')!.getAttribute('preload')).toBe('auto') // the next one
     const c1 = within(card(1))
-    expect(c1.getByText('9/10')).toBeTruthy()
-    expect(c1.getByText('strong hook')).toBeTruthy()
+    expect(c1.queryByText('strong hook')).toBeNull() // a legacy self-score reason: not shown (189)
     expect(c1.getByText('Explore')).toBeTruthy()
     const desc = c1.getByRole('button', { name: 'A knight jumps over three facts.' })
     fireEvent.click(desc)
@@ -433,11 +432,12 @@ describe('InboxPage feed', () => {
 
   it('a revised video shows what the owner asked: Changé : « … »', async () => {
     stubApi({ 'GET /api/assets': [200, [
-      asset(1, { change_request: { text: 'Plus court', reason_codes: [] } }),
+      asset(1, { change_request: { text: 'Plus court', reason_codes: [] }, self_score_reason: 'Changed: hook cut to 2 s' }),
       asset(2, { change_request: { text: null, reason_codes: ['weak_hook'] } }), asset(3)]] })
     renderPage()
     await screen.findByText('0 of 3 decided')
     expect(within(card(1)).getByText('Changé : « Plus court »')).toBeTruthy()
+    expect(within(card(1)).getByText('Changed: hook cut to 2 s')).toBeTruthy() // the agent's note, no score (189)
     expect(await within(card(2)).findByText('Changé : « Weak hook »')).toBeTruthy()
     expect(within(card(3)).queryByText(/Changé/)).toBeNull()
   })

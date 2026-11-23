@@ -63,7 +63,8 @@ export type Asset = {
   id: number
   status: string
   verdict: Verdict
-  self_score: number | null
+  /** The agent's one-line submit note (a new version: what it changed); '' or null: none.
+   *  The agent no longer scores its videos (step 189). */
   self_score_reason: string | null
   caption: string | null
   batch_date: string
@@ -488,13 +489,9 @@ export type FunnelStats = Record<'produced' | 'reviewed' | 'liked' | 'approved' 
 export type Funnel = { since: string; until: string; approval_rate_note: string; totals: FunnelStats }
 export const getFunnel = (days = 30) => request<Funnel>(`/api/analytics/funnel?days=${days}`)
 
-/** GET /api/analytics/taste: like-rate series, calibration, waste, feedback reasons. */
+/** GET /api/analytics/taste: like-rate series, waste, feedback reasons. */
 export type Taste = {
   like_rate: { date: string; reviewed: number; liked: number; like_rate: number | null; rolling_7d: number | null }[]
-  calibration: {
-    days: { date: string; scored: number; top_liked: number; top_n: number }[]
-    mean_self_score: { liked: number | null; disliked: number | null }
-  }
   waste: { count: number; render_minutes: number }
   reasons: { code: string; label: string; count: number }[]
 }

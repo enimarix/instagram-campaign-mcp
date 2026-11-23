@@ -144,7 +144,8 @@ def test_bench_order_and_expiry(store, cfg):
     _liked(store, cfg, d(1), 10, status="approved")  # not on the bench any more
     _asset(store, cfg, status="ready", best_before=d(1))  # not liked
     ids = [a["id"] for a in scheduling.bench(store, cfg, now)["assets"]]
-    assert ids == [today["id"], soon_hi["id"], soon_lo["id"], late["id"], none_hi["id"]]
+    # 189: same best_before -> oldest first; the legacy self_score (soon_hi 7) orders nothing
+    assert ids == [today["id"], soon_lo["id"], soon_hi["id"], late["id"], none_hi["id"]]
 
 
 @pytest.mark.parametrize("n, days", [(0, 0), (1, 1), (3, 1), (4, 2)])

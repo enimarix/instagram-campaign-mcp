@@ -2,9 +2,11 @@
 Production tools (step 053): what the agent calls to run a batch through MCP.
 
 create ideas -> queue renders (render_motion, src/studio/motion.py) -> wait_for_renders as
-they land -> submit_asset each QC-passed one with a self-score, caption and best_before.
+they land -> submit_asset each QC-passed one with a caption, best_before and an optional note.
 There is no "submitted" status: the worker already moved a QC-passed asset to `ready`;
-submit_asset attaches the agent's score and caption while the owner has not judged it.
+submit_asset attaches the caption and note while the owner has not judged it. The agent does
+not score its own videos (step 189): quality comes from real numbers and the owner's verdict.
+The note lives in the old `self_score_reason` column ('' when none): NULL = never submitted.
 """
 
 from __future__ import annotations
@@ -195,14 +197,15 @@ def compact_asset(asset: Dict[str, Any]) -> Dict[str, Any]:
         "template": (asset.get("recipe") or {}).get("template"),
         "caption": _excerpt(asset.get("caption")),
         "description": _excerpt(asset.get("description")),
-        "self_score": asset["self_score"], "qc": qc_summary(asset["qc"]),
+        "submitted": asset["self_score_reason"] is not None,
+        "note": asset["self_score_reason"] or None, "qc": qc_summary(asset["qc"]),
         "best_before": asset["best_before"], "file_path": asset["file_path"],
     }
 
 
 def list_assets(store: CampaignStore, *, status: Optional[str] = None,
                 batch_date: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
-    """Compact asset rows, best self-score first."""
+    """Compact asset rows, in the store's order (newest batch first)."""
     rows = store.list_assets(batch_date=batch_date, status=status,
                              limit=max(1, min(limit, MAX_LIST)))
     return [compact_asset(a) for a in rows]
@@ -291,10 +294,11 @@ def default_best_before(store: CampaignStore, settings: InstagramMCPSettings,
 
 
 def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id: int, *,
-                 self_score: int, self_score_reason: str, caption: str,
-                 best_before: Optional[str] = None,
-                 description: Optional[str] = None) -> Dict[str, Any]:
-    """Attach the agent's self-score (1-10, one line on why), caption, best_before and
+                 caption: str, best_before: Optional[str] = None,
+                 description: Optional[str] = None,
+                 note: Optional[str] = None) -> Dict[str, Any]:
+    """Attach the caption, best_before, an optional one-line note (a revision: what was
+    changed; read by daily-learn as the change made, learnings.change_outcome) and
     description (2-3 plain sentences: what happens, the hook, the payoff; default: the one
     already stored, else an automatic one) to a QC-passed (`ready`) asset the owner has not
     judged yet. Re-submitting overwrites. Everything is checked before anything is written;
@@ -311,12 +315,9 @@ def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
         raise ValueError(f"asset {asset_id} is {status}: only ready assets can be submitted")
     if asset["verdict"] != "none":
         raise ValueError(f"asset {asset_id}: the owner already judged it ({asset['verdict']})")
-    if isinstance(self_score, bool) or not isinstance(self_score, int) \
-            or not 1 <= self_score <= 10:
-        raise ValueError(f"self_score must be a whole number 1-10, not {self_score!r}")
-    reason = (self_score_reason or "").strip()
-    if not reason or "\n" in reason or "\r" in reason or len(reason) > REASON_CHARS:
-        raise ValueError(f"self_score_reason must be one line of 1-{REASON_CHARS} characters")
+    note = (note or "").strip()
+    if "\n" in note or "\r" in note or len(note) > REASON_CHARS:
+        raise ValueError(f"note must be one line of at most {REASON_CHARS} characters")
     if not (caption or "").strip():
         raise ValueError("a caption is required")
     source_id = store.get_idea(asset["idea_id"])["source_id"]
@@ -333,5 +334,6 @@ def submit_asset(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
     edit_asset(store, asset_id, caption=caption, best_before=best_before,  # checks them
                description=description)
     work_orders.mark_in_feed(store, asset)  # 134: an owner's order is in the feed now
-    return compact_asset(store.update_asset(asset_id, self_score=self_score,
-                                            self_score_reason=reason))
+    # '' marks a submit without a note; an old self-score is cleared on re-submit
+    return compact_asset(store.update_asset(asset_id, self_score=None,
+                                            self_score_reason=note))

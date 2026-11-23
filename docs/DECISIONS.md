@@ -8,6 +8,26 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: The agent no longer scores its own videos (189)
+The owner: an AI scoring its own render makes no sense; a video is good by its real numbers
+(views, comments, shares) and the owner's verdict. GOAL.md §2.1 dropped the agent's
+« calibration » metric. `submit_asset` (service and MCP tool, still in the `agent` profile)
+takes no `self_score` / `self_score_reason` any more: caption, best_before and description
+as before, plus an optional one-line `note` (a new version: what was changed; a work order or
+DM pick: its "Work order #<id>: " / "DM pick from @<sender>: " prefix). The note is stored in
+the existing `self_score_reason` column rather than a new one, so no migration: daily-learn's
+`approved_changes.changed` keeps reading the same column, and old revisions keep their
+« what I changed » text. A submit without a note stores '' there, so NULL still means « never
+submitted » and `list_assets` gives the agent `submitted` (and `note`) in place of the score it
+used to read as that marker. Re-submitting clears an old `self_score`; the columns stay, old
+scores are kept but nothing reads them. Replacement orders: `list_assets` (the Inbox, the
+agent's list) is newest batch first, then best_before soonest (none last), then id; the bench
+and its slot suggestion are best_before soonest (none last), then oldest first (lowest id, so
+a liked video does not go stale behind newer ones). The funnel's calibration block is gone
+from `taste`, the daily facts (and so the agent's packet and daily-learn) and the Analytics
+page. The Inbox card shows no score; a revised video's card shows the agent's note under the
+owner's request (a legacy score reason on other videos is not shown).
+
 ## 2026-11-23: Claude plans a video; the owner releases it from the Planning page (188b)
 A new asset status, `planned`, starts a video Claude plans instead of queueing:
 `render_motion` / `render_remix` take `plan=True` (and a `description`) rather than a new

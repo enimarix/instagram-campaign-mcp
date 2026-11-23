@@ -258,13 +258,13 @@ def test_submit_needs_the_creator_in_the_caption_for_commentary(store, settings)
     asset = store.add_asset(_idea(store, s)["id"], batch_date="2026-11-18",
                             qc={"passed": True}, file_path="2026-11-18/1/video.mp4")
     transition(store, asset["id"], "ready", actor="worker")
-    args = dict(self_score=7, self_score_reason="funny", best_before="2026-12-01")
+    args = dict(note="funny", best_before="2026-12-01")
     for caption in ("So good", "So good @creatorx"):
         with pytest.raises(ValueError, match="add @creator"):
             production.submit_asset(store, settings, asset["id"], caption=caption, **args)
     row = production.submit_asset(store, settings, asset["id"], caption="So good @Creator.",
                                   **args)
-    assert row["self_score"] == 7
+    assert row["submitted"] and row["note"] == "funny"
 
 
 # --- MCP doors ----------------------------------------------------------------------------

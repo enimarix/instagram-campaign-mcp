@@ -5,7 +5,7 @@ import type { Asset, AssetContext, ReactionInfo } from '../api/client'
 import AssetPage from './AssetPage'
 
 const ASSET: Asset = {
-  id: 7, status: 'ready', verdict: 'none', self_score: 8, self_score_reason: 'ok',
+  id: 7, status: 'ready', verdict: 'none', self_score_reason: 'ok',
   caption: 'old caption', batch_date: '2026-11-17', preview_url: '/api/media/7.mp4',
   thumbnail_url: null, best_before: '2026-11-20', recipe: { ops: [{ op: 'fit_vertical' }] },
   qc: { passed: false, reasons: ['too quiet'] },

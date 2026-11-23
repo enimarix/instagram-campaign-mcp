@@ -101,7 +101,7 @@ Never add a second learning for a point an active one already makes: add evidenc
 
 ## Step 4: taste versus audience
 
-From the funnel and calibration in the facts and the learnings: where the owner liked
+From the funnel in the facts and the learnings: where the owner liked
 what the audience ignored, or the reverse (a Reel the owner rated low that won). Name
 each conflict with its numbers; do not resolve it, the owner decides.
 

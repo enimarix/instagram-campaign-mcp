@@ -5,6 +5,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 import src.instagram_mcp_server as srv
 from src.learning import learnings as L
+from src.studio import production
 from src.studio.assets import transition
 from src.studio.feedback import add_comment, decline
 
@@ -227,6 +228,17 @@ def test_approved_change_comes_back_with_its_outcome(store):
         "changed": "Changed: hook cut to 2 s", "outcome": "approved", "decline_motives": [],
         "asked_again": []}
     assert L.owner_decisions(store)["approved_changes"] == [row["change"]]
+
+
+@pytest.mark.parametrize("note, changed", [
+    (" Changed: hook cut to 2 s ", "Changed: hook cut to 2 s"), (None, None)])
+def test_submit_note_is_the_change_daily_learn_reads(store, settings, note, changed):
+    """189: no self-score; the submit note is still the « changed » line of approved_changes."""
+    _, _, after = _revision(store, reason=None)
+    production.submit_asset(store, settings, after, caption="c", note=note)
+    transition(store, after, "approved", actor="owner")
+    [change] = L.owner_decisions(store)["approved_changes"]
+    assert change["after_asset_id"] == after and change["changed"] == changed
 
 
 def test_declined_revision_carries_its_motive(store):

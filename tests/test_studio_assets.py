@@ -97,11 +97,14 @@ def test_list_assets_filters_and_order(store):
     motion = store.add_idea("motion", strategy="explore", experiment="exp:1:question")
     low = store.add_asset(remix["id"], self_score=3, batch_date="2026-11-17")
     unscored = store.add_asset(remix["id"], batch_date="2026-11-17")
-    high = store.add_asset(motion["id"], self_score=9, batch_date="2026-11-17")
-    store.add_asset(motion["id"], self_score=10, batch_date="2026-11-16")
+    high = store.add_asset(motion["id"], self_score=9, batch_date="2026-11-17",
+                           best_before="2026-11-20")
+    older = store.add_asset(motion["id"], self_score=10, batch_date="2026-11-16")
     ids = lambda rows: [r["id"] for r in rows]  # noqa: E731
     day = "2026-11-17"
+    # 189: best_before soonest (none last), then id; the legacy self_score orders nothing
     assert ids(store.list_assets(batch_date=day)) == [high["id"], low["id"], unscored["id"]]
+    assert ids(store.list_assets())[-1] == older["id"]  # newest batch first
     assert ids(store.list_assets(batch_date=day, track="remix")) == [low["id"], unscored["id"]]
     assert {(r["track"], r["strategy"], r["experiment"])
             for r in store.list_assets(batch_date=day)} == {

@@ -53,7 +53,7 @@ def test_seed_batches_statuses_files_and_legal_moves(tmp_path, monkeypatch):
         rev = [r for r in rows if r["status"] == "revision_requested"]
         assert all(any(c["parent_asset_id"] == r["id"] for c in rows) for r in rev)
         assert all(r["qc"]["reason"] for r in rows if r["status"] == "failed")
-        assert all(1 <= r["self_score"] <= 10 and r["caption"].startswith("[demo]")
+        assert all(r["self_score"] is None and r["caption"].startswith("[demo]")
                    for r in rows)
         assert any(r["best_before"] < TODAY.isoformat() for r in rows
                    if r["status"] == "ready" and r["verdict"] == "liked")  # expired bench
@@ -85,7 +85,7 @@ def test_seed_is_deterministic(tmp_path):
         store = CampaignStore(":memory:")
         try:
             seed(store, tmp_path / name, 2, random.Random(7), TODAY)
-            return [(r["status"], r["verdict"], r["caption"], r["self_score"], r["recipe"])
+            return [(r["status"], r["verdict"], r["caption"], r["self_score_reason"], r["recipe"])
                     for r in _all(store)]
         finally:
             store.close()

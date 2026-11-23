@@ -16,9 +16,6 @@ Every metric below is about the assets of the window (feedback reasons too).
   day and the 6 before). The taste metric.
 - approval rate = approved / reviewed: shown, but capped by MAX_POSTS_PER_DAY, so it says
   more about the posting limit than about taste.
-- calibration: per batch day with at least 5 reviewed assets carrying a self_score, how many
-  of the agent's top 5 (by self_score) the owner liked; plus the mean self_score of liked
-  vs disliked assets.
 - waste: liked assets archived without ever being approved, after their best_before. No
   archive actor or date is stored: the archive date is the owner-local date of updated_at,
   minus DELETE_ARCHIVED_FILES_DAYS once housekeeping purged the files (that edit moves
@@ -43,11 +40,10 @@ from .learnings import _labels
 GROUPS = ("day", "track", "template", "style", "hook_type")
 STAGES = ("produced", "reviewed", "liked", "approved", "published", "winner")
 ROLLING_DAYS = 7
-TOP_N = 5
 APPROVAL_NOTE = "capped by the posts-per-day limit"
 
 _ASSETS_SQL = """
-SELECT a.id, a.batch_date AS day, i.track, i.hook_type, i.style, a.status, a.verdict, a.self_score,
+SELECT a.id, a.batch_date AS day, i.track, i.hook_type, i.style, a.status, a.verdict,
        a.best_before, a.updated_at, a.approved_at IS NOT NULL AS approved,
        a.file_path IS NULL AS purged,
        CASE WHEN json_extract(a.recipe, '$.kind') = 'motion'
@@ -124,7 +120,7 @@ def funnel(store: CampaignStore, settings: InstagramMCPSettings, *, days: int = 
 
 def taste(store: CampaignStore, settings: InstagramMCPSettings, *, days: int = 30,
           now: Optional[datetime] = None) -> Dict[str, Any]:
-    """Like-rate series (with 7-day rolling), calibration, waste and feedback reasons."""
+    """Like-rate series (with 7-day rolling), waste and feedback reasons."""
     since, until = _window(settings, days, now)
     rows = _assets(store, since - timedelta(days=ROLLING_DAYS - 1), until)
     by_day: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -145,19 +141,6 @@ def taste(store: CampaignStore, settings: InstagramMCPSettings, *, days: int = 3
             "rolling_7d": _rate(sum(r["liked"] for r in past), len(past)),
         })
 
-    calibration = []
-    for day in sorted({r["day"] for r in window}):
-        scored = [r for r in by_day[day] if r["reviewed"] and r["self_score"] is not None]
-        if len(scored) >= TOP_N:
-            top = sorted(scored, key=lambda r: (-r["self_score"], r["id"]))[:TOP_N]
-            calibration.append({"date": day, "scored": len(scored),
-                                "top_liked": sum(r["liked"] for r in top), "top_n": TOP_N})
-
-    def mean_score(verdict: str) -> Optional[float]:
-        s = [r["self_score"] for r in window
-             if r["verdict"] == verdict and r["self_score"] is not None]
-        return round(sum(s) / len(s), 2) if s else None
-
     def archived_on(r: Dict[str, Any]) -> str:
         day = parse_dt(r["updated_at"]).astimezone(ZoneInfo(settings.timezone)).date()
         # ponytail: purge runs ~delete_archived_files_days after the archive; an archive
@@ -173,9 +156,6 @@ def taste(store: CampaignStore, settings: InstagramMCPSettings, *, days: int = 3
     return {
         "since": since.isoformat(), "until": until.isoformat(),
         "like_rate": series,
-        "calibration": {"days": calibration,
-                        "mean_self_score": {"liked": mean_score("liked"),
-                                            "disliked": mean_score("disliked")}},
         "waste": {"count": len(wasted), "asset_ids": [r["id"] for r in wasted],
                   "render_minutes": round(sum(r["render_ms"] for r in wasted) / 60000, 1)},
         "reasons": _reasons(store, since, until),

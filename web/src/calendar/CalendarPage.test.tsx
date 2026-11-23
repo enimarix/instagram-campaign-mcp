@@ -26,7 +26,7 @@ function week(): Calendar {
   ]
   return {
     days,
-    publish_check: [{ id: 9, status: 'publish_check', verdict: 'liked', self_score: null,
+    publish_check: [{ id: 9, status: 'publish_check', verdict: 'liked',
       self_score_reason: null, caption: 'lost one', batch_date: '2026-11-17', preview_url: null,
       thumbnail_url: null }],
   }
