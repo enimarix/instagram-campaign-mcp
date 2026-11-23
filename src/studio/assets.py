@@ -23,6 +23,7 @@ MOVES: Dict[Tuple[str, str], Set[str]] = {
     ("rendering", "ready"): {"worker"},  # QC passed
     ("rendering", "failed"): {"worker"},
     ("failed", "rendering"): {"agent", "owner"},  # re-render
+    ("rendering", "archived"): {"owner"},  # removed from the Planning before its render (187)
     ("needs_reaction", "rendering"): {"owner"},  # owner uploads a reaction take
     ("ready", "approved"): {"owner"},  # owner only
     ("ready", "revision_requested"): {"owner"},  # comment that asks for changes

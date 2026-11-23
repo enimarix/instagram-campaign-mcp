@@ -156,11 +156,11 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
 def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                    ) -> Dict[str, Any]:
-    """{now, items}: the chain (see module doc). Item: section running | next | planned,
-    kind render | film | order_run | agent_run | work_order | change_request, title,
+    """{now, items, paused}: the chain (see module doc); paused: since when the studio is
+    paused (line.pause), else None. Item: section running | next | planned, kind render | film | order_run | agent_run | work_order | change_request, title,
     source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
-    why_here, waits_on (gpu_busy | agent_running | timer | order_grace | daily_cap |
+    why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | daily_cap |
     preflight | next_ai_run | needs_instruction | None), not_before (a waiting render's or
     film's timer, UTC ISO), stage and progress (running items), picks_up (the producing
     run's placeholder)."""
@@ -185,10 +185,30 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
         rows.update({("film", o["id"]): o for o in work_orders.list_orders(
             store, "scheduled", newest=False) if lemo.is_lemo(o["style"])})
         pending = [i for i in line.waiting(store) if (i["kind"], i["id"]) in rows]
+        held = [i for i in pending if i["not_before"] == line.HELD]  # listed after, no time
+        pending = [i for i in pending if i not in held]
         took = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
         quota = left = settings.lemo_films_per_day - film.films_today(store, settings, now)
         reset, films_n, idle_at, n = _midnight(settings, now), 0, None, len(items)
         ahead = any(i["kind"] in ("render", "film") for i in items)
+
+        def card(i: Dict[str, Any], start: Optional[datetime], waits: Optional[str],
+                 why: str) -> Dict[str, Any]:
+            r, nb = rows[(i["kind"], i["id"])], i["not_before"]
+            nb = None if nb == line.HELD else nb
+            if i["kind"] == "render":
+                engine = _engine(r["recipe"])
+                return _item("next", "render", _title(r["hook"], r["caption"],
+                                                      f"Vidéo {r['asset_id']}"),
+                             start, render_s[engine], why, waits_on=waits, not_before=nb,
+                             source=r["origin"] or "agent", style=r["style"], engine=engine,
+                             asset_id=r["asset_id"], order_id=r["order_id"],
+                             pick_id=r["pick_id"], job_id=r["id"])
+            return _item("next", "film", _title(r["instruction"], f"Film {r['id']}"), start,
+                         took, why, waits_on=waits, not_before=nb, source=r["source"],
+                         style=r["style"], engine="film", order_id=r["id"],
+                         pick_id=r["pick_id"])
+
         while pending:
             if cursor >= reset:  # the caps reset at owner-local midnight
                 left, reset = settings.lemo_films_per_day, _midnight(settings, cursor)
@@ -201,7 +221,7 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                              + ([reset] if left <= 0 else []))
                 continue
             pending.remove(i)
-            r, nb = rows[(i["kind"], i["id"])], i["not_before"]
+            nb = i["not_before"]
             timer = bool(nb) and parse_iso(nb) > now
             capped = i["kind"] == "film" and films_n >= quota
             waits = ("timer" if timer else "daily_cap" if capped
@@ -209,22 +229,12 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                      "agent_running" if agent_busy and i["kind"] == "film" else None)
             why = ("Lancé maintenant : il passe devant la file." if i["pos"] < 0 else
                    "Minuteur : il attend son heure sans bloquer la file." if timer else
+                   "Placé par toi dans la file." if i["pos"] > 0 else
                    "File unique des rendus et des films : le premier arrivé passe d'abord,"
                    " un à la fois.")
-            if i["kind"] == "render":
-                engine = _engine(r["recipe"])
-                add(_item("next", "render", _title(r["hook"], r["caption"],
-                                                   f"Vidéo {r['asset_id']}"),
-                          cursor, render_s[engine], why, waits_on=waits, not_before=nb,
-                          source=r["origin"] or "agent", style=r["style"], engine=engine,
-                          asset_id=r["asset_id"], order_id=r["order_id"],
-                          pick_id=r["pick_id"], job_id=r["id"]))
-            else:
+            if i["kind"] == "film":
                 films_n, left = films_n + 1, left - 1
-                add(_item("next", "film", _title(r["instruction"], f"Film {r['id']}"), cursor,
-                          took, why, waits_on=waits, not_before=nb, source=r["source"],
-                          style=r["style"], engine="film", order_id=r["id"],
-                          pick_id=r["pick_id"]))
+            add(card(i, cursor, waits, why))
             ahead = True
         if idle_at is not None:  # what waits on a timer holds no agent run back
             cursor, chain = idle_at, items[:n]
@@ -232,6 +242,8 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
             chain = items
         busy = ("gpu_busy" if any(i["kind"] == "render" for i in chain) else
                 "agent_running" if chain else None)
+        items.extend(card(i, None, "held", "En pause : il attend que tu le reprennes, sans"
+                          " bloquer la file.") for i in held)
 
     def playbook() -> None:
         for name in schedule.due_runs(store, settings, now):
@@ -304,4 +316,4 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
             item["picks_up"] = {**n, "ideas_left": max(0, settings.batch_size - sum(n.values()))}
         items.append(item)
         planned_at = _ready(item)
-    return {"now": to_iso(now), "items": items}
+    return {"now": to_iso(now), "items": items, "paused": line.paused(store)}

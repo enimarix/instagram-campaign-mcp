@@ -167,7 +167,10 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
             run: Callable[..., Dict[str, Any]] = run_agent,
             now: Callable[[], datetime] = utcnow) -> List[Dict[str, Any]]:
     """`agent run-due`: each due playbook in the foreground, one after another. A playbook
-    another process started meanwhile is skipped."""
+    another process started meanwhile is skipped. Nothing while the studio is paused
+    (line.pause): the runs stay due for the catch-up."""
+    if line.paused(store):
+        return []
     rows = []
     for playbook in due_runs(store, settings, now()):
         try:
@@ -345,7 +348,8 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
     """Start the Lemo film at the head of the line (film_run, runs.start_film), else the
     first due playbook detached (runs.start_run), else the work orders' run if they need
     one (order_run); nothing while busy(): one run, then the next waits for it and its
-    renders (a film only for a running render, 186). Never raises: the worker lives.
+    renders (a film only for a running render, 186); nothing while the studio is paused
+    (line.pause, 187). Never raises: the worker lives.
     ponytail: a run's row appears a second or two after its start, well within a tick."""
     from .runs import start_film as start_film_run
     from .runs import start_run
@@ -369,6 +373,8 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              "orders": lambda: order_run(store, settings, now(), start=start or start_run)}
     started = []
     try:
+        if line.paused(store):  # the owner paused the studio: nothing starts
+            return started
         for step in CATCH_UP_ORDER:
             if busy(store, queued=step != "film", now=now()):
                 continue

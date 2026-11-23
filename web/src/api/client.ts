@@ -1120,7 +1120,7 @@ export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'd
   send<StyleRequest>('PATCH', `/api/style-requests/${id}`, body)
 
 /** GET /api/planning (185): the chain of what the studio makes next, every time estimated. */
-export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'order_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
+export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'held' | 'order_grace' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
 export type PlanningItem = {
   section: 'running' | 'next' | 'planned'
   kind: 'render' | 'film' | 'order_run' | 'agent_run' | 'work_order' | 'change_request'
@@ -1141,10 +1141,21 @@ export type PlanningItem = {
   progress: number | null
   picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
 }
-export const getPlanning = () => request<{ now: string; items: PlanningItem[] }>('/api/planning')
+/** paused: since when the studio is paused (« Tout mettre en pause », 187), else null. */
+export const getPlanning = () => request<{ now: string; items: PlanningItem[]; paused: string | null }>('/api/planning')
 /** The heavy line (186): a waiting render (its job id) or film (its order id). */
 export type LineKind = 'render' | 'film'
 export const startNow = (kind: LineKind, id: number) => send<unknown>('POST', `/api/planning/${kind}/${id}/start-now`)
 /** `at` UTC ISO, null clears the timer. */
 export const setTimer = (kind: LineKind, id: number, at: string | null) =>
   send<{ not_before: string | null }>('PUT', `/api/planning/${kind}/${id}/timer`, { at })
+/** « Mettre en pause » / « Reprendre » one waiting item (187). */
+export const holdItem = (kind: LineKind, id: number, held: boolean) =>
+  send<unknown>('PUT', `/api/planning/${kind}/${id}/hold`, { held })
+/** Swap with the neighbour: -1 up, 1 down. */
+export const moveItem = (kind: LineKind, id: number, by: -1 | 1) =>
+  send<unknown>('POST', `/api/planning/${kind}/${id}/move`, { by })
+/** Out of the line for good (order: an owner order / change request, by its order id). */
+export const removeItem = (kind: LineKind | 'order', id: number) =>
+  send<unknown>('POST', `/api/planning/${kind}/${id}/remove`)
+export const setStudioPaused = (paused: boolean) => send<{ paused: string | null }>('PUT', '/api/planning/pause', { paused })

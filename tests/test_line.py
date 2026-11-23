@@ -1,5 +1,6 @@
 """Step 186: one heavy line, first in first out (src/studio/line.py), « start now » and the
-timer; the render claim, the film start and the Planning page follow it."""
+timer; the render claim, the film start and the Planning page follow it. Step 187: remove,
+hold, move up / down and the studio's pause switch."""
 
 import asyncio
 import sqlite3
@@ -16,7 +17,7 @@ from src.agent import schedule
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.store import MIGRATIONS, CampaignStore, to_iso, utcnow
-from src.studio import housekeeping, line, planning, work_orders
+from src.studio import alerts, housekeeping, line, planning, work_orders
 
 from .conftest import LOCAL
 
@@ -307,3 +308,200 @@ async def test_the_render_loop_fills_both_slots_in_one_tick_in_line_order(
         loop.cancel()
         with suppress(asyncio.CancelledError):
             await loop
+
+
+# --- 187: the owner's controls ------------------------------------------------------------
+
+def _line(store):
+    return [(i["kind"], i["id"]) for i in line.waiting(store)]
+
+
+def _order(store, monkeypatch, at, text="Une commande"):
+    monkeypatch.setattr(work_orders, "utcnow", lambda: at)
+    return work_orders._insert_owner_order(store, "create", text, None)["id"]
+
+
+def test_remove_takes_a_render_out_for_good_and_the_others_keep_their_place(store, monkeypatch):
+    s = cfg()
+    a = _render(store, NOW - timedelta(minutes=50))
+    b = _render(store, NOW - timedelta(minutes=40))
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=30))
+    c = _render(store, NOW - timedelta(minutes=20))
+    line.start_now(store, "render", c)
+    before = {(i["kind"], i["id"]): (i["pos"], i["arrived"]) for i in line.waiting(store)}
+    asset = store.get_render_job(b)["asset_id"]
+    order = _order(store, monkeypatch, NOW)
+    work_orders.start(store, order, store.get_idea(store.get_asset(asset)["idea_id"]))
+
+    assert line.remove(store, "render", b) == {"kind": "render", "id": b, "removed": True}
+    assert _line(store) == [("render", c), ("render", a), ("film", film)]
+    assert all(before[(i["kind"], i["id"])] == (i["pos"], i["arrived"])
+               for i in line.waiting(store))  # nobody else moved
+    job = store.get_render_job(b)
+    assert job["state"] == "failed" and job["failure"] == line.REMOVED
+    assert store.get_asset(asset)["status"] == "archived"
+    got = work_orders.get_order(store, order)  # the order it was made for goes too
+    assert got["status"] == "skipped" and got["skip_reason"] == line.REMOVED
+    assert line.renders_next(store, s, NOW, 5) == [c, a]  # the claim never takes it
+    with pytest.raises(ValueError, match="a échoué"):
+        line.remove(store, "render", b)
+
+
+def test_remove_keeps_an_asset_that_has_another_live_job(store):
+    job = _render(store, NOW)
+    asset = store.get_render_job(job)["asset_id"]
+    other = store.add_render_job(asset, "another-recipe")["id"]
+    line.remove(store, "render", job)
+    assert store.get_asset(asset)["status"] == "rendering"
+    assert store.get_render_job(other)["state"] == "queued"
+
+
+def test_remove_skips_a_film_or_an_order_and_refuses_what_runs(store, monkeypatch):
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=10))
+    order = _order(store, monkeypatch, NOW)
+    for kind, oid in (("film", film), ("order", order)):
+        line.remove(store, kind, oid)
+        got = work_orders.get_order(store, oid)
+        assert got["status"] == "skipped" and got["skip_reason"] == line.REMOVED
+    assert _line(store) == []
+    with pytest.raises(ValueError, match="statut skipped"):
+        line.remove(store, "order", order)
+    job = _render(store, NOW)
+    store.update_render_job(job, state="running")
+    with pytest.raises(ValueError, match="est en cours"):
+        line.remove(store, "render", job)
+    store.update_render_job(job, state="done")
+    with pytest.raises(ValueError, match="terminé"):
+        line.remove(store, "render", job)
+    with pytest.raises(KeyError):
+        line.remove(store, "render", 999)
+    with pytest.raises(ValueError, match="kind"):
+        line.remove(store, "idea", job)
+
+
+def test_hold_skips_without_blocking_until_released(store, monkeypatch):
+    s = cfg()
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=30))
+    job = _render(store, NOW - timedelta(minutes=20))
+    line.hold(store, "film", film, True)
+    assert _head(store, s) == ("render", job)  # the one behind it goes
+    assert _head(store, s, NOW + timedelta(days=3650)) == ("render", job)  # no end
+    assert _film_run(store, s) == []
+    items = [i for i in planning.build_planning(store, s, NOW)["items"] if i["kind"] in line.KINDS]
+    assert [i["kind"] for i in items] == ["render", "film"]
+    assert items[1]["waits_on"] == "held" and items[1]["est_start"] is None
+    assert items[1]["not_before"] is None
+    store.update_render_job(job, state="running")
+    assert schedule.busy(store, now=NOW) == "renders are waiting"  # the running one
+    store.update_render_job(job, state="done")
+    assert schedule.busy(store, now=NOW) is None  # a held film holds no agent run back
+    line.hold(store, "film", film, False)
+    assert _head(store, s) == ("film", film)
+    assert work_orders.get_order(store, film)["not_before"] is None
+
+
+def test_move_swaps_neighbours_old_rows_and_start_now_and_the_claim_follows(store, monkeypatch):
+    s = cfg()
+    a = _render(store, NOW - timedelta(minutes=50))  # old rows: no line_pos
+    b = _render(store, NOW - timedelta(minutes=40))
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=30))
+    c = _render(store, NOW - timedelta(minutes=20))
+    line.start_now(store, "render", c)  # c, a, b, film
+    line.move(store, "render", b, -1)
+    assert _line(store) == [("render", c), ("render", b), ("render", a), ("film", film)]
+    line.move(store, "render", b, -1)  # past the « start now » one
+    assert _line(store) == [("render", b), ("render", c), ("render", a), ("film", film)]
+    assert line.renders_next(store, s, NOW, 1) == [b]
+    line.move(store, "film", film, -1)
+    assert line.renders_next(store, s, NOW, 3) == [b, c]  # stops at the film
+    late = _render(store, NOW)  # a new arrival still goes behind
+    line.start_now(store, "render", a)  # and « start now » still goes first
+    assert _line(store) == [("render", a), ("render", b), ("render", c), ("film", film),
+                            ("render", late)]
+    items = [i for i in planning.build_planning(store, s, NOW)["items"] if i["kind"] in line.KINDS]
+    assert [(i["kind"], i["ids"].get("job_id") or i["ids"]["order_id"]) for i in items] == \
+        _line(store)
+    assert items[1]["why_here"] == "Placé par toi dans la file."
+    with pytest.raises(ValueError, match="Déjà en tête"):
+        line.move(store, "render", a, -1)
+    with pytest.raises(ValueError, match="Déjà en bout"):
+        line.move(store, "render", late, 1)
+    line.hold(store, "render", c, True)
+    line.move(store, "film", film, -1)  # the held one is passed over
+    assert _line(store)[1:4] == [("film", film), ("render", c), ("render", b)]
+    store.update_render_job(late, state="running")
+    with pytest.raises(ValueError, match="est en cours"):
+        line.move(store, "render", late, -1)
+
+
+def test_pause_stops_the_film_and_the_runs_and_resumes(store, monkeypatch):
+    s = cfg()
+    monkeypatch.setattr(schedule, "preflight", lambda settings: None)
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=30))
+    films, runs = [], []
+    since = line.pause(store, True)["paused"]
+    assert line.pause(store, True)["paused"] == since  # pressed again: the same pause
+    assert schedule.catch_up(store, s, now=lambda: NOW,
+                             start_film=lambda st, se, i: films.append(i)) == []
+    monkeypatch.setattr(schedule, "due_runs", lambda *a: ["daily-produce"])
+    assert schedule.run_due(store, s, run=lambda st, se, p: runs.append(p)) == []
+    assert planning.build_planning(store, s, NOW)["paused"] == since
+    assert films == runs == []
+    assert line.pause(store, False) == {"paused": None}
+    assert schedule.run_due(store, s, run=lambda st, se, p: runs.append(p) or p) == [
+        "daily-produce"]
+    monkeypatch.setattr(schedule, "due_runs", lambda *a: [])
+    assert schedule.catch_up(store, s, now=lambda: NOW,
+                             start_film=lambda st, se, i: films.append(i)) == [f"film {film}"]
+
+
+async def test_the_render_loop_claims_nothing_while_paused(store, monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "keep_awake", nullcontext)
+    monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: True)
+    job = _render(store, utcnow() - timedelta(minutes=20))
+    line.pause(store, True)
+    ran = []
+    loop = asyncio.create_task(worker.render_loop(
+        store, cfg(media_root=str(tmp_path)), run=lambda j: ran.append(j["id"]), interval=0.02))
+    try:
+        deadline = time.monotonic() + 0.3
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+        assert ran == [] and store.get_render_job(job)["state"] == "queued"
+        line.pause(store, False)  # the next tick takes it
+        deadline = time.monotonic() + 5
+        while not ran and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+    finally:
+        loop.cancel()
+        with suppress(asyncio.CancelledError):
+            await loop
+    assert ran == [job]
+
+
+async def test_the_pause_shows_an_alert_on_every_page(store):
+    s = cfg()
+    assert not [a for a in await alerts.alerts(store, s, NOW) if a["kind"] == "studio_paused"]
+    line.pause(store, True)
+    [a] = [a for a in await alerts.alerts(store, s, NOW) if a["kind"] == "studio_paused"]
+    assert a["title"] == "Studio en pause : rien ne démarre" and a["link"] == "/planning"
+
+
+def test_the_control_routes_are_thin_doors(store, monkeypatch):
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=10))
+    job = _render(store, NOW)
+    order = _order(store, monkeypatch, NOW)
+    with TestClient(create_app(cfg(), store=store), base_url=LOCAL,
+                    headers={"Origin": LOCAL}) as tc:
+        assert tc.post(f"/api/planning/render/{job}/move", json={"by": -1}).json()[
+            "line_pos"] == 1
+        assert tc.put(f"/api/planning/film/{film}/hold", json={"held": True}).json()["held"]
+        assert tc.post(f"/api/planning/render/{job}/move", json={"by": 2}).status_code == 422
+        r = tc.post(f"/api/planning/render/{job}/move", json={"by": -1})
+        assert r.status_code == 422 and "Déjà en tête" in r.json()["message"]
+        assert tc.post(f"/api/planning/order/{order}/remove").json()["removed"]
+        assert tc.post(f"/api/planning/order/{order}/move", json={"by": 1}).status_code == 422
+        assert tc.post("/api/planning/render/999/remove").status_code == 404
+        assert tc.put("/api/planning/pause", json={"paused": True}).json()["paused"]
+        assert tc.get("/api/planning").json()["paused"]
+        assert tc.put("/api/planning/pause", json={"paused": False}).json() == {"paused": None}
