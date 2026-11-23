@@ -956,3 +956,20 @@ Open: whether Instagram plays an attached track from 0:00 (the sync assumes it) 
 test publish the owner approves; Instagram's mixing level is unknown, so the preview mirrors
 the volumes literally.
 Reason: the owner (2026-11-21): trending, unknown music, and the cuts on the beat and the drop.
+
+## 2026-11-23: A sent-back Lemo film is remade by the film runner; half-made orders come back (202)
+A Lemo-Opuscar film has no template, so when the owner sent one back the AI could only answer
+« waiting » ("the night run will re-cut it"). The night run had no film path either: video
+43 stayed parked through runs 45, 46, 50 and 51. Now `decide_revision(asset_id, "remade", why)`
+on a film makes a change order in the film's own Lemo style with `why` (what to change) in
+its instruction. The film runner makes it like any Lemo order, and the old video is archived
+once the remake is in the Inbox. The agent still never makes films itself (173). A new
+decision on a video skips the order of its earlier decision when nothing was made for it yet,
+so one video never gets two remakes.
+An order a dead agent run left `in_production` with nothing made (run 34 was killed between
+`create_idea` and the render: order 51 stayed there for a day) goes back to `scheduled`, with
+the idea unlinked, when the next work packet is built, once it has been untouched for the
+agent's time cap (`AGENT_TIMEOUT_MINUTES`). If it was a change order and its video, still
+sent back, got another decision since, it is skipped instead. Lemo orders keep
+`film.close_orphans`.
+Reason: « AI never parks » (156): the owner relaunched a run for video 43 and nothing came of it.

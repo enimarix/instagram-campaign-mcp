@@ -134,6 +134,11 @@ you change the style, not that you stop. For each request (newest first):
    props from the idea's hook and the comments (change what the owner asked for and
    nothing else), `render_motion(template=…, props=…, asset_id=<that asset>)`, then
    `decide_revision(asset_id, "remade", "<one line: what you changed>")`.
+   **A Lemo film** (its style starts with `lemo:`, a custom film with no template) can
+   always be remade in its own look: render nothing, just `decide_revision(asset_id,
+   "remade", "<one line: what to change, from the owner's comments>")`. It returns a
+   film order that the studio's film runner makes from that line; the old video is
+   archived once the new one is in the Inbox. Never "waiting" for a film.
 3. **It cannot, another enabled style can**: pick the best-fitting one from `styles`
    (its description against the note), then `decide_revision(asset_id, "restyled",
    "<one line: why this style meets the note>", style=<id>)`. It returns a « même vidéo,
@@ -148,8 +153,7 @@ you change the style, not that you stop. For each request (newest first):
    original concept from imagination, not only a copy of a reference. The video's card
    then says « Nouveau style demandé ». When the style goes live the studio wakes this
    run again.
-5. Only when a decision cannot be acted on now (a non-motion video for the night run, a
-   render still pending): `decide_revision(asset_id, "waiting", "<what it waits for>")`.
+5. Only when a decision cannot be acted on now (a render still pending): `decide_revision(asset_id, "waiting", "<what it waits for>")`.
 6. `wait_for_renders(job_ids=…)`, then `get_asset_frames(asset_id)` on each new
    version: the change is there, text fits, nothing broken. Fix and render once more if
    needed, then `submit_asset` it (`caption`, and a one-line `note` that starts with

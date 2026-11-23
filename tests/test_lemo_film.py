@@ -13,8 +13,11 @@ import pytest
 from src.agent import film, runner, schedule
 from src.config import InstagramMCPSettings
 from src.store import to_iso, utcnow
-from src.studio import gpu_run, lemo, media, work_orders
+from src.studio import feedback, gpu_run, lemo, media, work_orders
 from src.studio.assets import transition
+from src.studio.feedback import add_comment
+
+from .test_agent_packet import _asset
 
 TOKEN = "IGQ-film-secret-789"
 SAMPLE = Path(__file__).resolve().parents[1] / "src" / "studio" / "samples" / "sample.mp4"
@@ -383,3 +386,67 @@ def test_a_render_that_never_ends_still_times_the_film_out(store, monkeypatch):
     assert got["status"] == "rendering" and at == 100
     got, at = _waited(store, monkeypatch, {50: _machine(1)})  # one restart, not one per poll
     assert got["status"] == "rendering" and at == 150
+
+
+# --- 202: a sent-back film is remade by the film runner; orphan orders come back ------
+def _sent_back_film(store, cfg):
+    idea = store.add_idea("motion", hook="Œuf ou yaourt ?", style="lemo:watercolor")
+    asset = store.add_asset(idea["id"], recipe={"kind": "ffmpeg", "recipe": {"version": 1,
+                                                "ops": []}, "inputs": {"source": "f.mp4"}})
+    transition(store, asset["id"], "ready", actor="worker")
+    return add_comment(store, asset["id"], text="trop lent, pas de hook",
+                       wants_changes=True)["asset"]["id"]
+
+
+def test_a_sent_back_film_is_remade_in_its_own_look(store, cfg, judged):
+    """Was: the AI could only answer « waiting » for a film (no template), forever."""
+    aid = _sent_back_film(store, cfg)
+    first = feedback.decide_revision(store, aid, "remade", "un hook qui bouge")["order"]
+    got = feedback.decide_revision(store, aid, "remade", "hook qui bouge, plus rapide")
+    order, d = got["order"], got["asset"]["agent_decision"]
+    assert (order["style"], order["source"], order["from_asset_id"]) == (
+        "lemo:watercolor", "change", aid)
+    assert "Même film" in order["instruction"] and "plus rapide" in order["instruction"]
+    assert (d["kind"], d["order_id"], d["text"]) == ("remade", order["id"],
+                                                    "Refaite en Watercolor Brush")
+    # never two remakes of one video: the earlier decision's order is replaced
+    assert work_orders.get_order(store, first["id"])["status"] == "skipped"
+    assert film.next_order(store)["id"] == order["id"]  # the film runner's, not the agent's
+    assert not work_orders.for_agent(store)
+    assert film.run_film(store, cfg, order["id"])["status"] == "succeeded"
+    assert store.get_asset(aid)["status"] == "archived"  # the remake replaced it
+    # a template video still re-renders itself: no order
+    other = add_comment(store, _asset(store), text="x", wants_changes=True)["asset"]["id"]
+    assert feedback.decide_revision(store, other, "remade", "x")["order"] is None
+    with pytest.raises(ValueError, match="not a Lemo film"):
+        work_orders.refilm(store, other, "x")
+
+
+def test_an_order_a_dead_run_left_half_made_comes_back(store, cfg):
+    """Was: order 51, in_production since its run was killed, with nothing ever made."""
+
+    def started(order, *, made=False):
+        idea = store.add_idea("motion", hook="h", style=order["style"])
+        work_orders.start(store, order["id"], idea)
+        if made:
+            store.add_asset(idea["id"])
+        return order["id"]
+
+    old = to_iso(utcnow() - timedelta(hours=3))
+    orphan = started(work_orders.create_video(store, "un sujet"))
+    fresh = started(work_orders.create_video(store, "un autre"))
+    made = started(work_orders.create_video(store, "fait"), made=True)
+    films = started(_order(store))
+    aid = _sent_back_film(store, cfg)
+    replaced = started(work_orders.restyle(store, aid, None, "x"))  # an earlier decision's
+    feedback.decide_revision(store, aid, "waiting", "un rendu")  # another decision since
+    with store._tx() as c:
+        c.execute("UPDATE work_orders SET updated_at=? WHERE id IN (?,?,?,?)",
+                  (old, orphan, made, films, replaced))
+    got = work_orders.recover(store, utcnow() - timedelta(minutes=90))
+    assert got == {"rescheduled": [orphan], "skipped": [replaced]}
+    back = work_orders.get_order(store, orphan)
+    assert (back["status"], back["idea_id"]) == ("scheduled", None)
+    assert "autre décision" in work_orders.get_order(store, replaced)["skip_reason"]
+    for oid in (fresh, made, films):
+        assert work_orders.get_order(store, oid)["status"] == "in_production"
