@@ -66,7 +66,7 @@ ORDER_READERS = tuple(p for p, (_, s) in RUNS.items()
 # (written or edited by the owner; the agent's digest doesn't touch updated_at) on an asset
 # still `revision_requested` (147). MAX skips NULLs; both columns are to_iso(). Lemo-Opuscar
 # orders are the film runner's (173), never the light run's.
-_AGENT_ORDER = "status = 'scheduled' AND COALESCE(style, '') NOT LIKE 'lemo:%'"
+_AGENT_ORDER = "status = 'scheduled' AND substr(COALESCE(style, ''), 1, 5) <> 'lemo:'"
 _NEWEST_WORK = (
     "SELECT MAX(t) FROM (SELECT MAX(scheduled_at) AS t FROM work_orders"
     f" WHERE {_AGENT_ORDER}"
@@ -170,11 +170,11 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
             now: Callable[[], datetime] = utcnow) -> List[Dict[str, Any]]:
     """`agent run-due`: each due playbook in the foreground, one after another. A playbook
     another process started meanwhile is skipped. Nothing while the studio is paused
-    (line.pause): the runs stay due for the catch-up."""
-    if line.paused(store):
-        return []
+    (line.pause, checked before each one): the runs stay due for the catch-up."""
     rows = []
     for playbook in due_runs(store, settings, now()):
+        if line.paused(store):
+            break
         try:
             rows.append(run(store, settings, playbook))
         except AgentRunRefused:

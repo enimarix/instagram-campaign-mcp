@@ -127,12 +127,11 @@ def enqueue_render(store: CampaignStore, asset_id: int, *, key: Optional[str] = 
     """Queue a render of the asset's current recipe; the same key gives the same job, so a
     restarted batch never renders an asset twice. A finished (failed or done) job is queued
     again only when the asset is back in `rendering` (a re-render of the same recipe, e.g.
-    after a failed QC)."""
+    after a failed QC): as a new arrival, counted (store.requeue_render_job)."""
     asset = store.get_asset(asset_id)
     job = store.add_render_job(asset_id, key or f"{asset_id}:{recipe_hash(asset['recipe'])}")
     if job["state"] in ("failed", "done") and asset["status"] == "rendering":
-        job = store.update_render_job(job["id"], state="queued", attempts=0, progress=0,
-                                      failure=None, finished_at=None)
+        job = store.requeue_render_job(job["id"])
     return job
 
 
@@ -253,12 +252,14 @@ def voice_first(store: CampaignStore, asset: Dict[str, Any], settings: Instagram
 def voice_ahead(store: CampaignStore, settings: InstagramMCPSettings) -> int:
     """Make the voices of the next VOICE_AHEAD waiting renders that still need one, in line
     order (line.waiting), each through voice_first; films and items on a timer or held are
-    passed over. A failure is left to that job's own run (logged, never raised). Returns how
+    passed over, and nothing while the studio is paused (line.pause). A failure is left to that job's own run (logged, never raised). Returns how
     many were voiced.
     ponytail: a job claimed meanwhile (RENDER_CONCURRENCY > 1) may voice the same recipe at
     once: the TTS cache answers the second, both store the same voiced recipe."""
     from . import line  # line imports us (through work_orders and lemo)
 
+    if line.paused(store):  # the owner needs the GPU: no voice ahead
+        return 0
     now, done = utcnow(), 0
     for item in line.waiting(store):
         if done >= VOICE_AHEAD:
