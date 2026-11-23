@@ -219,6 +219,54 @@ def test_drop_shows_the_reason_and_skips_the_order(store):
         checks.drop(store, a, "encore")
 
 
+def test_relaunching_a_dropped_video_revives_it_its_order_and_its_pick(store, tmp_path):
+    # audit 200 #6: « Relancer » (render.rerender) on a video the check run dropped: it
+    # follows the normal path again (its check, then the Inbox), its order back in production
+    from src.studio import render
+    from tests.test_studio_render import FFMPEG
+
+    [order, other] = work_orders.create_orders(store, [
+        {"source_id": _ref(store, "A"), "mode": "inspired"},
+        {"source_id": _ref(store, "B"), "mode": "inspired"}])
+    a = _done(store, 10, status="failed")
+    with store._tx() as c:
+        pick = c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url,"
+                         " received_at, status, created_at, updated_at) VALUES"
+                         " ('m1', 'pal', 'https://x', 't', 'in_production', 't', 't')").lastrowid
+        c.execute("UPDATE work_orders SET status='in_production', pick_id=?, idea_id="
+                  "(SELECT idea_id FROM assets WHERE id=?) WHERE id=?", (pick, a, order["id"]))
+        c.execute("UPDATE work_orders SET status='in_production', idea_id="
+                  "(SELECT idea_id FROM assets WHERE id=?) WHERE id=?", (a, other["id"]))
+    work_orders.skip_order(store, other["id"], "un doublon")  # skipped for another reason
+    checks.drop(store, a, "le rendu plante deux fois")
+    assert work_orders.get_order(store, order["id"])["status"] == "skipped"
+    assert store._get("dm_picks", pick)["status"] == "skipped"
+    render.rerender(store, tmp_path, a, FFMPEG)
+    got = store.get_asset(a)
+    assert got["agent_decision"] is None and got["status"] == "rendering"
+    revived = work_orders.get_order(store, order["id"])
+    assert (revived["status"], revived["skip_reason"]) == ("in_production", None)
+    assert store._get("dm_picks", pick)["status"] == "in_production"
+    assert work_orders.get_order(store, other["id"])["status"] == "skipped"  # not this drop's
+    transition(store, a, "ready", actor="worker")
+    assert a in [r["id"] for r in checks.waiting(store, utcnow())]  # checked, then the Inbox
+
+
+def test_a_re_render_of_a_video_never_dropped_changes_no_order(store, tmp_path):
+    from src.studio import render
+    from tests.test_studio_render import FFMPEG
+
+    [order] = work_orders.create_orders(store, [{"source_id": _ref(store, "A"),
+                                                 "mode": "inspired"}])
+    a = _done(store, 10, status="failed")
+    with store._tx() as c:
+        c.execute("UPDATE work_orders SET idea_id=(SELECT idea_id FROM assets WHERE id=?)"
+                  " WHERE id=?", (a, order["id"]))
+    work_orders.skip_order(store, order["id"], "le rendu plante deux fois")
+    render.rerender(store, tmp_path, a, FFMPEG)
+    assert work_orders.get_order(store, order["id"])["status"] == "skipped"
+
+
 def test_a_fix_s_new_version_keeps_the_dm_pick_going(store):
     # 193: the remix fix flow: render_remix makes a new version, drop_render the old one;
     # the pick (no order) stays in_production until no version of the idea lives

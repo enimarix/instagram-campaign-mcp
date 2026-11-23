@@ -132,6 +132,20 @@ def test_history_one_row_per_failed_video_each_can_be_relaunched(store):
         (videos[0], "crash 0", 2, True), (videos[1], "crash 1", 2, True)]
 
 
+def test_history_tries_count_the_relaunches_not_the_machine_retries(store):
+    """Audit 200 #18: « Relancer » reuses the job's row (requeues); a requeue after the
+    machine gave up (render.enqueue_render: count=False) is not the video's try."""
+    video = _job(store, "FactQuest", "failed", failure="boom",
+                 finished_at=to_iso(NOW - timedelta(hours=3)))
+    job = store.list_render_jobs(asset_id=video)[0]["id"]
+    for count in (True, True, False):  # two relaunches, one after a machine failure
+        store.requeue_render_job(job, count=count)
+        store.update_render_job(job, state="failed", failure="crash",
+                                finished_at=to_iso(NOW - timedelta(hours=1)))
+    [row] = planning.build_planning(store, cfg(), NOW)["history"]
+    assert (row["asset_id"], row["tries"]) == (video, 3)
+
+
 def _ahead(store, s):
     return planning.build_planning(store, s, NOW)["items"]
 

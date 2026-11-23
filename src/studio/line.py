@@ -220,27 +220,35 @@ def move(store: CampaignStore, kind: str, item_id: int, by: int) -> Dict[str, An
     return {"kind": kind, "id": item_id, "line_pos": to + 1}
 
 
-def place(store: CampaignStore, kind: str, item_id: int, index: int) -> Dict[str, Any]:
-    """The Planning page's drag and drop (195): the item goes to `index` among the other
-    waiting items that are not held (0 = the head, their count = the end); held ones keep
-    their place. Then the whole line's order is written as line_pos 1..n, like move()."""
-    if kind not in KINDS:
+def place(store: CampaignStore, kind: str, item_id: int, anchor_kind: str, anchor_id: int,
+          side: str) -> Dict[str, Any]:
+    """The Planning page's drag and drop (195, 200): the item goes just `side` (before |
+    after) the anchor item in the real line, read in the same write-locked transaction, so a
+    stale page or cards shown out of line order (a timer, the machine) never land it wrong.
+    Then the whole line's order is written as line_pos 1..n, like move(). An anchor that is
+    no longer waiting: ValueError."""
+    if kind not in KINDS or anchor_kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
+    if side not in ("before", "after"):
+        raise ValueError("side must be before or after")
+    if (kind, item_id) == (anchor_kind, anchor_id):
+        raise ValueError("an item cannot be placed next to itself")
     with store.immediate() as c:  # read-then-write, like move()
         items = [dict(r) for r in c.execute(_WAITING)]
         me = next((i for i in items if (i["kind"], i["id"]) == (kind, item_id)), None)
         if me is not None:
             items.remove(me)
-            free = [n for n, i in enumerate(items) if i["not_before"] != HELD]
-            if not 0 <= index <= len(free):
-                raise ValueError(f"index must be between 0 and {len(free)}")
-            items.insert(free[index] if index < len(free) else
-                         free[-1] + 1 if free else len(items), me)
+            to = next((n for n, i in enumerate(items)
+                       if (i["kind"], i["id"]) == (anchor_kind, anchor_id)), None)
+            if to is None:
+                raise ValueError("L'autre carte n'attend plus dans la file : la page se"
+                                 " recharge, recommence.")
+            items.insert(to + (side == "after"), me)
             for pos, i in enumerate(items, 1):
                 _update(c, i["kind"], i["id"], "line_pos = ?", (pos,))
     if me is None:
         _refuse(store, kind, item_id)
-    return {"kind": kind, "id": item_id, "index": index}
+    return {"kind": kind, "id": item_id, "line_pos": items.index(me) + 1}
 
 
 def remove(store: CampaignStore, kind: str, item_id: int) -> Dict[str, Any]:

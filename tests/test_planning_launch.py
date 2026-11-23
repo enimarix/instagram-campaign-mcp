@@ -10,13 +10,13 @@ from fastapi.testclient import TestClient
 
 from src.agent import packet, schedule
 from src.api.app import create_app
-from src.store import to_iso
+from src.store import parse_iso, to_iso
 from src.studio import line, planned, planning
 from src.studio.feedback import add_comment
 
 from .conftest import LOCAL
 from .test_agent_packet import _asset
-from .test_planning import NOW, _job, _order, _run, agent_dir, cfg  # noqa: F401 - fixture
+from .test_planning import NOW, _checkable, _job, _order, _run, agent_dir, cfg  # noqa: F401 - fixture
 
 pytestmark = pytest.mark.usefixtures("agent_dir")
 
@@ -67,9 +67,10 @@ def test_orders_change_requests_and_runs_become_launch_requests(store, monkeypat
     assert schedule.launch_requests(store)[0]["only"]["order_ids"] == sorted([mine, other])
     items = planning.build_planning(store, cfg(agent_schedule="daily-learn@03:00"), NOW)["items"]
     flags = {(i["kind"], i["ids"].get("order_id") or i["ids"].get("asset_id") or i["playbook"]):
-             i["launch_requested"] for i in items}
+             i["launch_requested"] for i in items if i["section"] == "next"}
     assert flags[("work_order", mine)] and flags[("change_request", parked)]
     assert flags[("agent_run", "daily-learn")]
+    assert not any(i["launch_requested"] for i in items if i["section"] == "planned")  # tomorrow's
 
 
 def test_refusals_say_why_and_the_rest_still_goes(store, monkeypatch):
@@ -224,3 +225,87 @@ def test_route_is_a_thin_door(store):
     assert body["front"] == [{"kind": "render", "id": job}]
     assert body["requested"] == [{"kind": "agent_run", "id": "daily-learn"}]
     assert body["busy"] == "renders are waiting" and body["paused"] is None
+
+
+# --- step 200: audit (b) ----------------------------------------------------------------------
+def _next(items, kind, **ids):
+    return next(i for i in items if i["section"] == "next" and i["kind"] == kind
+                and all(i["ids"].get(k) == v for k, v in ids.items()))
+
+
+def test_a_launched_run_is_the_next_thing_on_the_ai_track(store, monkeypatch):
+    # audit 200 #8: not its grace end, nor tomorrow's scheduled time
+    s = cfg(agent_schedule="daily-learn@15:00")  # 16:00 Paris: later today
+    mine = _order(store, monkeypatch, "Tout de suite", minutes_ago=1)  # in its grace
+    _launch(store, s, ("work_order", mine), ("agent_run", "daily-learn"))
+    items = planning.build_planning(store, s, NOW)["items"]
+    run, learn = _next(items, "order_run"), _next(items, "agent_run")
+    assert parse_iso(run["est_start"]) == NOW and run["waits_on"] is None
+    assert run["launch_requested"] and learn["launch_requested"]
+    order = _next(items, "work_order", order_id=mine)
+    assert order["est_start"] == run["est_ready"] and order["launch_requested"]
+    assert learn["est_start"] == order["est_ready"]  # the next launch, in request order
+    # launched today: due_runs skips its 15:00, the placeholder is gone
+    assert not [i for i in items if i["section"] == "planned"]
+
+
+def test_a_launched_run_waits_for_the_renders_and_goes_before_the_film(
+        store, monkeypatch, agent_dir):
+    s = cfg()
+    (agent_dir / "playbooks" / "check-renders.md").write_text("Run.\n")
+    _job(store, "FactQuest", "queued", created_at=to_iso(NOW - timedelta(minutes=50)))
+    _order(store, monkeypatch, "Un film", "lemo:watercolor", minutes_ago=40)
+    _checkable(store, 1)  # in the check's grace: the launch bypasses it
+    assert _launch(store, s, ("agent_run", "check-renders"))["requested"]
+    items = planning.build_planning(store, s, NOW)["items"]
+    render, film = _next(items, "render"), _next(items, "film")
+    check = _next(items, "check_run")
+    assert check["est_start"] == render["est_ready"] and check["waits_on"] == "gpu_busy"
+    assert film["est_start"] == check["est_ready"]  # catch_up: the launch first, then the film
+    assert len([i for i in items if i["kind"] == "check_run"]) == 1
+
+
+def test_a_run_that_ran_today_hides_its_later_placeholder_not_tomorrows(store):
+    s = cfg(agent_schedule="daily-learn@15:00,daily-produce@14:00")
+    _run(store, "daily-learn", NOW - timedelta(hours=2), minutes=5)  # by hand, this morning
+    items = planning.build_planning(store, s, NOW)["items"]
+    assert [i["playbook"] for i in items if i["section"] == "planned"] == ["daily-produce"]
+
+
+def test_a_launch_on_a_selection_leaves_the_others_their_own_path(store, monkeypatch):
+    s = cfg()
+    mine = _order(store, monkeypatch, "La mienne", minutes_ago=1)
+    other = _order(store, monkeypatch, "Une autre", minutes_ago=1)
+    _launch(store, s, ("work_order", mine))
+    items = planning.build_planning(store, s, NOW)["items"]
+    runs = [i for i in items if i["kind"] == "order_run"]
+    assert [(r["launch_requested"], r["waits_on"]) for r in runs] == [
+        (True, None), (False, "order_grace")]
+    assert [(i["ids"]["order_id"], i["launch_requested"]) for i in items
+            if i["kind"] == "work_order"] == [(mine, True), (other, False)]
+
+
+def test_bulk_launch_leaves_held_timer_and_machine_cards(store, monkeypatch):
+    # audit 200 #10: « Tout lancer » leaves them, one card's own « Lancer maintenant » not
+    s = cfg()
+    ok, held, timer, machine = (_job_id(store, _job(store, "FactQuest", "queued"))
+                                for _ in range(4))
+    line.hold(store, "render", held, True)
+    line.set_timer(store, "render", timer, NOW + timedelta(hours=1))
+    store.update_render_job(machine, not_before=to_iso(NOW + timedelta(minutes=5)),
+                            failure="machine 1/6: out of memory")
+    past = _job_id(store, _job(store, "FactQuest", "queued"))  # its timer is over: it goes
+    store.update_render_job(past, not_before=to_iso(NOW - timedelta(minutes=1)))
+    items = [{"kind": "render", "id": i} for i in (held, timer, machine, ok, past)]
+    waiting = items[:3]  # the preview leaves them too
+    assert planning.preview_launch(store, s, NOW, waiting, bulk=True)["pushed"] == []
+    assert planning.preview_launch(store, s, NOW, waiting)["pushed"]
+    out = planning.launch(store, s, items, NOW, bulk=True)
+    assert out["left"] == [{"kind": "render", "id": held, "why": "held"},
+                           {"kind": "render", "id": timer, "why": "timer"},
+                           {"kind": "render", "id": machine, "why": "machine"}]
+    assert out["front"] == [{"kind": "render", "id": ok}, {"kind": "render", "id": past}]
+    assert line.waiting(store)[2]["not_before"] == line.HELD  # untouched
+    out = planning.launch(store, s, [{"kind": "render", "id": machine}], NOW)  # one card
+    assert out["front"] == [{"kind": "render", "id": machine}] and out["left"] == []
+    assert store.get_render_job(machine)["not_before"] is None
