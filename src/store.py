@@ -1662,7 +1662,8 @@ class CampaignStore:
         track: Optional[str] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Best first: agent self_score high to low (unscored last), then id.
+        """Newest batch first, then best_before soonest (none last), then id (step 189: no
+        self_score order, the agent no longer scores itself).
         Rows carry their idea's track, strategy (explore/exploit) and experiment, its source's
         rights_basis (None: no source) and dm_pick_sender (the pinned account that sent the
         source by DM, else None) for the inbox, and change_request: on a revised video, the
@@ -1690,7 +1691,7 @@ class CampaignStore:
             " LEFT JOIN sources s ON s.id = i.source_id",
             {"a.batch_date": _sql_value(batch_date), "a.status": status,
              "a.verdict": verdict, "i.track": track},
-            "a.self_score IS NULL, a.self_score DESC, a.id", limit,
+            "a.batch_date DESC, a.best_before IS NULL, a.best_before, a.id", limit,
         )
 
     def update_asset(self, asset_id: int, **fields: Any) -> Dict[str, Any]:

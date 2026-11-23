@@ -105,7 +105,7 @@ def _new_asset(store, rng, batch_date, track, status, media_root, *, n, parent=N
     asset = store.add_asset(
         idea["id"], batch_date=batch_date, recipe=recipe, parent_asset_id=parent and parent["id"],
         caption=f"[demo] caption {batch_date} #{n + 1} #demo", duration=2.0,
-        self_score=rng.randint(1, 10), self_score_reason=f"[demo] reason {n + 1}",
+        self_score_reason=f"[demo] note {n + 1}",  # the submit note (189: no self-score)
         # the first (liked) asset of older batches is already past its best-before
         best_before=batch_date + timedelta(days=1 if n == 0 else rng.randint(1, 4)))
     if status == "failed" or (parent and status == "rendering"):

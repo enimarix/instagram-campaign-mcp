@@ -87,8 +87,8 @@ def test_restyled_makes_a_change_order_and_the_remake_retires_the_old_video(stor
                           recipe={"kind": "motion", "template": "Macro3D", "props": {}})
     transition(store, new["id"], "ready", actor="worker")
     assert store.get_asset(aid)["status"] == "revision_requested"  # not before it is in
-    production.submit_asset(store, settings, new["id"], self_score=7,
-                            self_score_reason="Changed: Macro 3D", caption="c")
+    production.submit_asset(store, settings, new["id"], note="Changed: Macro 3D",
+                            caption="c")
     assert store.get_asset(aid)["status"] == "archived"
     assert work_orders.get_order(store, order["id"])["status"] == "in_feed"
 

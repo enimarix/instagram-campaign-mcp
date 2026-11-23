@@ -188,3 +188,11 @@ def test_a_change_request_is_never_parked():  # step 156
     weekly = _section(learn, "Step 6: this week's invented style")
     assert "request_style(kind=\"invented\"" in weekly and "`invent_due`" in weekly
     assert "breakdown" in weekly and "`request_style`" in _section(learn, "Dry run")
+
+
+def test_no_self_score_in_the_playbooks():
+    """Step 189: the agent no longer scores itself; a new version carries its change note."""
+    for path in TEXTS:
+        assert "self_score" not in path.read_text(encoding="utf-8"), path.name
+    assert "score" not in _section(_book("daily-produce"), "Phase 10: submit")
+    assert '`note` that starts with\n   "Changed: "' in _book("daily-revise")

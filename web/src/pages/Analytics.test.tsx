@@ -32,16 +32,11 @@ const TASTE: Taste = {
     { date: '', reviewed: 5, liked: 2, like_rate: 0.4, rolling_7d: 0.4 },
     { date: '', reviewed: 5, liked: 4, like_rate: 0.8, rolling_7d: 0.6 },
   ],
-  calibration: {
-    days: [{ date: '', scored: 6, top_liked: 3, top_n: 5 }, { date: '', scored: 5, top_liked: 4, top_n: 5 }],
-    mean_self_score: { liked: 7.5, disliked: 5.25 },
-  },
   waste: { count: 2, render_minutes: 1.5 },
   reasons: [{ code: 'too_long', label: 'Too long', count: 4 }],
 }
 const EMPTY_TASTE: Taste = {
   like_rate: [{ date: '', reviewed: 0, liked: 0, like_rate: null, rolling_7d: null }],
-  calibration: { days: [], mean_self_score: { liked: null, disliked: null } },
   waste: { count: 0, render_minutes: 0 },
   reasons: [],
 }
@@ -95,7 +90,7 @@ describe('Analytics', () => {
     expect(funnel.map((li) => li.textContent)).toEqual(
       ['produced12', 'reviewed10', 'liked6', 'approved3', 'published2', 'winner1'])
     expect(screen.getByRole('img', { name: 'Like-rate, 7-day: 60 %, +20 % over the range' })).toBeTruthy()
-    expect(screen.getByText('3.5/5')).toBeTruthy()
+    expect(screen.queryByText('Calibration')).toBeNull() // 189: the agent no longer scores itself
     expect(screen.getByText('2 liked videos expired unapproved · 1.5 render minutes')).toBeTruthy()
     expect(screen.getByText('Too long ×4')).toBeTruthy()
   })
@@ -112,7 +107,6 @@ describe('Analytics', () => {
     expect(await screen.findByText('No posts in the last 7 days.')).toBeTruthy()
     expect(await screen.findByText('No videos in the last 30 days yet.')).toBeTruthy()
     expect(screen.getByText('Nothing reviewed in the last 30 days yet.')).toBeTruthy()
-    expect(screen.getByText(/Not enough scored reviews yet/)).toBeTruthy()
     expect(screen.getByText('No feedback reasons yet.')).toBeTruthy()
     expect(screen.getByText('0 d')).toBeTruthy()
     expect(await screen.findByText(/No report yet: the nightly analysis runs at 02:00/)).toBeTruthy()
@@ -122,7 +116,7 @@ describe('Analytics', () => {
     stubApi({ '/api/analytics/funnel?days=30': undefined })
     show()
     expect(await screen.findByRole('alert')).toBeTruthy()
-    expect(await screen.findByText('3.5/5')).toBeTruthy()
+    expect(await screen.findByText('2 liked videos expired unapproved · 1.5 render minutes')).toBeTruthy()
   })
 
   it('refetches the account series when the range changes', async () => {
@@ -147,6 +141,6 @@ describe('Analytics', () => {
     expect(screen.getByText(/Produced: rendered and checked/)).toBeTruthy()
     fireEvent.click(help)
     expect(screen.queryByText(/Produced: rendered and checked/)).toBeNull()
-    await screen.findByText('3.5/5') // let the fetches settle
+    await screen.findByText('2 liked videos expired unapproved · 1.5 render minutes') // let the fetches settle
   })
 })

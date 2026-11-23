@@ -49,48 +49,46 @@ async def test_mcp_create_idea_error_lists_values(mcp_store):
         await srv.create_idea("vlog", "Hook")
 
 
-def test_submit_sets_score_caption_and_pillar_default(store, settings):
+def test_submit_sets_caption_note_and_pillar_default(store, settings):
     a, j = _asset(store, pillar="everyday_humor")  # shelf_days 3
     _finish(store, a, j)
-    row = production.submit_asset(store, settings, a, self_score=8,
-                                  self_score_reason=" Strong hook, clean loop ",
-                                  caption="Fact #fun")
-    assert row["self_score"] == 8 and row["best_before"] == "2026-11-20"
-    assert store.get_asset(a)["self_score_reason"] == "Strong hook, clean loop"
-    # re-submitting before the owner reacts overwrites
-    row = production.submit_asset(store, settings, a, self_score=5, self_score_reason="meh",
-                                  caption="Other", best_before="2026-12-01")
-    assert row["self_score"] == 5 and row["best_before"] == "2026-12-01"
+    store.update_asset(a, self_score=8)  # a legacy score (189: the agent no longer scores)
+    assert production.list_assets(store)[0]["submitted"] is False
+    row = production.submit_asset(store, settings, a, caption="Fact #fun",
+                                  note=" Changed: cut to 12 s ")
+    assert row["best_before"] == "2026-11-20" and "self_score" not in row
+    assert row["submitted"] and row["note"] == "Changed: cut to 12 s"
+    assert store.get_asset(a)["self_score"] is None  # the legacy score is cleared
+    # re-submitting before the owner reacts overwrites; no note is still a submit
+    row = production.submit_asset(store, settings, a, caption="Other", best_before="2026-12-01")
+    assert row["best_before"] == "2026-12-01" and row["submitted"] and row["note"] is None
 
 
 def test_submit_default_falls_back_to_setting(store, settings):
     settings.best_before_default_days = 10
     a, j = _asset(store, pillar=None)
     _finish(store, a, j)
-    row = production.submit_asset(store, settings, a, self_score=7, self_score_reason="ok",
-                                  caption="c")
+    row = production.submit_asset(store, settings, a, caption="c")
     assert row["best_before"] == "2026-11-27"
 
 
 @pytest.mark.parametrize("kw, match", [
-    ({"self_score": 0}, "1-10"), ({"self_score": 11}, "1-10"), ({"self_score": True}, "1-10"),
-    ({"self_score_reason": "two\nlines"}, "one line"), ({"self_score_reason": "x" * 201},
-                                                        "one line"),
-    ({"self_score_reason": "  "}, "one line"), ({"caption": ""}, "caption is required"),
+    ({"note": "two\nlines"}, "one line"), ({"note": "x" * 201}, "one line"),
+    ({"caption": ""}, "caption is required"),
     ({"caption": "#a #b #c #d #e #f"}, "hashtags"), ({"best_before": "20/11/2026"}, "YYYY-MM-DD"),
 ])
 def test_submit_refuses_bad_input_and_writes_nothing(store, settings, kw, match):
     a, j = _asset(store)
     _finish(store, a, j)
-    args = {"self_score": 7, "self_score_reason": "ok", "caption": "c", **kw}
+    args = {"note": "ok", "caption": "c", **kw}
     with pytest.raises(ValueError, match=match):
         production.submit_asset(store, settings, a, **args)
     after = store.get_asset(a)
-    assert after["self_score"] is None and after["caption"] is None
+    assert after["self_score_reason"] is None and after["caption"] is None
 
 
 def test_submit_refuses_wrong_status_or_judged(store, settings):
-    args = {"self_score": 7, "self_score_reason": "ok", "caption": "c"}
+    args = {"caption": "c"}
     a, j = _asset(store)
     with pytest.raises(ValueError, match="still rendering"):
         production.submit_asset(store, settings, a, **args)
@@ -166,5 +164,6 @@ async def test_mcp_read_tools_are_compact(mcp_store):
         await srv.get_render_status()
     with pytest.raises(ToolError, match="exactly one"):
         await srv.wait_for_renders()
-    with pytest.raises(ToolError, match="1-10"):
-        await srv.submit_asset(a, 12, "ok", "c")
+    with pytest.raises(ToolError, match="one line"):
+        await srv.submit_asset(a, "c", note="two\nlines")
+    assert (await srv.submit_asset(a, "c", note="Changed: hook"))["note"] == "Changed: hook"

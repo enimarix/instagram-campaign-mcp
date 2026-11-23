@@ -11,7 +11,7 @@ from src import scheduler, worker
 from src.config import InstagramMCPSettings
 from src.instagram_client import InstagramClient
 from src.learning.facts import build_and_store, daily_facts, facts_for
-from src.learning.funnel import funnel, taste
+from src.learning.funnel import funnel
 from src.store import to_iso
 
 from .conftest import API
@@ -129,10 +129,7 @@ async def test_slots_flag_small_samples_and_movers(seeded, settings):
 async def test_funnel_equals_077_and_experiments(seeded, settings):
     f = await daily_facts(seeded, settings, now=NOW)
     for name, days in (("yesterday", 1), ("last_7_days", 7)):
-        got = dict(f[name]["funnel"])
-        assert got.pop("calibration") == taste(seeded, settings, days=days, now=NOON_Y)[
-            "calibration"]
-        assert got == funnel(seeded, settings, days=days, now=NOON_Y)["totals"]
+        assert f[name]["funnel"] == funnel(seeded, settings, days=days, now=NOON_Y)["totals"]
     assert f["yesterday"]["funnel"]["produced"] == 1
     assert f["last_7_days"]["funnel"]["produced"] == 2
     # free-text experiments of older ideas are no experiment (086: tests/test_experiments.py)

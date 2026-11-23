@@ -35,7 +35,7 @@ website and in the daily report.
 |---|---|---|
 | Audience | Followers gained per week; median Reel views; share of reach from non-followers | The account grows |
 | Content | Winners per week (existing rule in `src/scoring.py`); watch ratio (average watch time ÷ video length) | The videos hold attention |
-| Studio | **Like rate** (liked ÷ reviewed) per batch, per track and per template; the agent's **calibration** (its own score before review against the owner's verdict) | The agent makes what the owner wants. This is the first proof that learning works: it should rise over weeks. Approval rate (approved ÷ produced) is shown too, but it is capped by the posts-per-day limit (3 of 25 is at most 12 %), so it cannot measure taste |
+| Studio | **Like rate** (liked ÷ reviewed) per batch, per track and per template. The agent does not score its own videos (docs/DECISIONS.md, 2026-11-23): quality comes from the real numbers and the owner's verdict | The agent makes what the owner wants. This is the first proof that learning works: it should rise over weeks. Approval rate (approved ÷ produced) is shown too, but it is capped by the posts-per-day limit (3 of 25 is at most 12 %), so it cannot measure taste |
 | Waste | Share of liked videos never published; days of supply on the bench (§3.2) | Producing 25 videos for 3 slots wastes most renders unless good leftovers are reused |
 | Cost | Owner minutes per day in review; agent usage per batch; render minutes per batch | The loop stays cheap enough to run daily |
 | Paid | Cost per result on the chosen objective, against the organic baseline | Ads are worth their money |
@@ -175,7 +175,7 @@ Both tracks end in the same place: the review inbox.
   vs the account's own median (existing `src/scoring.py`), breakdowns by any tag, A/B
   variant comparison, and the daily report.
 - **Studio funnel**: produced → liked → approved → published → winner, per day, track,
-  template and hook type, with the like-rate trend and the agent's calibration (§2.1).
+  template and hook type, with the like-rate trend (§2.1).
 - Insights of a fresh post are captured on an age schedule (for example 1 h, 3 h, 6 h,
   12 h, 24 h, 48 h, 7 d, 30 d), so posts are compared at the same age and early
   velocity is visible.
@@ -365,7 +365,7 @@ Existing: `scheduled_posts`, `post_labels`, `insight_snapshots`.
 |---|---|
 | `sources` | A found clip or reference: provider, URL, author (creator username, for the credit), stats (views when known), **rights_basis**, rights_note, audio rights, local file, `downloaded_at` and the downloader version |
 | `ideas` | One content idea: track, pillar, hook, hook_type, script, source, **citations**, hypothesis, explore/exploit, experiment |
-| `assets` | One rendered candidate: idea, file, preview file, thumbnail, caption, `audio_name`, recipe, duration, batch date, **status**, **verdict**, parent asset (for a new version), QC result, **self_score** + reason (the agent's rating before review), **best_before**, approved_at, **description** and compressed **timeline** of events |
+| `assets` | One rendered candidate: idea, file, preview file, thumbnail, caption, `audio_name`, recipe, duration, batch date, **status**, **verdict**, parent asset (for a new version), QC result, the agent's one-line submit **note** (stored in the legacy `self_score_reason` column; `self_score` itself is no longer written), **best_before**, approved_at, **description** and compressed **timeline** of events |
 | `inspirations` | Reel links the owner pastes from the phone with a note ("react to this", "this format is funny"): the agent can download them for a reaction or use them as research input |
 | `pinned_accounts`, `dm_picks` | Instagram accounts the owner trusts, and the Reels they sent to the brand account by DM (link, sender, note, status) |
 | `reaction_reels`, `reaction_pieces` | The owner's long reaction recording(s), the cursor of the next piece, and which piece went into which asset |

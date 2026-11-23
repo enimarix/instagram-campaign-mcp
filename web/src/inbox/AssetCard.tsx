@@ -81,11 +81,8 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
           </div>
           {change && <p className="line-clamp-2 text-sm font-medium">{change}</p>}
           {a.work_order?.instruction && <p className="line-clamp-2 text-sm">Ta consigne : « {a.work_order.instruction} »</p>}
-          {a.self_score != null && (
-            <p className="truncate text-sm" title={a.self_score_reason ?? undefined}>
-              <strong className="mr-1 text-base tabular-nums">{a.self_score}/10</strong> {a.self_score_reason}
-            </p>
-          )}
+          {/* the agent's note on a new version: what it changed (no self-score since 189) */}
+          {change && a.self_score_reason && <p className="truncate text-sm" title={a.self_score_reason}>{a.self_score_reason}</p>}
           {a.description && (
             <button type="button" aria-expanded={expanded} onClick={() => setExpanded((x) => !x)}
               className={`pointer-events-auto text-left text-sm ${expanded ? '' : 'line-clamp-2'}`}>

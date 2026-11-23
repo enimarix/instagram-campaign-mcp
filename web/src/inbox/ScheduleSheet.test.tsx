@@ -4,7 +4,7 @@ import type { Asset } from '../api/client'
 import ScheduleSheet, { ScheduledSlot } from './ScheduleSheet'
 
 const ASSET: Asset = {
-  id: 3, status: 'approved', verdict: 'liked', self_score: 8, self_score_reason: 'ok',
+  id: 3, status: 'approved', verdict: 'liked', self_score_reason: 'ok',
   caption: 'c', batch_date: '2026-11-17', preview_url: null, thumbnail_url: null,
 }
 const SLOT = { publish_at: '2030-11-19T10:00:00+00:00', local: '2030-11-19T11:00:00+01:00' }

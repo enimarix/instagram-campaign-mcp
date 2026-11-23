@@ -262,8 +262,8 @@ def test_inspired_order_lifecycle_to_the_feed(store, settings):
         work_orders.delete_order(store, order["id"])
     asset = store.add_asset(idea["id"], batch_date=idea["batch_date"])["id"]
     _finish(store, asset)
-    production.submit_asset(store, settings, asset, self_score=7,
-                            self_score_reason="Work order #1: as asked", caption="c")
+    production.submit_asset(store, settings, asset, note="Work order #1: as asked",
+                            caption="c")
     got = work_orders.get_order(store, order["id"])
     assert (got["status"], got["asset_id"]) == ("in_feed", asset)
     [row] = store.list_assets()

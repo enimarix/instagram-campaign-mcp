@@ -272,7 +272,7 @@ def test_submit_adds_the_cc_by_credit_and_the_publish_guard_checks_it(store, tmp
                         qc={"passed": True}, recipe={"kind": "motion", "template": "PixelSkit",
                                                      "props": {}, "sfx_credits": [credit]})
     transition(store, a["id"], "ready", actor="worker")
-    production.submit_asset(store, s, a["id"], self_score=7, self_score_reason="ok",
+    production.submit_asset(store, s, a["id"],
                             caption="Boing ! #fun")
     assert store.get_asset(a["id"])["caption"] == f"Boing ! #fun\n\n{credit}"
     transition(store, a["id"], "approved", actor="owner")

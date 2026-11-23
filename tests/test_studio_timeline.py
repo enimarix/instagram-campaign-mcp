@@ -108,18 +108,18 @@ def test_auto_description_names_a_reaction_remix():
 def test_submit_stores_the_description_or_keeps_a_fallback(store, settings):
     a, j = _asset(store)
     _finish(store, a, j)
-    row = production.submit_asset(store, settings, a, self_score=7, self_score_reason="ok",
+    row = production.submit_asset(store, settings, a,
                                   caption="Cap")
     assert store.get_asset(a)["description"] == 'A FactQuest video with the hook "Did you know?".'
     assert row["description"] == 'A FactQuest video with the hook "Did you know?".'
-    production.submit_asset(store, settings, a, self_score=7, self_score_reason="ok",
+    production.submit_asset(store, settings, a,
                             caption="Cap", description=" Three facts. The hook asks. ")
     assert store.get_asset(a)["description"] == "Three facts. The hook asks."
-    production.submit_asset(store, settings, a, self_score=7, self_score_reason="ok",
+    production.submit_asset(store, settings, a,
                             caption="Cap")  # none given: the stored one stays
     assert store.get_asset(a)["description"] == "Three facts. The hook asks."
     with pytest.raises(ValueError, match="description must be 1-400"):
-        production.submit_asset(store, settings, a, self_score=7, self_score_reason="ok",
+        production.submit_asset(store, settings, a,
                                 caption="Other", description="x" * 401)
     assert store.get_asset(a)["caption"] == "Cap"  # nothing written
 

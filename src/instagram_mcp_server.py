@@ -69,9 +69,10 @@ Studio batch (the agent): start every batch with get_creative_brief (bible, lear
 feedback, quotas, what today's batch holds, the bench). create_idea for each idea, render_motion each one,
 wait_for_renders(batch_date) to review renders as they land (get_render_status for one,
 get_asset_frames to look at it),
-submit_asset each QC-passed asset with a self_score, caption and best_before;
-list_assets shows the batch best first. Reactions (track remix): list_sources, then
-create_idea(source_id=...) and render_remix (rules in its description).
+submit_asset each QC-passed asset with a caption and best_before (no self-score: real
+numbers and the owner judge); list_assets shows the newest batch first.
+Reactions (track remix): list_sources, then create_idea(source_id=...) and render_remix
+(rules in its description).
 
 Media must be at a public HTTPS URL; Instagram downloads it. Reels may instead use
 video_path (relative to the studio media root), uploaded directly. Scheduled posts are
@@ -968,24 +969,25 @@ async def wait_for_renders(batch_date: Optional[str] = None, job_ids: Optional[L
 
 
 @mcp.tool(annotations=LOCAL_WRITE)
-async def submit_asset(asset_id: int, self_score: int, self_score_reason: str, caption: str,
-                       best_before: Optional[str] = None,
-                       description: Optional[str] = None) -> Dict[str, Any]:
-    """Submit a QC-passed (ready) asset for the owner's review: an honest self_score 1-10
-    with one line on why (best candidates come first), the caption, best_before
+async def submit_asset(asset_id: int, caption: str, best_before: Optional[str] = None,
+                       description: Optional[str] = None,
+                       note: Optional[str] = None) -> Dict[str, Any]:
+    """Submit a QC-passed (ready) asset for the owner's review: the caption, best_before
     (YYYY-MM-DD; default: batch date + the pillar's shelf life) and a description (2-3
     plain sentences, up to 400 chars: what happens, the hook, the payoff; default: an
-    automatic one). Re-submitting overwrites until the owner reacts."""
+    automatic one) and an optional one-line note (up to 200 chars; a new version: what you
+    changed, read back as the change made). You do not score your own videos.
+    Re-submitting overwrites until the owner reacts."""
     return await _studio(production.submit_asset, store(), get_settings(), asset_id,
-                         self_score=self_score, self_score_reason=self_score_reason,
-                         caption=caption, best_before=best_before, description=description)
+                         caption=caption, best_before=best_before, description=description,
+                         note=note)
 
 
 @mcp.tool(annotations=LOCAL_READ)
 async def list_assets(status: Optional[str] = None, batch_date: Optional[str] = None,
                       limit: int = 50) -> Dict[str, Any]:
-    """Assets, best self-score first (limit up to 100): status, verdict, template, caption
-    and description excerpts, QC summary, best_before."""
+    """Assets, newest batch first (limit up to 100): status, verdict, template, caption
+    and description excerpts, QC summary, best_before, submitted and the submit note."""
     return {"assets": await _studio(production.list_assets, store(), status=status,
                                     batch_date=batch_date, limit=limit)}
 
@@ -1108,7 +1110,7 @@ async def get_daily_facts(date: Optional[str] = None) -> Dict[str, Any]:
     """The day's facts, computed with no AI (default yesterday; date YYYY-MM-DD,
     owner-local), for yesterday and the last 7 days: published, matured, winners and
     losers with tags and drivers, best and worst posting hours (small_sample when n < 3),
-    biggest view movers, the studio funnel and calibration; plus the open experiments
+    biggest view movers, the studio funnel; plus the open experiments
     (matured n and index per variant, warnings when one gets no approved videos) and the
     most-liked audience comments per recent post. Stored facts are
     returned as stored; missing ones are computed and stored. audience_comments are other

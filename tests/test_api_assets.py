@@ -34,14 +34,17 @@ def _asset(store, status="ready", track="motion", **fields):
 
 
 def test_list_filters_and_default_order(tc, store):
-    low = _asset(store, self_score=3, batch_date="2026-11-17")
-    unscored = _asset(store, batch_date="2026-11-17")
-    high = _asset(store, self_score=9, batch_date="2026-11-17")
+    # 189: newest batch first, then best_before soonest (none last), then id; a legacy
+    # self_score no longer orders anything
+    late = _asset(store, self_score=9, batch_date="2026-11-17", best_before="2026-11-30")
+    undated = _asset(store, batch_date="2026-11-17")
+    soon = _asset(store, self_score=3, batch_date="2026-11-17", best_before="2026-11-20")
     other_day = _asset(store, self_score=10, batch_date="2026-11-16", track="remix")
-    rendering = _asset(store, status="rendering", self_score=5, batch_date="2026-11-17")
+    rendering = _asset(store, status="rendering", batch_date="2026-11-17")
 
     ids = [a["id"] for a in tc.get("/api/assets", params={"batch_date": "2026-11-17"}).json()]
-    assert ids == [high["id"], rendering["id"], low["id"], unscored["id"]]
+    assert ids == [soon["id"], late["id"], undated["id"], rendering["id"]]
+    assert [a["id"] for a in tc.get("/api/assets").json()][-1] == other_day["id"]
     r = tc.get("/api/assets", params={"status": "rendering"}).json()
     assert [a["id"] for a in r] == [rendering["id"]]
     r = tc.get("/api/assets", params={"track": "remix"}).json()

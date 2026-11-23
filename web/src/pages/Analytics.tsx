@@ -19,7 +19,6 @@ const HELP = {
   streak: 'Posts this week: published in the last 7 days. Streak: days in a row (your time zone) with at least one published post, up to today or yesterday.',
   funnel: 'Videos whose batch day is in the last 30 days. Produced: rendered and checked. Reviewed: you liked, disliked, commented, approved or sent it back (an archive alone does not count). Liked: your verdict. Approved: cleared for publishing. Published: on Instagram. Winner: the post scores "winner" against the account\'s other posts.',
   likeRate: 'Like-rate = liked / reviewed per batch day: the taste metric. The 7-day value adds up the day and the 6 before. Approval rate is capped by the posts-per-day limit, so it says more about the posting limit than about taste.',
-  calibration: 'Per batch day with at least 5 reviewed videos the agent scored: how many of its top 5 (by its own score) you liked. Plus its mean score of the videos you liked vs disliked.',
   waste: 'Liked videos archived without ever being approved, after their best-before date, and the render minutes spent on them. Reasons: how often each feedback reason was given on the last 30 days\' videos.',
 }
 const RANGES = [7, 30, 90]
@@ -219,21 +218,6 @@ export default function Analytics() {
       <Section title="Like-rate" help={HELP.likeRate}>
         <Body s={taste} empty={(t) => t.like_rate.every((d) => d.rolling_7d === null) && 'Nothing reviewed in the last 30 days yet.'}>
           {(t) => <Line label="Like-rate, 7-day" values={t.like_rate.map((d) => d.rolling_7d)} format={pct} />}
-        </Body>
-      </Section>
-
-      <Section title="Calibration" help={HELP.calibration}>
-        <Body s={taste} empty={(t) => t.calibration.days.length === 0 && 'Not enough scored reviews yet: a batch day needs 5.'}>
-          {({ calibration: { days: cal, mean_self_score: mean } }) => (
-            <>
-              <p className="mt-1 text-sm">
-                The agent's top {cal[0].top_n} were liked{' '}
-                <strong>{(cal.reduce((a, d) => a + d.top_liked, 0) / cal.length).toFixed(1)}/{cal[0].top_n}</strong>{' '}
-                on average ({cal.length} day{cal.length === 1 ? '' : 's'}).
-              </p>
-              <p className="text-xs text-muted">Its mean score: liked {num(mean.liked)}, disliked {num(mean.disliked)}</p>
-            </>
-          )}
         </Body>
       </Section>
 
