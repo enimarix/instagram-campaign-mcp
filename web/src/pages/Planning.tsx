@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link } from 'react-router'
 import {
-  editIdea, errorMessage, getPlanning, holdItem, listVoices, moveItem, placeItem, previewPlanning, releaseIdea, removeIdea, removeItem,
-  rerenderAsset, setStudioPaused, setTimer, startNow,
-  type ClaudeIdea, type IdeaEdit, type LineKind, type Planning as PlanningData, type PlanningHistory, type PlanningItem,
+  editIdea, errorMessage, getPlanning, holdItem, launchItems, listVoices, moveItem, placeItem, previewLaunch, previewPlanning, releaseIdea,
+  removeIdea, removeItem, rerenderAsset, setStudioPaused, setTimer, startNow,
+  type ClaudeIdea, type IdeaEdit, type LaunchItem, type LaunchResult, type LineKind, type Planning as PlanningData, type PlanningHistory, type PlanningItem,
   type PlanningPreview, type PlanningStrip, type PlanningSupply, type PlanningWait, type Voice,
 } from '../api/client'
 import { Button } from '../ui/Button'
@@ -76,7 +76,74 @@ function removal(i: PlanningItem): Removal | null {
   if (i.kind === 'film') return { kind: 'film', id: i.ids.order_id }
   return i.kind === 'work_order' || i.kind === 'change_request' ? { kind: 'order', id: i.ids.order_id } : null
 }
-const keyOf = (r: Removal) => `${r.kind}:${r.id}`
+const keyOf = (r: Removal | LaunchItem) => `${r.kind}:${r.id}`
+
+/** What « Lancer » takes (196): a waiting render, film, Claude idea, owner order or change
+ * request (by its order, else its video), an AI run not running (its playbook); not one
+ * already launched, nor an order waiting for the owner's instruction; else null. */
+function launchable(i: PlanningItem): LaunchItem | null {
+  if (i.section === 'running' || i.launch_requested) return null
+  const { job_id, order_id, asset_id } = i.ids
+  switch (i.kind) {
+    case 'render': return job_id === undefined ? null : { kind: 'render', id: job_id }
+    case 'film': return order_id === undefined ? null : { kind: 'film', id: order_id }
+    case 'claude_idea': return asset_id === undefined ? null : { kind: 'claude_idea', id: asset_id }
+    case 'work_order':
+    case 'change_request':
+      if (i.waits_on === 'needs_instruction') return null
+      if (order_id !== undefined) return { kind: 'work_order', id: order_id }
+      return asset_id === undefined ? null : { kind: 'change_request', id: asset_id }
+    default: return i.playbook ? { kind: 'agent_run', id: i.playbook } : null
+  }
+}
+const TO_FRONT: LaunchItem['kind'][] = ['render', 'film', 'claude_idea'] // the rest waits for the machine
+
+function summary(r: LaunchResult) {
+  const n = (k: number, one: string, many: string) => `${k} ${k > 1 ? many : one}`
+  const parts = [
+    r.front.length > 0 && `${n(r.front.length, 'passe', 'passent')} en tête de la file`,
+    r.requested.length > 0 && `${n(r.requested.length, 'lancement demandé', 'lancements demandés')} : ${
+      r.requested.length > 1 ? 'démarrent' : 'démarre'} ${r.busy ? 'dès que la machine est libre' : 'dans la minute'}`,
+    r.refused.length > 0 && `${n(r.refused.length, 'refusé', 'refusés')} (${r.refused[0].message})`,
+  ].filter(Boolean)
+  const after = r.paused ? 'Studio en pause : rien ne démarre avant la reprise.' : 'La machine fait un seul travail lourd à la fois.'
+  return `${parts.length ? parts.join(' · ') : 'Rien à lancer'}. ${after}`
+}
+
+/** « Lancer » one card or many (196): the delay warning first when renders, films or ideas go
+ * to the front and push others back (190), then one toast summing it up. */
+function useLaunch(onDone: () => void) {
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const [ask, setAsk] = useState<{ pushed: Pushed; go: () => void } | null>(null)
+  const go = async (items: LaunchItem[]) => {
+    setAsk(null)
+    setBusy(true)
+    try {
+      toast({ message: summary(await launchItems(items)), duration: 8000 })
+      onDone()
+    } catch (e) {
+      toast({ message: `Pas fait : ${errorMessage(e)}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const launch = async (items: LaunchItem[]) => {
+    let pushed: Pushed = []
+    if (items.some((l) => TO_FRONT.includes(l.kind))) {
+      try {
+        pushed = (await previewLaunch(items)).pushed ?? []
+      } catch {
+        // no preview: the launch says what it refuses
+      }
+    }
+    if (pushed.length === 0) return void go(items)
+    setAsk({ pushed, go: () => void go(items) })
+  }
+  const box = ask && <DelayWarning pushed={ask.pushed} onConfirm={ask.go} onCancel={() => setAsk(null)} />
+  return { busy, launch, box }
+}
+type Launch = ReturnType<typeof useLaunch>['launch']
 
 /** A call with a toast, then onDone; `busy` while it runs. Resolves true when it went through. */
 function useAct(onDone: () => void) {
@@ -196,7 +263,28 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
   )
 }
 
-type Actions = { onDone: () => void; onRemove: (r: Removal) => void }
+type Actions = {
+  onDone: () => void
+  onRemove: (r: Removal) => void
+  picked: ReadonlySet<string> // keyOf the cards ticked for « Lancer la sélection » (196)
+  onPick: (key: string, on: boolean) => void
+  onLaunch: Launch
+}
+
+/** The card's tick box for « Lancer la sélection » (196), on what can be launched. */
+function PickBox({ item: i, picked, onPick }: { item: PlanningItem } & Pick<Actions, 'picked' | 'onPick'>) {
+  const l = launchable(i)
+  if (!l) return null
+  const key = keyOf(l)
+  return (
+    <label className="-my-2 grid size-11 place-items-center" title="Sélectionner pour « Lancer la sélection »">
+      <input type="checkbox" aria-label={`Sélectionner : ${i.title}`} className="size-5 accent-accent"
+        checked={picked.has(key)} onChange={(e) => onPick(key, e.target.checked)} />
+    </label>
+  )
+}
+
+const REQUESTED = 'Lancement demandé — démarre dès que la machine est libre'
 
 const MAKES: PlanningItem['kind'][] = ['render', 'film', 'work_order', 'change_request'] // each ends as a video
 
@@ -218,11 +306,14 @@ function Slot({ item: i }: { item: PlanningItem }) {
 
 function ItemCard({ item: i, grip, ...actions }: { item: PlanningItem; grip?: ReactNode } & Actions) {
   const look = [i.style && `style ${i.style}`, i.engine && `moteur ${i.engine}`, i.voice && `voix ${i.voice}`].filter(Boolean)
+  const l = launchable(i)
   return (
     <Card as="article" className="space-y-1.5 text-sm">
       <div className="flex flex-wrap items-center gap-2">
+        <PickBox item={i} {...actions} />
         {grip}
         <Chip tone={i.section === 'running' ? 'explore' : 'info'}>{KIND[i.kind]}</Chip>
+        {i.launch_requested && <Chip tone="success">{REQUESTED}</Chip>}
         {i.waits_on && i.waits_on !== 'held' && <Chip tone="warn">{WAIT[i.waits_on] ?? i.waits_on}</Chip>}
         {!!i.late_s && <Chip tone="warn">en retard de {Math.max(1, Math.round(i.late_s / 60))} min</Chip>}
       </div>
@@ -246,6 +337,11 @@ function ItemCard({ item: i, grip, ...actions }: { item: PlanningItem; grip?: Re
       {MAKES.includes(i.kind) && (
         <p className="text-muted">→ vérification par l'IA → <Link to="/inbox" className={link}>Inbox</Link></p>
       )}
+      {l && !TO_FRONT.includes(l.kind) && ( // a render's or film's is in LineControls
+        <div className="pt-1">
+          <Button size="sm" variant="primary" onClick={() => actions.onLaunch([l])}>Lancer maintenant</Button>
+        </div>
+      )}
       <LineControls item={i} {...actions} />
     </Card>
   )
@@ -256,7 +352,7 @@ const PREVIEW_LINES = 3
 /** A video Claude planned (188b), in its own colour: nothing renders or is voiced before
  * « Valider » (« Lancer maintenant » and the timer release it too); « Modifier » opens the
  * edit sheet; « Retirer » archives it after the 5 s undo. */
-function IdeaCard({ item: i, onDone, onRemove }: { item: PlanningItem } & Actions) {
+function IdeaCard({ item: i, onDone, onRemove, picked, onPick }: { item: PlanningItem } & Actions) {
   const [when, setWhen] = useState('')
   const [editing, setEditing] = useState(false)
   const { busy, act } = useAct(onDone)
@@ -272,7 +368,10 @@ function IdeaCard({ item: i, onDone, onRemove }: { item: PlanningItem } & Action
   }
   return (
     <Card as="article" className="space-y-1.5 border-l-4 border-l-idea text-sm">
-      <Chip tone="idea">Idée de Claude</Chip>
+      <div className="flex flex-wrap items-center gap-2">
+        <PickBox item={i} picked={picked} onPick={onPick} />
+        <Chip tone="idea">Idée de Claude</Chip>
+      </div>
       <h3 className="font-semibold break-words">{i.title}</h3>
       <p className="text-muted">{look.join(' · ')}</p>
       {idea.script.length > 0 && (
@@ -656,6 +755,7 @@ export default function Planning() {
   const [extras, setExtras] = useState<Partial<PlanningData>>({})
   const [error, setError] = useState<string | null>(null)
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set())
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   const pending = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; run: () => void }>())
   const toast = useToast()
   const seq = useRef(0)
@@ -733,6 +833,21 @@ export default function Planning() {
     const r = removal(i)
     return !r || !gone.has(keyOf(r))
   })
+  const { busy: launching, launch, box } = useLaunch(() => {
+    setPicked(new Set())
+    void load()
+  })
+  const onPick = (key: string, on: boolean) => setPicked((p) => {
+    const next = new Set(p)
+    if (on) next.add(key)
+    else next.delete(key)
+    return next
+  })
+  // on-screen order (the sections' order): the selection keeps it at the front of the line
+  const launchables = SECTIONS.flatMap(([id]) => (visible ?? []).filter((i) => i.section === id))
+    .map(launchable).filter((l): l is LaunchItem => l !== null)
+  const chosen = launchables.filter((l) => picked.has(keyOf(l)))
+  const actions = { onDone: () => void load(), onRemove: remove, picked, onPick, onLaunch: launch }
 
   return (
     <section>
@@ -756,13 +871,26 @@ export default function Planning() {
             return mine.length > 0 && (
               <section key={id} aria-label={title}>
                 <h2 className="mb-2 font-semibold">{title}</h2>
-                <Chain items={mine} onDone={() => void load()} onRemove={remove} onPlace={id === 'next' ? place : undefined} />
+                <Chain items={mine} {...actions} onPlace={id === 'next' ? place : undefined} />
               </section>
             )
           })}
         </div>
       )}
       {extras.history && <History rows={extras.history} onDone={() => void load()} />}
+      {launchables.length > 0 && (
+        <div role="region" aria-label="Lancer"
+          className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 mt-6 rounded-card border border-line bg-surface/95 p-3 text-sm shadow-overlay backdrop-blur-md lg:bottom-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="primary" disabled={launching || chosen.length === 0}
+              onClick={() => void launch(chosen)}>Lancer la sélection ({chosen.length})</Button>
+            <Button size="sm" disabled={launching} onClick={() => void launch(launchables)}>Tout lancer</Button>
+            {chosen.length > 0 && <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Désélectionner</Button>}
+            <span className="text-muted">Un seul travail lourd à la fois : le reste démarre dès que la machine est libre.</span>
+          </div>
+          {box}
+        </div>
+      )}
     </section>
   )
 }

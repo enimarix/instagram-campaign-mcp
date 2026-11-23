@@ -22,6 +22,11 @@ A run whose sections all count 0 is skipped (no Claude launch). brief and quotas
 count 1, so a run that needs them (making the batch) never is, except a run with a gate
 (GATES): `daily-learn` is skipped when yesterday's facts count 0 (no report summary then).
 After the run, gaps() looks the packet's revision and feedback ids up again.
+
+The owner's launch of a selection (196, schedule.request_launch) scopes the next light run:
+its packet (SCOPE_KEY, taken once) holds the selected orders and change requests only, with
+their comments and no DM pick; the run's id is kept (SCOPED_RUNS_KEY) so the orders it never
+saw are not « seen » by it (schedule._gate).
 """
 
 from __future__ import annotations
@@ -31,7 +36,7 @@ import hashlib
 import json
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -43,7 +48,7 @@ from ..learning.brief import agent_styles, creative_brief
 from ..learning.facts import facts_for
 from ..learning.learnings import get_feedback, list_revision_requests
 from ..learning.quotas import todays_quotas
-from ..store import CampaignStore, to_iso, utcnow
+from ..store import CampaignStore, parse_iso, to_iso, utcnow
 from ..studio import checks, dm_picks, planned, style_requests, work_orders
 from ..studio.seed import local_today
 
@@ -53,6 +58,11 @@ MAX_ITEMS = 50
 MAX_TEXT = 8000  # the brief's bible cut (brief.BIBLE_CHARS)
 DROP_KEYS = {"recipe", "props", "file_path"}
 SKIPPED = "skipped: nothing to do"
+LIGHT = "daily-revise"  # the light run (schedule.ORDER_PLAYBOOK)
+SCOPE_KEY = "light_run_only"  # worker_state (196): {order_ids, asset_ids, at}
+SCOPE_TTL = timedelta(minutes=10)  # an older scope's run never started: ignored
+SCOPED_RUNS_KEY = "scoped_light_runs"  # worker_state: the scoped runs' ids, newest last
+SCOPED_RUNS_KEPT = 20
 
 Producer = Callable[[CampaignStore, InstagramMCPSettings, datetime], Tuple[Any, int]]
 
@@ -149,6 +159,38 @@ RUNS: Dict[str, Tuple[str, Optional[Tuple[str, ...]]]] = {
 GATES: Dict[str, Tuple[str, ...]] = {"daily-learn": ("facts", "style_requests")}
 
 
+def _take_scope(store: CampaignStore, playbook: str, now: datetime
+                ) -> Optional[Dict[str, Any]]:
+    """The light run's selection (module doc), taken once; None: the whole packet."""
+    scope = store.get_state(SCOPE_KEY) if playbook == LIGHT else None
+    if not scope:
+        return None
+    store.set_state(SCOPE_KEY, None)
+    if now - parse_iso(scope["at"]) > SCOPE_TTL:
+        return None
+    run = store.running_agent_run(playbook)
+    if run:
+        ids = store.get_state(SCOPED_RUNS_KEY) or []
+        store.set_state(SCOPED_RUNS_KEY, [*ids, run["id"]][-SCOPED_RUNS_KEPT:])
+    return scope
+
+
+def _scoped(name: str, data: Any, scope: Dict[str, Any]) -> Tuple[Any, Optional[int]]:
+    """A section cut to the owner's selection, and its new count (None: left as is)."""
+    if name == "work_orders":
+        rows = data["orders"] = [o for o in data["orders"] if o["id"] in scope["order_ids"]]
+    elif name == "revisions":
+        rows = data["requests"] = [r for r in data["requests"]
+                                   if r["asset"]["id"] in scope["asset_ids"]]
+    elif name == "feedback":
+        rows = data = [f for f in data if f["asset"]["id"] in scope["asset_ids"]]
+    elif name == "dm_picks":
+        rows = data["picks"] = []
+    else:
+        return data, None
+    return data, len(rows)
+
+
 def _compact(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _compact(v) for k, v in value.items() if k not in DROP_KEYS}
@@ -191,9 +233,13 @@ def write_packet(store: CampaignStore, settings: InstagramMCPSettings, playbook:
     shutil.rmtree(work, ignore_errors=True)  # a failed build leaves no stale packet
     files: Dict[str, Tuple[bytes, int]] = {}
     ids: Dict[str, List[int]] = {}
+    scope = _take_scope(store, playbook, now)
     for name in names or SECTIONS:
         try:
             data, count = SECTIONS[name](store, settings, now)
+            if scope is not None:
+                data, cut = _scoped(name, data, scope)
+                count = count if cut is None else cut
             data = _compact(data)
             files[name] = encode(data, name, schemas), count
         except PacketError:

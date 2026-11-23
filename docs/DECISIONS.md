@@ -8,6 +8,21 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: The owner's « Lancer » bypasses the grace, « seen » and the daily cap (196)
+Planning's « Lancer maintenant », « Lancer la sélection » and « Tout lancer »: renders, Lemo
+films and Claude's ideas go to the head of the heavy line in on-screen order (as « start
+now »). Owner orders, change requests (one the AI left « en attente » too) and the AI's runs
+become launch requests (worker_state `launch_requests`), started by the catch-up before
+anything else as soon as nothing else runs (`schedule.busy`: no AI run, no render running or
+queued), never while the studio is paused. They skip ORDER_RUN_DEBOUNCE_MINUTES, the « a run
+saw it » rule and MAX_ORDER_RUNS_PER_DAY, and do not count in that cap; no separate
+preflight (the run's own fails it, like the Agent page's start). The light run launched on a
+selection works on those orders / change requests only (its packet is cut to them, their
+comments, no DM pick); it does not count as having « seen » the others, which keep their own
+path.
+Reason: the owner (2026-11-23): « I want to be able to launch a generation … I can select
+all of them … I can select some of them », not wait for 03:00.
+
 ## 2026-11-23: The check run never parks a video (193)
 A check run gives every waiting video a decision (a fix, `drop_render` or `submit_asset`;
 unsure: submit with a note). One it left anyway is offered again CHECK_RECHECK_HOURS
