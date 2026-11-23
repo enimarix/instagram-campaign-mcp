@@ -431,8 +431,11 @@ _DAY_DROPS = ("SELECT a.id, a.caption, a.agent_decision, i.hook FROM assets a"
               " JOIN ideas i ON i.id = a.idea_id"
               " WHERE json_extract(a.agent_decision, '$.kind') = 'dropped'"
               " AND json_extract(a.agent_decision, '$.at') >= ? ORDER BY a.id")
-_DAY_ORDERS = ("SELECT id, instruction, updated_at FROM work_orders WHERE status = 'skipped'"
-               " AND skip_reason = ? AND updated_at >= ? ORDER BY id")
+# Not the order of a removed render's video (line.skip_orders): that render is listed.
+_DAY_ORDERS = ("SELECT w.id, w.instruction, w.updated_at FROM work_orders w"
+               " WHERE w.status = 'skipped' AND w.skip_reason = ? AND w.updated_at >= ?"
+               " AND NOT EXISTS (SELECT 1 FROM render_jobs j JOIN assets a ON a.id = j.asset_id"
+               " WHERE a.idea_id = w.idea_id AND j.failure = ?) ORDER BY w.id")
 
 
 def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
@@ -452,7 +455,7 @@ def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     with store._tx() as c:
         jobs = c.execute(_DAY_JOBS, (since,)).fetchall()
         drops = c.execute(_DAY_DROPS, (since,)).fetchall()
-        orders = c.execute(_DAY_ORDERS, (line.REMOVED, since)).fetchall()
+        orders = c.execute(_DAY_ORDERS, (line.REMOVED, since, line.REMOVED)).fetchall()
     for j in jobs:
         kind = ("done" if j["state"] == "done" else
                 "removed" if j["failure"] == line.REMOVED else "failed")

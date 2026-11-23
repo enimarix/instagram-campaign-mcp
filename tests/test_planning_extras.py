@@ -91,10 +91,14 @@ def test_history_lists_today_newest_first_and_only_failures_can_rerender(store, 
     dropped = _video(store, "ready", agent_decision={
         "kind": "dropped", "why": "image floue", "at": to_iso(NOW - timedelta(minutes=20))})
     order = _film(store, monkeypatch, NOW - timedelta(hours=4))
-    work_orders.skip_order(store, order, line.REMOVED)
+    made = _film(store, monkeypatch, NOW - timedelta(hours=4))  # the removed render's order
+    for o in (order, made):
+        work_orders.skip_order(store, o, line.REMOVED)
     with store._tx() as c:
-        c.execute("UPDATE work_orders SET updated_at=? WHERE id=?",
-                  (to_iso(NOW - timedelta(minutes=10)), order))
+        c.execute("UPDATE work_orders SET updated_at=? WHERE id IN (?, ?)",
+                  (to_iso(NOW - timedelta(minutes=10)), order, made))
+        c.execute("UPDATE work_orders SET idea_id = (SELECT a.idea_id FROM render_jobs j JOIN"
+                  " assets a ON a.id = j.asset_id WHERE j.id = ?) WHERE id = ?", (removed, made))
     run = _run(store, "daily-produce", NOW - timedelta(hours=7), minutes=20)
     _run(store, "daily-learn", NOW - timedelta(hours=13), minutes=5)  # yesterday
     rows = planning.build_planning(store, s, NOW)["history"]
