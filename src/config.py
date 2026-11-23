@@ -440,6 +440,10 @@ class InstagramMCPSettings(BaseSettings):
         8, ge=0, description="Check runs started per owner-local day; past it the videos show"
         " in the Inbox after their grace"
     )
+    check_recheck_hours: float = Field(
+        4.0, gt=0, description="A video a check run saw and left (no fix, drop or submit) is"
+        " offered to a check run again this long after that run started"
+    )
     check_inbox_grace_hours: float = Field(
         3.0, ge=0, description="A ready video waiting for its check is shown in the Inbox"
         " anyway this long after its render finished"

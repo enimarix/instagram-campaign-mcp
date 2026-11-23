@@ -10,12 +10,14 @@ The light check run (agent/playbooks/check-renders.md, started by schedule.check
 at each one: frames and QC, a re-render (at most MAX_RERENDERS per video: the render jobs of
 the idea's versions nobody submitted or judged, minus the first), drop() with the reason, or
 submit_asset. Each comes with its render_args (step 191): what render_motion / render_remix
-takes again, so a fix changes what the check found and keeps the rest.
+takes again, so a fix changes what the check found and keeps the rest. Every video gets a
+decision; one a run left anyway is offered again CHECK_RECHECK_HOURS after that run
+(schedule.check_wait, 193): never parked.
 
-The Inbox hides a `ready` video waiting for its check, and an unsubmitted one a newer
-version replaces (flag), unless its render finished more than CHECK_INBOX_GRACE_HOURS ago
-(a replaced one: HORIZON) or the check run cannot run (failing()): then it shows as before,
-so nothing is lost.
+The Inbox hides a `ready` video waiting for its check (flag), unless its render finished
+more than CHECK_INBOX_GRACE_HOURS ago or the check run cannot run (failing()): then it shows
+as before, so nothing is lost. An unsubmitted one a newer version replaces is hidden for
+good (193): the newer version carries on.
 """
 
 from __future__ import annotations
@@ -59,9 +61,8 @@ _WAITING = (
     " AND NOT EXISTS (SELECT 1 FROM assets p WHERE p.id = a.parent_asset_id"
     "  AND p.status = 'ready' AND p.self_score_reason IS NOT NULL)"  # the owner's re-render
     f" AND {_FINISHED} >= ? ORDER BY finished_at, a.id")
-# ready, unsubmitted, and a newer version of it exists (the check re-rendered it)
-_REPLACED = (f"SELECT a.id FROM assets a WHERE a.status = 'ready' AND {_OPEN}"
-             f" AND {_HAS_CHILD} AND {_FINISHED} >= ?")
+# ready, unsubmitted, and a newer version of it exists (the check re-rendered it): for good
+_REPLACED = f"SELECT a.id FROM assets a WHERE a.status = 'ready' AND {_OPEN} AND {_HAS_CHILD}"
 # the render jobs of the idea's versions nobody submitted or judged: the first render and
 # the re-renders (in place, a child or a new remix); a version sent back for changes, or
 # submitted, starts the count again; a job re-queued for the same recipe counts each time
@@ -104,20 +105,23 @@ def for_agent(store: CampaignStore, now: datetime) -> Dict[str, Any]:
                     "rerenders_left": max(0, MAX_RERENDERS - r["rerenders"]),
                     "work_order_id": r["work_order_id"], "dm_pick_sender": r["dm_pick_sender"],
                     "version_of": r["parent_asset_id"],
-                    "render_args": render_args(json.loads(r["recipe"]) if r["recipe"] else None,
-                                               r["source_id"])})
+                    "render_args": render_args(
+                        json.loads(r["recipe"]) if r["recipe"] else None,
+                        store.get_source(r["source_id"]) if r["source_id"] is not None
+                        else None)})
     return {"max_rerenders": MAX_RERENDERS, "renders": out}
 
 
-def render_args(env: Optional[Dict[str, Any]], source_id: Optional[int]
+def render_args(env: Optional[Dict[str, Any]], source: Optional[Dict[str, Any]]
                 ) -> Optional[Dict[str, Any]]:
     """What render_motion / render_remix takes again to re-render the recipe `env`: motion
     {tool, template, template_props (the props as the agent gave them: editable_props),
     voice, music_audio_id (an Instagram track) or music (the template's bed)}; a reaction
-    remix {tool, source_id, hook, script, trim_start_s, trim_end_s, layout, captions, voice,
-    music}. The voice and the script come from `voice_todo`, or `voiced_with` once voiced: a
-    recipe voiced before step 191 has none (null: the default voice; a remix must write its
-    script again). None when there is no recipe (a remix that failed before it had one).
+    remix {tool, source_id, hook, script, trim_start_s, trim_end_s, layout, captions (only
+    written ones: from the transcript they are null, so a changed trim derives them again,
+    193), voice, music (a bed or `none`)} of the idea's `source`. The voice and the script
+    come from `voice_todo`, or `voiced_with` once voiced: a recipe voiced before step 191
+    has none (null: the default voice; a remix must write its script again). None when there is no recipe (a remix that failed before it had one).
     The keys avoid `props` and `recipe`: the packet drops those (packet.DROP_KEYS)."""
     if not env:
         return None
@@ -139,8 +143,10 @@ def render_args(env: Optional[Dict[str, Any]], source_id: Optional[int]
     # ponytail: the packet keeps 50 caption lines (packet.MAX_ITEMS); a remix is at most
     # REMIX_MAX_CLIP_S long, far fewer lines. Cap here like the props if that ever bites.
     params = remix.remix_params(env)
+    if source:
+        params["captions"] = remix.written_captions(env, source)
     start, end = params.pop("trim")
-    return {"tool": "render_remix", "source_id": source_id, **params,
+    return {"tool": "render_remix", "source_id": source and source["id"], **params,
             "trim_start_s": start, "trim_end_s": end}
 
 
@@ -172,17 +178,18 @@ def failing(store: CampaignStore) -> bool:
 
 def flag(store: CampaignStore, settings: InstagramMCPSettings, rows: List[Dict[str, Any]],
          now: datetime) -> List[Dict[str, Any]]:
-    """The Inbox's asset rows with awaiting_check, while the check run can run: a `ready`
+    """The Inbox's asset rows with awaiting_check (while the check run can run: a `ready`
     video waiting for its check whose render finished less than CHECK_INBOX_GRACE_HOURS
-    ago, or an unsubmitted one a newer version replaces (its render in the last HORIZON)."""
+    ago) and replaced (an unsubmitted `ready` one a newer version replaces: for good)."""
     hidden = set()
     if not failing(store):
         since = to_iso(now - timedelta(hours=settings.check_inbox_grace_hours))
         hidden = {r["id"] for r in waiting(store, now)
                   if r["status"] == "ready" and r["finished_at"] >= since}
-        with store._tx() as c:
-            hidden.update(r[0] for r in c.execute(_REPLACED, (to_iso(now - HORIZON),)))
-    return [{**r, "awaiting_check": r["id"] in hidden} for r in rows]
+    with store._tx() as c:
+        replaced = {r[0] for r in c.execute(_REPLACED)}
+    return [{**r, "awaiting_check": r["id"] in hidden, "replaced": r["id"] in replaced}
+            for r in rows]
 
 
 def drop(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
@@ -190,7 +197,8 @@ def drop(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
     agent_decision (kind `dropped`: the Inbox lists « Écartée par l'IA : <why> »), the video
     leaves the check list and the feed (it stays `ready` or `failed`: only the owner archives);
     the work order it was made for is skipped with the reason (Mes envois, a DM order's pick
-    too) unless another version of it lives, and an older DM pick it was made of skipped."""
+    too), else an older DM pick of the idea's source; neither while another version of the
+    idea lives (not archived, failed or dropped: a fix's new version carries them on)."""
     why = " ".join((why or "").split())[:WHY_MAX]
     if not why:
         raise ValueError("say why the video is dropped, in one line")
@@ -204,15 +212,19 @@ def drop(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
     asset = store.update_asset(asset_id, agent_decision=decision)
     idea = store.get_idea(asset["idea_id"])
     with store._tx() as c:
-        orders = [r[0] for r in c.execute(
-            "SELECT id FROM work_orders WHERE idea_id = ? AND status = 'in_production'"
-            " AND NOT EXISTS (SELECT 1 FROM assets WHERE idea_id = ? AND id <> ?"
+        # another version of the idea lives (a fix's new version): its order and pick go on
+        alive = c.execute(
+            "SELECT 1 FROM assets WHERE idea_id = ? AND id <> ?"
             " AND status NOT IN ('archived', 'failed')"
-            " AND COALESCE(json_extract(agent_decision, '$.kind'), '') <> 'dropped')",
-            (idea["id"], idea["id"], asset_id))]
+            " AND COALESCE(json_extract(agent_decision, '$.kind'), '') <> 'dropped'",
+            (idea["id"], asset_id)).fetchone()
+        orders = [] if alive else [r[0] for r in c.execute(
+            "SELECT id FROM work_orders WHERE idea_id = ? AND status = 'in_production'",
+            (idea["id"],))]
         picks = [r[0] for r in c.execute(
             "SELECT id FROM dm_picks WHERE source_id = ? AND status = 'in_production'",
-            (idea["source_id"],))] if idea["source_id"] is not None and not orders else []
+            (idea["source_id"],))] if idea["source_id"] is not None and not (
+                alive or orders) else []
     for order_id in orders:
         work_orders.skip_order(store, order_id, why)
     for pick_id in picks:

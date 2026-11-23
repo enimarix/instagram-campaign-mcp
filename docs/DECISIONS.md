@@ -8,6 +8,19 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: The check run never parks a video (193)
+A check run gives every waiting video a decision (a fix, `drop_render` or `submit_asset`;
+unsure: submit with a note). One it left anyway is offered again CHECK_RECHECK_HOURS
+(default 4) after that run started, still within MAX_CHECK_RUNS_PER_DAY; before, « a check
+run started since » kept it waiting until a newer render finished (live: #68 / #69). A
+setting rather than « the next check run, whatever starts it »: a check run only starts for
+finished renders, so a quiet day would never bring that next run. An unsubmitted version a
+re-render replaced stays out of the Inbox for good (was: 24 h), whether or not the check run
+can run: its newer version carries on. Claude's places are counted per batch day, minus the
+cards already planned for that day (a retried packet or a second run of the day never plans
+past the batch).
+Reason: the owner: the AI never parks a video silently.
+
 ## 2026-11-23: The night run plans, renders nothing of its own; a check run submits (188c)
 The owner (2026-11-22): the 03:00 daily-produce must not launch renders directly; Claude's new
 ideas come as cards of their own colour he reviews first, and they only fill the rest of the

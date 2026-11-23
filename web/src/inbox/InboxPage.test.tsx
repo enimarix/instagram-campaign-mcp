@@ -759,6 +759,7 @@ describe("The AI's check (188c)", () => {
       'GET /api/assets': [200, [
         ...ASSETS,
         asset(20, { self_score_reason: null, awaiting_check: true }),
+        asset(22, { self_score_reason: null, replaced: true }), // 193: out for good, not counted
         asset(21, { self_score_reason: null, agent_decision: { kind: 'dropped', text: "Écartée par l'IA : texte coupé", why: 'texte coupé', style: null, order_id: null, request_id: null, at: '2026-11-23T04:00:00+00:00' } }),
       ]],
     })

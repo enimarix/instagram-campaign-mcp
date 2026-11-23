@@ -96,6 +96,7 @@ export type Asset = {
   style?: string | null // list rows: the idea's style (138)
   agent_decision?: AgentDecision | null // a video sent back: what the AI decided (156); dropped by the check (188c)
   awaiting_check?: boolean // list rows (188c): finished, the AI's check has not submitted it yet
+  replaced?: boolean // list rows (193): unsubmitted, a newer version replaced it: never in the feed
 }
 
 /** One event; the last may be only {e: "+N more"} when the timeline was cut. */
