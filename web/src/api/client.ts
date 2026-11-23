@@ -1137,6 +1137,7 @@ export type PlanningItem = {
   not_before: string | null // a waiting render's or film's timer (UTC ISO)
   stage: string | null
   progress: number | null
+  late_s?: number | null // a running item past its usual time (190)
   picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
   idea?: ClaudeIdea // a claude_idea's card (section ideas, 188b)
 }
@@ -1157,7 +1158,52 @@ export type ClaudeIdea = {
   music_options: string[]
 }
 /** paused: since when the studio is paused (« Tout mettre en pause », 187), else null. */
-export const getPlanning = () => request<{ now: string; items: PlanningItem[]; paused: string | null }>('/api/planning')
+/** The next 24 h (190): blocks from the chain's ETAs (clipped), the queued posts' times. */
+export type PlanningStrip = {
+  start: string
+  end: string
+  blocks: { lane: 'render' | 'film' | 'run'; kind: PlanningItem['kind']; title: string; section: PlanningItem['section']; start: string; end: string; late: boolean }[]
+  posts: string[]
+}
+/** The supply gauge (190): approved + bench videos against posts per day. */
+export type PlanningSupply = {
+  approved: number
+  bench: number
+  per_day: number
+  days: number
+  until: string // owner-local date the reserve lasts to
+  low: boolean // under a day
+  making: number // videos the line adds once done
+  ideas: number // Claude's cards waiting for « Valider »
+}
+/** Today's history (190); recipe: a failed render that can be rendered again with it. */
+export type PlanningHistory = {
+  kind: 'done' | 'failed' | 'removed' | 'dropped' | 'run'
+  at: string
+  title: string
+  asset_id: number | null
+  order_id: number | null
+  run_id: number | null
+  reason: string | null
+  status: string | null
+  recipe: Record<string, unknown> | null
+}
+export type Planning = {
+  now: string
+  items: PlanningItem[]
+  paused: string | null
+  strip: PlanningStrip
+  supply: PlanningSupply
+  history: PlanningHistory[]
+}
+export const getPlanning = () => request<Planning>('/api/planning')
+/** The delay warning (190): what the move / « start now » would push back, by how many seconds. */
+export type PlanningPreview = { action: 'start_now' | 'move' | 'release'; kind: LineKind | 'idea'; id: number; by?: -1 | 1 }
+export const previewPlanning = (body: PlanningPreview) =>
+  send<{ pushed: { kind: PlanningItem['kind']; title: string; by_s: number }[] }>('POST', '/api/planning/preview', body)
+/** « Relancer » a failed render with its own recipe (POST /api/assets/{id}/rerender). */
+export const rerenderAsset = (assetId: number, recipe: Record<string, unknown>) =>
+  send<unknown>('POST', `/api/assets/${assetId}/rerender`, { recipe })
 /** The heavy line (186): a waiting render (its job id) or film (its order id). */
 export type LineKind = 'render' | 'film'
 export const startNow = (kind: LineKind, id: number) => send<unknown>('POST', `/api/planning/${kind}/${id}/start-now`)
