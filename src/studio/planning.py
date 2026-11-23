@@ -426,7 +426,8 @@ def supply(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
 _DAY_JOBS = ("SELECT j.id, j.asset_id, j.state, j.failure, j.finished_at,"
              " a.status AS asset_status, a.recipe, a.caption, i.hook FROM render_jobs j"
              " JOIN assets a ON a.id = j.asset_id JOIN ideas i ON i.id = a.idea_id"
-             " WHERE j.state IN ('done', 'failed') AND j.finished_at >= ? ORDER BY j.id")
+             " WHERE j.state IN ('done', 'failed') AND j.finished_at >= ?"
+             " ORDER BY j.finished_at DESC, j.id DESC")
 _DAY_DROPS = ("SELECT a.id, a.caption, a.agent_decision, i.hook FROM assets a"
               " JOIN ideas i ON i.id = a.idea_id"
               " WHERE json_extract(a.agent_decision, '$.kind') = 'dropped'"
@@ -451,7 +452,7 @@ def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         return {"kind": kind, "at": at, "title": title, "asset_id": None, "order_id": None,
                 "run_id": None, "reason": None, "status": None, "recipe": None, **extra}
 
-    out = []
+    out, offered = [], set()
     with store._tx() as c:
         jobs = c.execute(_DAY_JOBS, (since,)).fetchall()
         drops = c.execute(_DAY_DROPS, (since,)).fetchall()
@@ -459,10 +460,12 @@ def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     for j in jobs:
         kind = ("done" if j["state"] == "done" else
                 "removed" if j["failure"] == line.REMOVED else "failed")
-        retry = kind == "failed" and j["asset_status"] == "failed"
+        failed = kind == "failed"
+        retry = failed and j["asset_status"] == "failed" and j["asset_id"] not in offered
+        offered.add(j["asset_id"])  # « Relancer » once per video: on its newest job
         out.append(row(kind, j["finished_at"],
                        _title(j["hook"], j["caption"], f"Vidéo {j['asset_id']}"),
-                       asset_id=j["asset_id"], reason=j["failure"] if kind == "failed" else None,
+                       asset_id=j["asset_id"], reason=_title(j["failure"]) if failed else None,
                        recipe=json.loads(j["recipe"]) if retry else None))
     for a in drops:
         why = json.loads(a["agent_decision"])

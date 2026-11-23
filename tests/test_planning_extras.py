@@ -85,6 +85,9 @@ def test_history_lists_today_newest_first_and_only_failures_can_rerender(store, 
     failed = _job(store, "FactQuest", "failed", failure="ffmpeg crashed", finished_at=today)
     with store._tx() as c:
         c.execute("UPDATE assets SET status='failed' WHERE id=?", (failed,))
+    older = store.add_render_job(failed, "an older recipe")  # the same video failed before
+    store.update_render_job(older["id"], state="failed", failure="boom",
+                            finished_at=to_iso(NOW - timedelta(hours=2, minutes=30)))
     removed = _render(store, NOW - timedelta(hours=2))
     monkeypatch.setattr(line, "utcnow", lambda: NOW - timedelta(minutes=30))
     line.remove(store, "render", removed)
@@ -104,8 +107,9 @@ def test_history_lists_today_newest_first_and_only_failures_can_rerender(store, 
     rows = planning.build_planning(store, s, NOW)["history"]
     assert [(r["kind"], r["asset_id"] or r["order_id"] or r["run_id"]) for r in rows] == [
         ("removed", order), ("dropped", dropped), ("removed", store.get_render_job(removed)[
-            "asset_id"]), ("failed", failed), ("done", done), ("run", run)]
-    by = {r["kind"]: r for r in rows}
+            "asset_id"]), ("failed", failed), ("failed", failed), ("done", done), ("run", run)]
+    assert rows[4]["reason"] == "boom" and rows[4]["recipe"] is None  # « Relancer » once
+    by = {r["kind"]: r for r in rows if r["reason"] != "boom"}
     assert by["failed"]["reason"] == "ffmpeg crashed" and by["failed"]["recipe"]["kind"] == "motion"
     assert by["done"]["recipe"] is None and by["dropped"]["reason"] == "image floue"
     assert by["run"]["status"] == "succeeded" and by["run"]["title"] == "Run daily-produce"
