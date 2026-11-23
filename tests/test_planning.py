@@ -264,3 +264,16 @@ def test_the_check_run_shows_at_its_re_check(store, agent_dir):
     check, = [i for i in planning.build_planning(store, s, NOW)["items"]
               if i["kind"] == "check_run"]
     assert parse_iso(check["est_start"]) == MIDNIGHT  # today's are used
+
+
+def test_a_render_waiting_for_the_machine_says_so(store, agent_dir):
+    """197: a machine failure's timer is « machine », the owner's own timer stays « timer »."""
+    at = to_iso(NOW + timedelta(minutes=5))
+    machine = _job(store, "FactQuest", "queued", not_before=at,
+                   failure="machine 1/6: TTSError: voice-over failed: HTTP 503")
+    owner = _job(store, "FactQuest", "queued", not_before=at)
+    cards = {i["ids"]["asset_id"]: i for i in planning.chain(store, cfg(), NOW)
+             if i["kind"] == "render"}
+    assert cards[machine]["waits_on"] == "machine" and cards[machine]["not_before"] == at
+    assert "nouvel essai automatique" in cards[machine]["why_here"]
+    assert cards[owner]["waits_on"] == "timer"

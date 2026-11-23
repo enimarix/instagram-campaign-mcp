@@ -335,7 +335,9 @@ def test_check_renders_playbook_does_the_broken_check():
                  "rerenders_left", "drop_render", "submit_asset", "Work order #<id>: ",
                  "@<creator>",
                  # 193: never parked; the remix's music round-trips
-                 "exactly one decision", "Never leave one waiting", "music=…"):
+                 "exactly one decision", "Never leave one waiting", "music=…",
+                 # 197: the machine's failures are never the video's
+                 "A machine failure is never a reason to drop", "`machine:`"):
         assert rule in text, rule
     named = set(re.findall(r"`(\w+)", text))
     assert "wait_for_renders" not in named and "create_idea" not in named

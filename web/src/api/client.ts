@@ -1119,7 +1119,7 @@ export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'd
   send<StyleRequest>('PATCH', `/api/style-requests/${id}`, body)
 
 /** GET /api/planning (185): the chain of what the studio makes next, every time estimated. */
-export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'held' | 'order_grace' | 'check_grace' | 'recheck' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
+export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'machine' | 'held' | 'order_grace' | 'check_grace' | 'recheck' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction'
 export type PlanningItem = {
   section: 'running' | 'next' | 'planned' | 'ideas'
   kind: 'render' | 'film' | 'order_run' | 'check_run' | 'agent_run' | 'work_order' | 'change_request' | 'claude_idea'

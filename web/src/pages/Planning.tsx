@@ -25,7 +25,7 @@ const KIND: Record<PlanningItem['kind'], string> = {
   work_order: 'Commande', change_request: 'Changement', claude_idea: 'Idée de Claude',
 }
 const WAIT: Record<PlanningWait, string> = {
-  gpu_busy: 'attend le GPU', agent_running: 'attend la fin du run', timer: 'attend son minuteur', held: 'En pause', order_grace: 'délai après ton envoi',
+  gpu_busy: 'attend le GPU', agent_running: 'attend la fin du run', timer: 'attend son minuteur', machine: 'attend la machine', held: 'En pause', order_grace: 'délai après ton envoi',
   check_grace: 'délai après le dernier rendu', recheck: 'nouvelle vérification prévue',
   daily_cap: 'quota du jour atteint', preflight: "l'IA ne peut pas démarrer", next_ai_run: 'attend le prochain run',
   needs_instruction: 'attend ta consigne',
@@ -294,9 +294,10 @@ function Slot({ item: i }: { item: PlanningItem }) {
   const timed = i.est_start && i.est_ready && i.est_duration_s !== null
   const when = i.section === 'running' && i.est_start ? `En cours depuis ${at(i.est_start)}`
     : i.waits_on === 'held' ? 'En pause'
-      : i.not_before ? `Minuteur : ${at(i.not_before)}`
-        : timed ? `${MAKES.includes(i.kind) ? 'Génération prévue' : 'Prévu'} vers ${at(i.est_start!)}`
-          : `Pas d'heure : ${i.waits_on ? WAIT[i.waits_on] ?? i.waits_on : 'rien ne part sans toi'}.`
+      : i.waits_on === 'machine' && i.not_before ? `En attente de la machine — nouvel essai vers ${at(i.not_before)}`
+        : i.not_before ? `Minuteur : ${at(i.not_before)}`
+          : timed ? `${MAKES.includes(i.kind) ? 'Génération prévue' : 'Prévu'} vers ${at(i.est_start!)}`
+            : `Pas d'heure : ${i.waits_on ? WAIT[i.waits_on] ?? i.waits_on : 'rien ne part sans toi'}.`
   return (
     <p className={`tabular-nums ${i.late_s ? 'text-warn' : timed || i.waits_on === 'held' ? '' : 'text-muted'}`}>
       {when}{timed && ` · ${duration(i.est_duration_s!)} · prête ~${at(i.est_ready!)}`}

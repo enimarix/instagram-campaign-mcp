@@ -75,7 +75,8 @@ SAMPLES = 100  # recent finished jobs / runs the medians look at
 TEMPLATE_ENGINES = {cinematic.TEMPLATE: "blender", sitcom.TEMPLATE: "blender",
                     macro3d.TEMPLATE: "macro3d"}
 STYLE_ENGINES = {cinematic.STYLE: "blender", "sitcom": "blender", "macro3d": "macro3d"}
-_JOBS = ("SELECT j.id, j.asset_id, j.state, j.progress, j.started_at, a.recipe, a.caption,"
+_JOBS = ("SELECT j.id, j.asset_id, j.state, j.progress, j.started_at, j.failure, a.recipe,"
+         " a.caption,"
          " i.hook, i.style, w.id AS order_id, w.origin, w.pick_id FROM render_jobs j"
          " JOIN assets a ON a.id = j.asset_id JOIN ideas i ON i.id = a.idea_id"
          " LEFT JOIN work_orders w ON w.id ="
@@ -212,7 +213,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     render | film | order_run | check_run | agent_run | work_order | change_request | claude_idea, title,
     source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
-    why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | check_grace |
+    why_here, waits_on (gpu_busy | agent_running | timer | machine (197: a render waiting
+    to retry after a machine failure) | held | order_grace | check_grace |
     recheck | daily_cap | preflight | next_ai_run | needs_instruction | None), not_before (a
     waiting render's or film's timer, UTC ISO), stage and progress (running items), late_s
     (a running item past its usual time, 190; else None), picks_up (the producing run's
@@ -290,11 +292,16 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
             pending.remove(i)
             nb = i["not_before"]
             timer = bool(nb) and parse_iso(nb) > now
+            machine = timer and i["kind"] == "render" and bool(
+                render.machine_retries(rows[(i["kind"], i["id"])]))
             capped = i["kind"] == "film" and films_n >= quota
-            waits = ("timer" if timer else "daily_cap" if capped else
+            waits = ("machine" if machine else "timer" if timer else "daily_cap" if capped else
                      "agent_running" if agent_busy and i["kind"] == "film" and gpu <= agent else
                      "gpu_busy" if ahead else None)
-            why = ("Lancé maintenant : il passe devant la file." if i["pos"] < 0 else
+            why = ("La machine n'a pas pu faire la voix ou le rendu (RAM, GPU ou service de"
+                   " voix) : nouvel essai automatique, sans compter contre la vidéo."
+                   if machine else
+                   "Lancé maintenant : il passe devant la file." if i["pos"] < 0 else
                    "Minuteur : il attend son heure sans bloquer la file." if timer else
                    "Placé par toi dans la file." if i["pos"] > 0 else
                    "File unique des rendus et des films : le premier arrivé passe d'abord,"

@@ -37,11 +37,20 @@ LINE_GAP_S = 0.3
 
 
 class TTSError(RuntimeError):
-    """Synthesis failed. `status` is the service's HTTP status when there was one."""
+    """Synthesis failed. `status` is the service's HTTP status when there was one;
+    `unreachable`: the service did not answer (down, or no answer in time)."""
 
-    def __init__(self, message: str, *, status: Optional[int] = None):
+    def __init__(self, message: str, *, status: Optional[int] = None,
+                 unreachable: bool = False):
         super().__init__(message)
         self.status = status
+        self.unreachable = unreachable
+
+    @property
+    def machine(self) -> bool:
+        """The machine failed, not the text (step 197): no answer, or HTTP 5xx (the voice
+        service answers 503 when its engine died or was stopped by the resource guard)."""
+        return self.unreachable or (self.status or 0) >= 500
 
 
 @dataclass
@@ -252,9 +261,10 @@ class HttpProvider:
             resp = client.request(s.tts_http_method.upper(), s.tts_http_url, content=body,
                                   headers=headers, timeout=s.tts_timeout_s)
         except httpx.TimeoutException:
-            raise TTSError(f"the TTS service did not answer within {s.tts_timeout_s} s") from None
+            raise TTSError(f"the TTS service did not answer within {s.tts_timeout_s} s",
+                           unreachable=True) from None
         except httpx.HTTPError as e:
-            raise TTSError(f"TTS request failed ({type(e).__name__})") from None
+            raise TTSError(f"TTS request failed ({type(e).__name__})", unreachable=True) from None
         finally:
             if self.http is None:
                 client.close()

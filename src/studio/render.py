@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
@@ -28,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from . import ffmpeg, media, motion, music
+from . import ffmpeg, gpu_lock, guard, media, motion, music
 from .assets import DESCRIPTION_CHARS, InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
 from .qc import run_qc
@@ -38,6 +40,13 @@ from .tts import TTSError
 logger = structlog.get_logger(__name__)
 
 MAX_ATTEMPTS = 3
+# A machine failure (machine_failure, step 197) waits and retries without counting against
+# the video: the job keeps its place in the line behind a timer of MACHINE_BACKOFF_MIN[n]
+# (the last one after that), its failure "machine <n>/<MACHINE_RETRIES>: <reason>".
+MACHINE_RETRIES = 6
+MACHINE_BACKOFF_MIN = (5, 15, 45)
+MACHINE = "machine"
+_MACHINE_N = re.compile(rf"^{MACHINE} (\d+)/")
 # While the voice model is warm, a job that made a voice also makes the voices of the next
 # waiting voiced renders (voice_ahead): one model load per batch, not one per video.
 VOICE_AHEAD = 6
@@ -244,7 +253,8 @@ def voice_first(store: CampaignStore, asset: Dict[str, Any], settings: Instagram
         env = (motion.voice_recipe(env, settings, todo) if env["kind"] == "motion"
                else remix.voice_over(env, settings, todo))
     except TTSError as e:
-        raise TTSError(f"voice-over failed: {e}", status=e.status) from None
+        raise TTSError(f"voice-over failed: {e}", status=e.status,
+                       unreachable=e.unreachable) from None
     env["voiced_with"] = todo  # 191: the voice and script, gone from the voiced props
     return store.update_asset(asset["id"], recipe=validate_recipe(env, settings.media_root))
 
@@ -288,7 +298,8 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
     the quality check (src/studio/qc.py):
     the asset becomes `ready` (and a `revision_requested` parent it replaces is archived), or
     `failed` with the reasons in `assets.qc`; the asset keeps the render's timeline and gets
-    an automatic description if it has none (auto_description). Errors are retried
+    an automatic description if it has none (auto_description). A machine failure waits
+    (machine_wait); other errors are retried
     up to MAX_ATTEMPTS, except ValueError (a bad recipe: retrying gives the same result);
     then the job fails with the reason and the asset moves rendering -> failed. Returns the
     job. `settings` defaults to get_settings() (QC thresholds, hashtag cap)."""
@@ -316,6 +327,8 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
             qc = {**qc, "warnings": [*qc.get("warnings", []), *notes]}
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason
         reason = f"{type(e).__name__}: {e}"[:FAILURE_CHARS]
+        if machine_failure(e):
+            return machine_wait(store, job, reason)
         if isinstance(e, ValueError) or job["attempts"] >= MAX_ATTEMPTS:
             return _fail(store, job, reason)
         return store.update_render_job(job_id, state="queued", failure=reason)
@@ -327,6 +340,49 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
     if qc["passed"] and parent and parent["status"] == "revision_requested":
         transition(store, parent["id"], "archived", actor="system")  # the new version is in
     return _finish(store, job_id, "done", progress=1, render_ms=render_ms)
+
+
+def machine_failure(e: BaseException) -> bool:
+    """Whether the machine, not the video, made the job fail (step 197), the one place that
+    decides it. Machine: the voice service down, not answering in time or answering HTTP 5xx
+    (TTSError.machine: 503 when its engine died, was stopped by the guard or is loading),
+    the GPU lock not had in time (gpu_lock.LockTimeout), the resource guard killing the
+    render for free RAM (guard.Stopped). Everything else is the video's: a QC fail, a bad
+    recipe or props (ValueError), a render tool's error, a TTS 4xx or unreadable answer."""
+    if isinstance(e, TTSError):
+        return e.machine
+    return isinstance(e, (gpu_lock.LockTimeout, guard.Stopped))
+
+
+def machine_retries(job: Dict[str, Any]) -> int:
+    """How many machine failures in a row the waiting job has had (its failure's count)."""
+    m = _MACHINE_N.match(job.get("failure") or "")
+    return int(m.group(1)) if m else 0
+
+
+def machine_wait(store: CampaignStore, job: Dict[str, Any], reason: str) -> Dict[str, Any]:
+    """A machine failure: the job goes back to the line at its place (arrival, line_pos and
+    requeues untouched: the check run's re-render count stays as it was; the claim's attempt
+    is given back), skipped until a backoff timer, the asset still `rendering`. Past
+    MACHINE_RETRIES it fails with the reason and one website alert per video."""
+    n = machine_retries(job) + 1
+    if n > MACHINE_RETRIES:
+        from . import alerts  # alerts imports the worker, which imports us
+
+        why = (f"{MACHINE}: the machine could not make the voice or the render after"
+               f" {MACHINE_RETRIES} tries: {reason}")[:FAILURE_CHARS]
+        alerts.raise_alert(store, "render_machine", job["asset_id"], "error",
+                           "La machine n'arrive pas à faire la voix / le rendu",
+                           f"Vidéo {job['asset_id']} : {MACHINE_RETRIES} essais sans succès"
+                           f" ({reason}). Libère de la RAM ou vérifie le service de voix, puis"
+                           " relance-la.", f"/assets/{job['asset_id']}", utcnow(), renew=True)
+        return _fail(store, job, why)
+    wait = MACHINE_BACKOFF_MIN[min(n, len(MACHINE_BACKOFF_MIN)) - 1]
+    logger.warning("render.machine_wait", job=job["id"], retry=n, minutes=wait, error=reason)
+    return store.update_render_job(
+        job["id"], state="queued", attempts=max(job["attempts"] - 1, 0),
+        failure=f"{MACHINE} {n}/{MACHINE_RETRIES}: {reason}"[:FAILURE_CHARS],
+        not_before=to_iso(utcnow() + timedelta(minutes=wait)))
 
 
 def _finish(store: CampaignStore, job_id: int, state: str, **fields: Any) -> Dict[str, Any]:

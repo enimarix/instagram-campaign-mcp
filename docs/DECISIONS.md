@@ -8,6 +8,24 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: A machine failure waits and retries, never counts against the video (197)
+`render.machine_failure` is the one place that tells the machine from the video. Machine:
+the voice service down or not answering in time, or answering HTTP 5xx (503: its engine
+died, was stopped by the resource guard, or is loading), `gpu_lock.LockTimeout`,
+`guard.Stopped` (the guard killed the render for free RAM). Everything else (QC, a bad
+recipe or props, a render tool's error, a TTS 4xx) is the video's, as before. A machine
+failure puts the job back in the line at its place (arrival, line_pos and `requeues`
+untouched, the claim's attempt given back) behind a timer of 5, 15, then 45 min
+(`not_before`); the asset stays `rendering`, so the check run never lists it and its
+re-render count does not move. After 6 machine retries in a row (MACHINE_RETRIES) the job
+fails with « machine: … » and one website alert per video (« La machine n'arrive pas à
+faire la voix / le rendu »); the check run re-renders such a video unchanged, never drops
+it. Planning: `waits_on: machine`, « En attente de la machine — nouvel essai vers HH:MM ».
+No migration: the count lives in the waiting job's `failure` (« machine n/6: … »).
+Reason: 2026-11-23 12:31–12:57 free RAM fell to 0.6 GB, the guard stopped the voice
+engine four times, the voice service answered 503, the re-renders of #68 / #69 used up
+their budget and the check run dropped two good scripts.
+
 ## 2026-11-23: The owner's « Lancer » bypasses the grace, « seen » and the daily cap (196)
 Planning's « Lancer maintenant », « Lancer la sélection » and « Tout lancer »: renders, Lemo
 films and Claude's ideas go to the head of the heavy line in on-screen order (as « start
