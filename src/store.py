@@ -748,7 +748,7 @@ ASSET_FIELDS = ("idea_id", "parent_asset_id", "file_path", "preview_path", "thum
                 "verdict", "qc", "self_score", "self_score_reason", "best_before",
                 "poster_path", "description", "timeline", "agent_decision")
 RENDER_JOB_FIELDS = ("state", "progress", "attempts", "failure", "started_at", "finished_at",
-                     "render_ms", "heartbeat_at")
+                     "render_ms", "heartbeat_at", "not_before")
 FEEDBACK_FIELDS = ("text", "reason_codes", "video_time_s", "wants_changes")
 LEARNING_FIELDS = ("statement", "kind", "scope", "evidence", "confidence", "origin", "status")
 EXPERIMENT_FIELDS = ("hypothesis", "variable", "variants", "target_per_variant", "ends_on",

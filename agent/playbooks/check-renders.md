@@ -84,6 +84,10 @@ exactly as it is. Never rewrite the video from memory.
 - a `failure` with no QC reason (the render crashed: a validation error, a worker
   error): re-render it unchanged, once. If that one fails the same way, drop it with the
   error.
+- A machine failure is never a reason to drop: the machine (the voice service, the GPU,
+  free RAM) failed, not the video. The studio waits and retries those by itself, so they
+  are not in your list while they wait; a `failure` starting with `machine:` ran out of
+  tries: re-render it unchanged, whatever `rerenders_left` says, and say so in the summary.
 - `template_props` null (too large for the packet, see its `note`): drop it unless you
   can write the props again from the template's schema.
 Do not wait: the next check run reviews the new render.

@@ -1,10 +1,15 @@
 """Step 188a: queueing a voiced video never calls the voice; the render job makes it."""
 
+from datetime import timedelta
+
 import httpx
 import pytest
 import respx
 
-from src.studio import line, motion, render, sitcom, tts, voices
+from src.store import to_iso, utcnow
+from src.studio import checks, guard, line, motion, render, sitcom, tts, voices
+from src.studio.ffmpeg import FFmpegError
+from src.studio.gpu_lock import LockTimeout
 from src.studio.tts import LineTiming, Synthesis, TTSError
 from tests.test_studio_motion import FACTQUEST, VALID, _settings
 from tests.test_studio_render import FAR_PAST, INFO
@@ -93,11 +98,11 @@ def test_the_job_voices_the_recipe_then_renders_it(store, s, fake, tmp_path):
 
 def test_a_voice_failure_is_retried_then_fails_the_job_with_the_reason(store, s, fake):
     asset = _queue(store, s)["asset"]
-    fake.fail = TTSError("the TTS service answered HTTP 503", status=503)
+    fake.fail = TTSError("the TTS service answered HTTP 400", status=400)  # not the machine
     for attempt in range(1, render.MAX_ATTEMPTS + 1):
         job, rendered = _run(store, s)
         assert rendered == [] and job["attempts"] == attempt
-        assert job["failure"] == "TTSError: voice-over failed: the TTS service answered HTTP 503"
+        assert job["failure"] == "TTSError: voice-over failed: the TTS service answered HTTP 400"
     assert job["state"] == "failed"
     a = store.get_asset(asset["id"])
     assert a["status"] == "failed" and "voice-over failed" in a["qc"]["reason"]
@@ -190,3 +195,64 @@ def test_no_voice_ahead_while_paused(store, s, fake):
     job, _ = _run(store, s)  # a job already running makes its own voice
     assert job["state"] == "done" and len(fake.said) == 1
     assert "voice_todo" in store.get_asset(second["id"])["recipe"]
+
+
+def test_machine_failures_are_told_from_the_video_s():
+    machine = [TTSError("x", status=503), TTSError("x", status=500),
+               TTSError("x", unreachable=True), LockTimeout("x"), guard.Stopped("x")]
+    video = [TTSError("x", status=400), TTSError("the TTS service returned no audio"),
+             ValueError("bad props"), FFmpegError("ffmpeg exited with code 1"),
+             RuntimeError("x")]
+    assert all(render.machine_failure(e) for e in machine)
+    assert not any(render.machine_failure(e) for e in video)
+
+
+@respx.mock
+def test_an_unreachable_voice_service_is_a_machine_failure(s):
+    respx.post(URL).mock(side_effect=httpx.ConnectError("refused"))
+    with pytest.raises(TTSError) as e:
+        tts.HttpProvider(s).synthesize("Bonjour")
+    assert e.value.machine
+
+
+def test_a_machine_failure_waits_in_line_without_counting_against_the_video(
+        store, s, fake, monkeypatch):
+    now = utcnow()
+    monkeypatch.setattr(render, "utcnow", lambda: now)  # the fake clock
+    asset = _queue(store, s)["asset"]
+    fake.fail = TTSError("the TTS service answered HTTP 503", status=503)
+    for n, minutes in enumerate((5, 15, 45, 45, 45, 45), 1):
+        job, rendered = _run(store, s)
+        assert rendered == [] and job["state"] == "queued" and job["attempts"] == 0
+        assert job["failure"] == (f"machine {n}/{render.MACHINE_RETRIES}: TTSError: voice-over"
+                                  " failed: the TTS service answered HTTP 503")
+        assert job["not_before"] == to_iso(now + timedelta(minutes=minutes))
+        assert job["requeues"] == 0 and job["line_pos"] is None  # its place, no re-render
+        assert store.get_asset(asset["id"])["status"] == "rendering"
+        assert checks.waiting(store, now) == []  # the check run never sees it
+        assert line.renders_next(store, s, now, 1) == []  # it waits for its timer
+    assert store.get_state("alerts_raised") is None
+    job, _ = _run(store, s)  # the 7th machine failure: the cap
+    assert job["state"] == "failed" and job["failure"].startswith("machine: the machine could")
+    a = store.get_asset(asset["id"])
+    assert a["status"] == "failed" and "machine:" in a["qc"]["reason"]
+    alert = store.get_state("alerts_raised")[f"render_machine:{asset['id']}"]
+    assert alert["title"] == "La machine n'arrive pas à faire la voix / le rendu"
+    assert alert["link"] == f"/assets/{asset['id']}"
+    [waiting] = checks.waiting(store, now)
+    assert waiting["id"] == asset["id"] and waiting["rerenders"] == 0  # budget untouched
+
+
+def test_a_qc_fail_after_a_machine_wait_counts_as_before(store, s, fake):
+    asset = _queue(store, s)["asset"]
+    fake.fail = TTSError("the TTS service answered HTTP 503", status=503)
+    _run(store, s)
+    fake.fail = None
+    job = store.claim_render_jobs(1, stale_before=FAR_PAST)[0]
+    job = render.run_job(store, s.media_root, job, settings=s,
+                         render_fn=lambda *a: (INFO, {"file_path": "video.mp4"}),
+                         qc_fn=lambda *a: {"passed": False, "reason": "black frames"})
+    assert job["state"] == "done" and job["attempts"] == 1
+    assert store.get_asset(asset["id"])["status"] == "failed"
+    [waiting] = checks.waiting(store, utcnow())
+    assert waiting["id"] == asset["id"] and waiting["rerenders"] == 0

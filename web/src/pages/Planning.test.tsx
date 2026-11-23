@@ -115,6 +115,13 @@ describe('Planning', () => {
     expect(calls).toContainEqual({ method: 'PUT', url: '/api/planning/film/4/timer', body: { at: null } })
   })
 
+  it('a render waiting for the machine says so, with its next try (197)', async () => {
+    stub([item({ ids: { asset_id: 68, job_id: 7 }, waits_on: 'machine', not_before: soon(20) })])
+    show()
+    expect(await screen.findByText(/^En attente de la machine — nouvel essai vers .*\d\d:\d\d/)).toBeTruthy()
+    expect(screen.getByText('attend la machine')).toBeTruthy()
+  })
+
   it('a refused start says why', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => init?.method
       ? new Response(JSON.stringify({ error: 'invalid', message: 'Ce rendu est en cours' }), { status: 422 })
