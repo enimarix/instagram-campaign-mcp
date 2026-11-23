@@ -1141,7 +1141,7 @@ export type PlanningItem = {
   late_s?: number | null // a running item past its usual time (190)
   picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
   idea?: ClaudeIdea // a claude_idea's card (section ideas, 188b)
-  line_index?: number | null // a waiting render's or film's place among the line's not held (placeItem, 195)
+  line_index?: number | null // a waiting render's or film's place among the line's not held: it can be dragged (195)
   playbook?: string | null // an AI run's
   launch_requested?: boolean // the owner launched it, it waits for the machine (196)
 }
@@ -1191,7 +1191,7 @@ export type PlanningHistory = {
   reason: string | null
   status: string | null
   recipe: Record<string, unknown> | null
-  tries: number | null // failed: how many of the video's renders failed today (one row per video, 195)
+  tries: number | null // failed: how many times the video was rendered (its failed jobs today and their relaunches; machine retries not counted, 200)
 }
 export type Planning = {
   now: string
@@ -1221,9 +1221,10 @@ export const holdItem = (kind: LineKind, id: number, held: boolean) =>
 /** Swap with the neighbour: -1 up, 1 down. */
 export const moveItem = (kind: LineKind, id: number, by: -1 | 1) =>
   send<unknown>('POST', `/api/planning/${kind}/${id}/move`, { by })
-/** Drag and drop (195): to `index` among the other waiting items not held (0 the head). */
-export const placeItem = (kind: LineKind, id: number, index: number) =>
-  send<unknown>('POST', `/api/planning/${kind}/${id}/place`, { index })
+/** Drag and drop (195, 200): just before / after another waiting item of the real line. */
+export type LineAnchor = { kind: LineKind; id: number; side: 'before' | 'after' }
+export const placeItem = (kind: LineKind, id: number, anchor: LineAnchor) =>
+  send<unknown>('POST', `/api/planning/${kind}/${id}/place`, { anchor_kind: anchor.kind, anchor_id: anchor.id, side: anchor.side })
 /** Out of the line for good (order: an owner order / change request, by its order id). */
 export const removeItem = (kind: LineKind | 'order', id: number) =>
   send<unknown>('POST', `/api/planning/${kind}/${id}/remove`)
@@ -1236,15 +1237,18 @@ export const removeIdea = (assetId: number) => send<unknown>('POST', `/api/plann
 /** « Lancer » (196): id the job's (render), the order's (film, work_order), the video's
  * (claude_idea, change_request without an order), the playbook (agent_run). */
 export type LaunchItem = { kind: 'render' | 'film' | 'claude_idea' | 'work_order' | 'change_request' | 'agent_run'; id: number | string }
-/** front: to the head of the line; requested: start once the machine is free (busy: why it is not). */
+/** front: to the head of the line; requested: start once the machine is free (busy: why it is not);
+ * left: what a bulk launch left where it is (200). */
 export type LaunchResult = {
   front: LaunchItem[]
   requested: LaunchItem[]
   refused: (LaunchItem & { message: string })[]
+  left?: (LaunchItem & { why: 'held' | 'timer' | 'machine' })[]
   busy: string | null
   paused: string | null
 }
-export const launchItems = (items: LaunchItem[]) => send<LaunchResult>('POST', '/api/planning/launch', { items })
-export const previewLaunch = (items: LaunchItem[]) =>
-  send<{ pushed: { kind: PlanningItem['kind']; title: string; by_s: number }[] }>('POST', '/api/planning/launch/preview', { items })
+/** bulk (« Tout lancer », « Lancer la sélection », 200): held, timer and machine-waiting cards stay where they are. */
+export const launchItems = (items: LaunchItem[], bulk = false) => send<LaunchResult>('POST', '/api/planning/launch', { items, bulk })
+export const previewLaunch = (items: LaunchItem[], bulk = false) =>
+  send<{ pushed: { kind: PlanningItem['kind']; title: string; by_s: number }[] }>('POST', '/api/planning/launch/preview', { items, bulk })
 export const setStudioPaused = (paused: boolean) => send<{ paused: string | null }>('PUT', '/api/planning/pause', { paused })

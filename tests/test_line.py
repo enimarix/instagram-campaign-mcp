@@ -434,32 +434,65 @@ def test_move_swaps_neighbours_old_rows_and_start_now_and_the_claim_follows(stor
         line.move(store, "render", late, -1)
 
 
-def test_place_drops_an_item_anywhere_held_ones_keep_their_place(store, monkeypatch):
+def test_place_drops_an_item_next_to_another_held_ones_keep_their_place(store, monkeypatch):
     s = cfg()
     a = _render(store, NOW - timedelta(minutes=50))  # old rows: no line_pos
     b = _render(store, NOW - timedelta(minutes=40))
     film = _film(store, monkeypatch, NOW - timedelta(minutes=30))
     c = _render(store, NOW - timedelta(minutes=20))
-    assert line.place(store, "render", c, 0)["index"] == 0  # to the front
+    assert line.place(store, "render", c, "render", a, "before")["line_pos"] == 1  # the front
     assert _line(store) == [("render", c), ("render", a), ("render", b), ("film", film)]
-    line.place(store, "render", c, 3)  # to the end
+    line.place(store, "render", c, "film", film, "after")  # to the end
     assert _line(store) == [("render", a), ("render", b), ("film", film), ("render", c)]
     line.hold(store, "render", b, True)
-    line.place(store, "render", a, 1)  # past the held one: index counts the not held only
+    line.place(store, "render", a, "film", film, "after")  # the held one keeps its place
     assert _line(store) == [("render", b), ("film", film), ("render", a), ("render", c)]
-    line.place(store, "render", c, 0)  # the head of the not held: the held one stays first
-    assert _line(store) == [("render", b), ("render", c), ("film", film), ("render", a)]
     late = _render(store, NOW)  # a new arrival still goes behind
     assert _line(store)[-1] == ("render", late)
     items = [i for i in planning.build_planning(store, s, NOW)["items"] if i["kind"] in line.KINDS]
     assert [i["line_index"] for i in items] == [0, 1, 2, 3, None]  # the held one: listed last
-    with pytest.raises(ValueError, match="between 0 and 3"):
-        line.place(store, "render", c, 4)
+    with pytest.raises(ValueError, match="itself"):
+        line.place(store, "render", c, "render", c, "before")
+    with pytest.raises(ValueError, match="before or after"):
+        line.place(store, "render", c, "render", a, "under")
     store.update_render_job(late, state="running")
+    with pytest.raises(ValueError, match="n'attend plus"):  # the anchor left the line
+        line.place(store, "render", c, "render", late, "before")
     with pytest.raises(ValueError, match="est en cours"):
-        line.place(store, "render", late, 0)
+        line.place(store, "render", late, "render", a, "before")
     with pytest.raises(KeyError):
-        line.place(store, "film", 999, 0)
+        line.place(store, "film", 999, "render", a, "before")
+    assert _line(store) == [("render", b), ("film", film), ("render", a), ("render", c)]
+
+
+def test_place_lands_where_the_owner_sees_it_with_a_machine_card_between(store, monkeypatch):
+    """Audit 200 #7: the line is R1, T0 (waiting for the machine), R2; the page shows R1, R2,
+    T0 (T0 is timed later). Dragging R1 below R2 sends « after R2 »: R1 does move."""
+    r1 = _render(store, NOW - timedelta(minutes=50))
+    t0 = _render(store, NOW - timedelta(minutes=40))
+    r2 = _render(store, NOW - timedelta(minutes=30))
+    store.update_render_job(t0, not_before=to_iso(NOW + timedelta(minutes=15)),
+                            failure="machine 1/6: out of memory")
+    shown = [i for i in planning.build_planning(store, cfg(), NOW)["items"]
+             if i["section"] == "next"]
+    assert [i["ids"]["job_id"] for i in shown] == [r1, r2, t0]
+    assert shown[2]["waits_on"] == "machine"
+    line.place(store, "render", r1, "render", r2, "after")  # moving down: after the card above
+    assert _line(store) == [("render", t0), ("render", r2), ("render", r1)]
+    line.place(store, "render", r1, "render", r2, "before")  # moving up: before the card below
+    assert _line(store) == [("render", t0), ("render", r1), ("render", r2)]
+
+
+def test_place_survives_a_line_that_shifted_since_the_page_loaded(store, monkeypatch):
+    """Audit 200 #12: the page is 10 s old, a « start now » and a new arrival changed the line
+    since; the anchor still lands the item right after the card the owner dropped it under."""
+    a = _render(store, NOW - timedelta(minutes=50))
+    b = _render(store, NOW - timedelta(minutes=40))
+    c = _render(store, NOW - timedelta(minutes=30))
+    line.start_now(store, "render", c)  # meanwhile: c to the head, a new one at the end
+    d = _render(store, NOW)
+    line.place(store, "render", a, "render", b, "after")  # the owner saw a, b, c
+    assert _line(store) == [("render", c), ("render", b), ("render", a), ("render", d)]
 
 
 def test_pause_stops_the_film_and_the_runs_and_resumes(store, monkeypatch):
@@ -529,11 +562,12 @@ def test_the_control_routes_are_thin_doors(store, monkeypatch):
         assert r.status_code == 422 and "Déjà en tête" in r.json()["message"]
         assert tc.post(f"/api/planning/order/{order}/remove").json()["removed"]
         assert tc.post(f"/api/planning/order/{order}/move", json={"by": 1}).status_code == 422
-        assert tc.post(f"/api/planning/render/{job}/place", json={"index": 0}).json()[
-            "index"] == 0
-        r = tc.post(f"/api/planning/render/{job}/place", json={"index": 5})
-        assert r.status_code == 422 and "between 0 and" in r.json()["message"]
-        assert tc.post("/api/planning/render/999/place", json={"index": 0}).status_code == 404
+        before = {"anchor_kind": "film", "anchor_id": film, "side": "before"}
+        assert tc.post(f"/api/planning/render/{job}/place", json=before).json()["line_pos"] == 1
+        r = tc.post(f"/api/planning/render/{job}/place", json={**before, "anchor_id": 999})
+        assert r.status_code == 422 and "n'attend plus" in r.json()["message"]
+        assert tc.post(f"/api/planning/render/{job}/place", json={"index": 0}).status_code == 422
+        assert tc.post("/api/planning/render/999/place", json=before).status_code == 404
         assert tc.post("/api/planning/render/999/remove").status_code == 404
         assert tc.put("/api/planning/pause", json={"paused": True}).json()["paused"]
         assert tc.get("/api/planning").json()["paused"]

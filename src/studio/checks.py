@@ -250,3 +250,28 @@ def drop(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
     for pick_id in picks:
         dm_picks.mark_pick(store, pick_id, "skipped", why)
     return asset
+
+
+def revive(store: CampaignStore, asset_id: int) -> None:
+    """drop() undone when a dropped video is rendered again (200, render.rerender): its
+    decision is cleared and the order and DM picks its drop skipped (skipped with its reason)
+    are back in production, so it follows the normal path: its check, then the Inbox."""
+    asset = store.get_asset(asset_id)
+    decision = asset["agent_decision"] or {}
+    if decision.get("kind") != "dropped":
+        return
+    why, idea = decision["why"], store.get_idea(asset["idea_id"])
+    with store._tx() as c:
+        orders = c.execute("SELECT id, pick_id FROM work_orders WHERE idea_id = ? AND"
+                           " status = 'skipped' AND skip_reason = ?", (idea["id"], why)).fetchall()
+        mine = [r[1] for r in orders if r[1]]
+        picks = [r[0] for r in c.execute(
+            "SELECT id FROM dm_picks WHERE status = 'skipped' AND skip_reason = ? AND (source_id"
+            f" = ? OR id IN ({','.join('?' * len(mine)) or 'NULL'}))",
+            (why, idea["source_id"], *mine))]
+        c.execute(f"UPDATE work_orders SET status = 'in_production', skip_reason = NULL,"
+                  f" updated_at = ? WHERE id IN ({','.join('?' * len(orders)) or 'NULL'})",
+                  (to_iso(utcnow()), *(r[0] for r in orders)))
+    for pick_id in picks:
+        dm_picks.mark_pick(store, pick_id, "in_production")
+    store.update_asset(asset_id, agent_decision=None)

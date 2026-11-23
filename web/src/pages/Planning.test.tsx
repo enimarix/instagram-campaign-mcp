@@ -490,7 +490,8 @@ describe('Planning', () => {
       fireEvent.pointerMove(window, { clientY: 160 }) // past B's middle
       expect(titles()).toEqual(['B', 'A', 'C']) // live
       fireEvent.pointerUp(window, { clientY: 160 })
-      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/1/place', body: { index: 1 } }))
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/1/place', // down: after B
+        body: { anchor_kind: 'film', anchor_id: 2, side: 'after' } }))
       await vi.advanceTimersByTimeAsync(10_000) // a poll still says the old order
       expect(titles()).toEqual(['B', 'A', 'C'])
       items = [b, a, c].map((i, n) => ({ ...i, line_index: n }))
@@ -500,7 +501,8 @@ describe('Planning', () => {
       fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Glisser pour déplacer' })[2], { button: 0, clientY: 250 })
       fireEvent.pointerMove(window, { clientY: 10 }) // to the head
       fireEvent.pointerUp(window, { clientY: 10 })
-      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/3/place', body: { index: 0 } }))
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/3/place', // up: before B
+        body: { anchor_kind: 'film', anchor_id: 2, side: 'before' } }))
       answer()
       fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Glisser pour déplacer' })[0], { button: 0, clientY: 50 })
       fireEvent.pointerUp(window, { clientY: 50 }) // dropped where it was: nothing sent
@@ -511,8 +513,59 @@ describe('Planning', () => {
     }
   })
 
+  it('a drop lands where the owner sees it with a machine card between; no drag while it saves (200)', async () => {
+    const rect = HTMLElement.prototype.getBoundingClientRect
+    HTMLElement.prototype.getBoundingClientRect = function () { // 100 px per card
+      const n = [...document.querySelectorAll('[data-drag]')].indexOf(this)
+      return { top: n * 100, height: 100, bottom: n * 100 + 100, left: 0, right: 0, width: 0, x: 0, y: n * 100, toJSON: () => ({}) }
+    }
+    // the line is R1, T0, R2; T0 waits for the machine, so the page shows it last
+    const items = [
+      item({ title: 'R1', ids: { job_id: 1 }, line_index: 0 }),
+      item({ title: 'R2', ids: { job_id: 3 }, line_index: 2 }),
+      item({ title: 'T0', ids: { job_id: 2 }, line_index: 1, waits_on: 'machine', not_before: soon(15) }),
+    ]
+    let answer = () => {}
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? 'GET', url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      if (url.endsWith('/place')) await new Promise<void>((r) => { answer = r })
+      return new Response(JSON.stringify(init?.method ? {} : { now: soon(0), items }))
+    }))
+    const titles = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    try {
+      show()
+      const grips = await screen.findAllByRole('button', { name: 'Glisser pour déplacer' })
+      fireEvent.pointerDown(grips[0], { button: 0, clientY: 50 })
+      fireEvent.pointerMove(window, { clientY: 160 }) // past R2's middle, not T0's
+      fireEvent.pointerUp(window, { clientY: 160 })
+      expect(titles()).toEqual(['R2', 'R1', 'T0'])
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/1/place',
+        body: { anchor_kind: 'render', anchor_id: 3, side: 'after' } })) // not « before T0 »: it would not move
+      const again = screen.getAllByRole('button', { name: 'Glisser pour déplacer' })
+      expect(again.every((g) => (g as HTMLButtonElement).disabled)).toBe(true) // the save is pending
+      fireEvent.pointerDown(again[2], { button: 0, clientY: 250 })
+      fireEvent.pointerMove(window, { clientY: 10 })
+      fireEvent.pointerUp(window, { clientY: 10 })
+      expect(titles()).toEqual(['R2', 'R1', 'T0']) // no second drag mid-save
+      answer()
+      await waitFor(() => expect((screen.getAllByRole('button', { name: 'Glisser pour déplacer' })[0] as HTMLButtonElement).disabled).toBe(false))
+      expect(calls.filter((x) => x.url.endsWith('/place'))).toHaveLength(1)
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = rect
+    }
+  })
+
+  it('« Lancer maintenant » on a card waiting for the machine says it skips the retry (200)', async () => {
+    const calls = stubCalls([item({ title: 'T0', ids: { job_id: 2 }, line_index: 0, waits_on: 'machine', not_before: soon(15) })])
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: 'Lancer maintenant' }))
+    expect(await screen.findByText('Passe en tête de la file, sans attendre le nouvel essai de la machine.')).toBeTruthy()
+    expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/2/start-now', body: undefined })
+  })
+
   describe('« Lancer » (196)', () => {
-    type Launched = { front: unknown[]; requested: unknown[]; refused: unknown[]; busy: string | null; paused: string | null }
+    type Launched = { front: unknown[]; requested: unknown[]; refused: unknown[]; left?: unknown[]; busy: string | null; paused: string | null }
     function stubLaunch(items: PlanningItem[], answer: Launched, pushed: unknown[] = []) {
       const calls: Call[] = []
       vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -550,8 +603,8 @@ describe('Planning', () => {
       expect(await screen.findByText(/1 passe en tête de la file · 1 lancement demandé : démarre dès que la machine est libre/)).toBeTruthy()
       expect(screen.getByText(/un seul travail lourd à la fois/)).toBeTruthy()
       expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/launch/preview',
-        body: { items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }] } })
-      expect(launch(calls)?.body).toEqual({ items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }] })
+        body: { items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }], bulk: true } })
+      expect(launch(calls)?.body).toEqual({ items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }], bulk: true })
       await waitFor(() => expect(within(bar).getByRole('button', { name: 'Lancer la sélection (0)' })).toBeTruthy()) // cleared
     })
 
@@ -559,13 +612,33 @@ describe('Planning', () => {
       const calls = stubLaunch(cards, { front: [], requested: [], refused: [{ kind: 'agent_run', id: 'daily-learn', message: 'Le run daily-learn est déjà en cours.' }],
         busy: null, paused: '2026-11-23T10:00:00+00:00' }, [{ kind: 'render', title: 'Rendu B', by_s: 600 }])
       show()
-      fireEvent.click(await screen.findByRole('button', { name: 'Tout lancer' }))
+      const all = await screen.findByRole('button', { name: 'Tout lancer' })
+      fireEvent.click(all)
+      expect(all).toHaveProperty('disabled', true) // from the first click (200)
+      fireEvent.click(all)
       const warning = await screen.findByRole('alertdialog', { name: 'Ce que ça repousse' })
+      expect(calls.filter((c) => c.url.endsWith('/preview'))).toHaveLength(1) // a double click asks once
+      expect(all).toHaveProperty('disabled', true) // still, while the warning is open
       expect(launch(calls)).toBeUndefined() // nothing before the owner confirms
       fireEvent.click(within(warning).getByRole('button', { name: 'Confirmer' }))
       expect(await screen.findByText(/1 refusé \(Le run daily-learn est déjà en cours.\)\. Studio en pause/)).toBeTruthy()
       expect(launch(calls)?.body).toEqual({ items: [{ kind: 'claude_idea', id: 9 }, { kind: 'render', id: 6 },
-        { kind: 'work_order', id: 4 }, { kind: 'change_request', id: 3 }, { kind: 'agent_run', id: 'daily-learn' }] })
+        { kind: 'work_order', id: 4 }, { kind: 'change_request', id: 3 }, { kind: 'agent_run', id: 'daily-learn' }], bulk: true })
+      expect(calls.filter((c) => c.url === '/api/planning/launch')).toHaveLength(1)
+    })
+
+    it('« Tout lancer » says which cards it left where they are, and why; cancelling frees the buttons (200)', async () => {
+      stubLaunch(cards, { front: [{ kind: 'render', id: 6 }], requested: [], refused: [], busy: null, paused: null,
+        left: [{ kind: 'render', id: 7, why: 'held' }, { kind: 'film', id: 2, why: 'timer' }, { kind: 'render', id: 8, why: 'machine' },
+          { kind: 'render', id: 9, why: 'timer' }] }, [{ kind: 'render', title: 'Rendu B', by_s: 600 }])
+      show()
+      const all = await screen.findByRole('button', { name: 'Tout lancer' })
+      fireEvent.click(all)
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Annuler' }))
+      await waitFor(() => expect(all).toHaveProperty('disabled', false))
+      fireEvent.click(all)
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Confirmer' }))
+      expect(await screen.findByText(/1 passe en tête de la file · 4 laissés : en pause \/ minuteur \/ machine\./)).toBeTruthy()
     })
 
     it("an order's own button launches it alone; a launched one says it waits for the machine", async () => {
@@ -579,7 +652,7 @@ describe('Planning', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Lancer maintenant' }))
       expect(await screen.findByText(/1 lancement demandé : démarre dans la minute/)).toBeTruthy()
       expect(calls.some((c) => c.url.endsWith('/preview'))).toBe(false) // an order pushes no render back
-      expect(launch(calls)?.body).toEqual({ items: [{ kind: 'work_order', id: 4 }] })
+      expect(launch(calls)?.body).toEqual({ items: [{ kind: 'work_order', id: 4 }], bulk: false })
     })
   })
 })

@@ -150,9 +150,13 @@ def rerender(store: CampaignStore, media_root: PathLike, asset_id: int, recipe: 
              *, actor: str = "owner") -> Dict[str, Any]:
     """Render an asset again with an edited recipe. From `failed` the asset itself goes back
     to `rendering`; from `ready` or `revision_requested` a new child asset (parent_asset_id) is
-    rendered, so the one under review is never overwritten. Returns {asset, job}."""
+    rendered, so the one under review is never overwritten. A video the check run dropped
+    is revived first (checks.revive, 200). Returns {asset, job}."""
+    from . import checks  # here: checks imports remix, which imports this module
+
     env = validate_recipe(recipe, media_root)
     asset = check_rerender(store.get_asset(asset_id))
+    checks.revive(store, asset_id)
     if asset["status"] == "failed":
         transition(store, asset_id, "rendering", actor=actor)
         asset = store.update_asset(asset_id, recipe=env)

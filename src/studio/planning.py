@@ -20,7 +20,10 @@ worker really takes the work today:
 
 « Lancer » (196): launch() takes one card or a selection: renders, films and Claude's ideas
 to the head of the line, the owner's orders / change requests and the AI's runs as launch
-requests catch_up starts first (schedule.request_launch).
+requests catch_up starts first (schedule.request_launch). The chain times a launched run as
+the next thing on the AI track once no render waits, before the films and the other runs, and
+hides that playbook's placeholder later the same day (200). A film is an AI run there too: one
+due before the other runs could start goes first (200).
 
 Around the chain (190): the 24 h strip of its ETAs and the queued posts (strip), the
 supply gauge (supply), today's history (history), and the delay warning before a move or
@@ -241,6 +244,33 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         return _ready(item)
 
     busy: Optional[str] = None
+    todo = schedule.launch_requests(store)  # 196: the runs the owner launched, oldest first
+    launched = {r["playbook"] for r in todo}
+    listed: set = set()  # the orders and change requests a light run lists already
+
+    def launches(at: datetime) -> None:
+        """The runs the owner launched (200): catch_up starts them before anything else once
+        no render waits and no run runs (busy), so from `at` they are the next thing on the AI
+        track, past the grace, the daily cap or their scheduled time."""
+        nonlocal agent
+        first = len(items)
+        while todo:
+            req = todo.pop(0)
+            name = req["playbook"]
+            kind = {schedule.ORDER_PLAYBOOK: "order_run",
+                    checks.PLAYBOOK: "check_run"}.get(name, "agent_run")
+            waits = ("agent_running" if agent > max(at, now) else "gpu_busy" if at > now
+                     else None)
+            agent = add(_item("next", kind, f"Run {name}", max(agent, at),
+                              _run_s(store, name, RUN_S / 3 if kind == "check_run" else RUN_S),
+                              "Lancé par toi : il passe avant les autres runs de l'IA, dès que"
+                              " la machine est libre.", waits_on=waits, source="agent",
+                              playbook=name))
+            if kind == "order_run":
+                agent = requests(agent, waits, "L'IA l'écrit dans ce run lancé par toi, puis"
+                                 " son rendu suit celui d'avant.", req["only"])
+        for i in items[first:]:
+            i["launch_requested"] = True
 
     def heavy() -> None:
         nonlocal gpu, agent, busy
@@ -256,6 +286,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         quota = left = settings.lemo_films_per_day - film.films_today(store, settings, now)
         reset, films_n, idle_at, n = _midnight(settings, now), 0, None, len(items)
         ahead = any(i["kind"] == "render" for i in items)  # a running film holds no render
+        films: List[Dict[str, Any]] = []  # the films' cards, in line order
 
         def card(i: Dict[str, Any], start: Optional[datetime], waits: Optional[str],
                  why: str) -> Dict[str, Any]:
@@ -280,6 +311,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         while pending:
             if gpu >= reset:  # the caps reset at owner-local midnight
                 left, reset = settings.lemo_films_per_day, _midnight(settings, gpu)
+            if todo and not line.head([p for p in pending if p["kind"] == "render"], gpu):
+                launches(gpu)  # no render waits: the owner's launches go before the films
             # a film waits for the running AI run (line.films_ready), the renders don't
             i = line.head(pending, gpu, films=left > 0 and gpu >= agent)
             if i is None:  # each one waits on its timer, the films on tomorrow or the run
@@ -308,27 +341,41 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                    " un à la fois.")
             if i["kind"] == "film":
                 films_n, left = films_n + 1, left - 1
-            gpu = add(card(i, gpu, waits, why))
+                films.append(card(i, gpu, waits, why))
+                gpu = add(films[-1])
+            else:
+                gpu = add(card(i, gpu, waits, why))
             ahead = True
+        launches(gpu)
         # what waits on a timer holds no agent run back
         chain = items if idle_at is None else items[:n]
         agent = max(agent, gpu if idle_at is None else idle_at)
+        for f in films:  # 200: a film is an AI run for catch_up (busy), which starts it before
+            if parse_iso(f["est_start"]) <= agent:  # the others: one due by then goes first
+                agent = max(agent, _ready(f))
         busy = ("gpu_busy" if any(i["kind"] == "render" for i in chain) else
-                "agent_running" if chain else None)
+                "agent_running" if chain or agent > now else None)
         items.extend(card(i, None, "held", "En pause : il attend que tu le reprennes, sans"
                           " bloquer la file.") for i in held)
 
     def playbook() -> None:
         nonlocal agent
         for name in schedule.due_runs(store, settings, now):
+            if name in launched:  # listed with the launches
+                continue
             agent = add(_item("next", "agent_run", f"Run {name}", agent, _run_s(store, name),
                               "Run prévu pas encore lancé : il passe dès que rien ne tourne.",
                               waits_on=busy, source="agent", playbook=name))
 
-    def requests(at: datetime, waits: Optional[str], why_here: str) -> datetime:
-        """The owner's orders and change requests the light run writes, rendered one after
-        the other from `at`; returns when the last is ready."""
+    def requests(at: datetime, waits: Optional[str], why_here: str,
+                 only: Optional[Dict[str, List[int]]] = None) -> datetime:
+        """The owner's orders and change requests the light run writes (only: those of a
+        launch on a selection, 196), rendered one after the other from `at`, each listed
+        once; returns when the last is ready."""
         for o in work_orders.for_agent(store, "scheduled"):
+            if ("order", o["id"]) in listed or only and o["id"] not in only["order_ids"]:
+                continue
+            listed.add(("order", o["id"]))
             engine = _style_engine(o["style"])
             at = add(_item("next", "change_request" if o["source"] == "change" else "work_order",
                            _title(o["instruction"], f"Commande {o['id']}"), at,
@@ -337,6 +384,9 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                            pick_id=o["pick_id"], asset_id=o["from_asset_id"]))
         for r in list_revision_requests(store):
             a = r["asset"]
+            if ("asset", a["id"]) in listed or only and a["id"] not in only["asset_ids"]:
+                continue
+            listed.add(("asset", a["id"]))
             engine = _engine(store.get_asset(a["id"])["recipe"])
             at = add(_item("next", "change_request", _title(a.get("hook"), f"Vidéo {a['id']}"),
                            at, render_s[engine], why_here, waits_on=waits, source="change",
@@ -347,6 +397,12 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
     def orders() -> None:
         nonlocal agent
+        if schedule.ORDER_PLAYBOOK in launched and not (
+                any(("order", o["id"]) not in listed
+                    for o in work_orders.for_agent(store, "scheduled"))
+                or any(("asset", r["asset"]["id"]) not in listed
+                       for r in list_revision_requests(store))):
+            return  # the launched light run lists them all
         seen = store.get_state(schedule.CAPABILITIES_KEY) or {}
         gained = parse_iso(seen["gained_at"]) if seen.get("gained_at") else None
         why, newest = schedule.order_wait(store, settings, now, gained)
@@ -379,6 +435,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
     def check() -> None:  # 188c: the finished renders' check, once the line is idle
         nonlocal agent
+        if checks.PLAYBOOK in launched:  # listed with the launches
+            return
         why, newest = schedule.check_wait(store, settings, now)
         if why == "nothing":
             return
@@ -420,9 +478,15 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                            order_id=o["id"], pick_id=o["pick_id"]))
 
     planned_at: Optional[datetime] = None
+    local = schedule._local(settings, now)
+    day_start = to_iso(local.replace(hour=0, minute=0, second=0, microsecond=0))
     for r in sorted(schedule.next_runs(settings, now), key=lambda r: r["next_at"]):
         if r["next_at"] - now > HORIZON:
             continue
+        if r["next_at"].date() == local.date() and (r["playbook"] in launched or any(
+                x["started_at"] >= day_start for x in store.list_agent_runs(r["playbook"],
+                                                                             limit=1))):
+            continue  # it starts (or started) today: due_runs skips today's time (200)
         start = max(filter(None, (r["next_at"], planned_at, agent)))  # after the AI's runs
         item = _item("planned", "agent_run", f"Run {r['playbook']}", start,
                      _run_s(store, r["playbook"]), f"Prévu chaque jour à {r['time']}."
@@ -440,25 +504,9 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                               " ton « Valider ».", source="agent", style=card["style"],
                               engine=_engine(env), voice=card["voice"],
                               asset_id=card["asset_id"]), "idea": card})
-    reqs = {r["playbook"]: r["only"] for r in schedule.launch_requests(store)}
     for i in items:
-        i["launch_requested"] = i["section"] != "running" and _requested(i, reqs)
+        i.setdefault("launch_requested", False)
     return items
-
-
-def _requested(item: Dict[str, Any], reqs: Dict[str, Any]) -> bool:
-    """Whether the owner launched this AI run, order or change request and it waits for the
-    machine (196: schedule.request_launch)."""
-    if item["playbook"]:
-        return item["playbook"] in reqs
-    if (item["kind"] not in ORDERS or item["waits_on"] == "needs_instruction"
-            or schedule.ORDER_PLAYBOOK not in reqs):
-        return False
-    only, ids = reqs[schedule.ORDER_PLAYBOOK], item["ids"]
-    if only is None:
-        return True
-    return (ids["order_id"] in only["order_ids"] if "order_id" in ids
-            else ids.get("asset_id") in only["asset_ids"])
 
 
 LANES = {"render": "render", "work_order": "render", "change_request": "render",
@@ -505,7 +553,7 @@ def supply(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
             "ideas": sum(i["section"] == "ideas" for i in items)}
 
 
-_DAY_JOBS = ("SELECT j.id, j.asset_id, j.state, j.failure, j.finished_at,"
+_DAY_JOBS = ("SELECT j.id, j.asset_id, j.state, j.failure, j.finished_at, j.requeues,"
              " a.status AS asset_status, a.recipe, a.caption, i.hook FROM render_jobs j"
              " JOIN assets a ON a.id = j.asset_id JOIN ideas i ON i.id = a.idea_id"
              " WHERE j.state IN ('done', 'failed') AND j.finished_at >= ?"
@@ -526,9 +574,10 @@ def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     """Today's history (190, since owner-local midnight), newest first: [{kind done | failed
     | removed | dropped | run, at, title, asset_id, order_id, run_id, reason (failed,
     dropped), status (run), recipe (a failed render whose video can be rendered again with
-    it: POST /api/assets/{id}/rerender; else None), tries (failed: how many of the video's
-    renders failed today)}]. A video's failures are one row (195): its newest, with its
-    reason."""
+    it: POST /api/assets/{id}/rerender; else None; a dropped one too: the re-render revives
+    it, checks.revive), tries (failed: how many times the video was rendered, its jobs that
+    failed today and their requeues; a machine retry is not a try, render.machine_wait)}]. A
+    video's failures are one row (195): its newest, with its reason."""
     local = schedule._local(settings, now)
     since = to_iso(local.replace(hour=0, minute=0, second=0, microsecond=0))
 
@@ -544,7 +593,10 @@ def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         orders = c.execute(_DAY_ORDERS, (line.REMOVED, since, line.REMOVED)).fetchall()
     kinds = [("done" if j["state"] == "done" else
               "removed" if j["failure"] == line.REMOVED else "failed") for j in jobs]
-    tries = Counter(j["asset_id"] for j, kind in zip(jobs, kinds) if kind == "failed")
+    tries: Counter = Counter()
+    for j, kind in zip(jobs, kinds):
+        if kind == "failed":  # a relaunch reuses the job's row (store.requeue_render_job)
+            tries[j["asset_id"]] += 1 + j["requeues"]
     shown = set()
     for j, kind in zip(jobs, kinds):
         failed = kind == "failed"
@@ -606,12 +658,17 @@ def preview(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
 
 
 def preview_launch(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
-                   items: List[Dict[str, Any]]) -> Dict[str, Any]:
+                   items: List[Dict[str, Any]], bulk: bool = False) -> Dict[str, Any]:
     """The delay warning before « Lancer la sélection » / « Tout lancer » (196): what the
     selection's renders, films and Claude's ideas going to the head of the line push back
-    (on preview's copy; refused ones are left out, the AI runs move nothing ahead). {pushed}."""
+    (on preview's copy; refused ones and, with bulk, the ones launch() leaves are left out,
+    the AI runs move nothing ahead). {pushed}."""
+    waits = _waits(store, now) if bulk else {}
+
     def change(copy: CampaignStore) -> None:
         for i in reversed(items):  # as launch(): the selection keeps its order at the front
+            if (i["kind"], i["id"]) in waits:
+                continue
             try:
                 if i["kind"] in line.KINDS:
                     line.start_now(copy, i["kind"], i["id"])
@@ -652,6 +709,21 @@ ORDERS = ("work_order", "change_request")  # the light run, on the selection
 LAUNCHES = (*HEAVY, *ORDERS, "agent_run")
 
 
+def _waits(store: CampaignStore, now: datetime) -> Dict[tuple, str]:
+    """{(kind, id): held | timer | machine}: the line's items a bulk launch leaves where they
+    are (200): held, on a timer, or waiting to retry after a machine failure."""
+    out = {}
+    for i in line.waiting(store):
+        nb = i["not_before"]
+        if not nb or parse_iso(nb) <= now:
+            continue
+        out[(i["kind"], i["id"])] = (
+            "held" if nb == line.HELD else
+            "machine" if i["kind"] == "render" and render.machine_retries(
+                store.get_render_job(i["id"])) else "timer")
+    return out
+
+
 def _order_ids(store: CampaignStore, kind: str, item_id: int, sent_back: Callable[[], set]
                 ) -> Dict[str, List[int]]:
     """The waiting order (work_order: its id) or change request (its video's id, among
@@ -682,7 +754,7 @@ def _playbook(store: CampaignStore, name: Any) -> str:
 
 
 def launch(store: CampaignStore, settings: InstagramMCPSettings, items: List[Dict[str, Any]],
-           now: datetime) -> Dict[str, Any]:
+           now: datetime, bulk: bool = False) -> Dict[str, Any]:
     """« Lancer maintenant » on one card or many, « Lancer la sélection », « Tout lancer »
     (196). items [{kind, id}] in on-screen order: render (its job), film (its order) and
     claude_idea (its video: planned.release now=True) go to the head of the line in that
@@ -690,19 +762,25 @@ def launch(store: CampaignStore, settings: InstagramMCPSettings, items: List[Dic
     left « en attente » included) ask for the light run on those only, agent_run (id: the
     playbook) for that run: schedule.request_launch, started by catch_up as soon as nothing
     else runs, past the grace, the « seen » rule and the daily cap. Running, done or unknown:
-    refused with the reason. {front: [{kind, id}], requested: [{kind, id}], refused: [{kind,
-    id, message}] (on-screen order), busy (schedule.busy: why the requests wait, else None),
-    paused (line.paused)}."""
+    refused with the reason. bulk (« Tout lancer », « Lancer la sélection », 200): a held render
+    or film, one on a timer or waiting for the machine stays where it is (one card's « Lancer
+    maintenant » overrides those). {front: [{kind, id}], requested: [{kind, id}], refused:
+    [{kind, id, message}], left: [{kind, id, why held | timer | machine}] (on-screen order),
+    busy (schedule.busy: why the requests wait, else None), paused (line.paused)}."""
     from ..agent.runner import AgentError
     from .motion import MotionError
 
-    front, requested, refused = [], [], []
+    front, requested, refused, left = [], [], [], []
+    waits = _waits(store, now) if bulk else {}
     sent_back = cache(lambda: {r["asset"]["id"] for r in list_revision_requests(store)})
 
     orders: Dict[str, List[int]] = {"order_ids": [], "asset_ids": []}
     playbooks: List[str] = []
     for i in reversed(items):  # each start_now goes ahead of all: the first ends at the head
         kind, item_id = i["kind"], i["id"]
+        if (kind, item_id) in waits:
+            left.append({"kind": kind, "id": item_id, "why": waits[(kind, item_id)]})
+            continue
         try:
             if kind not in LAUNCHES:
                 raise ValueError(f"« {kind} » ne se lance pas.")
@@ -729,5 +807,5 @@ def launch(store: CampaignStore, settings: InstagramMCPSettings, items: List[Dic
     for name in playbooks:
         schedule.request_launch(store, name, now)
     return {"front": front[::-1], "requested": requested[::-1], "refused": refused[::-1],
-            "busy": schedule.busy(store, now=now) if requested else None,
+            "left": left[::-1], "busy": schedule.busy(store, now=now) if requested else None,
             "paused": line.paused(store)}

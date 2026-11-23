@@ -33,8 +33,10 @@ class MoveIn(BaseModel):
     by: Literal[-1, 1]  # -1 up, 1 down
 
 
-class PlaceIn(BaseModel):
-    index: int  # among the other waiting items not held: 0 the head (line.place)
+class PlaceIn(BaseModel):  # just before / after another waiting item (line.place, 200)
+    anchor_kind: Kind
+    anchor_id: int
+    side: Literal["before", "after"]
 
 
 class PauseIn(BaseModel):
@@ -69,6 +71,7 @@ class LaunchItem(BaseModel):
 
 class LaunchIn(BaseModel):
     items: List[LaunchItem]  # in on-screen order
+    bulk: bool = False  # « Tout lancer » / « Lancer la sélection »: held, timer, machine stay
 
 
 @router.get("/planning")
@@ -86,13 +89,13 @@ def preview(body: PreviewIn, request: Request, store: CampaignStore = Depends(ge
 @router.post("/planning/launch")
 def launch(body: LaunchIn, request: Request, store: CampaignStore = Depends(get_store)):
     return call(planning.launch, store, request.app.state.settings,
-                [i.model_dump() for i in body.items], utcnow())
+                [i.model_dump() for i in body.items], utcnow(), body.bulk)
 
 
 @router.post("/planning/launch/preview")
 def preview_launch(body: LaunchIn, request: Request, store: CampaignStore = Depends(get_store)):
     return call(planning.preview_launch, store, request.app.state.settings, utcnow(),
-                [i.model_dump() for i in body.items])
+                [i.model_dump() for i in body.items], body.bulk)
 
 
 # Before the line's routes: /planning/{kind}/{item_id}/remove would take /idea/... first.
@@ -138,7 +141,7 @@ def move(kind: Kind, item_id: int, body: MoveIn, store: CampaignStore = Depends(
 
 @router.post("/planning/{kind}/{item_id}/place")
 def place(kind: Kind, item_id: int, body: PlaceIn, store: CampaignStore = Depends(get_store)):
-    return call(line.place, store, kind, item_id, body.index)
+    return call(line.place, store, kind, item_id, body.anchor_kind, body.anchor_id, body.side)
 
 
 @router.post("/planning/{kind}/{item_id}/remove")

@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import {
   editIdea, errorMessage, getPlanning, holdItem, launchItems, listVoices, moveItem, placeItem, previewLaunch, previewPlanning, releaseIdea,
   removeIdea, removeItem, rerenderAsset, setStudioPaused, setTimer, startNow,
-  type ClaudeIdea, type IdeaEdit, type LaunchItem, type LaunchResult, type LineKind, type Planning as PlanningData, type PlanningHistory, type PlanningItem,
+  type ClaudeIdea, type IdeaEdit, type LaunchItem, type LaunchResult, type LineAnchor, type LineKind, type Planning as PlanningData, type PlanningHistory, type PlanningItem,
   type PlanningPreview, type PlanningStrip, type PlanningSupply, type PlanningWait, type Voice,
 } from '../api/client'
 import { Button } from '../ui/Button'
@@ -78,6 +78,12 @@ function removal(i: PlanningItem): Removal | null {
 }
 const keyOf = (r: Removal | LaunchItem) => `${r.kind}:${r.id}`
 
+/** A waiting render (its job) or film (its order) of the heavy line, else null. */
+function onLine(i: PlanningItem): { kind: LineKind; id: number } | null {
+  const r = removal(i)
+  return r && (r.kind === 'render' || r.kind === 'film') ? { kind: r.kind, id: r.id } : null
+}
+
 /** What « Lancer » takes (196): a waiting render, film, Claude idea, owner order or change
  * request (by its order, else its video), an AI run not running (its playbook); not one
  * already launched, nor an order waiting for the owner's instruction; else null. */
@@ -98,49 +104,66 @@ function launchable(i: PlanningItem): LaunchItem | null {
 }
 const TO_FRONT: LaunchItem['kind'][] = ['render', 'film', 'claude_idea'] // the rest waits for the machine
 
+const LEFT: Record<NonNullable<LaunchResult['left']>[number]['why'], string> = { held: 'en pause', timer: 'minuteur', machine: 'machine' }
+
 function summary(r: LaunchResult) {
   const n = (k: number, one: string, many: string) => `${k} ${k > 1 ? many : one}`
+  const left = r.left ?? []
   const parts = [
     r.front.length > 0 && `${n(r.front.length, 'passe', 'passent')} en tête de la file`,
     r.requested.length > 0 && `${n(r.requested.length, 'lancement demandé', 'lancements demandés')} : ${
       r.requested.length > 1 ? 'démarrent' : 'démarre'} ${r.busy ? 'dès que la machine est libre' : 'dans la minute'}`,
     r.refused.length > 0 && `${n(r.refused.length, 'refusé', 'refusés')} (${r.refused[0].message})`,
+    left.length > 0 && `${n(left.length, 'laissé', 'laissés')} : ${[...new Set(left.map((l) => LEFT[l.why]))].join(' / ')}`,
   ].filter(Boolean)
   const after = r.paused ? 'Studio en pause : rien ne démarre avant la reprise.' : 'La machine fait un seul travail lourd à la fois.'
   return `${parts.length ? parts.join(' · ') : 'Rien à lancer'}. ${after}`
 }
 
 /** « Lancer » one card or many (196): the delay warning first when renders, films or ideas go
- * to the front and push others back (190), then one toast summing it up. */
+ * to the front and push others back (190), then one toast summing it up. bulk (« Tout lancer »,
+ * « Lancer la sélection »): held, timer and machine-waiting cards stay where they are (200).
+ * Busy from the first click until the launch answers or the warning is cancelled (200). */
 function useLaunch(onDone: () => void) {
   const toast = useToast()
   const [busy, setBusy] = useState(false)
+  const running = useRef(false) // a second click before the re-render sends nothing
   const [ask, setAsk] = useState<{ pushed: Pushed; go: () => void } | null>(null)
-  const go = async (items: LaunchItem[]) => {
+  const done = () => {
+    running.current = false
+    setBusy(false)
+  }
+  const go = async (items: LaunchItem[], bulk: boolean) => {
     setAsk(null)
-    setBusy(true)
     try {
-      toast({ message: summary(await launchItems(items)), duration: 8000 })
+      toast({ message: summary(await launchItems(items, bulk)), duration: 8000 })
       onDone()
     } catch (e) {
       toast({ message: `Pas fait : ${errorMessage(e)}` })
     } finally {
-      setBusy(false)
+      done()
     }
   }
-  const launch = async (items: LaunchItem[]) => {
+  const launch = async (items: LaunchItem[], bulk = false) => {
+    if (running.current) return
+    running.current = true
+    setBusy(true)
     let pushed: Pushed = []
     if (items.some((l) => TO_FRONT.includes(l.kind))) {
       try {
-        pushed = (await previewLaunch(items)).pushed ?? []
+        pushed = (await previewLaunch(items, bulk)).pushed ?? []
       } catch {
         // no preview: the launch says what it refuses
       }
     }
-    if (pushed.length === 0) return void go(items)
-    setAsk({ pushed, go: () => void go(items) })
+    if (pushed.length === 0) return void go(items, bulk)
+    setAsk({ pushed, go: () => void go(items, bulk) })
   }
-  const box = ask && <DelayWarning pushed={ask.pushed} onConfirm={ask.go} onCancel={() => setAsk(null)} />
+  const cancel = () => {
+    setAsk(null)
+    done()
+  }
+  const box = ask && <DelayWarning pushed={ask.pushed} onConfirm={ask.go} onCancel={cancel} />
   return { busy, launch, box }
 }
 type Launch = ReturnType<typeof useLaunch>['launch']
@@ -231,6 +254,7 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
   const kind = out.kind // narrowed to the line's render | film
   const id = out.id
   const held = i.waits_on === 'held'
+  const machine = i.waits_on === 'machine' // « Lancer maintenant » skips the machine's retry wait (200)
   const timer = () => {
     const iso = new Date(when).toISOString() // the owner's local time, sent as UTC
     return act(() => setTimer(kind, id, iso), `Minuteur réglé : pas avant ${at(iso)}.`)
@@ -239,7 +263,9 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
     <div>
       <div className="flex flex-wrap items-end gap-2 pt-1">
         <Button size="sm" variant="primary" disabled={busy}
-          onClick={() => void guard({ action: 'start_now', kind, id }, () => startNow(kind, id), 'Passe en tête de la file.')}>
+          title={machine ? 'Sans attendre le nouvel essai de la machine (RAM, GPU ou voix)' : undefined}
+          onClick={() => void guard({ action: 'start_now', kind, id }, () => startNow(kind, id),
+            machine ? 'Passe en tête de la file, sans attendre le nouvel essai de la machine.' : 'Passe en tête de la file.')}>
           Lancer maintenant
         </Button>
         <Button size="sm" disabled={busy}
@@ -505,23 +531,26 @@ function arrange(items: PlanningItem[], order: string[] | null) {
   return items.map((i) => (rank.has(itemKey(i)) ? ranked[n++] : i))
 }
 
-type Place = (item: PlanningItem, index: number) => Promise<unknown>
+type Place = (item: PlanningItem, anchor: PlanningItem, side: LineAnchor['side']) => Promise<unknown>
 const EDGE_PX = 80 // a drag this close to the screen's top / bottom scrolls the page
 const SCROLL_PX = 12 // per frame
 
 /** Drag and drop (195): a waiting render or film (it has a line_index) is dragged by its grip
  * with the mouse or a finger (pointer events on the window; the grip's touch-none keeps the
  * page from scrolling); the cards reorder live as it crosses a neighbour's middle. The drop
- * sends the line index (line.place: among the others not held) of the card it lands before,
- * and the new order stays shown, through any poll, until the call and the reload answer. */
+ * sends an anchor (200, line.place): moved down, after the card now above it; moved up, before
+ * the card now below it, by their ids, so a stale page or cards shown out of line order (a
+ * timer, the machine) never land it wrong. The new order stays shown, through any poll, until
+ * the call and the reload answer; no other drag starts meanwhile. */
 function useDrag(items: PlanningItem[], onPlace?: Place) {
   const list = useRef<HTMLOListElement>(null)
   const [order, setOrder] = useState<string[] | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const shown = arrange(items, order)
   const movable = shown.filter((i) => i.line_index != null)
   const grab = (e: ReactPointerEvent, me: PlanningItem) => {
-    if (!onPlace || e.button !== 0 || dragging) return
+    if (!onPlace || e.button !== 0 || dragging || saving) return
     e.preventDefault()
     const key = itemKey(me)
     const start = movable.map(itemKey)
@@ -564,12 +593,13 @@ function useDrag(items: PlanningItem[], onPlace?: Place) {
       window.removeEventListener('pointercancel', end)
       setDragging(null)
       if (ev.type === 'pointercancel' || now.join() === start.join()) return setOrder(null)
-      // ponytail: "before the next card" in the line; a timer or a film's wait can show the
-      // cards in another order than the line's, the drop then lands next to that card.
-      const after = byKey.get(now[now.indexOf(key) + 1])
-      const mine = me.line_index!
-      const index = after ? after.line_index! - (after.line_index! > mine ? 1 : 0) : start.length - 1
-      void onPlace(me, index).finally(() => setOrder(null))
+      const to = now.indexOf(key)
+      const down = to > start.indexOf(key)
+      setSaving(true)
+      void onPlace(me, byKey.get(now[down ? to - 1 : to + 1])!, down ? 'after' : 'before').finally(() => {
+        setOrder(null)
+        setSaving(false)
+      })
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
@@ -577,7 +607,7 @@ function useDrag(items: PlanningItem[], onPlace?: Place) {
   }
   const grip = (i: PlanningItem) => i.line_index != null && onPlace && (
     <button type="button" tabIndex={-1} aria-label="Glisser pour déplacer" title="Glisser pour changer sa place (ou Monter / Descendre)"
-      onPointerDown={(e) => grab(e, i)}
+      disabled={saving} onPointerDown={(e) => grab(e, i)}
       className="-my-2 -ml-2 grid size-11 cursor-grab touch-none place-items-center rounded text-lg text-muted select-none active:cursor-grabbing">
       ⠿
     </button>
@@ -822,10 +852,10 @@ export default function Planning() {
       },
     })
   }
-  const place: Place = (i, index) => {
-    const r = removal(i)
-    if (r?.kind !== 'render' && r?.kind !== 'film') return Promise.resolve()
-    return placeItem(r.kind, r.id, index).then(() => {
+  const place: Place = (i, anchor, side) => {
+    const [me, next] = [onLine(i), onLine(anchor)]
+    if (!me || !next) return Promise.resolve()
+    return placeItem(me.kind, me.id, { ...next, side }).then(() => {
       toast({ message: 'Déplacé dans la file.' })
       return load()
     }, (e: unknown) => toast({ message: `Pas fait : ${errorMessage(e)}` }))
@@ -884,10 +914,10 @@ export default function Planning() {
           className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 mt-6 rounded-card border border-line bg-surface/95 p-3 text-sm shadow-overlay backdrop-blur-md lg:bottom-4">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="primary" disabled={launching || chosen.length === 0}
-              onClick={() => void launch(chosen)}>Lancer la sélection ({chosen.length})</Button>
-            <Button size="sm" disabled={launching} onClick={() => void launch(launchables)}>Tout lancer</Button>
+              onClick={() => void launch(chosen, true)}>Lancer la sélection ({chosen.length})</Button>
+            <Button size="sm" disabled={launching} onClick={() => void launch(launchables, true)}>Tout lancer</Button>
             {chosen.length > 0 && <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Désélectionner</Button>}
-            <span className="text-muted">Un seul travail lourd à la fois : le reste démarre dès que la machine est libre.</span>
+            <span className="text-muted">Un seul travail lourd à la fois : le reste démarre dès que la machine est libre. Les cartes en pause, minutées ou qui attendent la machine restent à leur place.</span>
           </div>
           {box}
         </div>

@@ -287,3 +287,31 @@ def test_a_render_waiting_for_the_machine_says_so(store, agent_dir):
     assert cards[machine]["waits_on"] == "machine" and cards[machine]["not_before"] == at
     assert "nouvel essai automatique" in cards[machine]["why_here"]
     assert cards[owner]["waits_on"] == "timer"
+
+
+def test_a_film_takes_the_ai_track_before_the_check_run_it_goes_ahead_of(
+        store, agent_dir, monkeypatch):
+    # audit 200 #11: the line is idle, a film and the check run both wait for the running
+    # run; catch_up starts the film first and nothing else while it plays
+    run = _run(store, "daily-produce", NOW - timedelta(minutes=5))  # running
+    _order(store, monkeypatch, "Un film", "lemo:watercolor", minutes_ago=30)
+    _checkable(store, 20)
+    items = planning.build_planning(store, cfg(), NOW)["items"]
+    running = next(i for i in items if i["ids"].get("run_id") == run)
+    film = next(i for i in items if i["kind"] == "film")
+    check = next(i for i in items if i["kind"] == "check_run")
+    assert film["est_start"] == running["est_ready"]
+    assert check["est_start"] == film["est_ready"]  # after the film, not over it
+    assert check["waits_on"] == "agent_running"
+
+
+def test_a_film_on_a_far_timer_holds_no_run_back(store, agent_dir, monkeypatch):
+    # the regression the #11 fix could cause: a film waiting on its timer is no AI run yet
+    film = _order(store, monkeypatch, "Un film", "lemo:watercolor", minutes_ago=30)
+    with store._tx() as c:
+        c.execute("UPDATE work_orders SET not_before = ? WHERE id = ?",
+                  (to_iso(NOW + timedelta(hours=5)), film))
+    _checkable(store, 20)
+    items = planning.build_planning(store, cfg(), NOW)["items"]
+    check = next(i for i in items if i["kind"] == "check_run")
+    assert parse_iso(check["est_start"]) == NOW and check["waits_on"] is None
