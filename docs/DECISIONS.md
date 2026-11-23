@@ -8,6 +8,21 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: A living new version replaces; a removed Claude card frees its place (199)
+An unsubmitted version stays out of the check list and the Inbox while a newer version of it
+lives (not failed, archived or dropped), up the chain (a version the owner sent back is
+archived once its own new one is ready: the first stays replaced). When the newer version
+dies the old one is back in the check list (and the Inbox once checked or after the grace),
+so its order or DM pick is never parked behind a hidden video. A day's places for Claude's
+ideas are fixed by that day's first producing packet; a later packet may only lower them
+(the owner's items it made no longer count, the batch stays the batch). « Retirer » on a
+planned Claude card (or the Inbox's « Archiver ») gives its place back for its batch day; a
+released card keeps it. The re-check clock (193) starts at the newest check run, whatever
+started it (catch_up, the owner's launch, the Agent page). A launch request whose start
+fails is dropped with a website alert, never a stale scope.
+Reason: audit 2026-11-23 (b) #4 #5 #9 #14 #17; owner: the cap is how many of Claude's ideas
+wait or get made.
+
 ## 2026-11-23: A film waits for its render through the machine's backoff (198)
 The film runner waits RENDER_WAIT_S (1 h) for its own render to be judged, and each
 machine failure of that render (`render.machine_wait`) starts the hour again: the machine's

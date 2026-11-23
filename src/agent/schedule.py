@@ -337,13 +337,21 @@ def check_wait(store: CampaignStore, settings: InstagramMCPSettings, now: dateti
     if now - newest < timedelta(minutes=settings.check_run_debounce_minutes):
         return "check_grace", newest
     since = newest
-    last = store.get_state("check_run_started_at")  # _launch's
+    last = check_started_at(store)
     if last:
-        again = parse_iso(last) + timedelta(hours=settings.check_recheck_hours)
+        again = last + timedelta(hours=settings.check_recheck_hours)
         if newest < again <= now:  # that run saw them all and left some: they count as new
             since = again
     return _gate(store, settings, now, since, (checks.PLAYBOOK,), "check",
                  settings.max_check_runs_per_day), newest
+
+
+def check_started_at(store: CampaignStore) -> Optional[datetime]:
+    """When the newest check run started, whatever started it (199: catch_up's _launch, the
+    owner's launch, the Agent page): its row, or _launch's time before the row exists."""
+    times = [store.get_state("check_run_started_at"),
+             *(r["started_at"] for r in store.list_agent_runs(checks.PLAYBOOK, limit=1))]
+    return max((parse_iso(t) for t in times if t), default=None)
 
 
 def check_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
@@ -448,24 +456,39 @@ def launched(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     """catch_up's first step (196): the oldest launch request starts its playbook (no grace,
     « seen » or daily cap; the run's own preflight fails it when the CLI cannot start), a
     light run on a selection with its scope set for the packet. Returns the playbook when
-    started; one already running waits (it is put back), an unknown playbook is dropped."""
+    started; one already running waits (it is put back); any other failure (an unknown
+    playbook, the process that cannot start...) drops it, logged with a website alert (199:
+    never lost silently). The scope never outlives a start that failed."""
     if not launch_requests(store):  # the usual tick: no write lock taken
         return None
     req = _edit_launches(store, lambda reqs: reqs.pop(0) if reqs else None)
     if req is None:
         return None
-    if req["only"] is not None:
-        store.set_state(packet.SCOPE_KEY, {**req["only"], "at": to_iso(now)})
+    started = False
     try:
+        if req["only"] is not None:
+            store.set_state(packet.SCOPE_KEY, {**req["only"], "at": to_iso(now)})
         start(store, settings, req["playbook"])
-    except AgentError as e:
-        store.set_state(packet.SCOPE_KEY, None)
-        if isinstance(e, AgentRunRefused):  # it runs already: it waits for the next tick
-            _edit_launches(store, lambda reqs: _join(reqs, req))
-        else:
-            print(f"agent launch: {e}", file=sys.stderr, flush=True)
-        return None
-    return req["playbook"]
+        started = True
+    except AgentRunRefused:  # it runs already: it waits for the next tick
+        _edit_launches(store, lambda reqs: _join(reqs, req))
+    except Exception as e:  # noqa: BLE001 - e.g. Popen's OSError: dropped, said
+        _launch_failed(store, req["playbook"], e, now)
+    finally:
+        if not started:
+            store.set_state(packet.SCOPE_KEY, None)
+    return req["playbook"] if started else None
+
+
+def _launch_failed(store: CampaignStore, playbook: str, error: BaseException,
+                   now: datetime) -> None:
+    from ..studio import alerts  # alerts imports the worker, which imports us
+
+    logger.warning("agent_launch_failed", playbook=playbook, error=repr(error))
+    alerts.raise_alert(store, "agent_launch", playbook, "error",
+                       "Un lancement de l'IA n'a pas pu démarrer",
+                       f"{playbook} : {error}. Relance-le depuis le Planning.", "/planning",
+                       now, renew=True)
 
 
 def busy(store: CampaignStore, *, queued: bool = True,

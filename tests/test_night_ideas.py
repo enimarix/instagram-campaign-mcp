@@ -52,8 +52,8 @@ def s(tmp_path, monkeypatch):
     return _settings(tmp_path)
 
 
-def _plan(store, s):
-    idea = store.add_idea("motion", hook="Le mythe du jus détox", batch_date=DAY)
+def _plan(store, s, day=DAY):
+    idea = store.add_idea("motion", hook="Le mythe du jus détox", batch_date=day)
     return motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
                                       idea_id=idea["id"], plan=True)["asset"]
 
@@ -93,6 +93,54 @@ def test_a_day_no_packet_opened_counts_its_places_at_once(store, s):
     _plan(store, s)
     with pytest.raises(ValueError, match="no place left"):
         _plan(store, s)
+
+
+def test_a_second_produce_run_the_same_day_keeps_the_first_places(store, s, tmp_path,
+                                                                 monkeypatch):
+    # 199 (#5): once the first run made the owner's items, ideas_left() grows back; the
+    # day's first packet fixed its places, a later one only lowers them
+    monkeypatch.setattr(B, "BIBLE_PATH", tmp_path / "BIBLE.md")
+    s4 = cfg(batch_size=4)
+    [order] = work_orders.create_orders(store, [{"source_id": _ref(store, "A"),
+                                                 "mode": "react"}])
+
+    def places():
+        packet.write_packet(store, s4, "daily-produce", tmp_path)
+        q = json.loads((tmp_path / "work" / "quotas.json").read_text(encoding="utf-8"))
+        return q["date"], q["places"]["ideas_left"]
+
+    day, left = places()
+    assert left == 3
+    _plan(store, s, day)
+    with store._tx() as c:  # the first run made the owner's item
+        c.execute("UPDATE work_orders SET status='in_production' WHERE id=?", (order["id"],))
+    assert planned.ideas_left(store, s4)["ideas_left"] == 4
+    assert places() == (day, 2)  # not 3: the batch stays 4 with the owner's item
+    _plan(store, s, day)
+    _plan(store, s, day)
+    with pytest.raises(ValueError, match="no place left"):
+        _plan(store, s, day)
+    assert planned.open_places(store, day, 0) == 0  # a later packet may lower them
+    assert store.get_state(planned.PLACES_KEY)[day] == {"places": 0, "taken": 3}
+
+
+def test_a_removed_card_gives_its_place_back_a_released_one_keeps_it(store, s):
+    # 199 (#17): the cap is how many of Claude's ideas wait or get made
+    planned.open_places(store, DAY, 2)
+    one, two = _plan(store, s), _plan(store, s)
+    with pytest.raises(ValueError, match="no place left"):
+        _plan(store, s)
+    planned.remove(store, one["id"])
+    assert planned.open_places(store, DAY, 2) == 1
+    three = _plan(store, s)  # the removed card's place
+    planned.release(store, s, two["id"])
+    assert store.get_asset(two["id"])["status"] == "rendering"
+    assert planned.open_places(store, DAY, 2) == 0  # the released card keeps its place
+    with pytest.raises(ValueError, match="no place left"):
+        _plan(store, s)
+    planned.archive(store, three["id"])  # the Inbox's « Archiver »: remove() too
+    assert planned.open_places(store, DAY, 2) == 1
+    planned.give_place(store, "2026-01-01")  # a day no packet opened: nothing to give
 
 
 # --- what waits for a check -------------------------------------------------------------
@@ -196,6 +244,58 @@ def test_a_fix_s_new_version_keeps_the_dm_pick_going(store):
     assert (got["status"], got["skip_reason"]) == ("skipped", "le rendu plante deux fois")
 
 
+def test_a_parent_whose_new_version_dies_is_offered_again(store):
+    # 199 (#4): only a living newer version replaces the old one; when it fails or is
+    # dropped the old one is back in the check list and the Inbox, its order not parked
+    now = utcnow()
+    [order] = work_orders.create_orders(store, [{"source_id": _ref(store, "A"),
+                                                 "mode": "inspired"}])
+    a = _done(store, 30)
+    with store._tx() as c:
+        c.execute("UPDATE work_orders SET status='in_production', idea_id="
+                  "(SELECT idea_id FROM assets WHERE id=?) WHERE id=?", (a, order["id"]))
+    b = _done(store, 5, parent=a)  # the check's re-render
+
+    def checked():
+        return [r["asset_id"] for r in checks.for_agent(store, now)["renders"]]
+
+    def replaced():
+        return checks.flag(store, cfg(), [{"id": a}], now)[0]["replaced"]
+
+    assert checked() == [b] and replaced()
+    with store._tx() as c:
+        c.execute("UPDATE assets SET status='failed' WHERE id=?", (b,))
+    assert checked() == [a, b] and not replaced()  # its render failed: `a` is back
+    with store._tx() as c:  # re-rendered in place: it lives again
+        c.execute("UPDATE assets SET status='ready' WHERE id=?", (b,))
+    assert checked() == [b] and replaced()
+    checks.drop(store, b, "le texte sort encore du cadre après 2 rendus")
+    assert checked() == [a] and not replaced()
+    assert work_orders.get_order(store, order["id"])["status"] == "in_production"  # `a` lives
+    checks.drop(store, a, "la première version non plus")
+    assert work_orders.get_order(store, order["id"])["status"] == "skipped"  # never parked
+
+
+def test_an_old_version_stays_replaced_while_a_version_after_it_lives(store):
+    # old #17 still holds: out for good, beyond 24 h, while a newer version lives, up the
+    # chain (the owner sent the new version back: archived once its own new one is ready)
+    now = utcnow()
+    a = _done(store, 60 * 30)
+    b = _done(store, 60 * 29, parent=a)
+    store.update_asset(b, self_score_reason="")  # the check submitted the new version
+    c = _done(store, 60 * 28, parent=b)
+
+    def replaced():
+        return {r["id"]: r["replaced"] for r in checks.flag(store, cfg(), [{"id": a}], now)}
+
+    with store._tx() as cx:
+        cx.execute("UPDATE assets SET status='archived' WHERE id=?", (b,))
+    assert replaced() == {a: True}
+    with store._tx() as cx:  # nothing after it lives any more: the owner's again
+        cx.execute("UPDATE assets SET status='archived' WHERE id=?", (c,))
+    assert replaced() == {a: False}
+
+
 # --- the trigger --------------------------------------------------------------------------
 class Starts:
     def __init__(self):
@@ -237,6 +337,28 @@ def test_a_video_a_check_run_left_is_offered_again(store):
     assert run(4) == "check-renders" and len(f.runs) == 2  # it left it: offered again
     assert schedule.check_wait(store, s, now + timedelta(hours=5))[0] == "seen"
     assert schedule.check_wait(store, s, now + timedelta(hours=8))[0] == "daily_cap"
+
+
+def test_the_re_check_keys_on_an_owner_launched_check_run(store):
+    # 199 (#9): a check run the owner launched (no _launch time) starts the re-check clock
+    from datetime import datetime, timezone
+
+    s = cfg(check_recheck_hours=4)
+    now = datetime(2026, 11, 23, 1, 0, tzinfo=timezone.utc)
+    _done(store, 30, now=now)
+    schedule.request_launch(store, checks.PLAYBOOK, now)
+
+    def start(st, settings, playbook):  # what the started process does: its row
+        run = st.start_agent_run(playbook)
+        st.finish_agent_run(run["id"], "succeeded")
+        with st._tx() as c:
+            c.execute("UPDATE agent_runs SET started_at=? WHERE id=?", (to_iso(now), run["id"]))
+
+    assert schedule.launched(store, s, now, start=start) == checks.PLAYBOOK
+    assert store.get_state("check_run_started_at") is None
+    assert schedule.check_started_at(store) == now
+    assert schedule.check_wait(store, s, now + timedelta(hours=3.9))[0] == "seen"
+    assert schedule.check_wait(store, s, now + timedelta(hours=4))[0] is None  # not « seen »
 
 
 def test_check_run_preflight_retry(store):

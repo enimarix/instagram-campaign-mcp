@@ -4,7 +4,8 @@ The check run (step 188c): a finished render is checked before the owner sees it
 The night run no longer waits for its renders. A video waits for its check once its render
 finished (in the last HORIZON): `ready`, not judged, never submitted, or `failed`; never a
 Lemo film (the film runner checks its own film: lemo-film.md, today's path), never one the
-check dropped, never one with a newer version (its re-render took over), never the owner's
+check dropped, never one a living newer version replaces (its re-render took over; 199:
+when that one fails, is archived or dropped, the old one is back), never the owner's
 own re-render of a submitted video (next reaction piece, fixed transcript: today's path).
 The light check run (agent/playbooks/check-renders.md, started by schedule.check_run) looks
 at each one: frames and QC, a re-render (at most MAX_RERENDERS per video: the render jobs of
@@ -16,8 +17,8 @@ decision; one a run left anyway is offered again CHECK_RECHECK_HOURS after that 
 
 The Inbox hides a `ready` video waiting for its check (flag), unless its render finished
 more than CHECK_INBOX_GRACE_HOURS ago or the check run cannot run (failing()): then it shows
-as before, so nothing is lost. An unsubmitted one a newer version replaces is hidden for
-good (193): the newer version carries on.
+as before, so nothing is lost. An unsubmitted one a living newer version replaces is hidden
+for good (193), while that version lives (199): it carries on.
 """
 
 from __future__ import annotations
@@ -41,9 +42,19 @@ PROPS_MAX = 20_000  # characters of one video's props in the packet; past it the
 _FINISHED = ("COALESCE((SELECT MAX(j.finished_at) FROM render_jobs j"
              " WHERE j.asset_id = a.id), a.updated_at)")
 _OPEN = "a.verdict = 'none' AND a.self_score_reason IS NULL"  # nobody submitted or judged it
-_HAS_CHILD = "EXISTS (SELECT 1 FROM assets c WHERE c.parent_asset_id = a.id)"
+# a version that lives: not archived, failed or dropped (the check run's drop, drop())
+_LIVES = ("{0}.status NOT IN ('archived', 'failed')"
+          " AND COALESCE(json_extract({0}.agent_decision, '$.kind'), '') <> 'dropped'")
+# the versions a living newer one replaces (199): the parents of a living version, up the
+# chain (a version the owner sent back is archived once its own new one is ready: its parent
+# stays replaced); when the newer version dies the old one is back
+_REPLACED_IDS = (
+    "WITH RECURSIVE replaced(id) AS (SELECT c.parent_asset_id FROM assets c"
+    f" WHERE c.parent_asset_id IS NOT NULL AND {_LIVES.format('c')}"
+    " UNION SELECT p.parent_asset_id FROM assets p JOIN replaced r ON p.id = r.id"
+    "  WHERE p.parent_asset_id IS NOT NULL) ")
 _WAITING = (
-    "SELECT a.id, a.idea_id, a.parent_asset_id, a.status, a.caption, a.description, a.qc,"
+    _REPLACED_IDS + "SELECT a.id, a.idea_id, a.parent_asset_id, a.status, a.caption, a.description, a.qc,"
     " a.recipe, json_extract(a.recipe, '$.template') AS template, i.track, i.hook, i.style,"
     f" i.source_id, {_FINISHED} AS finished_at,"
     # the last job's reason when it failed: a render crash (a QC fail has none)
@@ -57,12 +68,13 @@ _WAITING = (
     f" WHERE a.status IN ('ready', 'failed') AND {_OPEN}"
     " AND substr(COALESCE(i.style, ''), 1, 5) <> 'lemo:'"
     " AND COALESCE(json_extract(a.agent_decision, '$.kind'), '') <> 'dropped'"
-    f" AND NOT {_HAS_CHILD}"
+    " AND a.id NOT IN (SELECT id FROM replaced)"
     " AND NOT EXISTS (SELECT 1 FROM assets p WHERE p.id = a.parent_asset_id"
     "  AND p.status = 'ready' AND p.self_score_reason IS NOT NULL)"  # the owner's re-render
     f" AND {_FINISHED} >= ? ORDER BY finished_at, a.id")
-# ready, unsubmitted, and a newer version of it exists (the check re-rendered it): for good
-_REPLACED = f"SELECT a.id FROM assets a WHERE a.status = 'ready' AND {_OPEN} AND {_HAS_CHILD}"
+# ready, unsubmitted, and a living newer version of it exists (the check re-rendered it)
+_REPLACED = (_REPLACED_IDS + "SELECT a.id FROM assets a WHERE a.status = 'ready'"
+             f" AND {_OPEN} AND a.id IN (SELECT id FROM replaced)")
 # the render jobs of the idea's versions nobody submitted or judged: the first render and
 # the re-renders (in place, a child or a new remix); a version sent back for changes, or
 # submitted, starts the count again; a job re-queued for the same recipe counts each time
@@ -180,7 +192,8 @@ def flag(store: CampaignStore, settings: InstagramMCPSettings, rows: List[Dict[s
          now: datetime) -> List[Dict[str, Any]]:
     """The Inbox's asset rows with awaiting_check (while the check run can run: a `ready`
     video waiting for its check whose render finished less than CHECK_INBOX_GRACE_HOURS
-    ago) and replaced (an unsubmitted `ready` one a newer version replaces: for good)."""
+    ago) and replaced (an unsubmitted `ready` one a living newer version replaces: for good,
+    while that version lives)."""
     hidden = set()
     if not failing(store):
         since = to_iso(now - timedelta(hours=settings.check_inbox_grace_hours))
@@ -213,11 +226,10 @@ def drop(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
     idea = store.get_idea(asset["idea_id"])
     with store._tx() as c:
         # another version of the idea lives (a fix's new version): its order and pick go on
-        alive = c.execute(
-            "SELECT 1 FROM assets WHERE idea_id = ? AND id <> ?"
-            " AND status NOT IN ('archived', 'failed')"
-            " AND COALESCE(json_extract(agent_decision, '$.kind'), '') <> 'dropped'",
-            (idea["id"], asset_id)).fetchone()
+        # (an old version a living one replaces counts for nothing more: that one lives; with
+        # this video dropped, the one it replaced is back in the check list and the Inbox)
+        alive = c.execute("SELECT 1 FROM assets v WHERE v.idea_id = ? AND v.id <> ?"
+                          f" AND {_LIVES.format('v')}", (idea["id"], asset_id)).fetchone()
         orders = [] if alive else [r[0] for r in c.execute(
             "SELECT id FROM work_orders WHERE idea_id = ? AND status = 'in_production'",
             (idea["id"],))]
