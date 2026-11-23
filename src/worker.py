@@ -45,7 +45,7 @@ from .config import InstagramMCPSettings
 from .instagram_client import Breaker, InstagramClient
 from .learning import evidence, experiments, facts
 from .store import CampaignStore, parse_dt, to_iso, utcnow
-from .studio import dm_picks, downloader_service, housekeeping, power, render
+from .studio import dm_picks, downloader_service, housekeeping, line, power, render
 from .studio.power import keep_awake
 from .studio.publish import reconcile_publish_checks
 
@@ -279,11 +279,12 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
                       run: Optional[Callable[[Dict[str, Any]], Any]] = None,
                       interval: float = RENDER_TICK, stale_after: timedelta = RENDER_STALE
                       ) -> None:
-    """Render queued jobs, up to settings.render_concurrency at once, each in a thread so
-    the loop stays responsive; heartbeat running jobs; keep the PC awake while any runs;
-    claim nothing while the media disk is under the floor; run daily_housekeeping between
-    batches. Runs until cancelled (a job cut off then is re-queued once its heartbeat is
-    stale)."""
+    """Render queued jobs in line order (studio/line.py: none starts while a film that
+    arrived earlier waits for the catch-up), up to settings.render_concurrency at once,
+    each in a thread so the loop stays responsive; heartbeat running jobs; keep the PC
+    awake while any runs; claim nothing while the media disk is under the floor; run
+    daily_housekeeping between batches. Runs until cancelled (a job cut off then is
+    re-queued once its heartbeat is stale)."""
     run = run or functools.partial(render.run_job, store, settings.media_root)
     running: Dict[int, asyncio.Task] = {}
     disk_warned = float("-inf")
@@ -299,7 +300,12 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
                           " media disk; no render starts", file=sys.stderr, flush=True)
                 return
             free = settings.render_concurrency - len(running)
-            for job in store.claim_render_jobs(free, stale_before=utcnow() - stale_after):
+            if free <= 0:
+                return
+            stale = utcnow() - stale_after
+            store.requeue_stale_render_jobs(stale)  # first: a crashed job keeps its place
+            ids = line.renders_next(store, settings, utcnow(), free)  # every free slot
+            for job in store.claim_render_jobs(free, stale_before=stale, ids=ids):
                 running[job["id"]] = asyncio.create_task(asyncio.to_thread(run, job))
         except Exception as e:  # noqa: BLE001 - e.g. database locked: try next tick
             print(f"render queue: {e!r}", file=sys.stderr, flush=True)

@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore
-from . import media, style_catalog
+from . import line, media, style_catalog
 from .assets import DESCRIPTION_CHARS
 from .render import enqueue_render
 
@@ -120,7 +120,8 @@ def _citations(sources: Any) -> List[Dict[str, str]]:
 def register_film(store: CampaignStore, settings: InstagramMCPSettings,
                   order: Dict[str, Any], idea: Dict[str, Any], workspace: Path
                   ) -> Dict[str, Any]:
-    """The delivered film becomes an asset of the order's idea, queued for render + QC.
+    """The delivered film becomes an asset of the order's idea, queued for render + QC at
+    the front of the heavy line (186).
     Returns {asset, job}; ValueError when the film delivered no final.mp4."""
     from .production import default_best_before  # here: production imports work_orders
 
@@ -146,4 +147,9 @@ def register_film(store: CampaignStore, settings: InstagramMCPSettings,
         description=_text(post.get("description"), DESCRIPTION_CHARS)
         or f"Un film Lemo-Opuscar ({idea['style']}) : {hook}"[:DESCRIPTION_CHARS],
         best_before=default_best_before(store, settings, {"idea_id": idea["id"]}))
-    return {"asset": asset, "job": enqueue_render(store, asset["id"])}
+    job = enqueue_render(store, asset["id"])
+    try:  # the film waits for this render (film._wait_render): it goes first in the line
+        line.start_now(store, "render", job["id"])
+    except ValueError:  # the render loop took it already
+        pass
+    return {"asset": asset, "job": job}

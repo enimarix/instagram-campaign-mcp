@@ -5,13 +5,15 @@ build_planning(store, settings, now) -> {now, items} lists one chain, in the ord
 worker really takes the work today:
 
 - running: the render in progress (render_jobs, one at a time) and the agent run going;
-- next: the queued renders, oldest id first (the render loop's claim order), then what the
-  worker's catch-up starts once nothing is busy, in schedule.CATCH_UP_ORDER: a due
-  playbook, the oldest Lemo films (LEMO_FILMS_PER_DAY), the light run for the owner's
-  orders and change requests (schedule.order_wait: grace, daily cap...) followed by each
-  of their renders; then the orders that wait for the owner's instruction (no time);
-- planned: the scheduled AI runs of the next 24 h as placeholders; the producing run says
-  what it picks up first and how many places stay for Claude's own ideas.
+- next: in schedule.CATCH_UP_ORDER, the heavy line (studio/line.py, 186: queued renders
+  and Lemo films, first in first out, « start now » first, a timer skipping without
+  blocking: line.head() again on a simulated clock, LEMO_FILMS_PER_DAY moving the next
+  day's films past midnight), then a due playbook, the light run for the owner's orders
+  and change requests (schedule.order_wait: grace, daily cap...) followed by each of their
+  renders; then the orders that wait for the owner's instruction (no time);
+- planned: the scheduled AI runs of the next 24 h as placeholders, none before the chain
+  ahead is done; the producing run says what it picks up first and how many places stay
+  for Claude's own ideas.
 
 Every time is an estimate (`estimated: true`): each item starts when the one before is
 ready. A duration is the median of the recent real ones (render_jobs.render_ms per engine,
@@ -31,7 +33,7 @@ from ..agent import film, packet, schedule
 from ..config import InstagramMCPSettings
 from ..learning.learnings import list_revision_requests
 from ..store import CampaignStore, parse_iso, to_iso
-from . import cinematic, dm_picks, lemo, macro3d, sitcom, voices, work_orders
+from . import cinematic, dm_picks, lemo, line, macro3d, sitcom, voices, work_orders
 
 # Fallback seconds per engine (DECISIONS: Remotion ~0.4 min per 30 s video; the 8-shot
 # Blender proof 13.1 min; Macro3D's first Blender plates 12-15 min). ponytail: ffmpeg's
@@ -87,7 +89,7 @@ def _item(section: str, kind: str, title: str, start: Optional[datetime],
           duration: Optional[float], why: str, *, waits_on: Optional[str] = None,
           source: Optional[str] = None, style: Optional[str] = None,
           engine: Optional[str] = None, voice: Optional[str] = None,
-          **ids: Optional[int]) -> Dict[str, Any]:
+          not_before: Optional[str] = None, **ids: Optional[int]) -> Dict[str, Any]:
     timed = start is not None and duration is not None
     return {"section": section, "kind": kind, "title": title, "source": source,
             "ids": {k: v for k, v in ids.items() if v is not None},
@@ -96,6 +98,7 @@ def _item(section: str, kind: str, title: str, start: Optional[datetime],
             "est_duration_s": round(duration) if duration is not None else None,
             "est_ready": to_iso(start + timedelta(seconds=duration)) if timed else None,
             "estimated": True, "why_here": why, "waits_on": waits_on,
+            "not_before": not_before,
             "stage": None, "progress": None}
 
 
@@ -155,11 +158,12 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                    ) -> Dict[str, Any]:
     """{now, items}: the chain (see module doc). Item: section running | next | planned,
     kind render | film | order_run | agent_run | work_order | change_request, title,
-    source, ids {order_id, asset_id, pick_id, run_id}, style, engine, voice, est_start,
-    est_duration_s, est_ready (ISO, None when it waits on the owner), estimated, why_here,
-    waits_on (gpu_busy | agent_running | order_grace | daily_cap | preflight | next_ai_run
-    | needs_instruction | None), stage and progress (running items), picks_up (the
-    producing run's placeholder)."""
+    source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
+    est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
+    why_here, waits_on (gpu_busy | agent_running | timer | order_grace | daily_cap |
+    preflight | next_ai_run | needs_instruction | None), not_before (a waiting render's or
+    film's timer, UTC ISO), stage and progress (running items), picks_up (the producing
+    run's placeholder)."""
     with store._tx() as c:
         jobs = [dict(r) for r in c.execute(_JOBS)]
     render_s = _render_s(store)
@@ -173,37 +177,67 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
         items.append(item)
         cursor = _ready(item) or cursor
 
-    for n, j in enumerate(j for j in jobs if j["state"] == "queued"):
-        engine = _engine(j["recipe"])
-        ahead = n > 0 or any(i["kind"] == "render" for i in items)
-        add(_item("next", "render", _title(j["hook"], j["caption"], f"Vidéo {j['asset_id']}"),
-                  cursor, render_s[engine],
-                  "File des rendus : le plus ancien d'abord, un à la fois.",
-                  waits_on="gpu_busy" if ahead else None, source=j["origin"] or "agent",
-                  style=j["style"], engine=engine, asset_id=j["asset_id"],
-                  order_id=j["order_id"], pick_id=j["pick_id"]))
-    busy = "gpu_busy" if jobs else "agent_running" if agent_busy else None
+    busy: Optional[str] = None
+
+    def heavy() -> None:
+        nonlocal cursor, busy
+        rows = {("render", j["id"]): j for j in jobs if j["state"] == "queued"}
+        rows.update({("film", o["id"]): o for o in work_orders.list_orders(
+            store, "scheduled", newest=False) if lemo.is_lemo(o["style"])})
+        pending = [i for i in line.waiting(store) if (i["kind"], i["id"]) in rows]
+        took = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
+        quota = left = settings.lemo_films_per_day - film.films_today(store, settings, now)
+        reset, films_n, idle_at, n = _midnight(settings, now), 0, None, len(items)
+        ahead = any(i["kind"] in ("render", "film") for i in items)
+        while pending:
+            if cursor >= reset:  # the caps reset at owner-local midnight
+                left, reset = settings.lemo_films_per_day, _midnight(settings, cursor)
+            i = line.head(pending, cursor, films=left > 0)
+            if i is None:  # each one waits on its timer, or the films on tomorrow
+                if idle_at is None:  # the line is idle: the agent runs can go (busy)
+                    idle_at, n = cursor, len(items)
+                cursor = min([t for t in (parse_iso(p["not_before"]) for p in pending
+                                          if p["not_before"]) if t > cursor]
+                             + ([reset] if left <= 0 else []))
+                continue
+            pending.remove(i)
+            r, nb = rows[(i["kind"], i["id"])], i["not_before"]
+            timer = bool(nb) and parse_iso(nb) > now
+            capped = i["kind"] == "film" and films_n >= quota
+            waits = ("timer" if timer else "daily_cap" if capped
+                     else "gpu_busy" if ahead else
+                     "agent_running" if agent_busy and i["kind"] == "film" else None)
+            why = ("Lancé maintenant : il passe devant la file." if i["pos"] < 0 else
+                   "Minuteur : il attend son heure sans bloquer la file." if timer else
+                   "File unique des rendus et des films : le premier arrivé passe d'abord,"
+                   " un à la fois.")
+            if i["kind"] == "render":
+                engine = _engine(r["recipe"])
+                add(_item("next", "render", _title(r["hook"], r["caption"],
+                                                   f"Vidéo {r['asset_id']}"),
+                          cursor, render_s[engine], why, waits_on=waits, not_before=nb,
+                          source=r["origin"] or "agent", style=r["style"], engine=engine,
+                          asset_id=r["asset_id"], order_id=r["order_id"],
+                          pick_id=r["pick_id"], job_id=r["id"]))
+            else:
+                films_n, left = films_n + 1, left - 1
+                add(_item("next", "film", _title(r["instruction"], f"Film {r['id']}"), cursor,
+                          took, why, waits_on=waits, not_before=nb, source=r["source"],
+                          style=r["style"], engine="film", order_id=r["id"],
+                          pick_id=r["pick_id"]))
+            ahead = True
+        if idle_at is not None:  # what waits on a timer holds no agent run back
+            cursor, chain = idle_at, items[:n]
+        else:
+            chain = items
+        busy = ("gpu_busy" if any(i["kind"] == "render" for i in chain) else
+                "agent_running" if chain else None)
 
     def playbook() -> None:
         for name in schedule.due_runs(store, settings, now):
             add(_item("next", "agent_run", f"Run {name}", cursor, _run_s(store, name),
                       "Run prévu pas encore lancé : il passe dès que rien ne tourne.",
                       waits_on=busy, source="agent"))
-
-    def films() -> None:
-        nonlocal cursor
-        took = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
-        done = film.films_today(store, settings, now)
-        for o in (o for o in work_orders.list_orders(store, "scheduled", newest=False)
-                  if lemo.is_lemo(o["style"])):
-            waits = busy
-            if done >= settings.lemo_films_per_day:  # the next day's films
-                cursor, done, waits = _midnight(settings, cursor), 0, "daily_cap"
-            done += 1
-            add(_item("next", "film", _title(o["instruction"], f"Film {o['id']}"), cursor, took,
-                      "Film Lemo : le plus ancien d'abord, après les runs prévus.",
-                      waits_on=waits, source=o["source"], style=o["style"], engine="film",
-                      order_id=o["id"], pick_id=o["pick_id"]))
 
     def orders() -> None:
         nonlocal cursor
@@ -244,7 +278,7 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
                       cursor, render_s[engine], why_here, waits_on=waits, source="change",
                       engine=engine, asset_id=a["id"]))
 
-    steps = {"playbook": playbook, "film": films, "orders": orders}
+    steps = {"film": heavy, "playbook": playbook, "orders": orders}
     for step in schedule.CATCH_UP_ORDER:
         steps[step]()
 
@@ -258,7 +292,7 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
     for r in sorted(schedule.next_runs(settings, now), key=lambda r: r["next_at"]):
         if r["next_at"] - now > HORIZON:
             continue
-        start = max(filter(None, (r["next_at"], planned_at)))
+        start = max(filter(None, (r["next_at"], planned_at, cursor)))  # after the chain
         item = _item("planned", "agent_run", f"Run {r['playbook']}", start,
                      _run_s(store, r["playbook"]), f"Prévu chaque jour à {r['time']}."
                      if not r["weekly"] else f"Prévu chaque semaine ({r['time']}).",

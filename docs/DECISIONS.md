@@ -8,6 +8,25 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: Heavy work goes in one line, first in first out; start now and timers (186)
+Renders and Lemo films wait in one line (`src/studio/line.py`), by arrival: a render job's
+`created_at`, a film order's `scheduled_at` (old rows sort exactly as before). `next_in_line`
+decides the head: the render loop claims it when it is a render, the catch-up starts it when it
+is a film, the Planning page lists the line the same way. A film that arrived first goes before
+the renders queued after it (queued renders no longer hold films back: only a running render
+does), and no render starts while an earlier film waits. A film the runner could not take now
+(an agent run is running, today's `LEMO_FILMS_PER_DAY` are made, the preflight just failed) is
+skipped, so it never blocks the renders behind it; a film's own final render goes to the front
+(the film waits for it). On the Planning page each waiting render or film can « Lancer
+maintenant » (ahead of every waiting item, the latest press first; the running item is never
+stopped; its timer is cleared) or get a « Minuteur » (`not_before`, stored UTC, shown in the
+owner's time): it is skipped until then without blocking the line. The catch-up now tries the
+film before a due playbook. What stays as before: agent runs (due playbooks, the light run for
+orders) are not in the line and still start only when no run is running and no render is
+queued or running; one render at a time; one film at a time.
+Reason: owner decision 2026-11-22: a queued render blocked every film, and films only went
+after the due playbooks: the order was decided by rules, not by arrival.
+
 ## 2026-11-22: Voices are designed recipes, picked on the Voix page (owner's re-casting)
 The owner found the cloned voices robotic ("AI slop"). Six casting rounds by ear
 (`data/voice-trials/`, rated on a phone page) settled it: a voice is a VoxCPM2 **recipe**, not a

@@ -10,8 +10,9 @@ one), it has no run started today, it isn't running and its file exists. Three c
   starting due runs detached one at a time, each once the last run and its renders are done
   (166) (a run missed while the PC was off starts after the next logon, same day),
   and the light run the owner's scheduled work orders (136) and change requests (147) ask
-  for, or new capability re-wakes (156) (order_run); before those, the oldest scheduled
-  Lemo-Opuscar order goes to the film runner (film_run, 173);
+  for, or new capability re-wakes (156) (order_run); before those, the Lemo-Opuscar order
+  at the head of the heavy line (studio/line.py, 186) goes to the film runner (film_run,
+  173), even while renders wait behind it;
 - the website's Settings page: overview() (next and last run per playbook).
 
 install_schedule() registers the OS side: on Windows a logon task for `up` and one daily
@@ -36,7 +37,7 @@ import structlog
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from ..studio import styles, work_orders
+from ..studio import line, styles, work_orders
 from . import film
 from .packet import RUNS
 from .runner import (
@@ -73,9 +74,10 @@ _NEWEST_WORK = (
 # 156: something the light run would look at again when the studio can make more
 _WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_requested')"
             f" OR EXISTS (SELECT 1 FROM work_orders WHERE {_AGENT_ORDER})")
-# what catch_up starts first, once nothing is busy: a due playbook, else the oldest Lemo
-# film, else the light run for the orders; the Planning page (185) lists them in this order
-CATCH_UP_ORDER = ("playbook", "film", "orders")
+# what catch_up starts first: the Lemo film at the head of the line (186: heavy work by
+# arrival, not after the runs), else a due playbook, else the light run for the orders;
+# the Planning page (185) lists them in this order
+CATCH_UP_ORDER = ("film", "playbook", "orders")
 CAPABILITIES_KEY = "style_capabilities"  # worker_state: {styles, gained_at}
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
@@ -291,11 +293,12 @@ def order_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
 def film_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
              start: Callable[..., Any], check: Optional[Callable[..., Any]] = None
              ) -> Optional[int]:
-    """The oldest scheduled Lemo-Opuscar order starts the film runner (173). Returns its id
-    when started, else None. Not while a film runs (one at a time; orders a dead film left
-    in_production are skipped first, film.close_orphans), nor past LEMO_FILMS_PER_DAY, nor
-    while the agent preflight fails (asked again ORDER_RETRY later); the Lemo orders'
-    blocked_reason says why when it is the cap or the preflight."""
+    """The scheduled Lemo-Opuscar order at the head of the heavy line (line.next_in_line,
+    186) starts the film runner (173). Returns its id when started, else None. Not while a
+    film runs (one at a time; orders a dead film left in_production are skipped first,
+    film.close_orphans), nor past LEMO_FILMS_PER_DAY, nor while the agent preflight fails
+    (asked again ORDER_RETRY later); the Lemo orders' blocked_reason says why when it is the
+    cap or the preflight."""
     try:
         film.check_film(store, settings, now)
     except AgentRunRefused:
@@ -305,12 +308,10 @@ def film_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
             work_orders.set_blocked(store, str(e), films=True)
         return None
     film.close_orphans(store)
-    order = film.next_order(store)
-    if not order:
+    first = line.next_in_line(store, settings, now)  # None too while the preflight fails
+    if not first or first["kind"] != "film":
         return None
-    failed = store.get_state("order_preflight_failed_at")
-    if failed and now - parse_iso(failed) < ORDER_RETRY:
-        return None
+    order = work_orders.get_order(store, first["id"])
     try:
         (check or preflight)(settings)
         start(store, settings, order["id"])
@@ -322,13 +323,17 @@ def film_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     return order["id"]
 
 
-def busy(store: CampaignStore) -> Optional[str]:
+def busy(store: CampaignStore, *, queued: bool = True,
+         now: Optional[datetime] = None) -> Optional[str]:
     """Why the catch-up starts no run now (166: never back to back), else None: a run is
-    running (one whose runner is gone is closed first, 155), or renders are queued."""
+    running (one whose runner is gone is closed first, 155), or renders are running or
+    queued (one waiting on its timer does not count, 186). queued=False (the film): only a
+    running render counts, the queued ones wait behind it in the line."""
     close_dead_runs(store)
     if store.running_agent_runs(limit=1):
         return "an agent run is running"
-    if any(store.list_render_jobs(state, limit=1) for state in ("queued", "running")):
+    if store.list_render_jobs("running", limit=1) or queued and line.head(
+            [i for i in line.waiting(store) if i["kind"] == "render"], now or utcnow()):
         return "renders are waiting"
     return None
 
@@ -337,10 +342,10 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              start: Optional[Callable[..., Any]] = None,
              now: Optional[Callable[[], datetime]] = None,
              start_film: Optional[Callable[..., Any]] = None) -> List[str]:
-    """Start the first due playbook detached (runs.start_run), else a Lemo film (film_run,
-    runs.start_film), else the work orders' run if they need one (order_run); nothing while
-    busy(): one run, then the next waits for it and its renders. Never raises: the worker
-    lives.
+    """Start the Lemo film at the head of the line (film_run, runs.start_film), else the
+    first due playbook detached (runs.start_run), else the work orders' run if they need
+    one (order_run); nothing while busy(): one run, then the next waits for it and its
+    renders (a film only for a running render, 186). Never raises: the worker lives.
     ponytail: a run's row appears a second or two after its start, well within a tick."""
     from .runs import start_film as start_film_run
     from .runs import start_run
@@ -364,9 +369,9 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              "orders": lambda: order_run(store, settings, now(), start=start or start_run)}
     started = []
     try:
-        if busy(store):
-            return started
         for step in CATCH_UP_ORDER:
+            if busy(store, queued=step != "film", now=now()):
+                continue
             got = steps[step]()
             if got:
                 started.append(got)
