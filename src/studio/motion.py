@@ -55,6 +55,7 @@ from . import (  # render.py imports us
     styles,
     voices,
 )
+from .assets import checked_fields
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
 
@@ -451,18 +452,43 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
                         template: str, props: Dict[str, Any], idea_id: Optional[int] = None,
                         asset_id: Optional[int] = None, caption: Optional[str] = None,
                         voice: Optional[str] = None, music_audio_id: Optional[str] = None,
-                        actor: str = "agent") -> Dict[str, Any]:
+                        actor: str = "agent", plan: bool = False,
+                        description: Optional[str] = None) -> Dict[str, Any]:
     """Store a motion recipe and queue its render; returns {asset, job} at once (the worker
     renders). New asset for `idea_id`, or a re-render of `asset_id` (failed: same asset;
     ready: a child asset). Never waits for the voice: a template with a script and no voice yet
     is stored with `voice_todo` (the voice checked on now) and the render job makes it.
     `music_audio_id`: an Instagram track (fetched with music.fetch) the video is cut to and
-    published with, in place of the template's bed (step 178)."""
+    published with, in place of the template's bed (step 178).
+    `plan` (188b): a new asset `planned` with its recipe, caption and description, and no
+    job (job None): nothing renders or is voiced until the owner releases it
+    (src/studio/planned.py)."""
     if (idea_id is None) == (asset_id is None):
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
-    # 138: the template must be in the idea's style (one without takes the template's)
-    styles.check_template(store, store.get_idea(
-        idea_id if idea_id is not None else store.get_asset(asset_id)["idea_id"]), template)
+    if plan and asset_id is not None:
+        raise ValueError("plan a new video (idea_id), not a re-render")
+    fields = checked_fields("planned", **{k: x for k, x in (
+        ("caption", caption), ("description", description)) if x is not None}) if plan else {}
+    idea = store.get_idea(idea_id if idea_id is not None
+                          else store.get_asset(asset_id)["idea_id"])
+    env = motion_recipe(store, settings, idea, template, props, voice, music_audio_id, plan)
+    if asset_id is not None:
+        return render.rerender(store, settings.media_root, asset_id, env, actor=actor)
+    if plan:
+        asset = store.add_asset(idea_id, recipe=env, batch_date=idea["batch_date"],
+                                status="planned", **fields)
+        return {"asset": asset, "job": None}
+    asset = store.add_asset(idea_id, recipe=env, caption=caption, batch_date=idea["batch_date"])
+    return {"asset": asset, "job": render.enqueue_render(store, asset["id"])}
+
+
+def motion_recipe(store: CampaignStore, settings: InstagramMCPSettings, idea: Dict[str, Any],
+                  template: str, props: Dict[str, Any], voice: Optional[str],
+                  music_audio_id: Optional[str], plan: bool = False) -> Dict[str, Any]:
+    """The checked recipe queue_motion_render stores (ValueError names the problem). `plan`:
+    always with `voice_todo`, so the voice, the track and the cover are made at render time
+    and an edit of a planned card (planned.edit) only re-runs this."""
+    styles.check_template(store, idea, template)  # 138: the template in the idea's style
     if music_audio_id and template in (cinematic.TEMPLATE, sitcom.TEMPLATE):
         # ponytail: the Blender engines time shots and character voices off the narrator
         # lines; moving the narrator alone would desync them. Remotion templates only.
@@ -483,16 +509,11 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     if credits:  # the caption must carry them: submit_asset adds them, the publish guard checks
         env["sfx_credits"] = credits
     todo = {"voice": voice, "cast": cast, "music_audio_id": music_audio_id}
-    if settings.tts_provider != "none" and voice_pending(template, v["props"]):
+    if plan or (settings.tts_provider != "none" and voice_pending(template, v["props"])):
         if music_audio_id:  # what music.apply can tell before the voice exists
             music.load_beats(settings.media_root, music_audio_id)
         # 188a: the render job makes the voice (render.voice_first), in line order
         env["voice_todo"] = {k: x for k, x in todo.items() if x is not None}
-    else:  # nothing to synthesise (no script, a voice already, or the reading estimate)
-        env = voice_recipe(env, settings, todo, v)
-    if asset_id is not None:
-        return render.rerender(store, settings.media_root, asset_id, env, actor=actor)
-    idea = store.get_idea(idea_id)
-    asset = store.add_asset(idea_id, recipe=env, caption=caption, batch_date=idea["batch_date"])
-    return {"asset": asset, "job": render.enqueue_render(store, asset["id"])}
-
+        return env
+    # nothing to synthesise (no script, a voice already, or the reading estimate)
+    return voice_recipe(env, settings, todo, v)

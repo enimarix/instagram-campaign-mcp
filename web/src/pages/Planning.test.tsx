@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PlanningItem } from '../api/client'
+import type { ClaudeIdea, PlanningItem } from '../api/client'
 import { ToastProvider } from '../ui/Toast'
 import Planning from './Planning'
 
@@ -10,6 +10,19 @@ const item = (over: Partial<PlanningItem>): PlanningItem => ({
   section: 'next', kind: 'render', title: 'Pourquoi on a faim', source: 'create', ids: {}, style: null,
   engine: 'remotion', voice: null, est_start: soon(1), est_duration_s: 600, est_ready: soon(11), estimated: true,
   why_here: "File des rendus : le plus ancien d'abord.", waits_on: null, not_before: null, stage: null, progress: null, ...over,
+})
+
+const idea = (over: Partial<ClaudeIdea> = {}): PlanningItem => item({
+  section: 'ideas', kind: 'claude_idea', title: 'Le mythe du jus détox', source: 'agent', ids: { asset_id: 9 },
+  est_start: null, est_ready: null, est_duration_s: null, why_here: 'Idée de Claude : rien ne se rend sans toi.',
+  idea: {
+    asset_id: 9, batch_date: '2026-11-23', hook: 'Le mythe du jus détox', style: 'pixel', kind: 'motion',
+    template: 'FactQuest', voice: 'lea', music: 'music-overworld', caption: 'Le jus détox ? #nutrition',
+    description: 'Trois faits.', sources: [{ url: 'https://example.org/a', title: 'Étude' }],
+    music_options: ['music-cave', 'music-overworld', 'none'],
+    script: [{ text: 'Le jus détox', editable: true }, { text: 'Fait un', editable: true },
+      { text: 'Fait deux', editable: false }, { text: 'Fin', editable: true }], ...over,
+  },
 })
 
 function stub(items: PlanningItem[]) {
@@ -186,5 +199,79 @@ describe('Planning', () => {
     expect(await screen.findByText('Studio repris : la file repart.')).toBeTruthy()
     expect(toggle.checked).toBe(false)
     expect(screen.queryByText(/Studio en pause depuis/)).toBeNull()
+  })
+
+  it("Claude's ideas: their own section and colour, the script, the sources; release, now, timer", async () => {
+    const calls = stubCalls([idea(), item({ title: 'Le suivant', ids: { job_id: 6 } })])
+    show()
+    const ideas = await screen.findByRole('region', { name: 'Idées de Claude — à valider' })
+    const card = within(ideas).getByRole('article')
+    expect(card.className).toContain('border-l-idea')
+    expect(within(card).getByText('Idée de Claude').className).toContain('text-idea')
+    expect(within(card).getAllByRole('listitem').map((l) => l.textContent)).toEqual(
+      ['Le jus détox', 'Fait un', 'Fait deux', '… 1 ligne(s) de plus'])
+    expect(within(card).getByText('style pixel · FactQuest · voix lea · musique music-overworld')).toBeTruthy()
+    expect(within(card).getByRole('link', { name: 'Étude' }).getAttribute('href')).toBe('https://example.org/a')
+    expect(within(card).queryByText(/Début ~/)).toBeNull() // no time until released
+    fireEvent.click(within(card).getByRole('button', { name: 'Valider' }))
+    expect(await screen.findByText('Validée : son rendu entre dans la file.')).toBeTruthy()
+    fireEvent.click(within(card).getByRole('button', { name: 'Lancer maintenant' }))
+    await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/idea/9/release', body: { now: true } }))
+    expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/idea/9/release', body: {} })
+    fireEvent.change(within(card).getByLabelText('Minuteur'), { target: { value: '2026-12-01T09:30' } })
+    fireEvent.click(within(card).getByRole('button', { name: 'Régler' }))
+    const iso = new Date('2026-12-01T09:30').toISOString()
+    await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/idea/9/release', body: { at: iso } }))
+  })
+
+  it("edits an idea: only what changed is sent, a joined line stays locked, a refusal keeps the sheet", async () => {
+    HTMLDialogElement.prototype.showModal = function () { this.open = true } // jsdom has none
+    const calls: Call[] = []
+    let refuse = true
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      if (url === '/api/voices') return new Response(JSON.stringify([
+        { id: 'lea', label: 'Léa', enabled: true }, { id: 'marc', label: 'Marc', enabled: true },
+        { id: 'off', label: 'Éteinte', enabled: false }]))
+      if (method === 'PATCH' && refuse) {
+        refuse = false
+        return new Response(JSON.stringify({ error: 'invalid', message: 'la ligne 1 est vide' }), { status: 422 })
+      }
+      return new Response(JSON.stringify(method === 'GET' ? { now: soon(0), items: [idea()] } : {}))
+    }))
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: 'Modifier' }))
+    const sheet = await screen.findByRole('dialog', { name: "Modifier l'idée" })
+    await waitFor(() => expect(within(sheet).getAllByRole('option', { name: 'Marc' })).toHaveLength(1))
+    expect(within(sheet).queryByRole('option', { name: 'Éteinte' })).toBeNull()
+    expect((within(sheet).getByLabelText('Ligne 3') as HTMLTextAreaElement).disabled).toBe(true)
+    fireEvent.change(within(sheet).getByLabelText('Voix'), { target: { value: 'marc' } })
+    fireEvent.change(within(sheet).getByLabelText('Musique'), { target: { value: 'none' } })
+    fireEvent.change(within(sheet).getByLabelText('Ligne 1'), { target: { value: 'Le jus détox ne détoxifie rien.' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Enregistrer' }))
+    expect(await screen.findByText('Pas fait : la ligne 1 est vide')).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: "Modifier l'idée" })).toBeTruthy()
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Enregistrer' }))
+    expect(await screen.findByText('Idée modifiée.')).toBeTruthy()
+    expect(calls.filter((c) => c.method === 'PATCH').at(-1)).toEqual({
+      method: 'PATCH', url: '/api/planning/idea/9',
+      body: { voice: 'marc', music: 'none', lines: ['Le jus détox ne détoxifie rien.', 'Fait un', 'Fait deux', 'Fin'] },
+    })
+  })
+
+  it('removes an idea after the 5 s undo', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const calls = stubCalls([idea()])
+      show()
+      fireEvent.click(await screen.findByRole('button', { name: 'Retirer' }))
+      expect(screen.queryByText('Le mythe du jus détox')).toBeNull()
+      expect(calls.filter((c) => c.url.endsWith('/remove'))).toEqual([])
+      vi.advanceTimersByTime(5000)
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/idea/9/remove', body: undefined }))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

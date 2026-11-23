@@ -14,6 +14,8 @@ worker really takes the work today:
 - planned: the scheduled AI runs of the next 24 h as placeholders, none before the chain
   ahead is done; the producing run says what it picks up first and how many places stay
   for Claude's own ideas.
+- ideas: Claude's planned videos waiting for the owner (src/studio/planned.py, 188b):
+  outside the chain, no time until released.
 
 Every time is an estimate (`estimated: true`): each item starts when the one before is
 ready. A duration is the median of the recent real ones (render_jobs.render_ms per engine,
@@ -33,7 +35,7 @@ from ..agent import film, packet, schedule
 from ..config import InstagramMCPSettings
 from ..learning.learnings import list_revision_requests
 from ..store import CampaignStore, parse_iso, to_iso
-from . import cinematic, dm_picks, lemo, line, macro3d, sitcom, voices, work_orders
+from . import cinematic, dm_picks, lemo, line, macro3d, planned, sitcom, voices, work_orders
 
 # Fallback seconds per engine (DECISIONS: Remotion ~0.4 min per 30 s video; the 8-shot
 # Blender proof 13.1 min; Macro3D's first Blender plates 12-15 min). ponytail: ffmpeg's
@@ -157,13 +159,14 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                    ) -> Dict[str, Any]:
     """{now, items, paused}: the chain (see module doc); paused: since when the studio is
-    paused (line.pause), else None. Item: section running | next | planned, kind render | film | order_run | agent_run | work_order | change_request, title,
+    paused (line.pause), else None. Item: section running | next | planned | ideas, kind
+    render | film | order_run | agent_run | work_order | change_request | claude_idea, title,
     source, ids {order_id, asset_id, pick_id, run_id, job_id}, style, engine, voice,
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
     why_here, waits_on (gpu_busy | agent_running | timer | held | order_grace | daily_cap |
     preflight | next_ai_run | needs_instruction | None), not_before (a waiting render's or
     film's timer, UTC ISO), stage and progress (running items), picks_up (the producing
-    run's placeholder)."""
+    run's placeholder), idea (a claude_idea's card: planned.cards, section ideas)."""
     with store._tx() as c:
         jobs = [dict(r) for r in c.execute(_JOBS)]
     render_s = _render_s(store)
@@ -316,4 +319,12 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
             item["picks_up"] = {**n, "ideas_left": max(0, settings.batch_size - sum(n.values()))}
         items.append(item)
         planned_at = _ready(item)
+    for card in planned.cards(store):  # Claude's ideas: not in the line, no time (188b)
+        env = card.pop("recipe")
+        items.append({**_item("ideas", "claude_idea", _title(card["hook"], card["caption"],
+                                                             f"Vidéo {card['asset_id']}"),
+                              None, None, "Idée de Claude : rien ne se rend ni ne se dit sans"
+                              " ton « Valider ».", source="agent", style=card["style"],
+                              engine=_engine(env), voice=card["voice"],
+                              asset_id=card["asset_id"]), "idea": card})
     return {"now": to_iso(now), "items": items, "paused": line.paused(store)}

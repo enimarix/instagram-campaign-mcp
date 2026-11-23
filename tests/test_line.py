@@ -221,7 +221,7 @@ def test_a_crashed_render_keeps_its_place(store, monkeypatch):
 
 def test_migration_keeps_the_old_order_by_arrival(tmp_path, monkeypatch):
     path = str(tmp_path / "old.db")
-    monkeypatch.setattr(store_mod, "MIGRATIONS", MIGRATIONS[:-1])
+    monkeypatch.setattr(store_mod, "MIGRATIONS", MIGRATIONS[:MIGRATIONS.index(store_mod.LINE_SCHEMA)])
     old = CampaignStore(path)
     jobs = [_render(old, NOW - timedelta(minutes=m)) for m in (40, 10)]
     film = _film(old, monkeypatch, NOW - timedelta(minutes=20))

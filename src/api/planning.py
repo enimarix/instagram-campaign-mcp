@@ -1,17 +1,18 @@
 """Planning routes: what renders next and when, « start now », the timer, hold, move and
-remove of a waiting render or film (remove: an owner order too), and the studio's pause
-switch (thin doors onto src/studio/planning.py and src/studio/line.py)."""
+remove of a waiting render or film (remove: an owner order too), the studio's pause
+switch, and Claude's planned videos: release, edit, remove (thin doors onto
+src/studio/planning.py, src/studio/line.py and src/studio/planned.py)."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..store import CampaignStore, utcnow
-from ..studio import line, planning
+from ..studio import line, planned, planning
 from .assets import call, get_store
 
 router = APIRouter(prefix="/api")
@@ -35,10 +36,44 @@ class PauseIn(BaseModel):
     paused: bool
 
 
+class ReleaseIn(BaseModel):
+    now: bool = False  # « Lancer maintenant »
+    at: Optional[datetime] = None  # « Minuteur », UTC ISO
+
+
+class IdeaEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    voice: Optional[str] = None
+    music: Optional[str] = None  # a bed (music-...), none, or an Instagram track's audio_id
+    lines: Optional[List[str]] = None  # the spoken lines, in the card's order
+    caption: Optional[str] = None
+    description: Optional[str] = None
+
+
 @router.get("/planning")
 def get_planning(request: Request):
     return planning.build_planning(request.app.state.store, request.app.state.settings,
                                    utcnow())
+
+
+# Before the line's routes: /planning/{kind}/{item_id}/remove would take /idea/... first.
+@router.post("/planning/idea/{asset_id}/release")
+def release_idea(asset_id: int, request: Request, body: ReleaseIn,
+                 store: CampaignStore = Depends(get_store)):
+    return call(planned.release, store, request.app.state.settings, asset_id, now=body.now,
+                at=body.at)
+
+
+@router.patch("/planning/idea/{asset_id}")
+def edit_idea(asset_id: int, body: IdeaEdit, request: Request,
+              store: CampaignStore = Depends(get_store)):
+    return call(planned.edit, store, request.app.state.settings, asset_id,
+                **body.model_dump(exclude_none=True))
+
+
+@router.post("/planning/idea/{asset_id}/remove")
+def remove_idea(asset_id: int, store: CampaignStore = Depends(get_store)):
+    return call(planned.remove, store, asset_id)
 
 
 @router.post("/planning/{kind}/{item_id}/start-now")
@@ -70,3 +105,4 @@ def remove(kind: Removable, item_id: int, store: CampaignStore = Depends(get_sto
 @router.put("/planning/pause")
 def pause(body: PauseIn, store: CampaignStore = Depends(get_store)):
     return call(line.pause, store, body.paused)
+

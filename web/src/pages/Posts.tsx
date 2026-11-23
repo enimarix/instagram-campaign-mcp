@@ -48,7 +48,7 @@ const COLUMNS: [string, (p: AnalyticsPost) => string][] = [
 
 // marker colours, written out so Tailwind sees them
 const MARKER: Record<Tone, string> = {
-  neutral: 'bg-fg', accent: 'bg-accent', success: 'bg-success', warn: 'bg-warn', danger: 'bg-danger', info: 'bg-info', explore: 'bg-explore',
+  neutral: 'bg-fg', accent: 'bg-accent', success: 'bg-success', warn: 'bg-warn', danger: 'bg-danger', info: 'bg-info', explore: 'bg-explore', idea: 'bg-idea',
 }
 
 /** "Why viewers left": the description, the timeline bar with a marker per finding, the findings. */

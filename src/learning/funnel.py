@@ -61,7 +61,7 @@ SELECT a.id, a.batch_date AS day, i.track, i.hook_type, i.style, a.status, a.ver
        (SELECT COALESCE(SUM(render_ms), 0) FROM render_jobs r WHERE r.asset_id = a.id)
            AS render_ms
 FROM assets a JOIN ideas i ON i.id = a.idea_id
-WHERE a.batch_date >= ? AND a.batch_date <= ?
+WHERE a.batch_date >= ? AND a.batch_date <= ? AND a.status <> 'planned'
 """
 
 

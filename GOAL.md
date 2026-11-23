@@ -393,6 +393,8 @@ an approved asset keeps its like.
 | `rendering` | `ready` (QC passed) or `failed` | worker |
 | `failed` | `rendering` | agent or owner (re-render) |
 | `rendering` | `archived` | owner, removing a render still waiting in the Planning line |
+| `planned` | `rendering` | owner, releasing Claude's planned video on the Planning page (« Valider ») |
+| `planned` | `archived` | owner, removing Claude's planned video before its release |
 | `needs_reaction` | `rendering` | owner uploads a reaction take (unused since 2026-11-17: reactions come from the reaction reel) |
 | `ready` | `approved` | **owner only** |
 | `ready` | `revision_requested` | owner (comment that asks for changes) |

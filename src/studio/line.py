@@ -204,15 +204,20 @@ def remove(store: CampaignStore, kind: str, item_id: int) -> Dict[str, Any]:
                          " ('queued', 'running')", (asset_id,)).fetchone()
     if live or store.get_asset(asset_id)["status"] != "rendering":
         return {"kind": kind, "id": item_id, "removed": True}
-    idea_id = transition(store, asset_id, "archived", actor="owner")["idea_id"]
-    with store._tx() as c:  # the order it was made for, unless another video of it lives
+    skip_orders(store, transition(store, asset_id, "archived", actor="owner")["idea_id"])
+    return {"kind": kind, "id": item_id, "removed": True}
+
+
+def skip_orders(store: CampaignStore, idea_id: int) -> None:
+    """A removed video's idea: the order in production for it is skipped with REMOVED,
+    unless another video of it lives (remove; planned.remove, 188b)."""
+    with store._tx() as c:
         orders = [r[0] for r in c.execute(
             "SELECT id FROM work_orders WHERE idea_id = ? AND status = 'in_production'"
             " AND NOT EXISTS (SELECT 1 FROM assets WHERE idea_id = ? AND status NOT IN"
             " ('archived', 'failed'))", (idea_id, idea_id))]
     for order_id in orders:
         work_orders.skip_order(store, order_id, REMOVED)
-    return {"kind": kind, "id": item_id, "removed": True}
 
 
 def paused(store: CampaignStore) -> Optional[str]:

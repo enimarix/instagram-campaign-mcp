@@ -697,6 +697,19 @@ ALTER TABLE work_orders ADD COLUMN line_pos INTEGER;
 ALTER TABLE work_orders ADD COLUMN not_before TEXT;
 """
 
+# Migration 27: Claude's planned videos (188b, src/studio/planned.py). assets.status gains
+# `planned`: an idea with its full recipe, no render job, until the owner releases it. A CHECK
+# that only widens changes no row, so the table is not rebuilt (its children's FOREIGN KEYs
+# would refuse the drop): the schema text is edited in place (sqlite.org/lang_altertable.html,
+# "simpler procedure"); RESET reloads it here, the new index bumps it for other connections.
+PLANNED_SCHEMA = """
+PRAGMA writable_schema=ON;
+UPDATE sqlite_master SET sql = replace(sql, '''published'',''archived'')',
+    '''published'',''archived'',''planned'')') WHERE type = 'table' AND name = 'assets';
+PRAGMA writable_schema=RESET;
+CREATE INDEX idx_assets_status ON assets(status);
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -707,7 +720,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
                          AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
                          AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA,
-                         STYLE_REQUESTS_SCHEMA, LINE_SCHEMA]
+                         STYLE_REQUESTS_SCHEMA, LINE_SCHEMA, PLANNED_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -756,10 +769,11 @@ _INSERT_STAMPS = {
 ACCOUNT_SNAPSHOT_FIELDS = ("followers", "reach", "views", "reach_followers",
                            "reach_non_followers")
 AGENT_RUN_END_STATUSES = ("succeeded", "failed", "cancelled")
-# New assets start here; every later status move goes through studio.assets.transition().
+# New assets start here (planned: Claude's idea waiting for the owner's « Valider », 188b);
+# every later status move goes through studio.assets.transition().
 # `needs_reaction` stays in the lifecycle but nothing enters it any more (072: a remix
 # takes its reaction piece from the reel at render time).
-ASSET_INITIAL_STATUSES = ("rendering",)
+ASSET_INITIAL_STATUSES = ("rendering", "planned")
 _UNCHANGED = object()
 
 
@@ -1655,7 +1669,9 @@ class CampaignStore:
         owner's newest change request on the version it replaces {text, reason_codes}, and
         work_order: the owner's work order its idea was made for {id, mode, instruction,
         permalink, source (its origin: trend | dm | create | change), style} (every version
-        of that idea), else None; style: the idea's (138)."""
+        of that idea), else None; style: the idea's (138). Claude's `planned` ideas (188b) are
+        left out unless asked for by status: they live on the Planning page."""
+        hide = "" if status else " AND a.status <> 'planned'"
         return self._select(
             "SELECT a.*, i.track, i.strategy, i.experiment, i.style, s.rights_basis,"
             " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
@@ -1670,7 +1686,7 @@ class CampaignStore:
             "  LEFT JOIN sources ws ON ws.id = w.source_id"
             "  LEFT JOIN dm_picks wp ON wp.id = w.pick_id"
             "  WHERE w.idea_id = a.idea_id ORDER BY w.id DESC LIMIT 1) AS work_order"
-            " FROM assets a JOIN ideas i ON i.id = a.idea_id"
+            " FROM assets a JOIN ideas i ON i.id = a.idea_id" + hide +
             " LEFT JOIN sources s ON s.id = i.source_id",
             {"a.batch_date": _sql_value(batch_date), "a.status": status,
              "a.verdict": verdict, "i.track": track},

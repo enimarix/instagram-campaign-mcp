@@ -3,7 +3,7 @@
 
 export type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 export type Size = 'sm' | 'md' | 'lg'
-export type Tone = 'neutral' | 'accent' | 'success' | 'warn' | 'danger' | 'info' | 'explore'
+export type Tone = 'neutral' | 'accent' | 'success' | 'warn' | 'danger' | 'info' | 'explore' | 'idea'
 
 const VARIANT: Record<Variant, string> = {
   primary: 'bg-accent text-on-accent hover:brightness-110',
@@ -30,6 +30,7 @@ export const TONE: Record<Tone, string> = {
   danger: 'bg-danger/12 text-danger',
   info: 'bg-info/12 text-info',
   explore: 'bg-explore/12 text-explore',
+  idea: 'bg-idea/12 text-idea', // Claude's planned ideas (188b)
 }
 
 export const card = 'rounded-card border border-line/60 bg-surface shadow-card'

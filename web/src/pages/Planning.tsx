@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import {
-  errorMessage, getPlanning, holdItem, moveItem, removeItem, setStudioPaused, setTimer, startNow,
-  type LineKind, type PlanningItem, type PlanningWait,
+  editIdea, errorMessage, getPlanning, holdItem, listVoices, moveItem, releaseIdea, removeIdea, removeItem,
+  setStudioPaused, setTimer, startNow,
+  type ClaudeIdea, type IdeaEdit, type LineKind, type PlanningItem, type PlanningWait, type Voice,
 } from '../api/client'
 import { Button } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
+import { Sheet } from '../ui/Sheet'
 import { field, link } from '../ui/styles'
 import { useToast } from '../ui/useToast'
 
@@ -15,11 +17,11 @@ const POLL_MS = 10_000 // a live page, like Créer and Agent
 const UNDO_MS = 5000 // the Toast's own lifetime
 
 const SECTIONS: [PlanningItem['section'], string][] = [
-  ['running', 'En cours'], ['next', 'Ensuite'], ['planned', "Runs prévus de l'IA"],
+  ['ideas', 'Idées de Claude — à valider'], ['running', 'En cours'], ['next', 'Ensuite'], ['planned', "Runs prévus de l'IA"],
 ]
 const KIND: Record<PlanningItem['kind'], string> = {
   render: 'Rendu', film: 'Film Lemo', order_run: 'Run léger', agent_run: "Run de l'IA",
-  work_order: 'Commande', change_request: 'Changement',
+  work_order: 'Commande', change_request: 'Changement', claude_idea: 'Idée de Claude',
 }
 const WAIT: Record<PlanningWait, string> = {
   gpu_busy: 'attend le GPU', agent_running: 'attend la fin du run', timer: 'attend son minuteur', held: 'En pause', order_grace: 'délai après ton envoi',
@@ -59,11 +61,13 @@ function Origin({ item: i }: { item: PlanningItem }) {
   )
 }
 
-type Removal = { kind: LineKind | 'order'; id: number }
+type Removal = { kind: LineKind | 'order' | 'idea'; id: number }
 
 /** What « Retirer » takes out: a waiting render (its job), a film or an owner order / change
- * request still waiting for the light run (its order); else null. */
+ * request still waiting for the light run (its order), Claude's planned idea (its video);
+ * else null. */
 function removal(i: PlanningItem): Removal | null {
+  if (i.kind === 'claude_idea') return i.ids.asset_id === undefined ? null : { kind: 'idea', id: i.ids.asset_id }
   if (i.section !== 'next') return null
   if (i.kind === 'render') return i.ids.job_id === undefined ? null : { kind: 'render', id: i.ids.job_id }
   if (i.ids.order_id === undefined || i.waits_on === 'needs_instruction') return null
@@ -72,31 +76,50 @@ function removal(i: PlanningItem): Removal | null {
 }
 const keyOf = (r: Removal) => `${r.kind}:${r.id}`
 
-/** On a waiting render or film (the heavy line): « Lancer maintenant », move up / down, hold,
- * « Minuteur » (186-187); « Retirer » on those and on the owner's waiting orders. */
-function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Actions) {
+/** A call with a toast, then onDone; `busy` while it runs. Resolves true when it went through. */
+function useAct(onDone: () => void) {
   const toast = useToast()
-  const [when, setWhen] = useState('')
   const [busy, setBusy] = useState(false)
-  const out = removal(i)
-  if (!out) return null
-  const retirer = <Button size="sm" variant="danger" disabled={busy} onClick={() => onRemove(out)}>Retirer</Button>
-  if (out.kind === 'order') return <div className="flex flex-wrap items-end gap-2 pt-1">{retirer}</div>
-  const kind = out.kind // narrowed to the line's render | film
-  const id = out.id
-  const held = i.waits_on === 'held'
   const act = async (fn: () => Promise<unknown>, done: string) => {
     setBusy(true)
     try {
       await fn()
       toast({ message: done })
       onDone()
+      return true
     } catch (e) {
       toast({ message: `Pas fait : ${errorMessage(e)}` })
+      return false
     } finally {
       setBusy(false)
     }
   }
+  return { busy, act }
+}
+
+/** « Minuteur »: a local date and time (sent as UTC ISO). */
+function TimerField({ when, setWhen }: { when: string; setWhen: (v: string) => void }) {
+  return (
+    <label className="text-xs font-medium">
+      Minuteur
+      <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
+        className={`${field} mt-1 block px-2 font-normal`} />
+    </label>
+  )
+}
+
+/** On a waiting render or film (the heavy line): « Lancer maintenant », move up / down, hold,
+ * « Minuteur » (186-187); « Retirer » on those and on the owner's waiting orders. */
+function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Actions) {
+  const [when, setWhen] = useState('')
+  const { busy, act } = useAct(onDone)
+  const out = removal(i)
+  if (!out || out.kind === 'idea') return null
+  const retirer = <Button size="sm" variant="danger" disabled={busy} onClick={() => onRemove(out)}>Retirer</Button>
+  if (out.kind === 'order') return <div className="flex flex-wrap items-end gap-2 pt-1">{retirer}</div>
+  const kind = out.kind // narrowed to the line's render | film
+  const id = out.id
+  const held = i.waits_on === 'held'
   const timer = () => {
     const iso = new Date(when).toISOString() // the owner's local time, sent as UTC
     return act(() => setTimer(kind, id, iso), `Minuteur réglé : pas avant ${at(iso)}.`)
@@ -111,11 +134,7 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
         onClick={() => void act(() => holdItem(kind, id, !held), held ? 'Repris : il retrouve sa place.' : 'En pause : il ne bloque pas la file.')}>
         {held ? 'Reprendre' : 'Mettre en pause'}
       </Button>
-      <label className="text-xs font-medium">
-        Minuteur
-        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
-          className={`${field} mt-1 block px-2 font-normal`} />
-      </label>
+      <TimerField when={when} setWhen={setWhen} />
       <Button size="sm" disabled={busy || !when} onClick={() => void timer()}>Régler</Button>
       {i.not_before && (
         <Button size="sm" variant="ghost" disabled={busy}
@@ -166,6 +185,140 @@ function ItemCard({ item: i, ...actions }: { item: PlanningItem } & Actions) {
   )
 }
 
+const PREVIEW_LINES = 3
+
+/** A video Claude planned (188b), in its own colour: nothing renders or is voiced before
+ * « Valider » (« Lancer maintenant » and the timer release it too); « Modifier » opens the
+ * edit sheet; « Retirer » archives it after the 5 s undo. */
+function IdeaCard({ item: i, onDone, onRemove }: { item: PlanningItem } & Actions) {
+  const [when, setWhen] = useState('')
+  const [editing, setEditing] = useState(false)
+  const { busy, act } = useAct(onDone)
+  const idea = i.idea
+  if (!idea) return null
+  const id = idea.asset_id
+  const look = [idea.style && `style ${idea.style}`, idea.template ?? 'remix', idea.voice && `voix ${idea.voice}`,
+    idea.music && `musique ${idea.music}`].filter(Boolean)
+  const timer = () => {
+    const iso = new Date(when).toISOString() // the owner's local time, sent as UTC
+    return act(() => releaseIdea(id, { at: iso }), `Validée : son rendu attend jusqu'à ${at(iso)}.`)
+  }
+  return (
+    <Card as="article" className="space-y-1.5 border-l-4 border-l-idea text-sm">
+      <Chip tone="idea">Idée de Claude</Chip>
+      <h3 className="font-semibold break-words">{i.title}</h3>
+      <p className="text-muted">{look.join(' · ')}</p>
+      {idea.script.length > 0 && (
+        <ol aria-label="Ce qui est dit" className="list-decimal space-y-0.5 pl-5">
+          {idea.script.slice(0, PREVIEW_LINES).map((l, n) => <li key={n}>{l.text}</li>)}
+          {idea.script.length > PREVIEW_LINES && (
+            <li className="list-none text-muted">… {idea.script.length - PREVIEW_LINES} ligne(s) de plus</li>
+          )}
+        </ol>
+      )}
+      {idea.caption && <p className="break-words whitespace-pre-line"><span className="text-muted">Légende : </span>{idea.caption}</p>}
+      {idea.description && <p className="text-muted">{idea.description}</p>}
+      {idea.sources.length > 0 && (
+        <p className="text-muted">
+          Sources :{' '}
+          {idea.sources.map((src, n) => (
+            <span key={src.url}>{n > 0 && ' · '}<a href={src.url} target="_blank" rel="noreferrer" className={link}>{src.title || src.url}</a></span>
+          ))}
+        </p>
+      )}
+      <p className="text-muted">{i.why_here}</p>
+      <div className="flex flex-wrap items-end gap-2 pt-1">
+        <Button size="sm" variant="primary" disabled={busy}
+          onClick={() => void act(() => releaseIdea(id, {}), 'Validée : son rendu entre dans la file.')}>Valider</Button>
+        <Button size="sm" disabled={busy}
+          onClick={() => void act(() => releaseIdea(id, { now: true }), 'Validée : elle passe en tête de la file.')}>Lancer maintenant</Button>
+        <TimerField when={when} setWhen={setWhen} />
+        <Button size="sm" disabled={busy || !when} onClick={() => void timer()}>Régler</Button>
+        <Button size="sm" disabled={busy} onClick={() => setEditing(true)}>Modifier</Button>
+        <Button size="sm" variant="danger" disabled={busy} onClick={() => onRemove({ kind: 'idea', id })}>Retirer</Button>
+      </div>
+      {editing && <IdeaSheet idea={idea} onClose={() => setEditing(false)} onDone={onDone} />}
+    </Card>
+  )
+}
+
+const TRACK = /^\d+$/ // an Instagram track's audio_id, not one of our beds
+
+/** « Modifier » a planned idea: voice (the voices on), music (a bed, none, or for a motion
+ * video an Instagram track's audio_id), the spoken lines, caption, description. Only what
+ * changed is sent; the server checks it all again and refuses with the reason. */
+function IdeaSheet({ idea, onClose, onDone }: { idea: ClaudeIdea; onClose: () => void; onDone: () => void }) {
+  const [voices, setVoices] = useState<Voice[]>([])
+  const [voice, setVoice] = useState(idea.voice ?? '')
+  const [music, setMusic] = useState(idea.music ?? '')
+  const [lines, setLines] = useState(idea.script.map((l) => l.text))
+  const [caption, setCaption] = useState(idea.caption ?? '')
+  const [description, setDescription] = useState(idea.description ?? '')
+  const { busy, act } = useAct(onDone)
+  useEffect(() => {
+    listVoices().then((v) => setVoices(v.filter((x) => x.enabled)), () => setVoices([]))
+  }, [])
+  const save = async () => {
+    const body: IdeaEdit = {}
+    if (voice && voice !== (idea.voice ?? '')) body.voice = voice
+    if (music.trim() && music.trim() !== (idea.music ?? '')) body.music = music.trim()
+    if (lines.some((l, n) => l !== idea.script[n].text)) body.lines = lines
+    if (caption !== (idea.caption ?? '')) body.caption = caption
+    if (description !== (idea.description ?? '')) body.description = description
+    if (await act(() => editIdea(idea.asset_id, body), 'Idée modifiée.')) onClose()
+  }
+  return (
+    <Sheet title="Modifier l'idée" onClose={onClose} wide>
+      <div className="mt-3 space-y-3 text-sm">
+        <label className="block font-medium">
+          Voix
+          <select value={voice} onChange={(e) => setVoice(e.target.value)} className={`${field} mt-1 block w-full`}>
+            {!voices.some((v) => v.id === voice) && <option value={voice}>{voice || '—'}</option>}
+            {voices.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+          </select>
+        </label>
+        <label className="block font-medium">
+          Musique
+          <select value={TRACK.test(music) ? '' : music} onChange={(e) => setMusic(e.target.value)}
+            className={`${field} mt-1 block w-full`}>
+            {(TRACK.test(music) || !idea.music_options.includes(music)) && <option value="">{TRACK.test(music) ? 'son Instagram' : music || '—'}</option>}
+            {idea.music_options.map((b) => <option key={b} value={b}>{b === 'none' ? 'aucune' : b}</option>)}
+          </select>
+        </label>
+        {idea.kind === 'motion' && (
+          <label className="block font-medium">
+            Ou un son Instagram (son audio_id, déjà récupéré par l'IA)
+            <input inputMode="numeric" value={TRACK.test(music) ? music : ''} onChange={(e) => setMusic(e.target.value)}
+              className={`${field} mt-1 block w-full`} />
+          </label>
+        )}
+        <fieldset className="space-y-2">
+          <legend className="font-medium">Ce qui est dit</legend>
+          {lines.map((l, n) => (
+            <textarea key={n} aria-label={`Ligne ${n + 1}`} value={l} rows={2} disabled={!idea.script[n].editable}
+              title={idea.script[n].editable ? undefined : 'Cette ligne réunit plusieurs textes du modèle : elle ne se modifie pas ici.'}
+              onChange={(e) => setLines(lines.map((x, k) => (k === n ? e.target.value : x)))}
+              className={`${field} block w-full py-2`} />
+          ))}
+        </fieldset>
+        <label className="block font-medium">
+          Légende
+          <textarea value={caption} rows={3} onChange={(e) => setCaption(e.target.value)} className={`${field} mt-1 block w-full py-2`} />
+        </label>
+        <label className="block font-medium">
+          Description
+          <textarea value={description} rows={2} maxLength={400} onChange={(e) => setDescription(e.target.value)}
+            className={`${field} mt-1 block w-full py-2`} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Annuler</Button>
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>Enregistrer</Button>
+        </div>
+      </div>
+    </Sheet>
+  )
+}
+
 /** The cards of one section, joined by a line (the chain). */
 function Chain({ items, ...actions }: { items: PlanningItem[] } & Actions) {
   return (
@@ -173,7 +326,7 @@ function Chain({ items, ...actions }: { items: PlanningItem[] } & Actions) {
       {items.map((item, n) => (
         <li key={`${item.kind}-${item.ids.asset_id ?? item.ids.order_id ?? item.ids.run_id ?? item.title}-${n}`}>
           {n > 0 && <div aria-hidden className="ml-6 h-4 w-px bg-line" />}
-          <ItemCard item={item} {...actions} />
+          {item.kind === 'claude_idea' ? <IdeaCard item={item} {...actions} /> : <ItemCard item={item} {...actions} />}
         </li>
       ))}
     </ol>
@@ -250,7 +403,8 @@ export default function Planning() {
     const run = () => {
       clearTimeout(timer)
       pending.current.delete(key)
-      removeItem(r.kind, r.id).then(() => load(), (e: unknown) => {
+      const call = r.kind === 'idea' ? removeIdea(r.id) : removeItem(r.kind, r.id)
+      call.then(() => load(), (e: unknown) => {
         show(key, true)
         toast({ message: `Pas retiré : ${errorMessage(e)}` })
       })
