@@ -9,8 +9,9 @@ other move, or the right move by the wrong actor, raises InvalidTransition.
 
 from __future__ import annotations
 
+import re
 from datetime import date
-from typing import Any, Dict, Set, Tuple
+from typing import Any, Dict, Optional, Set, Tuple
 
 from ..instagram_client import caption_problem
 from ..store import CampaignStore, to_iso, utcnow
@@ -121,6 +122,12 @@ def edit_asset(store: CampaignStore, asset_id: int, **fields: Any) -> Dict[str, 
                                                          **fields))
 
 
+def clean_caption(caption: Optional[str]) -> Optional[str]:
+    r"""A caption with each literal `\n` (backslash-n, an escape the agent wrote as text) a
+    real line break (191)."""
+    return re.sub(r"(\\r)?\\n", "\n", caption) if isinstance(caption, str) else caption
+
+
 def checked_fields(status: str, **fields: Any) -> Dict[str, Any]:
     """edit_asset's checks for an asset in `status`: the fields as stored, or ValueError."""
     unknown = set(fields) - set(EDITABLE)
@@ -131,6 +138,7 @@ def checked_fields(status: str, **fields: Any) -> Dict[str, Any]:
         if status in ("scheduled", "publish_check", "published"):
             raise ValueError(f"the caption can't change once the asset is {status}"
                              " (cancel the queued post first)")
+        fields["caption"] = clean_caption(fields["caption"])
         problem = caption_problem(fields["caption"])
         if problem:
             raise ValueError(problem)

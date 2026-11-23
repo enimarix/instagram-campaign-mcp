@@ -55,7 +55,7 @@ from . import (  # render.py imports us
     styles,
     voices,
 )
-from .assets import checked_fields
+from .assets import checked_fields, clean_caption
 from .ffmpeg import MediaInfo, PathLike
 from .tts import get_provider
 
@@ -482,7 +482,8 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
         asset = store.add_asset(idea_id, recipe=env, batch_date=idea["batch_date"],
                                 status="planned", **fields)
         return {"asset": asset, "job": None}
-    asset = store.add_asset(idea_id, recipe=env, caption=caption, batch_date=idea["batch_date"])
+    asset = store.add_asset(idea_id, recipe=env, caption=clean_caption(caption),
+                            batch_date=idea["batch_date"])
     return {"asset": asset, "job": render.enqueue_render(store, asset["id"])}
 
 
