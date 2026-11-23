@@ -65,7 +65,8 @@ _REPLACED = (f"SELECT a.id FROM assets a WHERE a.status = 'ready' AND {_OPEN}"
 # the render jobs of the idea's versions nobody submitted or judged: the first render and
 # the re-renders (in place, a child or a new remix); a version sent back for changes, or
 # submitted, starts the count again; a job re-queued for the same recipe counts each time
-_JOBS = ("SELECT COALESCE(SUM(1 + j.requeues), 0) FROM render_jobs j JOIN assets a ON a.id = j.asset_id"
+_JOBS = ("SELECT COALESCE(SUM(1 + j.requeues), 0) FROM render_jobs j"
+         " JOIN assets a ON a.id = j.asset_id"
          f" WHERE a.idea_id = ? AND a.status IN ('rendering', 'ready', 'failed') AND {_OPEN}")
 
 
