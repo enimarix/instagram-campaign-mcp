@@ -100,7 +100,7 @@ function useAct(onDone: () => void) {
 }
 type Act = ReturnType<typeof useAct>['act']
 
-type Pushed = { kind: PlanningItem['kind']; title: string; by_s: number }[]
+type Pushed = Awaited<ReturnType<typeof previewPlanning>>['pushed']
 
 /** The delay warning (190): before a move or « start now », what it pushes back and by how
  * much (a dry run on the server); confirm or cancel. Nothing pushed back: it goes at once. */
@@ -191,7 +191,7 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
         )}
         {retirer}
       </div>
-  {box}
+      {box}
     </div>
   )
 }
