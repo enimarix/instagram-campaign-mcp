@@ -542,10 +542,12 @@ def test_the_control_routes_are_thin_doors(store, monkeypatch):
 
 # --- step 192: audit fixes ------------------------------------------------------------------
 def _film_render(store, monkeypatch):
-    """A running film's own render: its Lemo order in_production, its job queued."""
+    """A running film's own render: its run alive, its Lemo order in_production, its job
+    queued."""
     order = _film(store, monkeypatch, NOW - timedelta(minutes=60))
     idea = store.add_idea("motion", hook="Un film", style="lemo:watercolor",
                           batch_date="2026-11-17")
+    store.start_agent_run("lemo-film")  # no pid: alive for close_dead_runs
     work_orders.start(store, order, idea)
     asset = store.add_asset(idea["id"], batch_date="2026-11-17")
     return store.add_render_job(asset["id"], f"film{asset['id']}")["id"]
@@ -650,3 +652,47 @@ def test_a_lemo_style_is_case_sensitive(store, monkeypatch):
     with store._tx() as c:
         c.execute("UPDATE work_orders SET style='LEMO:watercolor' WHERE id=?", (film,))
     assert _line(store) == []  # lemo.is_lemo says no: not a film
+
+
+# --- step 198: audit fixes ------------------------------------------------------------------
+async def _loop_until(store, tmp_path, ran, done, wait_s):
+    """Run the render loop until done() or wait_s passes; the jobs it claims go to `ran`."""
+    loop = asyncio.create_task(worker.render_loop(
+        store, cfg(media_root=str(tmp_path)), run=lambda j: ran.append(j["id"]), interval=0.02))
+    try:
+        deadline = time.monotonic() + wait_s
+        while not done() and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+    finally:
+        loop.cancel()
+        with suppress(asyncio.CancelledError):
+            await loop
+
+
+async def test_the_pause_waits_for_a_films_render_machine_timer(store, monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "keep_awake", nullcontext)
+    monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: True)
+    job = _film_render(store, monkeypatch)
+    store.update_render_job(job, failure="machine 1/6: TTSError: x",  # render.machine_wait
+                            not_before=to_iso(utcnow() + timedelta(minutes=5)))
+    line.pause(store, True)
+    assert line.film_renders(store) == [job]  # still the film's: no hold, timer nor remove
+    assert line.film_renders(store, utcnow()) == []
+    ran = []
+    await _loop_until(store, tmp_path, ran, lambda: ran, 0.3)
+    assert ran == [] and store.get_render_job(job)["state"] == "queued"
+    store.update_render_job(job, not_before=to_iso(utcnow() - timedelta(seconds=1)))
+    await _loop_until(store, tmp_path, ran, lambda: ran, 5)  # its timer is past: claimed
+    assert ran == [job]
+
+
+def test_a_dead_films_render_is_an_ordinary_one(store, monkeypatch):
+    from src.agent import runner
+
+    job = _film_render(store, monkeypatch)
+    assert line.film_renders(store) == [job]  # a live film's: exempt
+    monkeypatch.setattr(runner, "is_gone", lambda pid, started: True)  # the film died
+    assert line.film_renders(store) == []
+    assert store.list_agent_runs("lemo-film", limit=1)[0]["status"] == "failed"
+    line.hold(store, "render", job, True)  # the owner may hold, time or remove it now
+    assert store.get_render_job(job)["not_before"] == line.HELD
