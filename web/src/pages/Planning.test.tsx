@@ -109,4 +109,82 @@ describe('Planning', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Lancer maintenant' }))
     expect(await screen.findByText('Pas fait : Ce rendu est en cours')).toBeTruthy()
   })
+
+  it('moves a waiting render up / down and holds or releases a film (187)', async () => {
+    const calls = stubCalls([
+      item({ title: 'Le suivant', ids: { job_id: 6 } }),
+      item({ kind: 'film', title: 'Un film', ids: { order_id: 4 }, waits_on: 'held', est_start: null, est_ready: null }),
+    ])
+    show()
+    const [render, film] = await screen.findAllByRole('article')
+    fireEvent.click(within(render).getByRole('button', { name: 'Monter' }))
+    expect(await screen.findByText('Monté d’une place.')).toBeTruthy()
+    fireEvent.click(within(render).getByRole('button', { name: 'Descendre' }))
+    await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/6/move', body: { by: 1 } }))
+    expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/6/move', body: { by: -1 } })
+    fireEvent.click(within(render).getByRole('button', { name: 'Mettre en pause' }))
+    await waitFor(() => expect(calls).toContainEqual({ method: 'PUT', url: '/api/planning/render/6/hold', body: { held: true } }))
+    expect(within(film).getByText('En pause')).toBeTruthy()
+    fireEvent.click(within(film).getByRole('button', { name: 'Reprendre' }))
+    await waitFor(() => expect(calls).toContainEqual({ method: 'PUT', url: '/api/planning/film/4/hold', body: { held: false } }))
+  })
+
+  it('removes with a 5 s undo: nothing is sent before it closes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const calls = stubCalls([
+        item({ title: 'Le suivant', ids: { job_id: 6 } }),
+        item({ kind: 'work_order', title: 'Ma commande', ids: { order_id: 4 } }),
+        item({ kind: 'work_order', title: 'Sans consigne', ids: { order_id: 5 }, waits_on: 'needs_instruction' }),
+      ])
+      show()
+      const titles = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+      const buttons = await screen.findAllByRole('button', { name: 'Retirer' })
+      expect(buttons).toHaveLength(2) // not on the order that waits for its instruction
+      fireEvent.click(buttons[0])
+      expect(screen.queryByText('Le suivant')).toBeNull() // out at once
+      fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+      expect(titles()).toEqual(['Le suivant', 'Ma commande', 'Sans consigne']) // back in its place
+      vi.advanceTimersByTime(6000)
+      expect(calls.filter((c) => c.url.endsWith('/remove'))).toEqual([])
+      fireEvent.click(screen.getAllByRole('button', { name: 'Retirer' })[1])
+      expect(screen.queryByText('Ma commande')).toBeNull()
+      expect(calls.filter((c) => c.url.endsWith('/remove'))).toEqual([])
+      vi.advanceTimersByTime(5000)
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/order/4/remove', body: undefined }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaving the page sends a removal still in its undo window', async () => {
+    const calls = stubCalls([item({ kind: 'film', title: 'Un film', ids: { order_id: 4 } })])
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: 'Retirer' }))
+    cleanup()
+    await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/film/4/remove', body: undefined }))
+  })
+
+  it('the pause switch pauses and resumes the whole studio', async () => {
+    let paused: string | null = null
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined
+      calls.push({ method: init?.method ?? 'GET', url, body })
+      if (init?.method === 'PUT') paused = body.paused ? soon(0) : null
+      return new Response(JSON.stringify(init?.method ? { paused } : { now: soon(0), items: [item({})], paused }))
+    }))
+    show()
+    const toggle = await screen.findByRole('switch', { name: 'Tout mettre en pause' }) as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+    fireEvent.click(toggle)
+    expect(await screen.findByText('Studio en pause : rien ne démarre, ce qui tourne finit.')).toBeTruthy()
+    expect(calls).toContainEqual({ method: 'PUT', url: '/api/planning/pause', body: { paused: true } })
+    expect(toggle.checked).toBe(true)
+    expect(screen.getByText(/Studio en pause depuis/)).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(await screen.findByText('Studio repris : la file repart.')).toBeTruthy()
+    expect(toggle.checked).toBe(false)
+    expect(screen.queryByText(/Studio en pause depuis/)).toBeNull()
+  })
 })
