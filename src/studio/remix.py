@@ -163,9 +163,10 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
                  captions: Optional[List[Dict[str, Any]]] = None,
                  caption: Optional[str] = None, music: Optional[str] = DEFAULT_MUSIC,
                  voice: Optional[str] = None) -> Dict[str, Any]:
-    """Build the remix, voice the script, claim the next reaction piece for the new asset
-    and queue its render: {asset, job, piece, warnings}. Everything is checked before the asset is
-    created; a piece that cannot be cut leaves the asset `failed` with the reason."""
+    """Build the remix, claim the next reaction piece for the new asset and queue its render
+    (the job voices the script first: voice_over): {asset, job, piece, warnings}. Everything
+    else is checked before the asset is created; a piece that cannot be cut leaves the asset
+    `failed` with the reason."""
     idea = store.get_idea(idea_id)
     if idea["track"] != "remix" or idea["source_id"] != source_id:
         raise ValueError(f"idea {idea_id} must be a remix idea of source {source_id}"
@@ -179,15 +180,14 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
     if store.active_reaction_reel() is None:
         raise ValueError("no reaction reel: upload a reaction reel in Settings first")
     inputs = {"source": source["local_path"]}
+    todo = {}
     if (script or "").strip():
         if settings.tts_provider == "none":
             raise ValueError("no TTS engine is set up (TTS_PROVIDER=none), so there is no"
                              " voice-over: a remix with a script is refused (never faked)")
-        synth = get_provider(settings).synthesize(script, voices.check_voice(store, voice))
-        if synth.duration_s > length + 0.05:
-            raise ValueError(f"the voice-over is {synth.duration_s:.1f} s, longer than the"
-                             f" {length:.1f} s clip: shorten the script or widen the trim")
-        inputs["voice"] = motion.store_voice(settings, synth.audio_path)
+        # 188a: the render job makes the voice (voice_over), in line order
+        todo = {"voice_todo": {"script": script, "max_s": length,
+                               "voice": voices.check_voice(store, voice)}}
     if any(isinstance(op, Music) for op in recipe.ops):
         inputs["music"] = _music_file(settings, music)
     clip = {"clip_timeline": t} if (t := source["stats"].get("timeline")) else {}
@@ -196,7 +196,7 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
         piece = next_reaction_piece(store, settings, length, asset_id=asset["id"])
         env = render.validate_recipe({"kind": "ffmpeg", "recipe": recipe.model_dump(mode="json"),
                                       "inputs": {**inputs, "reaction": piece["path"]},
-                                      **clip},
+                                      **clip, **todo},
                                      settings.media_root)
         asset = store.update_asset(asset["id"], recipe=env)
     except Exception as e:
@@ -205,6 +205,18 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
         raise
     return {"asset": asset, "job": render.enqueue_render(store, asset["id"]), "piece": piece,
             "warnings": _warnings(source, recipe, settings)}
+
+
+def voice_over(env: Dict[str, Any], settings: InstagramMCPSettings, todo: Dict[str, Any]
+               ) -> Dict[str, Any]:
+    """The remix recipe `env` with its voice-over made (`todo`: render.VoiceTodo's voice,
+    script, max_s) as its `voice` input. Run by the render job (render.voice_first)."""
+    synth = get_provider(settings).synthesize(todo["script"], todo.get("voice"))
+    if synth.duration_s > todo["max_s"] + 0.05:
+        raise ValueError(f"the voice-over is {synth.duration_s:.1f} s, longer than the"
+                         f" {todo['max_s']:.1f} s clip: shorten the script or widen the trim")
+    return {**env, "inputs": {**env["inputs"],
+                              "voice": motion.store_voice(settings, synth.audio_path)}}
 
 
 def _warnings(source: Dict[str, Any], recipe: Recipe, settings: InstagramMCPSettings

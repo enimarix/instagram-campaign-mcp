@@ -350,6 +350,14 @@ def retime_voice(src: Path, old: Sequence[Dict[str, Any]], new: Sequence[Dict[st
     return out
 
 
+def load_beats(media_root: Any, audio_id: str) -> Dict[str, Any]:
+    """load(), ValueError too when the track has no beat to cut on."""
+    meta = load(media_root, audio_id)
+    if not meta.get("beats"):
+        raise ValueError(f"track {audio_id}: no beat found, pick another track")
+    return meta
+
+
 def apply(props: Dict[str, Any], media_root: Any, audio_id: str) -> tuple:
     """Props cut on the track's beat with the template's own bed off, and the recipe's
     `ig_audio` (what publish attaches, what the preview mixes). ValueError when the track
@@ -357,9 +365,7 @@ def apply(props: Dict[str, Any], media_root: Any, audio_id: str) -> tuple:
     ponytail: voiced videos only. The clean master must pass QC on its own (an audio track
     at -14 LUFS): with a voice it does; without one the finish would push the sfx alone to
     -14 under Instagram's track. Music-only videos need QC to judge the mix with the track."""
-    meta = load(media_root, audio_id)
-    if not meta.get("beats"):
-        raise ValueError(f"track {audio_id}: no beat found, pick another track")
+    meta = load_beats(media_root, audio_id)
     voice = props.get("voice") or {}
     if not (voice.get("audioSrc") and voice.get("lines")):
         raise ValueError("an Instagram track needs a voiced video (a voice other than none)")

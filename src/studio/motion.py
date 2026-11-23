@@ -224,6 +224,36 @@ def build_props(template: str, props: Dict[str, Any], settings: InstagramMCPSett
     return {**props, "voice": filled}
 
 
+def voice_pending(template: str, props: Dict[str, Any]) -> bool:
+    """Whether build_props would call the TTS provider for these props."""
+    if template not in SCRIPTS:
+        return False
+    if template == sitcom.TEMPLATE and any("seconds" not in say for say in sitcom.says(props)):
+        return True
+    return "voice" not in props
+
+
+def voice_recipe(env: Dict[str, Any], settings: InstagramMCPSettings, todo: Dict[str, Any],
+                 v: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The motion recipe `env` with its voice-over made (build_props, `todo` as in
+    render.VoiceTodo), then cut on the Instagram track when it has one, and its cover time.
+    `v`: validate_props of env's props when the caller has it. The render job runs this for
+    a recipe queued with `voice_todo` (step 188a), queue_motion_render for the others."""
+    template = env["template"]
+    voiced = build_props(template, env["props"], settings, todo.get("voice"), todo.get("cast"))
+    if v is None or voiced is not v["props"]:
+        v = validate_props(template, voiced)
+    env = {**env, "props": v["props"]}
+    if todo.get("music_audio_id"):  # the lines on the track's beat; publish attaches the track
+        props, env["ig_audio"] = music.apply(v["props"], settings.media_root,
+                                             todo["music_audio_id"])
+        v = validate_props(template, props)
+        env["props"] = v["props"]
+    if v["coverFrame"] is not None:  # the publish guard sends it to Instagram as the cover
+        env["thumb_offset_ms"] = round(v["coverFrame"] * 1000 / v["fps"])
+    return env
+
+
 def store_voice(settings: InstagramMCPSettings, audio: Path) -> str:
     """Copy synthesised audio into `<media root>/voice/` (once); returns its media path."""
     dest = Path(settings.media_root) / "voice" / audio.name
@@ -424,7 +454,8 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
                         actor: str = "agent") -> Dict[str, Any]:
     """Store a motion recipe and queue its render; returns {asset, job} at once (the worker
     renders). New asset for `idea_id`, or a re-render of `asset_id` (failed: same asset;
-    ready: a child asset). Runs TTS first when the template has a script and no voice yet.
+    ready: a child asset). Never waits for the voice: a template with a script and no voice yet
+    is stored with `voice_todo` (the voice checked on now) and the render job makes it.
     `music_audio_id`: an Instagram track (fetched with music.fetch) the video is cut to and
     published with, in place of the template's bed (step 178)."""
     if (idea_id is None) == (asset_id is None):
@@ -436,7 +467,7 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
         # ponytail: the Blender engines time shots and character voices off the narrator
         # lines; moving the narrator alone would desync them. Remotion templates only.
         raise ValueError(f"{template} cannot take an Instagram track yet: use its own bed")
-    v = validate_props(template, props)  # before TTS: build_props needs well-formed props
+    v = validate_props(template, props)  # at once: the agent gets bad props now, not at render
     cast = None
     if settings.tts_provider != "none":  # only voices the owner keeps on (Voix page)
         if "voice" not in v["props"]:  # a new voice-over; a re-render keeps its own audio
@@ -447,19 +478,18 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
             voice = voices.default_voice(store)
         if template == sitcom.TEMPLATE:
             cast = voices.say_cast(store)
-    voiced = build_props(template, v["props"], settings, voice, cast)
-    if voiced is not v["props"]:
-        v = validate_props(template, voiced)
     env: Dict[str, Any] = {"kind": "motion", "template": template, "props": v["props"]}
     credits = sfx.credits(v["props"])  # ValueError for a library sound not cached (150)
     if credits:  # the caption must carry them: submit_asset adds them, the publish guard checks
         env["sfx_credits"] = credits
-    if music_audio_id:  # the lines on the track's beat; publish attaches the track
-        props, env["ig_audio"] = music.apply(v["props"], settings.media_root, music_audio_id)
-        v = validate_props(template, props)
-        env["props"] = v["props"]
-    if v["coverFrame"] is not None:  # the publish guard sends it to Instagram as the cover
-        env["thumb_offset_ms"] = round(v["coverFrame"] * 1000 / v["fps"])
+    todo = {"voice": voice, "cast": cast, "music_audio_id": music_audio_id}
+    if settings.tts_provider != "none" and voice_pending(template, v["props"]):
+        if music_audio_id:  # what music.apply can tell before the voice exists
+            music.load_beats(settings.media_root, music_audio_id)
+        # 188a: the render job makes the voice (render.voice_first), in line order
+        env["voice_todo"] = {k: x for k, x in todo.items() if x is not None}
+    else:  # nothing to synthesise (no script, a voice already, or the reading estimate)
+        env = voice_recipe(env, settings, todo, v)
     if asset_id is not None:
         return render.rerender(store, settings.media_root, asset_id, env, actor=actor)
     idea = store.get_idea(idea_id)

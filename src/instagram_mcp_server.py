@@ -755,7 +755,8 @@ async def render_motion(template: str, props: Dict[str, Any], idea_id: Optional[
                         music_audio_id: Optional[str] = None) -> Dict[str, Any]:
     """Queue a motion render and return at once with the job id: a new asset for idea_id,
     or a re-render of asset_id (failed asset: same asset; ready: a new child asset).
-    Templates with a script get their voice-over (TTS) first unless props carry `voice`.
+    Templates with a script get their voice-over (TTS), made by the render job, unless props
+    carry `voice`: the voice is checked now, so an unknown or switched-off one is refused here.
     The template must be in the idea's style (an idea without one takes the template's).
     `music_audio_id` (a track fetched with fetch_music): the scenes start on its beats and
     the drop, the template's own bed is off, and the Reel is published with that Instagram
