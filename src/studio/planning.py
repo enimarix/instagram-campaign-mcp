@@ -245,7 +245,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
     busy: Optional[str] = None
     todo = schedule.launch_requests(store)  # 196: the runs the owner launched, oldest first
-    launched = {r["playbook"]: r["only"] for r in todo}
+    launched = {r["playbook"] for r in todo}
     listed: set = set()  # the orders and change requests a light run lists already
 
     def launches(at: datetime) -> None:

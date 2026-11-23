@@ -263,9 +263,9 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
     <div>
       <div className="flex flex-wrap items-end gap-2 pt-1">
         <Button size="sm" variant="primary" disabled={busy}
-          title={machine ? "Sans attendre le nouvel essai de la machine (RAM, GPU ou voix)" : undefined}
+          title={machine ? 'Sans attendre le nouvel essai de la machine (RAM, GPU ou voix)' : undefined}
           onClick={() => void guard({ action: 'start_now', kind, id }, () => startNow(kind, id),
-            machine ? "Passe en tête de la file, sans attendre le nouvel essai de la machine." : 'Passe en tête de la file.')}>
+            machine ? 'Passe en tête de la file, sans attendre le nouvel essai de la machine.' : 'Passe en tête de la file.')}>
           Lancer maintenant
         </Button>
         <Button size="sm" disabled={busy}
