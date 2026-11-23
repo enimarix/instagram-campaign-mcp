@@ -1142,6 +1142,8 @@ export type PlanningItem = {
   picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
   idea?: ClaudeIdea // a claude_idea's card (section ideas, 188b)
   line_index?: number | null // a waiting render's or film's place among the line's not held (placeItem, 195)
+  playbook?: string | null // an AI run's
+  launch_requested?: boolean // the owner launched it, it waits for the machine (196)
 }
 /** A video Claude planned (188b): nothing renders or is voiced until « Valider ». */
 export type ClaudeIdea = {
@@ -1231,4 +1233,18 @@ export const releaseIdea = (assetId: number, body: { now?: boolean; at?: string 
 export type IdeaEdit = { voice?: string; music?: string; lines?: string[]; caption?: string; description?: string }
 export const editIdea = (assetId: number, body: IdeaEdit) => send<unknown>('PATCH', `/api/planning/idea/${assetId}`, body)
 export const removeIdea = (assetId: number) => send<unknown>('POST', `/api/planning/idea/${assetId}/remove`)
+/** « Lancer » (196): id the job's (render), the order's (film, work_order), the video's
+ * (claude_idea, change_request without an order), the playbook (agent_run). */
+export type LaunchItem = { kind: 'render' | 'film' | 'claude_idea' | 'work_order' | 'change_request' | 'agent_run'; id: number | string }
+/** front: to the head of the line; requested: start once the machine is free (busy: why it is not). */
+export type LaunchResult = {
+  front: LaunchItem[]
+  requested: LaunchItem[]
+  refused: (LaunchItem & { message: string })[]
+  busy: string | null
+  paused: string | null
+}
+export const launchItems = (items: LaunchItem[]) => send<LaunchResult>('POST', '/api/planning/launch', { items })
+export const previewLaunch = (items: LaunchItem[]) =>
+  send<{ pushed: { kind: PlanningItem['kind']; title: string; by_s: number }[] }>('POST', '/api/planning/launch/preview', { items })
 export const setStudioPaused = (paused: boolean) => send<{ paused: string | null }>('PUT', '/api/planning/pause', { paused })

@@ -82,7 +82,7 @@ describe('Planning', () => {
     expect(screen.getByText("Pas d'heure : attend ta consigne.")).toBeTruthy()
   })
 
-  it('a waiting render starts now; the running card and an order have no such button', async () => {
+  it('a waiting render starts now; the running card has no such button', async () => {
     const calls = stubCalls([
       item({ section: 'running', title: 'Le rendu actuel', ids: { asset_id: 17, job_id: 5 }, progress: 0.5 }),
       item({ title: 'Le suivant', ids: { asset_id: 18, job_id: 6 }, waits_on: 'gpu_busy' }),
@@ -92,7 +92,7 @@ describe('Planning', () => {
     const running = await screen.findByRole('region', { name: 'En cours' })
     expect(within(running).queryByRole('button', { name: 'Lancer maintenant' })).toBeNull()
     const [button] = within(screen.getByRole('region', { name: 'Ensuite' })).getAllByRole('button', { name: 'Lancer maintenant' })
-    expect(screen.getAllByRole('button', { name: 'Lancer maintenant' })).toHaveLength(1) // not on the order
+    expect(screen.getAllByRole('button', { name: 'Lancer maintenant' })).toHaveLength(2) // the order's launches (196)
     fireEvent.click(button)
     expect(await screen.findByText('Passe en tête de la file.')).toBeTruthy()
     expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/6/start-now', body: undefined })
@@ -502,5 +502,77 @@ describe('Planning', () => {
       HTMLElement.prototype.getBoundingClientRect = rect
       vi.useRealTimers()
     }
+  })
+
+  describe('« Lancer » (196)', () => {
+    type Launched = { front: unknown[]; requested: unknown[]; refused: unknown[]; busy: string | null; paused: string | null }
+    function stubLaunch(items: PlanningItem[], answer: Launched, pushed: unknown[] = []) {
+      const calls: Call[] = []
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+        if (method === 'GET') return new Response(JSON.stringify({ now: soon(0), items }))
+        return new Response(JSON.stringify(url.endsWith('/preview') ? { pushed } : answer))
+      }))
+      return calls
+    }
+    const cards = [
+      item({ section: 'running', title: 'Le rendu actuel', ids: { asset_id: 17, job_id: 5 } }),
+      item({ title: 'Rendu A', ids: { asset_id: 18, job_id: 6 } }),
+      item({ kind: 'work_order', title: 'Ma commande', ids: { order_id: 4 } }),
+      item({ kind: 'change_request', title: 'Vidéo 3', ids: { asset_id: 3 }, waits_on: 'next_ai_run' }),
+      item({ kind: 'work_order', title: 'Sans consigne', ids: { order_id: 8 }, waits_on: 'needs_instruction' }),
+      item({ section: 'planned', kind: 'agent_run', title: 'Run daily-learn', source: 'schedule', playbook: 'daily-learn' }),
+      idea(),
+    ]
+    const launch = (calls: Call[]) => calls.find((c) => c.url === '/api/planning/launch')
+
+    it('ticks some cards and launches the selection in on-screen order, then one toast', async () => {
+      const calls = stubLaunch(cards, { front: [{ kind: 'render', id: 6 }], requested: [{ kind: 'work_order', id: 4 }],
+        refused: [], busy: 'renders are waiting', paused: null })
+      show()
+      const boxes = await screen.findAllByRole('checkbox', { name: /^Sélectionner : / })
+      expect(boxes.map((b) => b.getAttribute('aria-label'))).toEqual([ // not the running card, not the order without instruction
+        'Sélectionner : Le mythe du jus détox', 'Sélectionner : Rendu A', 'Sélectionner : Ma commande',
+        'Sélectionner : Vidéo 3', 'Sélectionner : Run daily-learn'])
+      const bar = screen.getByRole('region', { name: 'Lancer' })
+      expect(within(bar).getByRole('button', { name: 'Lancer la sélection (0)' })).toHaveProperty('disabled', true)
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Ma commande' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Rendu A' }))
+      fireEvent.click(within(bar).getByRole('button', { name: 'Lancer la sélection (2)' }))
+      expect(await screen.findByText(/1 passe en tête de la file · 1 lancement demandé : démarre dès que la machine est libre/)).toBeTruthy()
+      expect(screen.getByText(/un seul travail lourd à la fois/)).toBeTruthy()
+      expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/launch/preview',
+        body: { items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }] } })
+      expect(launch(calls)?.body).toEqual({ items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }] })
+      await waitFor(() => expect(within(bar).getByRole('button', { name: 'Lancer la sélection (0)' })).toBeTruthy()) // cleared
+    })
+
+    it('« Tout lancer » sends every waiting card, after the delay warning', async () => {
+      const calls = stubLaunch(cards, { front: [], requested: [], refused: [{ kind: 'agent_run', id: 'daily-learn', message: 'Le run daily-learn est déjà en cours.' }],
+        busy: null, paused: '2026-11-23T10:00:00+00:00' }, [{ kind: 'render', title: 'Rendu B', by_s: 600 }])
+      show()
+      fireEvent.click(await screen.findByRole('button', { name: 'Tout lancer' }))
+      const warning = await screen.findByRole('alertdialog', { name: 'Ce que ça repousse' })
+      expect(launch(calls)).toBeUndefined() // nothing before the owner confirms
+      fireEvent.click(within(warning).getByRole('button', { name: 'Confirmer' }))
+      expect(await screen.findByText(/1 refusé \(Le run daily-learn est déjà en cours.\)\. Studio en pause/)).toBeTruthy()
+      expect(launch(calls)?.body).toEqual({ items: [{ kind: 'claude_idea', id: 9 }, { kind: 'render', id: 6 },
+        { kind: 'work_order', id: 4 }, { kind: 'change_request', id: 3 }, { kind: 'agent_run', id: 'daily-learn' }] })
+    })
+
+    it("an order's own button launches it alone; a launched one says it waits for the machine", async () => {
+      const calls = stubLaunch([
+        item({ kind: 'work_order', title: 'Ma commande', ids: { order_id: 4 } }),
+        item({ kind: 'change_request', title: 'Déjà demandée', ids: { asset_id: 3 }, launch_requested: true }),
+      ], { front: [], requested: [{ kind: 'work_order', id: 4 }], refused: [], busy: null, paused: null })
+      show()
+      expect(await screen.findByText('Lancement demandé — démarre dès que la machine est libre')).toBeTruthy()
+      expect(screen.getAllByRole('button', { name: 'Lancer maintenant' })).toHaveLength(1) // not twice
+      fireEvent.click(screen.getByRole('button', { name: 'Lancer maintenant' }))
+      expect(await screen.findByText(/1 lancement demandé : démarre dans la minute/)).toBeTruthy()
+      expect(calls.some((c) => c.url.endsWith('/preview'))).toBe(false) // an order pushes no render back
+      expect(launch(calls)?.body).toEqual({ items: [{ kind: 'work_order', id: 4 }] })
+    })
   })
 })

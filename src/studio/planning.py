@@ -1,5 +1,5 @@
 """
-The Planning page (step 185): what the studio makes next and when, read-only.
+The Planning page (step 185): what the studio makes next and when.
 
 build_planning(store, settings, now) -> {now, items} lists one chain, in the order the
 worker really takes the work today:
@@ -17,6 +17,10 @@ worker really takes the work today:
   for Claude's own ideas.
 - ideas: Claude's planned videos waiting for the owner (src/studio/planned.py, 188b):
   outside the chain, no time until released.
+
+« Lancer » (196): launch() takes one card or a selection: renders, films and Claude's ideas
+to the head of the line, the owner's orders / change requests and the AI's runs as launch
+requests catch_up starts first (schedule.request_launch).
 
 Around the chain (190): the 24 h strip of its ETAs and the queued posts (strip), the
 supply gauge (supply), today's history (history), and the delay warning before a move or
@@ -114,10 +118,11 @@ def _item(section: str, kind: str, title: str, start: Optional[datetime],
           duration: Optional[float], why: str, *, waits_on: Optional[str] = None,
           source: Optional[str] = None, style: Optional[str] = None,
           engine: Optional[str] = None, voice: Optional[str] = None,
-          not_before: Optional[str] = None, **ids: Optional[int]) -> Dict[str, Any]:
+          not_before: Optional[str] = None, playbook: Optional[str] = None,
+          **ids: Optional[int]) -> Dict[str, Any]:
     timed = start is not None and duration is not None
     return {"section": section, "kind": kind, "title": title, "source": source,
-            "ids": {k: v for k, v in ids.items() if v is not None},
+            "ids": {k: v for k, v in ids.items() if v is not None}, "playbook": playbook,
             "style": style, "engine": engine, "voice": voice,
             "est_start": to_iso(start) if start else None,
             "est_duration_s": round(duration) if duration is not None else None,
@@ -184,7 +189,7 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
             item = _item("running", kind,
                          f"Run {r['playbook']}", start, took,
                          "Le run de l'IA en cours : rien d'autre ne démarre avant sa fin.",
-                         source="agent", run_id=r["id"])
+                         source="agent", playbook=r["playbook"], run_id=r["id"])
         out.append({**item, "stage": "en cours", "late_s": _late(start, usual, now)})
     return out
 
@@ -212,7 +217,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     (a running item past its usual time, 190; else None), picks_up (the producing run's
     placeholder), idea (a claude_idea's card: planned.cards, section ideas), line_index (a
     waiting render's or film's place among the line's items not held, for line.place; held:
-    None)."""
+    None), playbook (an AI run's), launch_requested (196: the owner launched it, it waits for
+    the machine)."""
     with store._tx() as c:
         jobs = [dict(r) for r in c.execute(_JOBS)]
     render_s = _render_s(store)
@@ -309,7 +315,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         for name in schedule.due_runs(store, settings, now):
             agent = add(_item("next", "agent_run", f"Run {name}", agent, _run_s(store, name),
                               "Run prévu pas encore lancé : il passe dès que rien ne tourne.",
-                              waits_on=busy, source="agent"))
+                              waits_on=busy, source="agent", playbook=name))
 
     def requests(at: datetime, waits: Optional[str], why_here: str) -> datetime:
         """The owner's orders and change requests the light run writes, rendered one after
@@ -353,7 +359,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                               max(agent, at) if at else agent,
                               _run_s(store, schedule.ORDER_PLAYBOOK),
                               "Tes commandes et demandes de changement lancent le run léger.",
-                              waits_on=why or busy, source="agent"))
+                              waits_on=why or busy, source="agent",
+                              playbook=schedule.ORDER_PLAYBOOK))
             return requests(ready, why or busy,
                             "L'IA l'écrit dans ce run, puis son rendu suit celui d'avant.")
 
@@ -385,7 +392,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                           max(agent, at) if at else agent,
                           _run_s(store, checks.PLAYBOOK, RUN_S / 3),
                           "Les rendus finis sont vérifiés (images, contrôle) puis envoyés dans"
-                          " ta boîte, ou refaits.", waits_on=why or busy, source="agent"))
+                          " ta boîte, ou refaits.", waits_on=why or busy, source="agent",
+                          playbook=checks.PLAYBOOK))
         if at is None:
             agent = ready
 
@@ -411,7 +419,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         item = _item("planned", "agent_run", f"Run {r['playbook']}", start,
                      _run_s(store, r["playbook"]), f"Prévu chaque jour à {r['time']}."
                      if not r["weekly"] else f"Prévu chaque semaine ({r['time']}).",
-                     source="schedule")
+                     source="schedule", playbook=r["playbook"])
         if packet.RUNS.get(r["playbook"], ("custom",))[0] == "produce":
             item["picks_up"] = planned.ideas_left(store, settings)
         items.append(item)
@@ -424,7 +432,25 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                               " ton « Valider ».", source="agent", style=card["style"],
                               engine=_engine(env), voice=card["voice"],
                               asset_id=card["asset_id"]), "idea": card})
+    reqs = {r["playbook"]: r["only"] for r in schedule.launch_requests(store)}
+    for i in items:
+        i["launch_requested"] = i["section"] != "running" and _requested(i, reqs)
     return items
+
+
+def _requested(item: Dict[str, Any], reqs: Dict[str, Any]) -> bool:
+    """Whether the owner launched this AI run, order or change request and it waits for the
+    machine (196: schedule.request_launch)."""
+    if item["playbook"]:
+        return item["playbook"] in reqs
+    if (item["kind"] not in ORDERS or item["waits_on"] == "needs_instruction"
+            or schedule.ORDER_PLAYBOOK not in reqs):
+        return False
+    only, ids = reqs[schedule.ORDER_PLAYBOOK], item["ids"]
+    if only is None:
+        return True
+    return (ids["order_id"] in only["order_ids"] if "order_id" in ids
+            else ids.get("asset_id") in only["asset_ids"])
 
 
 LANES = {"render": "render", "work_order": "render", "change_request": "render",
@@ -544,6 +570,12 @@ def _key(item: Dict[str, Any]) -> tuple:
     return item["section"], item["kind"], item["title"], tuple(sorted(item["ids"].items()))
 
 
+def _release_now(store: CampaignStore, asset_id: int) -> None:
+    """planned.release(now=True) minus its checks, for a preview: they change no time."""
+    transition(store, asset_id, "rendering", actor="owner")
+    line.start_now(store, "render", render.enqueue_render(store, asset_id)["id"])
+
+
 def preview(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
             action: str, kind: str, item_id: int, by: int = 0) -> Dict[str, Any]:
     """The delay warning (190): what « Lancer maintenant » (start_now), « Monter » /
@@ -553,19 +585,48 @@ def preview(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
     errors (KeyError, ValueError)."""
     if action not in PREVIEWS:
         raise ValueError(f"action must be one of {', '.join(PREVIEWS)}")
+
+    def change(copy: CampaignStore) -> None:
+        if action == "start_now":
+            line.start_now(copy, kind, item_id)
+        elif action == "move":
+            line.move(copy, kind, item_id, by)
+        else:
+            _release_now(copy, item_id)
+
+    return _pushed(store, settings, now, change)
+
+
+def preview_launch(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+                   items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The delay warning before « Lancer la sélection » / « Tout lancer » (196): what the
+    selection's renders, films and Claude's ideas going to the head of the line push back
+    (on preview's copy; refused ones are left out, the AI runs move nothing ahead). {pushed}."""
+    def change(copy: CampaignStore) -> None:
+        for i in reversed(items):  # as launch(): the selection keeps its order at the front
+            try:
+                if i["kind"] in line.KINDS:
+                    line.start_now(copy, i["kind"], i["id"])
+                elif i["kind"] == "claude_idea":
+                    planned._planned(copy, i["id"])
+                    _release_now(copy, i["id"])
+            except (KeyError, ValueError):
+                continue
+
+    return _pushed(store, settings, now, change)
+
+
+def _pushed(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
+            change: Callable[[CampaignStore], Any]) -> Dict[str, Any]:
+    """{pushed: [{kind, title, by_s}]}: the items made ready a minute or more later once
+    `change` is applied to a copy of the database, in chain order."""
     # ponytail: copies the whole database (2 MB today: milliseconds); a SAVEPOINT on a
     # dedicated connection if it grows past what a click can wait for.
     copy = CampaignStore(":memory:")
     try:
         with store._tx() as c:
             c.backup(copy._conn)
-        if action == "start_now":
-            line.start_now(copy, kind, item_id)
-        elif action == "move":
-            line.move(copy, kind, item_id, by)
-        else:  # planned.release minus its checks: they change no time
-            transition(copy, item_id, "rendering", actor="owner")
-            line.start_now(copy, "render", render.enqueue_render(copy, item_id)["id"])
+        change(copy)
         after = {_key(i): _ready(i) for i in chain(copy, settings, now) if i["est_ready"]}
     finally:
         copy.close()
@@ -576,3 +637,85 @@ def preview(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
         if by_s >= 60:
             pushed.append({"kind": i["kind"], "title": i["title"], "by_s": round(by_s)})
     return {"pushed": pushed}
+
+
+HEAVY = (*line.KINDS, "claude_idea")  # to the head of the line
+ORDERS = ("work_order", "change_request")  # the light run, on the selection
+LAUNCHES = (*HEAVY, *ORDERS, "agent_run")
+
+
+def _order_ids(store: CampaignStore, kind: str, item_id: int) -> Dict[str, List[int]]:
+    """The waiting order (work_order: its id) or change request (its video's id) for the
+    light run, or the refusal: KeyError, ValueError."""
+    if kind == "work_order":
+        o = work_orders.get_order(store, item_id)
+        if o["status"] == "needs_instruction":
+            raise ValueError("Cette commande attend ta consigne : rien ne part sans elle.")
+        if o["status"] != "scheduled" or lemo.is_lemo(o["style"]):
+            raise ValueError(f"Cette commande n'attend pas le run léger (statut {o['status']}) :"
+                             " seule une commande en attente peut être lancée.")
+        return {"order_ids": [item_id], "asset_ids": []}
+    if item_id not in {r["asset"]["id"] for r in list_revision_requests(store)}:
+        status = store.get_asset(item_id)["status"]
+        raise ValueError(f"La vidéo {item_id} n'attend pas de changement (statut {status}, ou sa"
+                         " nouvelle version est déjà en rendu).")
+    return {"order_ids": [], "asset_ids": [item_id]}
+
+
+def _playbook(store: CampaignStore, name: Any) -> str:
+    """A playbook the owner may launch, or the refusal (AgentError, ValueError)."""
+    from ..agent.runner import _playbook_file
+
+    name = _playbook_file(str(name), schedule.AGENT_DIR).stem
+    if store.running_agent_run(name):
+        raise ValueError(f"Le run {name} est déjà en cours.")
+    return name
+
+
+def launch(store: CampaignStore, settings: InstagramMCPSettings, items: List[Dict[str, Any]],
+           now: datetime) -> Dict[str, Any]:
+    """« Lancer maintenant » on one card or many, « Lancer la sélection », « Tout lancer »
+    (196). items [{kind, id}] in on-screen order: render (its job), film (its order) and
+    claude_idea (its video: planned.release now=True) go to the head of the line in that
+    order (line.start_now); work_order (its order) and change_request (its video, one the AI
+    left « en attente » included) ask for the light run on those only, agent_run (id: the
+    playbook) for that run: schedule.request_launch, started by catch_up as soon as nothing
+    else runs, past the grace, the « seen » rule and the daily cap. Running, done or unknown:
+    refused with the reason. {front: [{kind, id}], requested: [{kind, id}], refused: [{kind,
+    id, message}] (on-screen order), busy (schedule.busy: why the requests wait, else None),
+    paused (line.paused)}."""
+    from ..agent.runner import AgentError
+
+    front, requested, refused = [], [], []
+    orders: Dict[str, List[int]] = {"order_ids": [], "asset_ids": []}
+    playbooks: List[str] = []
+    for i in reversed(items):  # each start_now goes ahead of all: the first ends at the head
+        kind, item_id = i["kind"], i["id"]
+        try:
+            if kind not in LAUNCHES:
+                raise ValueError(f"« {kind} » ne se lance pas.")
+            if kind == "agent_run":
+                playbooks.append(_playbook(store, item_id))
+            elif not isinstance(item_id, int):
+                raise ValueError(f"id {item_id!r} : un nombre est attendu.")
+            elif kind == "claude_idea":
+                planned.release(store, settings, item_id, now=True)
+            elif kind in HEAVY:
+                line.start_now(store, kind, item_id)
+            else:
+                for k, ids in _order_ids(store, kind, item_id).items():
+                    orders[k] += ids
+        except KeyError:
+            refused.append({"kind": kind, "id": item_id, "message": "Introuvable."})
+            continue
+        except (ValueError, AgentError) as e:
+            refused.append({"kind": kind, "id": item_id, "message": str(e)})
+            continue
+        (front if kind in HEAVY else requested).append({"kind": kind, "id": item_id})
+    if orders["order_ids"] or orders["asset_ids"]:
+        schedule.request_launch(store, schedule.ORDER_PLAYBOOK, now, **orders)
+    for name in playbooks:
+        schedule.request_launch(store, name, now)
+    return {"front": front[::-1], "requested": requested[::-1], "refused": refused[::-1],
+            "busy": schedule.busy(store, now=now) if requested else None,
+            "paused": line.paused(store)}

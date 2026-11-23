@@ -1,13 +1,13 @@
 """Planning routes: what renders next and when, « start now », the timer, hold, move, place
 (drag and drop, 195) and remove of a waiting render or film (remove: an owner order too),
-the studio's pause switch, the delay preview (190), and Claude's planned videos: release,
-edit, remove (thin doors onto src/studio/planning.py, src/studio/line.py and
+the studio's pause switch, the delay preview (190), Claude's planned videos: release,
+edit, remove, and « Lancer » one card or many (196) (thin doors onto src/studio/planning.py, src/studio/line.py and
 src/studio/planned.py)."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict
@@ -62,6 +62,15 @@ class PreviewIn(BaseModel):
     by: Literal[-1, 0, 1] = 0  # move: -1 up, 1 down
 
 
+class LaunchItem(BaseModel):
+    kind: str  # render | film | claude_idea | work_order | change_request | agent_run
+    id: Union[int, str]  # the job's, the order's, the video's; agent_run: the playbook
+
+
+class LaunchIn(BaseModel):
+    items: List[LaunchItem]  # in on-screen order
+
+
 @router.get("/planning")
 def get_planning(request: Request):
     return planning.build_planning(request.app.state.store, request.app.state.settings,
@@ -72,6 +81,18 @@ def get_planning(request: Request):
 def preview(body: PreviewIn, request: Request, store: CampaignStore = Depends(get_store)):
     return call(planning.preview, store, request.app.state.settings, utcnow(), body.action,
                 body.kind, body.id, body.by)
+
+
+@router.post("/planning/launch")
+def launch(body: LaunchIn, request: Request, store: CampaignStore = Depends(get_store)):
+    return call(planning.launch, store, request.app.state.settings,
+                [i.model_dump() for i in body.items], utcnow())
+
+
+@router.post("/planning/launch/preview")
+def preview_launch(body: LaunchIn, request: Request, store: CampaignStore = Depends(get_store)):
+    return call(planning.preview_launch, store, request.app.state.settings, utcnow(),
+                [i.model_dump() for i in body.items])
 
 
 # Before the line's routes: /planning/{kind}/{item_id}/remove would take /idea/... first.

@@ -25,6 +25,7 @@ run-due`). A weekly run missed while the PC was off waits for the next week.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import shlex
 import subprocess
@@ -39,7 +40,7 @@ import structlog
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
 from ..studio import checks, line, styles, work_orders
-from . import film
+from . import film, packet
 from .packet import RUNS
 from .runner import (
     AGENT_DIR,
@@ -80,6 +81,9 @@ _WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_reques
 # else the check run for finished renders (188c); the Planning page (185) lists them in
 # this order
 CATCH_UP_ORDER = ("film", "playbook", "orders", "checks")
+# worker_state (196): the owner's « Lancer maintenant » on an AI run, [{playbook, only, at}],
+# honoured by catch_up before CATCH_UP_ORDER (request_launch)
+LAUNCH_KEY = "launch_requests"
 CAPABILITIES_KEY = "style_capabilities"  # worker_state: {styles, gained_at}
 ORDER_RETRY = timedelta(minutes=10)  # a failed preflight is asked again after this
 UP_TASK = "IGCampaignUp"
@@ -219,8 +223,10 @@ def _gate(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
     `seen` (a reader started since: it has it), `daily_cap`, `preflight` (failed less than
     ORDER_RETRY ago), else None."""
     # ponytail: the last 10 runs per reader; more than 10 since the newest request is unseen.
+    # A light run on the owner's selection (196) saw only that: it counts for none.
+    scoped = set(store.get_state(packet.SCOPED_RUNS_KEY) or ())
     since = [r for p in readers for r in store.list_agent_runs(p, limit=10)
-             if parse_iso(r["started_at"]) >= newest]
+             if parse_iso(r["started_at"]) >= newest and r["id"] not in scoped]
     if any(r["summary"] != DEAD_RUN for r in since):
         return "seen"
     # a run a restart killed never had them (155), nor the start that made it
@@ -393,6 +399,73 @@ def film_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     return order["id"]
 
 
+def _edit_launches(store: CampaignStore, change: Callable[[List[Dict[str, Any]]], Any]) -> Any:
+    """Read-change-write the launch requests in one locked transaction (the page's launch
+    and the worker's catch_up never lose each other's); returns what `change` returns."""
+    with store.immediate() as c:
+        row = c.execute("SELECT value FROM worker_state WHERE key = ?", (LAUNCH_KEY,)).fetchone()
+        reqs = json.loads(row[0]) if row else []
+        out = change(reqs)
+        c.execute("INSERT INTO worker_state (key, value, updated_at) VALUES (?, ?, ?)"
+                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
+                  " updated_at = excluded.updated_at",
+                  (LAUNCH_KEY, json.dumps(reqs), to_iso(utcnow())))
+    return out
+
+
+def _join(reqs: List[Dict[str, Any]], req: Dict[str, Any]) -> None:
+    """Add `req` to the list; a request for the same playbook joins the one waiting (only:
+    the union of both, None when either is all)."""
+    old = next((r for r in reqs if r["playbook"] == req["playbook"]), None)
+    if old is None:
+        reqs.append(req)
+    elif old["only"] is not None:
+        old["only"] = None if req["only"] is None else {
+            k: sorted({*old["only"][k], *req["only"][k]}) for k in old["only"]}
+
+
+def launch_requests(store: CampaignStore) -> List[Dict[str, Any]]:
+    """The AI runs the owner launched that have not started yet (request_launch)."""
+    return store.get_state(LAUNCH_KEY) or []
+
+
+def request_launch(store: CampaignStore, playbook: str, now: datetime, *,
+                   order_ids: Optional[List[int]] = None,
+                   asset_ids: Optional[List[int]] = None) -> None:
+    """The owner's « Lancer maintenant » on an AI run (196): `playbook` starts as soon as
+    nothing else runs (catch_up, first; never while the studio is paused), past the grace,
+    the « seen » rule and the daily cap. order_ids / asset_ids (the light run): it works on
+    those orders and change requests only (packet.SCOPE_KEY), the others keep waiting;
+    neither: on all."""
+    only = (None if order_ids is None and asset_ids is None else
+            {"order_ids": sorted(set(order_ids or ())), "asset_ids": sorted(set(asset_ids or ()))})
+    _edit_launches(store, lambda reqs: _join(reqs, {"playbook": playbook, "only": only,
+                                                    "at": to_iso(now)}))
+
+
+def launched(store: CampaignStore, settings: InstagramMCPSettings, now: datetime, *,
+             start: Callable[..., Any]) -> Optional[str]:
+    """catch_up's first step (196): the oldest launch request starts its playbook (no grace,
+    « seen » or daily cap; the run's own preflight fails it when the CLI cannot start), a
+    light run on a selection with its scope set for the packet. Returns the playbook when
+    started; one already running waits (it is put back), an unknown playbook is dropped."""
+    req = _edit_launches(store, lambda reqs: reqs.pop(0) if reqs else None)
+    if req is None:
+        return None
+    if req["only"] is not None:
+        store.set_state(packet.SCOPE_KEY, {**req["only"], "at": to_iso(now)})
+    try:
+        start(store, settings, req["playbook"])
+    except AgentError as e:
+        store.set_state(packet.SCOPE_KEY, None)
+        if isinstance(e, AgentRunRefused):  # it runs already: it waits for the next tick
+            _edit_launches(store, lambda reqs: _join(reqs, req))
+        else:
+            print(f"agent launch: {e}", file=sys.stderr, flush=True)
+        return None
+    return req["playbook"]
+
+
 def busy(store: CampaignStore, *, queued: bool = True,
          now: Optional[datetime] = None) -> Optional[str]:
     """Why the catch-up starts no run now (166: never back to back), else None: a run is
@@ -412,8 +485,8 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
              start: Optional[Callable[..., Any]] = None,
              now: Optional[Callable[[], datetime]] = None,
              start_film: Optional[Callable[..., Any]] = None) -> List[str]:
-    """Start the Lemo film at the head of the line (film_run, runs.start_film), else the
-    first due playbook detached (runs.start_run), else the work orders' run if they need
+    """Start the run the owner launched (launched, 196), else the Lemo film at the head of
+    the line (film_run, runs.start_film), else the first due playbook detached (runs.start_run), else the work orders' run if they need
     one (order_run), else the check run for finished renders (check_run, 188c); nothing
     while busy(): one run, then the next waits for it and its
     renders (a film only for a running render, 186); nothing while the studio is paused
@@ -437,14 +510,15 @@ def catch_up(store: CampaignStore, settings: InstagramMCPSettings, *,
         order_id = film_run(store, settings, now(), start=start_film or start_film_run)
         return None if order_id is None else f"film {order_id}"
 
-    steps = {"playbook": playbook, "film": film,
+    steps = {"launch": lambda: launched(store, settings, now(), start=start or start_run),
+             "playbook": playbook, "film": film,
              "orders": lambda: order_run(store, settings, now(), start=start or start_run),
              "checks": lambda: check_run(store, settings, now(), start=start or start_run)}
     started = []
     try:
         if line.paused(store):  # the owner paused the studio: nothing starts
             return started
-        for step in CATCH_UP_ORDER:
+        for step in ("launch", *CATCH_UP_ORDER):
             if busy(store, queued=step != "film", now=now()):
                 continue
             got = steps[step]()
