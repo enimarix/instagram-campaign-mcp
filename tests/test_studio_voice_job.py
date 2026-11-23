@@ -4,7 +4,7 @@ import httpx
 import pytest
 import respx
 
-from src.studio import motion, render, tts, voices
+from src.studio import motion, render, sitcom, tts, voices
 from src.studio.tts import LineTiming, Synthesis, TTSError
 from tests.test_studio_motion import FACTQUEST, VALID, _settings
 from tests.test_studio_render import FAR_PAST, INFO
@@ -139,3 +139,12 @@ def test_a_none_engine_still_fills_the_reading_estimate_at_queue(store, tmp_path
     env = out["asset"]["recipe"]
     assert "voice_todo" not in env and "audioSrc" not in env["props"]["voice"]
     assert env["thumb_offset_ms"] == 1000
+
+
+def test_sitcom_character_lines_wait_for_the_job_too():
+    said = {"text": "Non !", "who": "dad", "seconds": 1.0}
+    props = {"voice": {"lines": []}, "scenes": [{"beats": [{"say": said}]}]}
+    assert not motion.voice_pending(sitcom.TEMPLATE, props)
+    unsaid = {**props, "scenes": [{"beats": [{"say": {"text": "Non !", "who": "dad"}}]}]}
+    assert motion.voice_pending(sitcom.TEMPLATE, unsaid)
+    assert motion.voice_pending("FactQuest", {}) and not motion.voice_pending("Hello", {})
