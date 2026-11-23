@@ -217,7 +217,7 @@ export default function Planning() {
   const toast = useToast()
   const load = useCallback(() => getPlanning().then((p) => {
     setItems(p.items)
-    setPaused(p.paused)
+    setPaused(p.paused ?? null)
     setError(null)
   }, (e: unknown) => setError(errorMessage(e))), [])
   useEffect(() => {
