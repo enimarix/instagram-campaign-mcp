@@ -4,8 +4,9 @@ The check run (step 188c): a finished render is checked before the owner sees it
 The night run no longer waits for its renders. A video waits for its check once its render
 finished (in the last HORIZON): `ready`, not judged, never submitted, or `failed`; never a
 Lemo film (the film runner checks its own film: lemo-film.md, today's path), never one the
-check dropped, never one a living newer version replaces (its re-render took over; 199:
-when that one fails, is archived or dropped, the old one is back), never the owner's
+check dropped, never one a newer version replaces (its re-render took over; 199: when
+that one failed or was dropped, the old one is back; an archived one still replaces it: a
+decision was taken on the idea), never the owner's
 own re-render of a submitted video (next reaction piece, fixed transcript: today's path).
 The light check run (agent/playbooks/check-renders.md, started by schedule.check_run) looks
 at each one: frames and QC, a re-render (at most MAX_RERENDERS per video: the render jobs of
@@ -17,8 +18,8 @@ decision; one a run left anyway is offered again CHECK_RECHECK_HOURS after that 
 
 The Inbox hides a `ready` video waiting for its check (flag), unless its render finished
 more than CHECK_INBOX_GRACE_HOURS ago or the check run cannot run (failing()): then it shows
-as before, so nothing is lost. An unsubmitted one a living newer version replaces is hidden
-for good (193), while that version lives (199): it carries on.
+as before, so nothing is lost. An unsubmitted one a newer version replaces is hidden for
+good (193), unless that version failed or was dropped (199).
 """
 
 from __future__ import annotations
@@ -42,15 +43,18 @@ PROPS_MAX = 20_000  # characters of one video's props in the packet; past it the
 _FINISHED = ("COALESCE((SELECT MAX(j.finished_at) FROM render_jobs j"
              " WHERE j.asset_id = a.id), a.updated_at)")
 _OPEN = "a.verdict = 'none' AND a.self_score_reason IS NULL"  # nobody submitted or judged it
-# a version that lives: not archived, failed or dropped (the check run's drop, drop())
-_LIVES = ("{0}.status NOT IN ('archived', 'failed')"
-          " AND COALESCE(json_extract({0}.agent_decision, '$.kind'), '') <> 'dropped'")
-# the versions a living newer one replaces (199): the parents of a living version, up the
-# chain (a version the owner sent back is archived once its own new one is ready: its parent
-# stays replaced); when the newer version dies the old one is back
+# a newer version that replaces its parent: neither failed nor dropped (the check run's
+# drop, drop()); an archived one still does (the owner declined it, the worker or a restyle
+# retired it: a decision was taken on the idea, the old one never comes back)
+_REPLACES = ("{0}.status <> 'failed'"
+             " AND COALESCE(json_extract({0}.agent_decision, '$.kind'), '') <> 'dropped'")
+_LIVES = "{0}.status <> 'archived' AND " + _REPLACES  # a version that lives
+# the versions a newer one replaces (199): the parents of a replacing version, up the chain
+# (a version the owner sent back is archived once its own new one is ready); when the newer
+# version failed or was dropped, the old one is back
 _REPLACED_IDS = (
     "WITH RECURSIVE replaced(id) AS (SELECT c.parent_asset_id FROM assets c"
-    f" WHERE c.parent_asset_id IS NOT NULL AND {_LIVES.format('c')}"
+    f" WHERE c.parent_asset_id IS NOT NULL AND {_REPLACES.format('c')}"
     " UNION SELECT p.parent_asset_id FROM assets p JOIN replaced r ON p.id = r.id"
     "  WHERE p.parent_asset_id IS NOT NULL) ")
 _WAITING = (
@@ -193,8 +197,8 @@ def flag(store: CampaignStore, settings: InstagramMCPSettings, rows: List[Dict[s
          now: datetime) -> List[Dict[str, Any]]:
     """The Inbox's asset rows with awaiting_check (while the check run can run: a `ready`
     video waiting for its check whose render finished less than CHECK_INBOX_GRACE_HOURS
-    ago) and replaced (an unsubmitted `ready` one a living newer version replaces: for good,
-    while that version lives)."""
+    ago) and replaced (an unsubmitted `ready` one a newer version replaces: for good, unless
+    that version failed or was dropped)."""
     hidden = set()
     if not failing(store):
         since = to_iso(now - timedelta(hours=settings.check_inbox_grace_hours))
@@ -212,7 +216,8 @@ def drop(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
     leaves the check list and the feed (it stays `ready` or `failed`: only the owner archives);
     the work order it was made for is skipped with the reason (Mes envois, a DM order's pick
     too), else an older DM pick of the idea's source; neither while another version of the
-    idea lives (not archived, failed or dropped: a fix's new version carries them on)."""
+    idea lives (not archived, failed or dropped, nor replaced: a fix's new version carries
+    them on)."""
     why = " ".join((why or "").split())[:WHY_MAX]
     if not why:
         raise ValueError("say why the video is dropped, in one line")
@@ -226,11 +231,13 @@ def drop(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
     asset = store.update_asset(asset_id, agent_decision=decision)
     idea = store.get_idea(asset["idea_id"])
     with store._tx() as c:
-        # another version of the idea lives (a fix's new version): its order and pick go on
-        # (an old version a living one replaces counts for nothing more: that one lives; with
-        # this video dropped, the one it replaced is back in the check list and the Inbox)
-        alive = c.execute("SELECT 1 FROM assets v WHERE v.idea_id = ? AND v.id <> ?"
-                          f" AND {_LIVES.format('v')}", (idea["id"], asset_id)).fetchone()
+        # another version of the idea lives (a fix's new version): its order and pick go on;
+        # an old version a newer one replaces does not (hidden for good); with this video
+        # dropped, the one it replaced is back in the check list and the Inbox: it does
+        alive = c.execute(_REPLACED_IDS + "SELECT 1 FROM assets v WHERE v.idea_id = ?"
+                          f" AND v.id <> ? AND {_LIVES.format('v')}"
+                          " AND v.id NOT IN (SELECT id FROM replaced)",
+                          (idea["id"], asset_id)).fetchone()
         orders = [] if alive else [r[0] for r in c.execute(
             "SELECT id FROM work_orders WHERE idea_id = ? AND status = 'in_production'",
             (idea["id"],))]

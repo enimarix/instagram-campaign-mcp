@@ -8,12 +8,14 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
-## 2026-11-23: A living new version replaces; a removed Claude card frees its place (199)
-An unsubmitted version stays out of the check list and the Inbox while a newer version of it
-lives (not failed, archived or dropped), up the chain (a version the owner sent back is
-archived once its own new one is ready: the first stays replaced). When the newer version
-dies the old one is back in the check list (and the Inbox once checked or after the grace),
-so its order or DM pick is never parked behind a hidden video. A day's places for Claude's
+## 2026-11-23: Only a failed or dropped new version gives the old one back; a removed Claude card frees its place (199)
+An unsubmitted version stays out of the check list and the Inbox for good once a newer
+version of it exists, up the chain, archived included (the owner declined it, the worker or a
+restyle retired it, or the owner sent it back and its own new one is ready: a decision was
+taken on the idea). When the newer version failed (past its retries) or was dropped by the
+check run, the old one is back in the check list (and the Inbox once checked or after the
+grace), so its order or DM pick is never parked behind a hidden video; `drop_render` counts
+no hidden old version as one that carries the order on. A day's places for Claude's
 ideas are fixed by that day's first producing packet; a later packet may only lower them
 (the owner's items it made no longer count, the batch stays the batch). « Retirer » on a
 planned Claude card (or the Inbox's « Archiver ») gives its place back for its batch day; a

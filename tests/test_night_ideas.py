@@ -16,6 +16,7 @@ from src.config import InstagramMCPSettings
 from src.learning import brief as B
 from src.store import to_iso, utcnow
 from src.studio import checks, line, motion, planned, work_orders
+from src.studio.assets import transition
 from tests.test_studio_motion import FACTQUEST, VALID, _settings
 from tests.test_trending import _ref
 
@@ -183,8 +184,6 @@ def test_what_waits_for_a_check(store):
 def test_an_unchanged_re_render_counts_for_the_cap(store):
     # 192: the same recipe re-queues the same job row; it still counts
     from src.studio import render
-    from src.studio.assets import transition
-
     now = utcnow()
     failed = _done(store, 20, status="failed")
     left = {r["asset_id"]: r["rerenders_left"] for r in checks.for_agent(store, now)["renders"]}
@@ -276,9 +275,32 @@ def test_a_parent_whose_new_version_dies_is_offered_again(store):
     assert work_orders.get_order(store, order["id"])["status"] == "skipped"  # never parked
 
 
-def test_an_old_version_stays_replaced_while_a_version_after_it_lives(store):
-    # old #17 still holds: out for good, beyond 24 h, while a newer version lives, up the
-    # chain (the owner sent the new version back: archived once its own new one is ready)
+def test_an_old_version_stays_out_once_the_owner_declined_its_new_one(store):
+    # review round 1: archived (the owner declined it, the worker or a restyle retired it)
+    # still replaces: the version the check judged broken never comes back
+    now = utcnow()
+    [order] = work_orders.create_orders(store, [{"source_id": _ref(store, "A"),
+                                                 "mode": "inspired"}])
+    a = _done(store, 30)
+    with store._tx() as c:
+        c.execute("UPDATE work_orders SET status='in_production', idea_id="
+                  "(SELECT idea_id FROM assets WHERE id=?) WHERE id=?", (a, order["id"]))
+    b = _done(store, 5, parent=a)
+    store.update_asset(b, self_score_reason="")  # the check submitted it
+    transition(store, b, "archived", actor="owner")  # the owner declined it
+    assert [r["asset_id"] for r in checks.for_agent(store, now)["renders"]] == []
+    assert checks.flag(store, cfg(), [{"id": a}], now)[0]["replaced"]
+    # drop's `alive` follows the same rule: the hidden `a` carries nothing on
+    c2 = _done(store, 2, parent=a)
+    with store._tx() as cx:
+        cx.execute("UPDATE assets SET status='failed' WHERE id=?", (c2,))
+    checks.drop(store, c2, "le rendu plante")
+    assert work_orders.get_order(store, order["id"])["status"] == "skipped"
+
+
+def test_an_old_version_stays_replaced_up_the_chain(store):
+    # old #17 still holds: out for good, beyond 24 h, up the chain (the owner sent the new
+    # version back: archived once its own new one is ready)
     now = utcnow()
     a = _done(store, 60 * 30)
     b = _done(store, 60 * 29, parent=a)
@@ -291,9 +313,9 @@ def test_an_old_version_stays_replaced_while_a_version_after_it_lives(store):
     with store._tx() as cx:
         cx.execute("UPDATE assets SET status='archived' WHERE id=?", (b,))
     assert replaced() == {a: True}
-    with store._tx() as cx:  # nothing after it lives any more: the owner's again
+    with store._tx() as cx:  # the owner declined the last one too: still out
         cx.execute("UPDATE assets SET status='archived' WHERE id=?", (c,))
-    assert replaced() == {a: False}
+    assert replaced() == {a: True}
 
 
 # --- the trigger --------------------------------------------------------------------------
