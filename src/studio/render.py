@@ -22,10 +22,11 @@ import time
 from pathlib import Path
 from typing import Annotated, Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from ..config import InstagramMCPSettings, get_settings
-from ..store import CampaignStore, to_iso, utcnow
+from ..store import CampaignStore, parse_iso, to_iso, utcnow
 from . import ffmpeg, media, motion, music
 from .assets import DESCRIPTION_CHARS, InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
@@ -33,7 +34,12 @@ from .qc import run_qc
 from .recipe import DEFAULT_PRESET, DEFAULT_TIMEOUT_S, Recipe, recipe_timeline, render
 from .tts import TTSError
 
+logger = structlog.get_logger(__name__)
+
 MAX_ATTEMPTS = 3
+# While the voice model is warm, a job that made a voice also makes the voices of the next
+# waiting voiced renders (voice_ahead): one model load per batch, not one per video.
+VOICE_AHEAD = 6
 FAILURE_CHARS = 2000
 POSTER_AT_S = 1.0  # cover frame when the recipe names none
 PREVIEW_ARGS = ("-vf", "scale=720:1280", "-c:v", "libx264", "-b:v", "1500k", "-maxrate", "1500k",
@@ -241,12 +247,41 @@ def voice_first(store: CampaignStore, asset: Dict[str, Any], settings: Instagram
     return store.update_asset(asset["id"], recipe=validate_recipe(env, settings.media_root))
 
 
+def voice_ahead(store: CampaignStore, settings: InstagramMCPSettings) -> int:
+    """Make the voices of the next VOICE_AHEAD waiting renders that still need one, in line
+    order (line.waiting), each through voice_first; films and items on a timer or held are
+    passed over. A failure is left to that job's own run (logged, never raised). Returns how
+    many were voiced.
+    ponytail: a job claimed meanwhile (RENDER_CONCURRENCY > 1) may voice the same recipe at
+    once: the TTS cache answers the second, both store the same voiced recipe."""
+    from . import line  # line imports us (through work_orders and lemo)
+
+    now, done = utcnow(), 0
+    for item in line.waiting(store):
+        if done >= VOICE_AHEAD:
+            break
+        if item["kind"] != "render" or (item["not_before"]
+                                        and parse_iso(item["not_before"]) > now):
+            continue
+        asset = store.get_asset(store.get_render_job(item["id"])["asset_id"])
+        if asset["status"] != "rendering" or "voice_todo" not in (asset["recipe"] or {}):
+            continue
+        try:
+            voice_first(store, asset, settings)
+        except Exception as e:  # noqa: BLE001 - its own job retries or fails with the reason
+            logger.warning("render.voice_ahead_failed", job=item["id"], error=str(e))
+            continue
+        done += 1
+    return done
+
+
 def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
             render_fn: Callable[..., Tuple[MediaInfo, Dict[str, Any]]] = render_files,
             qc_fn: Callable[..., Dict[str, Any]] = run_qc,
             settings: Optional[InstagramMCPSettings] = None) -> Dict[str, Any]:
     """Render one claimed job (state running): its voice-over first when the recipe still
-    needs one (voice_first), then the render and the quality check (src/studio/qc.py):
+    needs one (voice_first, then voice_ahead for the next ones in line), then the render and
+    the quality check (src/studio/qc.py):
     the asset becomes `ready` (and a `revision_requested` parent it replaces is archived), or
     `failed` with the reasons in `assets.qc`; the asset keeps the render's timeline and gets
     an automatic description if it has none (auto_description). Errors are retried
@@ -263,7 +298,10 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
     settings = settings or get_settings()
     try:
         idea = store.get_idea(asset["idea_id"])
-        asset = voice_first(store, asset, settings)
+        voiced = voice_first(store, asset, settings)
+        if voiced is not asset:  # the voice model is warm: the next voices while it is
+            voice_ahead(store, settings)
+        asset = voiced
         info, files = render_fn(asset, media_root,
                                 lambda p: store.update_render_job(job_id, progress=p))
         notes = files.pop("render_warnings", [])

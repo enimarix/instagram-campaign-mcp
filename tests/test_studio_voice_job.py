@@ -4,7 +4,7 @@ import httpx
 import pytest
 import respx
 
-from src.studio import motion, render, sitcom, tts, voices
+from src.studio import line, motion, render, sitcom, tts, voices
 from src.studio.tts import LineTiming, Synthesis, TTSError
 from tests.test_studio_motion import FACTQUEST, VALID, _settings
 from tests.test_studio_render import FAR_PAST, INFO
@@ -148,3 +148,36 @@ def test_sitcom_character_lines_wait_for_the_job_too():
     unsaid = {**props, "scenes": [{"beats": [{"say": {"text": "Non !", "who": "dad"}}]}]}
     assert motion.voice_pending(sitcom.TEMPLATE, unsaid)
     assert motion.voice_pending("FactQuest", {}) and not motion.voice_pending("Hello", {})
+
+
+def test_a_warm_voice_makes_the_next_voices_in_line_once(store, s, fake):
+    first, second = _queue(store, s)["asset"], _queue(store, s)["asset"]
+    job, _ = _run(store, s)
+    assert job["asset_id"] == first["id"] and len(fake.said) == 2  # one model load, two voices
+    assert "voice_todo" not in store.get_asset(second["id"])["recipe"]
+    job, rendered = _run(store, s)
+    assert job["asset_id"] == second["id"] and job["state"] == "done"
+    assert len(fake.said) == 2 and rendered[0]["props"]["voice"]["audioSrc"] == "voice/abc.wav"
+
+
+def test_held_renders_and_failures_are_not_voiced_ahead(store, s, fake, monkeypatch):
+    _queue(store, s)
+    held = _queue(store, s)
+    line.hold(store, "render", held["job"]["id"], True)
+    _run(store, s)
+    assert len(fake.said) == 1 and "voice_todo" in store.get_asset(held["asset"]["id"])["recipe"]
+    line.hold(store, "render", held["job"]["id"], False)
+    later = _queue(store, s)["asset"]
+    ahead = {"n": 0}
+    real = render.voice_first
+
+    def flaky(store_, asset, settings):  # the job itself voices, the one ahead fails
+        ahead["n"] += 1
+        if ahead["n"] > 1:
+            raise TTSError("the TTS service answered HTTP 503")
+        return real(store_, asset, settings)
+
+    monkeypatch.setattr(render, "voice_first", flaky)
+    job, _ = _run(store, s)
+    assert job["state"] == "done"  # a voice made ahead that fails never fails this job
+    assert "voice_todo" in store.get_asset(later["id"])["recipe"]
