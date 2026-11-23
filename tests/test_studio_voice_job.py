@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from src.store import to_iso, utcnow
-from src.studio import checks, guard, line, motion, render, sitcom, tts, voices
+from src.studio import alerts, checks, guard, line, motion, render, sitcom, tts, voices
 from src.studio.ffmpeg import FFmpegError
 from src.studio.gpu_lock import LockTimeout
 from src.studio.tts import LineTiming, Synthesis, TTSError
@@ -255,8 +255,6 @@ def _machine_failed(store, s, fake):
 
 
 async def _machine_alerts(store, s):
-    from src.studio import alerts
-
     return [a for a in await alerts.alerts(store, s, utcnow()) if a["kind"] == "render_machine"]
 
 

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from src import store as store_mod
 from src import worker
-from src.agent import schedule
+from src.agent import runner, schedule
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.store import MIGRATIONS, CampaignStore, to_iso, utcnow
@@ -687,8 +687,6 @@ async def test_the_pause_waits_for_a_films_render_machine_timer(store, monkeypat
 
 
 def test_a_dead_films_render_is_an_ordinary_one(store, monkeypatch):
-    from src.agent import runner
-
     job = _film_render(store, monkeypatch)
     assert line.film_renders(store) == [job]  # a live film's: exempt
     monkeypatch.setattr(runner, "is_gone", lambda pid, started: True)  # the film died
