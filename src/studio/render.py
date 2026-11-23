@@ -136,11 +136,13 @@ def enqueue_render(store: CampaignStore, asset_id: int, *, key: Optional[str] = 
     """Queue a render of the asset's current recipe; the same key gives the same job, so a
     restarted batch never renders an asset twice. A finished (failed or done) job is queued
     again only when the asset is back in `rendering` (a re-render of the same recipe, e.g.
-    after a failed QC): as a new arrival, counted (store.requeue_render_job)."""
+    after a failed QC): as a new arrival, counted (store.requeue_render_job), unless it
+    failed for the machine (machine_wait: a machine problem is not the video's fault)."""
     asset = store.get_asset(asset_id)
     job = store.add_render_job(asset_id, key or f"{asset_id}:{recipe_hash(asset['recipe'])}")
     if job["state"] in ("failed", "done") and asset["status"] == "rendering":
-        job = store.requeue_render_job(job["id"])
+        job = store.requeue_render_job(job["id"], count=not (job["failure"] or "").startswith(
+            f"{MACHINE}:"))
     return job
 
 
@@ -262,17 +264,17 @@ def voice_first(store: CampaignStore, asset: Dict[str, Any], settings: Instagram
 def voice_ahead(store: CampaignStore, settings: InstagramMCPSettings) -> int:
     """Make the voices of the next VOICE_AHEAD waiting renders that still need one, in line
     order (line.waiting), each through voice_first; films and items on a timer or held are
-    passed over, and nothing while the studio is paused (line.pause). A failure is left to
-    that job's own run (logged, never raised). Returns how many were voiced.
+    passed over, and it stops once the studio is paused (line.pause, looked at before each
+    voice). A failure is left to that job's own run (logged, never raised); a machine one
+    (machine_failure) stops it: the next ones would wait for the same machine, inside this
+    running job. Returns how many were voiced.
     ponytail: a job claimed meanwhile (RENDER_CONCURRENCY > 1) may voice the same recipe at
     once: the TTS cache answers the second, both store the same voiced recipe."""
     from . import line  # line imports us (through work_orders and lemo)
 
-    if line.paused(store):  # the owner needs the GPU: no voice ahead
-        return 0
     now, done = utcnow(), 0
     for item in line.waiting(store):
-        if done >= VOICE_AHEAD:
+        if done >= VOICE_AHEAD or line.paused(store):  # paused: the owner needs the GPU
             break
         if item["kind"] != "render" or (item["not_before"]
                                         and parse_iso(item["not_before"]) > now):
@@ -284,6 +286,8 @@ def voice_ahead(store: CampaignStore, settings: InstagramMCPSettings) -> int:
             voice_first(store, asset, settings)
         except Exception as e:  # noqa: BLE001 - its own job retries or fails with the reason
             logger.warning("render.voice_ahead_failed", job=item["id"], error=str(e))
+            if machine_failure(e):
+                break
             continue
         done += 1
     return done

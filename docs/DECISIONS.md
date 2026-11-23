@@ -8,6 +8,21 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-23: A film waits for its render through the machine's backoff (198)
+The film runner waits RENDER_WAIT_S (1 h) for its own render to be judged, and each
+machine failure of that render (`render.machine_wait`) starts the hour again: the machine's
+backoff (5 + 15 + 45 × 4 min) never runs the film out of time, and the wait stays bounded
+because the job fails for good after its 6 machine retries (the film then sees the failed
+video and stops at once). A video failure ends the wait as before. While the studio is
+paused, the film's render is claimed only once its machine timer is past, and the film's
+exemption (pause, hold, timer, remove) needs the film's run alive (its process): a dead
+film's render is an ordinary one. A relaunch after a machine failure is not a re-render
+(`requeues` unchanged), and the « La machine n'arrive pas… » alert goes once the video is no
+longer failed for the machine.
+Reason: audit 2026-11-23 (b) #1 #2 #13 #15 #16: three machine failures (65 min) outlasted
+the film's hour, the order was skipped and the video later rendered with its order never in
+the feed.
+
 ## 2026-11-23: A machine failure waits and retries, never counts against the video (197)
 `render.machine_failure` is the one place that tells the machine from the video. Machine:
 the voice service down or not answering in time, or answering HTTP 5xx (503: its engine
