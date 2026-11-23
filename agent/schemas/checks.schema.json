@@ -3,6 +3,40 @@
   "title": "Finished renders waiting for their check, oldest first (studio.checks.for_agent, 188c): ready ones not submitted yet, failed ones with the re-renders left",
   "type": "object",
   "required": ["max_rerenders", "renders"],
+  "$defs": {
+    "motion": {
+      "type": "object",
+      "required": ["tool", "template", "template_props", "voice", "music_audio_id", "music"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {"const": "render_motion"},
+        "template": {"type": "string"},
+        "template_props": {"type": ["object", "null"]},
+        "voice": {"type": ["string", "null"]},
+        "music_audio_id": {"type": ["string", "null"]},
+        "music": {"type": ["string", "null"]},
+        "note": {"type": "string"}
+      }
+    },
+    "remix": {
+      "type": "object",
+      "required": ["tool", "source_id", "hook", "script", "trim_start_s", "trim_end_s",
+                   "layout", "captions", "voice", "music"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {"const": "render_remix"},
+        "source_id": {"type": ["integer", "null"]},
+        "hook": {"type": "string"},
+        "script": {"type": ["string", "null"]},
+        "trim_start_s": {"type": "number"},
+        "trim_end_s": {"type": "number"},
+        "layout": {"enum": ["pip", "split"]},
+        "captions": {"type": ["array", "null"], "items": {"type": "object"}},
+        "voice": {"type": ["string", "null"]},
+        "music": {"type": ["string", "null"]}
+      }
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "max_rerenders": {"type": "integer", "minimum": 0},
@@ -12,8 +46,9 @@
       "items": {
         "type": "object",
         "required": ["asset_id", "status", "idea_id", "track", "hook", "template", "style",
-                     "caption", "description", "qc", "finished_at", "rerenders_left",
-                     "work_order_id", "dm_pick_sender", "version_of"],
+                     "caption", "description", "qc", "failure", "finished_at",
+                     "rerenders_left", "work_order_id", "dm_pick_sender", "version_of",
+                     "render_args"],
         "additionalProperties": false,
         "properties": {
           "asset_id": {"type": "integer"},
@@ -26,11 +61,14 @@
           "caption": {"type": ["string", "null"]},
           "description": {"type": ["string", "null"]},
           "qc": {"type": ["string", "null"]},
+          "failure": {"type": ["string", "null"], "maxLength": 300},
           "finished_at": {"type": "string"},
           "rerenders_left": {"type": "integer", "minimum": 0},
           "work_order_id": {"type": ["integer", "null"]},
           "dm_pick_sender": {"type": ["string", "null"]},
-          "version_of": {"type": ["integer", "null"]}
+          "version_of": {"type": ["integer", "null"]},
+          "render_args": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/motion"},
+                                    {"$ref": "#/$defs/remix"}]}
         }
       }
     }

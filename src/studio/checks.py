@@ -9,7 +9,8 @@ own re-render of a submitted video (next reaction piece, fixed transcript: today
 The light check run (agent/playbooks/check-renders.md, started by schedule.check_run) looks
 at each one: frames and QC, a re-render (at most MAX_RERENDERS per video: the render jobs of
 the idea's versions nobody submitted or judged, minus the first), drop() with the reason, or
-submit_asset.
+submit_asset. Each comes with its render_args (step 191): what render_motion / render_remix
+takes again, so a fix changes what the check found and keeps the rest.
 
 The Inbox hides a `ready` video waiting for its check, and an unsubmitted one a newer
 version replaces (flag), unless its render finished more than CHECK_INBOX_GRACE_HOURS ago
@@ -25,7 +26,7 @@ from typing import Any, Dict, List, Optional
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from . import dm_picks, work_orders
+from . import dm_picks, motion, remix, sitcom, work_orders
 from .production import qc_summary
 
 PLAYBOOK = "check-renders"
@@ -33,14 +34,19 @@ PREFLIGHT_KEY = "check_preflight_failed_at"  # worker_state, set by schedule.che
 MAX_RERENDERS = 2
 HORIZON = timedelta(hours=24)  # renders older than this stay the owner's, as before 188c
 WHY_MAX = 300
+FAILURE_MAX = 300  # the failed job's reason in the packet
+PROPS_MAX = 20_000  # characters of one video's props in the packet; past it they are left out
 _FINISHED = ("COALESCE((SELECT MAX(j.finished_at) FROM render_jobs j"
              " WHERE j.asset_id = a.id), a.updated_at)")
 _OPEN = "a.verdict = 'none' AND a.self_score_reason IS NULL"  # nobody submitted or judged it
 _HAS_CHILD = "EXISTS (SELECT 1 FROM assets c WHERE c.parent_asset_id = a.id)"
 _WAITING = (
     "SELECT a.id, a.idea_id, a.parent_asset_id, a.status, a.caption, a.description, a.qc,"
-    " json_extract(a.recipe, '$.template') AS template, i.track, i.hook, i.style,"
-    f" {_FINISHED} AS finished_at,"
+    " a.recipe, json_extract(a.recipe, '$.template') AS template, i.track, i.hook, i.style,"
+    f" i.source_id, {_FINISHED} AS finished_at,"
+    # the last job's reason when it failed: a render crash (a QC fail has none)
+    " (SELECT CASE WHEN j.state = 'failed' THEN j.failure END FROM render_jobs j"
+    "  WHERE j.asset_id = a.id ORDER BY j.id DESC LIMIT 1) AS failure,"
     " (SELECT w.id FROM work_orders w WHERE w.idea_id = a.idea_id ORDER BY w.id DESC LIMIT 1)"
     " AS work_order_id,"
     " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
@@ -80,21 +86,79 @@ def newest(store: CampaignStore, now: datetime) -> Optional[datetime]:
 
 def for_agent(store: CampaignStore, now: datetime) -> Dict[str, Any]:
     """The check run's packet section: {max_rerenders, renders [{asset_id, status, idea_id,
-    track, hook, template, style, caption, description, qc, finished_at, rerenders_left,
-    work_order_id, dm_pick_sender, version_of}]}. caption and description are what the
-    producing run stored (data written by us; a remix caption holds the creator's credit)."""
+    track, hook, template, style, caption, description, qc, failure, finished_at,
+    rerenders_left, work_order_id, dm_pick_sender, version_of, render_args}]}. caption and
+    description are what the producing run stored (data written by us; a remix caption holds
+    the creator's credit); failure: the failed job's reason (a render crash, not a QC fail)."""
     out = []
     for r in waiting(store, now):
+        failure = " ".join((r["failure"] or "").split())
         out.append({"asset_id": r["id"], "status": r["status"], "idea_id": r["idea_id"],
                     "track": r["track"], "hook": r["hook"], "template": r["template"],
                     "style": r["style"], "caption": r["caption"],
                     "description": r["description"],
                     "qc": qc_summary(json.loads(r["qc"]) if r["qc"] else None),
+                    "failure": failure[:FAILURE_MAX] or None,
                     "finished_at": r["finished_at"],
                     "rerenders_left": max(0, MAX_RERENDERS - r["rerenders"]),
                     "work_order_id": r["work_order_id"], "dm_pick_sender": r["dm_pick_sender"],
-                    "version_of": r["parent_asset_id"]})
+                    "version_of": r["parent_asset_id"],
+                    "render_args": render_args(json.loads(r["recipe"]) if r["recipe"] else None,
+                                               r["source_id"])})
     return {"max_rerenders": MAX_RERENDERS, "renders": out}
+
+
+def render_args(env: Optional[Dict[str, Any]], source_id: Optional[int]
+                ) -> Optional[Dict[str, Any]]:
+    """What render_motion / render_remix takes again to re-render the recipe `env`: motion
+    {tool, template, template_props (the props as the agent gave them: editable_props),
+    voice, music_audio_id (an Instagram track) or music (the template's bed)}; a reaction
+    remix {tool, source_id, hook, script, trim_start_s, trim_end_s, layout, captions, voice,
+    music}. The voice and the script come from `voice_todo`, or `voiced_with` once voiced: a
+    recipe voiced before step 191 has none (null: the default voice; a remix must write its
+    script again). None when there is no recipe (a remix that failed before it had one).
+    The keys avoid `props` and `recipe`: the packet drops those (packet.DROP_KEYS)."""
+    if not env:
+        return None
+    todo = env.get("voice_todo") or env.get("voiced_with") or {}
+    if env["kind"] == "motion":
+        props = editable_props(env["template"], env["props"])
+        args = {"tool": "render_motion", "template": env["template"], "template_props": props,
+                "voice": todo.get("voice"),
+                "music_audio_id": (todo.get("music_audio_id")
+                                   or (env.get("ig_audio") or {}).get("audio_id")),
+                "music": props.get("music")}
+        size = len(json.dumps(props, ensure_ascii=False))
+        if size > PROPS_MAX:
+            args.update(template_props=None,
+                        note=f"props too large for the packet ({size} characters)")
+        return args
+    if "reaction" not in env["inputs"]:  # not a reaction remix (none is made since 069)
+        return None
+    params = remix.remix_params(env)
+    start, end = params.pop("trim")
+    return {"tool": "render_remix", "source_id": source_id, **params,
+            "trim_start_s": start, "trim_end_s": end}
+
+
+def editable_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
+    """`props` as render_motion takes them: the voice the job filled taken out (`voice`, a
+    SitcomSkit character line's `seconds` and `audioSrc`), so a re-render voices the lines
+    it says now (the voice service's cache answers a text it already made)."""
+    if template not in motion.SCRIPTS:
+        return props
+    props = {k: v for k, v in props.items() if k != "voice"}
+    if template == sitcom.TEMPLATE:
+        props["scenes"] = [{**sc, "beats": [_unsaid(b) for b in sc["beats"]]}
+                           for sc in props["scenes"]]
+    return props
+
+
+def _unsaid(beat: Dict[str, Any]) -> Dict[str, Any]:
+    if not beat.get("say"):
+        return beat
+    return {**beat, "say": {k: v for k, v in beat["say"].items()
+                            if k not in ("seconds", "audioSrc")}}
 
 
 def failing(store: CampaignStore) -> bool:

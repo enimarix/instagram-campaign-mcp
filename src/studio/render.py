@@ -5,7 +5,8 @@ Render jobs (GOAL.md §3.1, §3.2, §4.3): render an asset from its recipe into 
   {"kind": "ffmpeg", "recipe": <Recipe>, "inputs": {"source": <media path>, ...}}  Track A
   {"kind": "motion", "template": <id>, "props": {...}}                             Track B
 plus an optional `thumb_offset_ms` (cover frame, also sent to Instagram) and `voice_todo` (a
-voice-over the job makes before rendering, step 188a: VoiceTodo); a remix may carry
+voice-over the job makes before rendering, step 188a: VoiceTodo), kept as `voiced_with` once
+made (step 191: the check run's re-render takes the same voice and script); a remix may carry
 its source's `clip_timeline` (step 119) for the asset's timeline. Motion recipes
 render through src/studio/motion.py (Remotion); their cover is the template's cover frame.
 
@@ -79,6 +80,7 @@ class _Envelope(BaseModel):
     thumb_offset_ms: Optional[int] = Field(None, ge=0)
     ig_audio: Optional[IgAudio] = None
     voice_todo: Optional[VoiceTodo] = None
+    voiced_with: Optional[VoiceTodo] = None  # the voice_todo its voice was made from (191)
 
 
 class FfmpegRecipe(_Envelope):
@@ -244,6 +246,7 @@ def voice_first(store: CampaignStore, asset: Dict[str, Any], settings: Instagram
                else remix.voice_over(env, settings, todo))
     except TTSError as e:
         raise TTSError(f"voice-over failed: {e}", status=e.status) from None
+    env["voiced_with"] = todo  # 191: the voice and script, gone from the voiced props
     return store.update_asset(asset["id"], recipe=validate_recipe(env, settings.media_root))
 
 

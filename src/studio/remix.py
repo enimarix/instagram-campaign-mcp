@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
 from . import ffmpeg, frames, media, motion, render, stt, voices
-from .assets import checked_fields, transition
+from .assets import checked_fields, clean_caption, transition
 from .reactions import next_reaction_piece
 from .recipe import (
     EVENT_CHARS,
@@ -185,7 +185,7 @@ def render_remix(store: CampaignStore, settings: InstagramMCPSettings, idea_id: 
         asset = store.add_asset(idea_id, recipe=recipe_env,
                                 batch_date=batch, status="planned", **fields)
         return {"asset": asset, "job": None, "piece": None, "warnings": warnings}
-    asset = store.add_asset(idea_id, caption=caption, batch_date=batch)
+    asset = store.add_asset(idea_id, caption=clean_caption(caption), batch_date=batch)
     try:
         asset, piece = attach_piece(store, settings, asset["id"], env)
     except Exception as e:
@@ -245,10 +245,11 @@ def attach_piece(store: CampaignStore, settings: InstagramMCPSettings, asset_id:
 
 
 def remix_params(env: Dict[str, Any]) -> Dict[str, Any]:
-    """render_remix's arguments as a planned remix's recipe `env` holds them (planned.py
-    rebuilds it through _remix_env on an edit and at its release)."""
+    """render_remix's arguments as a remix's recipe `env` holds them (planned.py rebuilds a
+    planned one through _remix_env on an edit and at its release; the check run, 191,
+    re-renders a voiced one from them: its script and voice in `voiced_with`)."""
     ops = {op["op"]: op for op in env["recipe"]["ops"]}
-    todo = env.get("voice_todo") or {}
+    todo = env.get("voice_todo") or env.get("voiced_with") or {}
     music = env["inputs"].get("music")
     return {"hook": ops["hook_text"]["text"], "script": todo.get("script"),
             "voice": todo.get("voice"), "trim": (ops["trim"]["start_s"], ops["trim"]["end_s"]),
