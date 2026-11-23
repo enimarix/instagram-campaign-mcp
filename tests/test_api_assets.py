@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
+from src.studio import work_orders
 from src.studio.assets import transition
 
 from .conftest import LOCAL
@@ -171,3 +172,20 @@ def test_app_opens_and_closes_its_own_store(tmp_path):
         opened = app.state.store
         assert opened._conns
     assert not opened._conns  # closed on shutdown
+
+
+def test_archive_refuses_a_rendering_video_and_removes_a_planned_one(tc, store):
+    # 192: the job of a rendering video waits or runs (the Planning's « Retirer » takes it)
+    rendering = _asset(store, status="rendering")
+    r = tc.post(f"/api/assets/{rendering['id']}/archive")
+    assert r.status_code == 409 and "Retirer" in r.json()["message"]
+    assert store.get_asset(rendering["id"])["status"] == "rendering"
+    # a planned one goes through planned.remove: the order made for it is skipped too
+    planned = _asset(store, status="rendering")
+    with store._tx() as c:
+        c.execute("UPDATE assets SET status='planned' WHERE id=?", (planned["id"],))
+    order = work_orders._insert_owner_order(store, "create", "Une commande", None)
+    work_orders.start(store, order["id"], store.get_idea(planned["idea_id"]))
+    r = tc.post(f"/api/assets/{planned['id']}/archive")
+    assert r.status_code == 200 and r.json()["status"] == "archived"
+    assert work_orders.get_order(store, order["id"])["status"] == "skipped"

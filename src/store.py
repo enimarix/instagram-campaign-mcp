@@ -710,6 +710,12 @@ PRAGMA writable_schema=RESET;
 CREATE INDEX idx_assets_status ON assets(status);
 """
 
+# Migration 28: a re-render of the same recipe re-queues its finished job (render.py
+# enqueue_render): requeues counts those, so the check run's re-render cap counts them too.
+REQUEUES_SCHEMA = """
+ALTER TABLE render_jobs ADD COLUMN requeues INTEGER NOT NULL DEFAULT 0;
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -720,7 +726,8 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          PERMISSIONS_SCHEMA, AD_SPEND_SCHEMA, AD_ENTITIES_SCHEMA,
                          AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
                          AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA,
-                         STYLE_REQUESTS_SCHEMA, LINE_SCHEMA, PLANNED_SCHEMA]
+                         STYLE_REQUESTS_SCHEMA, LINE_SCHEMA, PLANNED_SCHEMA,
+                         REQUEUES_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",
@@ -2008,11 +2015,25 @@ class CampaignStore:
         return self._select("SELECT * FROM render_jobs", {"state": state, "asset_id": asset_id},
                             "id DESC", limit)
 
+    def requeue_render_job(self, job_id: int) -> Dict[str, Any]:
+        """A finished (failed or done) job queued again as a new arrival: created_at now, no
+        place nor timer (line_pos, not_before), requeues + 1. The job as it is now."""
+        now = to_iso(utcnow())
+        with self._tx() as c:
+            c.execute("UPDATE render_jobs SET state='queued', attempts=0, progress=0,"
+                      " failure=NULL, finished_at=NULL, line_pos=NULL, not_before=NULL,"
+                      " requeues=requeues+1, created_at=?, updated_at=?"
+                      " WHERE id=? AND state IN ('failed', 'done')", (now, now, job_id))
+        return self.get_render_job(job_id)
+
     def requeue_stale_render_jobs(self, stale_before: datetime) -> None:
         """Running jobs whose heartbeat is older than `stale_before` (a crashed worker's)
-        back to queued; they keep their place in the line (created_at, line_pos)."""
+        back to queued, ahead of every waiting item (studio/line.py): it was running, so it
+        was first, even after a move placed the others (line_pos 1..n)."""
         with self._tx() as c:
-            c.execute("UPDATE render_jobs SET state='queued', updated_at=?"
+            c.execute("UPDATE render_jobs SET state='queued', updated_at=?, line_pos=MIN(0,"
+                      " COALESCE((SELECT MIN(line_pos) FROM render_jobs), 0),"
+                      " COALESCE((SELECT MIN(line_pos) FROM work_orders), 0)) - 1"
                       " WHERE state='running' AND heartbeat_at < ?",
                       (to_iso(utcnow()), to_iso(stale_before)))
 

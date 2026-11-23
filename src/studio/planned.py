@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore, to_iso, utcnow
 from . import dm_picks, line, motion, remix, render, work_orders
-from .assets import checked_fields, transition
+from .assets import InvalidTransition, checked_fields, transition
 
 KeyPath = Tuple[Any, ...]  # keys / indices down the props to one text
 PLACES_KEY = "claude_places"  # worker_state {day, left}: take_place
@@ -168,6 +168,21 @@ def remove(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
     transition(store, asset_id, "archived", actor="owner")
     line.skip_orders(store, asset["idea_id"])
     return {"asset_id": asset_id, "removed": True}
+
+
+def archive(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
+    """The Inbox's generic « Archiver » (POST /api/assets/{id}/archive): a planned video goes
+    through remove() (its order skipped too); a rendering one is refused (its job waits or
+    runs: the Planning's « Retirer » takes a waiting one out); anything else moves as
+    transition() allows. Returns the asset."""
+    status = store.get_asset(asset_id)["status"]
+    if status == "rendering":
+        raise InvalidTransition(f"La vidéo {asset_id} est en cours de rendu : retirez-la depuis"
+                                " le Planning (« Retirer »).")
+    if status == "planned":
+        remove(store, asset_id)
+        return store.get_asset(asset_id)
+    return transition(store, asset_id, "archived", actor="owner")
 
 
 def ideas_left(store: CampaignStore, settings: InstagramMCPSettings) -> Dict[str, int]:

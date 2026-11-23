@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from ..store import CampaignStore, utcnow
-from ..studio import assets, checks, remix, scheduling
+from ..studio import assets, checks, planned, remix, scheduling
 from ..studio.assets import InvalidTransition
 from ..studio.media import media_url
 from ..studio.publish import QueueRefused, release_publish_check
@@ -159,7 +159,7 @@ def unschedule(asset_id: int, store: CampaignStore = Depends(get_store)):
 
 @router.post("/{asset_id}/archive")
 def archive(asset_id: int, store: CampaignStore = Depends(get_store)):
-    return _call(assets.transition, store, asset_id, "archived", actor=OWNER)
+    return _call(planned.archive, store, asset_id)
 
 
 @router.post("/{asset_id}/release")
