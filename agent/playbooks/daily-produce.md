@@ -180,8 +180,8 @@ pass it as `create_idea(style=…)`.
      against the rights rules: a Reel whose rights stay unknown, a recut of someone
      else's Reel) → `skip_work_order(id, "<one-line reason>")`: the owner reads it and
      can send the Reel again.
-6. The order is `in_production` once its idea exists. Pass its `caption` (and a
-   `description`) to the render: the check run reviews the render and submits it (note
+6. The order is `in_production` once its idea exists. Pass its `caption` to the
+   render: the check run reviews the render and submits it (note
    "Work order #<id>: "), which puts the order `in_feed`, where the owner sees it. Owner
    items always render now (never `plan`) and take none of your places.
 7. A `create_idea` refusal (reaction quota, explore quota, a duplicate): change what it
@@ -280,8 +280,8 @@ and its steps are how a reaction is made, for the orders too.
    - `voice`: picked from `voices.json` like a motion video's (phase 8): what this
      reaction is (humour and quick reactions: an energetic voice; a story or an
      explanation: a storyteller);
-   - `caption` (with `@<creator>` and the credit) and a `description`: the check run
-     submits them.
+   - `caption` (with `@<creator>` and the credit): the check run submits it; a planned
+     remix (phase 5) also takes a `description`.
 6. `mark_dm_pick(id, "in_production")`. It becomes `posted` by itself when the video is
    published.
 7. `warnings` in the result (e.g. the clip's speech muted with no captions): prefer
@@ -358,10 +358,10 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    - `citations`: `[{url, title}]` for every fact (fact pillars are refused without).
    Send several `create_idea` calls in one turn.
 4. Refusals tell you what to change: "batch full" or "no place left" → stop; "style …
-   share used" → pick
-   another style; "explore quota used" → make it exploit; "humour …/informative …" → switch to the other kind of pillar; a duplicate →
-   a genuinely different topic or angle, not a reworded hook; "needs citations" → source
-   it or pick another pillar. Adapt; never retry the same call.
+   share used" → pick another style; "explore quota used" → make it exploit; "humour
+   …/informative …" → switch to the other kind of pillar; a duplicate → a genuinely
+   different topic or angle, not a reworded hook; "needs citations" → source it or pick
+   another pillar. Adapt; never retry the same call.
 
 **Dry run: stop after this phase and go to phase 9.**
 
@@ -433,15 +433,16 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    itself: never describe cameras. Narrate with an energetic « tu » voice from `voices.json`
    (`energique_femme` when it is listed, else the closest one listed); the characters' voices
    are picked by the studio.
-4. Send them in parallel, with a `caption` (1–3 short lines in the video's language,
-   adds something the video does not say, at most 5 hashtags; sources as "Source: <site
-   name>") and a `description` (2–3 plain sentences: what happens, its hook and its
-   payoff):
+4. Send them in parallel, each with a `caption` (1–3 short lines in the video's
+   language, adds something the video does not say, at most 5 hashtags; sources as
+   "Source: <site name>"):
    - an owner's item (a work order's idea): `render_motion(template=…, props=…,
-     idea_id=…, caption=…, description=…, music_audio_id=…)`: it joins the render line;
-   - **your own idea**: `render_motion(…, plan=True)` with the same arguments: no render,
-     no voice; a card on the owner's Planning page, its sources the idea's citations. The
-     owner edits, validates or removes it; the studio renders it only then.
+     idea_id=…, caption=…, music_audio_id=…)`: it joins the render line;
+   - **your own idea**: `render_motion(…, plan=True, description=…)` with the same
+     arguments and a `description` (2–3 plain sentences: what happens, its hook and its
+     payoff): no render, no voice; a card on the owner's Planning page, its sources the
+     idea's citations. The owner edits, validates or removes it; the studio renders it
+     only then.
    Do not wait for anything: the check run reviews every render when it finishes.
 
 ## Phase 9: summary
