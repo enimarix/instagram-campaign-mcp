@@ -107,12 +107,29 @@ def test_history_lists_today_newest_first_and_only_failures_can_rerender(store, 
     rows = planning.build_planning(store, s, NOW)["history"]
     assert [(r["kind"], r["asset_id"] or r["order_id"] or r["run_id"]) for r in rows] == [
         ("removed", order), ("dropped", dropped), ("removed", store.get_render_job(removed)[
-            "asset_id"]), ("failed", failed), ("failed", failed), ("done", done), ("run", run)]
-    assert rows[4]["reason"] == "boom" and rows[4]["recipe"] is None  # « Relancer » once
-    by = {r["kind"]: r for r in rows if r["reason"] != "boom"}
+            "asset_id"]), ("failed", failed), ("done", done), ("run", run)]  # one row per video
+    by = {r["kind"]: r for r in rows}
     assert by["failed"]["reason"] == "ffmpeg crashed" and by["failed"]["recipe"]["kind"] == "motion"
+    assert by["failed"]["tries"] == 2 and by["done"]["tries"] is None
     assert by["done"]["recipe"] is None and by["dropped"]["reason"] == "image floue"
     assert by["run"]["status"] == "succeeded" and by["run"]["title"] == "Run daily-produce"
+
+
+def test_history_one_row_per_failed_video_each_can_be_relaunched(store):
+    """Step 195: two videos that failed twice each are two rows, both with « Relancer »."""
+    videos = []
+    for n in range(2):
+        first = _job(store, "FactQuest", "failed", failure="boom",
+                     finished_at=to_iso(NOW - timedelta(hours=3, minutes=n)))
+        again = store.add_render_job(first, f"again {n}")
+        store.update_render_job(again["id"], state="failed", failure=f"crash {n}",
+                                finished_at=to_iso(NOW - timedelta(hours=2, minutes=n)))
+        with store._tx() as c:
+            c.execute("UPDATE assets SET status='failed' WHERE id=?", (first,))
+        videos.append(first)
+    rows = planning.build_planning(store, cfg(), NOW)["history"]
+    assert [(r["asset_id"], r["reason"], r["tries"], bool(r["recipe"])) for r in rows] == [
+        (videos[0], "crash 0", 2, True), (videos[1], "crash 1", 2, True)]
 
 
 def _ahead(store, s):

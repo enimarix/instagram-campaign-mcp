@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link } from 'react-router'
 import {
-  editIdea, errorMessage, getPlanning, holdItem, listVoices, moveItem, previewPlanning, releaseIdea, removeIdea, removeItem,
+  editIdea, errorMessage, getPlanning, holdItem, listVoices, moveItem, placeItem, previewPlanning, releaseIdea, removeIdea, removeItem,
   rerenderAsset, setStudioPaused, setTimer, startNow,
   type ClaudeIdea, type IdeaEdit, type LineKind, type Planning as PlanningData, type PlanningHistory, type PlanningItem,
   type PlanningPreview, type PlanningStrip, type PlanningSupply, type PlanningWait, type Voice,
@@ -198,24 +198,38 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
 
 type Actions = { onDone: () => void; onRemove: (r: Removal) => void }
 
-function ItemCard({ item: i, ...actions }: { item: PlanningItem } & Actions) {
+const MAKES: PlanningItem['kind'][] = ['render', 'film', 'work_order', 'change_request'] // each ends as a video
+
+/** The card's own generation slot in plain words (195): running since, the estimate, the
+ * timer, held, or why it has no time. */
+function Slot({ item: i }: { item: PlanningItem }) {
+  const timed = i.est_start && i.est_ready && i.est_duration_s !== null
+  const when = i.section === 'running' && i.est_start ? `En cours depuis ${at(i.est_start)}`
+    : i.waits_on === 'held' ? 'En pause'
+      : i.not_before ? `Minuteur : ${at(i.not_before)}`
+        : timed ? `${MAKES.includes(i.kind) ? 'Génération prévue' : 'Prévu'} vers ${at(i.est_start!)}`
+          : `Pas d'heure : ${i.waits_on ? WAIT[i.waits_on] ?? i.waits_on : 'rien ne part sans toi'}.`
+  return (
+    <p className={`tabular-nums ${i.late_s ? 'text-warn' : timed || i.waits_on === 'held' ? '' : 'text-muted'}`}>
+      {when}{timed && ` · ${duration(i.est_duration_s!)} · prête ~${at(i.est_ready!)}`}
+    </p>
+  )
+}
+
+function ItemCard({ item: i, grip, ...actions }: { item: PlanningItem; grip?: ReactNode } & Actions) {
   const look = [i.style && `style ${i.style}`, i.engine && `moteur ${i.engine}`, i.voice && `voix ${i.voice}`].filter(Boolean)
   return (
     <Card as="article" className="space-y-1.5 text-sm">
       <div className="flex flex-wrap items-center gap-2">
+        {grip}
         <Chip tone={i.section === 'running' ? 'explore' : 'info'}>{KIND[i.kind]}</Chip>
-        {i.waits_on && <Chip tone="warn">{WAIT[i.waits_on] ?? i.waits_on}</Chip>}
+        {i.waits_on && i.waits_on !== 'held' && <Chip tone="warn">{WAIT[i.waits_on] ?? i.waits_on}</Chip>}
         {!!i.late_s && <Chip tone="warn">en retard de {Math.max(1, Math.round(i.late_s / 60))} min</Chip>}
       </div>
       <h3 className="font-semibold break-words">{i.title}</h3>
       <Origin item={i} />
       {look.length > 0 && <p className="text-muted">{look.join(' · ')}</p>}
-      {i.est_start && i.est_ready && i.est_duration_s !== null ? (
-        <p className={`tabular-nums ${i.late_s ? 'text-warn' : ''}`}>
-          Début ~{at(i.est_start)} · {duration(i.est_duration_s)} · prête ~{at(i.est_ready)}
-        </p>
-      ) : <p className="text-muted">Pas d'heure : rien ne part sans toi.</p>}
-      {i.not_before && <p className="tabular-nums">Minuteur : pas avant {at(i.not_before)}</p>}
+      <Slot item={i} />
       {i.progress !== null && (
         <div role="progressbar" aria-label={i.stage ?? 'Progression'} aria-valuenow={Math.round(i.progress * 100)}
           aria-valuemin={0} aria-valuemax={100} className="h-1.5 overflow-hidden rounded-full bg-surface-2">
@@ -229,9 +243,9 @@ function ItemCard({ item: i, ...actions }: { item: PlanningItem } & Actions) {
         </p>
       )}
       <p className="text-muted">{i.why_here}</p>
-      <p className="text-muted">
-        → <Link to="/inbox" className={link}>Inbox</Link> → <Link to="/calendar" className={link}>créneau</Link>
-      </p>
+      {MAKES.includes(i.kind) && (
+        <p className="text-muted">→ vérification par l'IA → <Link to="/inbox" className={link}>Inbox</Link></p>
+      )}
       <LineControls item={i} {...actions} />
     </Card>
   )
@@ -382,16 +396,111 @@ const itemKey = (i: PlanningItem) => {
   return id ? `${i.kind}-${id}-${i.ids[id]}` : `${i.kind}-${i.title}`
 }
 
-/** The cards of one section, joined by a line (the chain). */
-function Chain({ items, ...actions }: { items: PlanningItem[] } & Actions) {
+/** `items` with the ones `order` names (by itemKey) in its order, in the places they hold. */
+function arrange(items: PlanningItem[], order: string[] | null) {
+  if (!order) return items
+  const rank = new Map(order.map((k, n) => [k, n]))
+  const ranked = items.filter((i) => rank.has(itemKey(i))).sort((a, b) => rank.get(itemKey(a))! - rank.get(itemKey(b))!)
+  let n = 0
+  return items.map((i) => (rank.has(itemKey(i)) ? ranked[n++] : i))
+}
+
+type Place = (item: PlanningItem, index: number) => Promise<unknown>
+const EDGE_PX = 80 // a drag this close to the screen's top / bottom scrolls the page
+const SCROLL_PX = 12 // per frame
+
+/** Drag and drop (195): a waiting render or film (it has a line_index) is dragged by its grip
+ * with the mouse or a finger (pointer events on the window; the grip's touch-none keeps the
+ * page from scrolling); the cards reorder live as it crosses a neighbour's middle. The drop
+ * sends the line index (line.place: among the others not held) of the card it lands before,
+ * and the new order stays shown, through any poll, until the call and the reload answer. */
+function useDrag(items: PlanningItem[], onPlace?: Place) {
+  const list = useRef<HTMLOListElement>(null)
+  const [order, setOrder] = useState<string[] | null>(null)
+  const [dragging, setDragging] = useState<string | null>(null)
+  const shown = arrange(items, order)
+  const movable = shown.filter((i) => i.line_index != null)
+  const grab = (e: ReactPointerEvent, me: PlanningItem) => {
+    if (!onPlace || e.button !== 0 || dragging) return
+    e.preventDefault()
+    const key = itemKey(me)
+    const start = movable.map(itemKey)
+    const byKey = new Map(movable.map((i) => [itemKey(i), i]))
+    let now = start
+    setDragging(key)
+    setOrder(start)
+    const middle = (k: string) => {
+      const r = list.current?.querySelector(`[data-drag="${k}"]`)?.getBoundingClientRect()
+      return r ? r.top + r.height / 2 : 0
+    }
+    let y = e.clientY
+    const reorder = () => {
+      const rest = now.filter((k) => k !== key)
+      const to = rest.filter((k) => middle(k) < y).length
+      const next = [...rest.slice(0, to), key, ...rest.slice(to)]
+      if (next.join() !== now.join()) setOrder((now = next))
+    }
+    const move = (ev: PointerEvent) => {
+      y = ev.clientY
+      reorder()
+    }
+    // Near the screen's top or bottom edge the page scrolls: a tall card's neighbour is often
+    // off screen, on a phone above all.
+    let frame = 0
+    const roll = () => {
+      const by = y < EDGE_PX ? -SCROLL_PX : y > window.innerHeight - EDGE_PX ? SCROLL_PX : 0
+      const page = document.scrollingElement
+      if (by && page) {
+        page.scrollTop += by
+        reorder()
+      }
+      frame = requestAnimationFrame(roll)
+    }
+    frame = requestAnimationFrame(roll)
+    const end = (ev: PointerEvent) => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      setDragging(null)
+      if (ev.type === 'pointercancel' || now.join() === start.join()) return setOrder(null)
+      // ponytail: "before the next card" in the line; a timer or a film's wait can show the
+      // cards in another order than the line's, the drop then lands next to that card.
+      const after = byKey.get(now[now.indexOf(key) + 1])
+      const mine = me.line_index!
+      const index = after ? after.line_index! - (after.line_index! > mine ? 1 : 0) : start.length - 1
+      void onPlace(me, index).finally(() => setOrder(null))
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+  }
+  const grip = (i: PlanningItem) => i.line_index != null && onPlace && (
+    <button type="button" tabIndex={-1} aria-label="Glisser pour déplacer" title="Glisser pour changer sa place (ou Monter / Descendre)"
+      onPointerDown={(e) => grab(e, i)}
+      className="-my-2 -ml-2 grid size-11 cursor-grab touch-none place-items-center rounded text-lg text-muted select-none active:cursor-grabbing">
+      ⠿
+    </button>
+  )
+  return { list, shown, dragging, grip }
+}
+
+/** The cards of one section, joined by a line (the chain); the waiting renders and films
+ * move by drag and drop (useDrag). */
+function Chain({ items, onPlace, ...actions }: { items: PlanningItem[]; onPlace?: Place } & Actions) {
+  const { list, shown, dragging, grip } = useDrag(items, onPlace)
   return (
-    <ol>
-      {items.map((item, n) => (
-        <li key={itemKey(item)}>
-          {n > 0 && <div aria-hidden className="ml-6 h-4 w-px bg-line" />}
-          {item.kind === 'claude_idea' ? <IdeaCard item={item} {...actions} /> : <ItemCard item={item} {...actions} />}
-        </li>
-      ))}
+    <ol ref={list} className={dragging ? 'select-none' : undefined}>
+      {shown.map((item, n) => {
+        const key = itemKey(item)
+        return (
+          <li key={key} data-drag={item.line_index != null ? key : undefined}
+            className={key === dragging ? 'rounded-card opacity-80 ring-2 ring-accent' : undefined}>
+            {n > 0 && <div aria-hidden className="ml-6 h-4 w-px bg-line" />}
+            {item.kind === 'claude_idea' ? <IdeaCard item={item} {...actions} /> : <ItemCard item={item} grip={grip(item)} {...actions} />}
+          </li>
+        )
+      })}
     </ol>
   )
 }
@@ -480,9 +589,9 @@ const DONE: Record<PlanningHistory['kind'], [string, Tone]> = {
 }
 const RUN_STATUS: Record<string, string> = { running: 'en cours', succeeded: 'réussi', failed: 'échoué', cancelled: 'annulé' }
 
-/** Today's history (190), under the chain: finished renders (to the Inbox), failed ones with
- * their reason and « Relancer » (the asset's re-render with its own recipe), removed, dropped
- * by the check, and today's AI runs. */
+/** Today's history (190), under the chain: finished renders (to the Inbox), failed videos
+ * (one row each, 195: the newest failure's reason, how many tries) with « Relancer » (the
+ * asset's re-render with its own recipe), removed, dropped by the check, and today's AI runs. */
 function History({ rows, onDone }: { rows: PlanningHistory[]; onDone: () => void }) {
   const { busy, act } = useAct(onDone)
   if (rows.length === 0) return null
@@ -499,6 +608,7 @@ function History({ rows, onDone }: { rows: PlanningHistory[]; onDone: () => void
               <Chip tone={tone}>{what}</Chip>
               <span className="break-words">{r.title}</span>
               {r.reason && <span className="text-muted">: {r.reason}</span>}
+              {!!r.tries && r.tries > 1 && <span className="text-muted">· {r.tries} essais</span>}
               {r.status && <span className="text-muted">{RUN_STATUS[r.status] ?? r.status}</span>}
               {r.kind === 'done' && <Link to="/inbox" className={link}>Inbox</Link>}
               {recipe && id !== null && (
@@ -537,8 +647,8 @@ function PauseSwitch({ paused, onChanged }: { paused: string | null; onChanged: 
 }
 
 /** Planning (185): what renders next and when, in the worker's real order; a waiting render
- * or film can start now, wait for a timer (186), move, be held or removed, and the whole
- * studio can pause (187). Remove follows the Inbox rule: the card leaves at once and the call
+ * or film can start now, wait for a timer (186), move (by drag and drop too, 195), be held or
+ * removed, and the whole studio can pause (187). Remove follows the Inbox rule: the card leaves at once and the call
  * fires when the 5 s undo closes, or at once when the page is hidden or left. */
 export default function Planning() {
   const [items, setItems] = useState<PlanningItem[] | null>(null)
@@ -548,12 +658,19 @@ export default function Planning() {
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set())
   const pending = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; run: () => void }>())
   const toast = useToast()
-  const load = useCallback(() => getPlanning().then((p) => {
-    setItems(p.items)
-    setPaused(p.paused ?? null)
-    setExtras(p)
-    setError(null)
-  }, (e: unknown) => setError(errorMessage(e))), [])
+  const seq = useRef(0)
+  const load = useCallback(() => {
+    const n = ++seq.current // only the newest load lands: a poll sent before a drop never undoes it
+    return getPlanning().then((p) => {
+      if (n !== seq.current) return
+      setItems(p.items)
+      setPaused(p.paused ?? null)
+      setExtras(p)
+      setError(null)
+    }, (e: unknown) => {
+      if (n === seq.current) setError(errorMessage(e))
+    })
+  }, [])
   useEffect(() => {
     void load()
     const t = setInterval(() => void load(), POLL_MS) // a failed load does not stop it
@@ -604,6 +721,14 @@ export default function Planning() {
       },
     })
   }
+  const place: Place = (i, index) => {
+    const r = removal(i)
+    if (r?.kind !== 'render' && r?.kind !== 'film') return Promise.resolve()
+    return placeItem(r.kind, r.id, index).then(() => {
+      toast({ message: 'Déplacé dans la file.' })
+      return load()
+    }, (e: unknown) => toast({ message: `Pas fait : ${errorMessage(e)}` }))
+  }
   const visible = items?.filter((i) => {
     const r = removal(i)
     return !r || !gone.has(keyOf(r))
@@ -631,7 +756,7 @@ export default function Planning() {
             return mine.length > 0 && (
               <section key={id} aria-label={title}>
                 <h2 className="mb-2 font-semibold">{title}</h2>
-                <Chain items={mine} onDone={() => void load()} onRemove={remove} />
+                <Chain items={mine} onDone={() => void load()} onRemove={remove} onPlace={id === 'next' ? place : undefined} />
               </section>
             )
           })}

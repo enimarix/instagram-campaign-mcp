@@ -64,8 +64,9 @@ describe('Planning', () => {
     expect(within(next).getByText(/10 min/)).toBeTruthy()
     const planned = screen.getByRole('region', { name: "Runs prévus de l'IA" })
     expect(within(planned).getByText(/place\(s\) pour les idées de Claude/).textContent).toContain('7')
-    expect(screen.getAllByRole('link', { name: 'Inbox' })).toHaveLength(3)
-    expect(screen.getAllByRole('link', { name: 'créneau' })[0].getAttribute('href')).toBe('/calendar')
+    expect(screen.getAllByRole('link', { name: 'Inbox' })).toHaveLength(2) // the videos, not the run
+    expect(within(next).getByText(/vérification par l'IA/).textContent).toBe("→ vérification par l'IA → Inbox")
+    expect(document.querySelector('a[href="/calendar"]')).toBeNull() // publishing is the Calendar's (195)
   })
 
   it('says when nothing is planned', async () => {
@@ -78,7 +79,7 @@ describe('Planning', () => {
     stub([item({ kind: 'work_order', waits_on: 'needs_instruction', est_start: null, est_ready: null, est_duration_s: null })])
     show()
     expect(await screen.findByText('attend ta consigne')).toBeTruthy()
-    expect(screen.getByText("Pas d'heure : rien ne part sans toi.")).toBeTruthy()
+    expect(screen.getByText("Pas d'heure : attend ta consigne.")).toBeTruthy()
   })
 
   it('a waiting render starts now; the running card and an order have no such button', async () => {
@@ -101,7 +102,7 @@ describe('Planning', () => {
   it("a film's timer is set in owner-local time, shown on the card, and cleared", async () => {
     const calls = stubCalls([item({ kind: 'film', title: 'Un film', ids: { order_id: 4 }, waits_on: 'timer', not_before: soon(120) })])
     show()
-    expect(await screen.findByText(/Minuteur : pas avant/)).toBeTruthy()
+    expect(await screen.findByText(/^Minuteur : .*\d\d:\d\d/)).toBeTruthy() // its slot (195)
     expect(screen.getByText('attend son minuteur')).toBeTruthy()
     const input = screen.getByLabelText('Minuteur') as HTMLInputElement
     expect(input.type).toBe('datetime-local')
@@ -212,7 +213,7 @@ describe('Planning', () => {
       ['Le jus détox', 'Fait un', 'Fait deux', '… 1 ligne(s) de plus'])
     expect(within(card).getByText('style pixel · FactQuest · voix lea · musique music-overworld')).toBeTruthy()
     expect(within(card).getByRole('link', { name: 'Étude' }).getAttribute('href')).toBe('https://example.org/a')
-    expect(within(card).queryByText(/Début ~/)).toBeNull() // no time until released
+    expect(within(card).queryByText(/Génération prévue/)).toBeNull() // no time until released
     fireEvent.click(within(card).getByRole('button', { name: 'Valider' }))
     expect(await screen.findByText('Validée : son rendu entre dans la file.')).toBeTruthy()
     fireEvent.click(within(card).getByRole('button', { name: 'Lancer maintenant' }))
@@ -280,7 +281,7 @@ describe('Planning', () => {
     show()
     const late = await screen.findByText('en retard de 10 min')
     expect(late.className).toContain('text-warn')
-    expect(screen.getByText(/Début ~/).className).toContain('text-warn')
+    expect(screen.getByText(/^En cours depuis/).className).toContain('text-warn')
   })
 
   describe('190 extras', () => {
@@ -344,10 +345,11 @@ describe('Planning', () => {
 
     it("today's history: done to the Inbox, a failure with its reason and « Relancer », the runs", async () => {
       const recipe = { kind: 'motion', template: 'FactQuest', props: {} }
-      const row = { asset_id: null, order_id: null, run_id: null, reason: null, status: null, recipe: null }
+      const row = { asset_id: null, order_id: null, run_id: null, reason: null, status: null, recipe: null, tries: null }
       const calls = stubPlanning(extras({
         history: [
-          { ...row, kind: 'failed', at: soon(-10), title: 'Raté', asset_id: 7, reason: 'ffmpeg crashed', recipe },
+          { ...row, kind: 'failed', at: soon(-10), title: 'Raté', asset_id: 7, reason: 'ffmpeg crashed', recipe, tries: 2 },
+          { ...row, kind: 'failed', at: soon(-15), title: 'Raté aussi', asset_id: 5, reason: 'blender crashed', recipe, tries: 2 },
           { ...row, kind: 'dropped', at: soon(-20), title: 'Floue', asset_id: 8, reason: 'image floue' },
           { ...row, kind: 'removed', at: soon(-30), title: 'Retirée', order_id: 3 },
           { ...row, kind: 'done', at: soon(-40), title: 'Finie', asset_id: 6 },
@@ -358,11 +360,12 @@ describe('Planning', () => {
       const today = await screen.findByRole('region', { name: "Aujourd'hui" })
       const rows = within(today).getAllByRole('listitem')
       expect(rows.map((r) => r.textContent)).toEqual([
-        expect.stringContaining('Rendu ratéRaté: ffmpeg crashed'), expect.stringContaining('Écartée par la vérificationFloue: image floue'),
+        expect.stringContaining('Rendu ratéRaté: ffmpeg crashed· 2 essais'), expect.stringContaining('Raté aussi'),
+        expect.stringContaining('Écartée par la vérificationFloue: image floue'),
         expect.stringContaining('Retiré du planning'), expect.stringContaining('Rendu finiFinie'), expect.stringContaining('réussi'),
       ])
-      expect(within(rows[3]).getByRole('link', { name: 'Inbox' }).getAttribute('href')).toBe('/inbox')
-      expect(within(today).getAllByRole('button', { name: 'Relancer' })).toHaveLength(1)
+      expect(within(rows[4]).getByRole('link', { name: 'Inbox' }).getAttribute('href')).toBe('/inbox')
+      expect(within(today).getAllByRole('button', { name: 'Relancer' })).toHaveLength(2) // every failed video (195)
       fireEvent.click(within(rows[0]).getByRole('button', { name: 'Relancer' }))
       expect(await screen.findByText('Relancé : le rendu revient dans la file.')).toBeTruthy()
       expect(calls).toContainEqual({ method: 'POST', url: '/api/assets/7/rerender', body: { recipe } })
@@ -430,6 +433,73 @@ describe('Planning', () => {
       const sheet = screen.getByRole('dialog', { name: "Modifier l'idée" })
       expect((within(sheet).getByLabelText('Légende') as HTMLTextAreaElement).value).toBe('Ma légende')
     } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('each card says its own generation slot in plain words (195)', async () => {
+    stub([
+      item({ section: 'running', title: 'Le rendu actuel', est_start: soon(-5), progress: 0.5 }),
+      item({ title: 'Le suivant', ids: { job_id: 6 } }),
+      item({ kind: 'film', title: 'Un film', ids: { order_id: 4 }, waits_on: 'held', est_start: null, est_ready: null, est_duration_s: null }),
+      item({ kind: 'agent_run', title: 'Run daily-learn' }),
+    ])
+    show()
+    const [running, next, film, run] = await screen.findAllByRole('article')
+    expect(within(running).getByText(/^En cours depuis \d\d:\d\d/)).toBeTruthy()
+    expect(within(next).getByText(/^Génération prévue vers \d\d:\d\d · 10 min · prête ~/)).toBeTruthy()
+    expect(within(film).getAllByText('En pause')).toHaveLength(1) // the slot, no chip saying it again
+    expect(within(run).getByText(/^Prévu vers/)).toBeTruthy()
+    expect(within(run).queryByRole('link', { name: 'Inbox' })).toBeNull()
+  })
+
+  it('drags a waiting card with the pointer: the new order stays through a poll until the server answers (195)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const rect = HTMLElement.prototype.getBoundingClientRect
+    HTMLElement.prototype.getBoundingClientRect = function () { // jsdom lays nothing out: 100 px per card
+      const n = [...document.querySelectorAll('[data-drag]')].indexOf(this)
+      return { top: n * 100, height: 100, bottom: n * 100 + 100, left: 0, right: 0, width: 0, x: 0, y: n * 100, toJSON: () => ({}) }
+    }
+    const [a, b, c] = [
+      item({ title: 'A', ids: { job_id: 1 }, line_index: 0 }),
+      item({ kind: 'film', title: 'B', ids: { order_id: 2 }, line_index: 1 }),
+      item({ title: 'C', ids: { job_id: 3 }, line_index: 2 }),
+    ]
+    let items = [a, b, c]
+    let answer = () => {}
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? 'GET', url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      if (url.endsWith('/place')) await new Promise<void>((r) => { answer = r })
+      return new Response(JSON.stringify(init?.method ? {} : { now: soon(0), items }))
+    }))
+    const titles = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    try {
+      show()
+      const grips = await screen.findAllByRole('button', { name: 'Glisser pour déplacer' })
+      expect(grips).toHaveLength(3)
+      expect(grips[0].className).toContain('touch-none') // a finger drags, the page does not scroll
+      fireEvent.pointerDown(grips[0], { button: 0, clientY: 50 })
+      fireEvent.pointerMove(window, { clientY: 160 }) // past B's middle
+      expect(titles()).toEqual(['B', 'A', 'C']) // live
+      fireEvent.pointerUp(window, { clientY: 160 })
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/1/place', body: { index: 1 } }))
+      await vi.advanceTimersByTimeAsync(10_000) // a poll still says the old order
+      expect(titles()).toEqual(['B', 'A', 'C'])
+      items = [b, a, c].map((i, n) => ({ ...i, line_index: n }))
+      answer()
+      expect(await screen.findByText('Déplacé dans la file.')).toBeTruthy()
+      await waitFor(() => expect(titles()).toEqual(['B', 'A', 'C']))
+      fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Glisser pour déplacer' })[2], { button: 0, clientY: 250 })
+      fireEvent.pointerMove(window, { clientY: 10 }) // to the head
+      fireEvent.pointerUp(window, { clientY: 10 })
+      await waitFor(() => expect(calls).toContainEqual({ method: 'POST', url: '/api/planning/render/3/place', body: { index: 0 } }))
+      answer()
+      fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Glisser pour déplacer' })[0], { button: 0, clientY: 50 })
+      fireEvent.pointerUp(window, { clientY: 50 }) // dropped where it was: nothing sent
+      expect(calls.filter((x) => x.url.endsWith('/place'))).toHaveLength(2)
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = rect
       vi.useRealTimers()
     }
   })

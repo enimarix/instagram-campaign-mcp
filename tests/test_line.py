@@ -434,6 +434,34 @@ def test_move_swaps_neighbours_old_rows_and_start_now_and_the_claim_follows(stor
         line.move(store, "render", late, -1)
 
 
+def test_place_drops_an_item_anywhere_held_ones_keep_their_place(store, monkeypatch):
+    s = cfg()
+    a = _render(store, NOW - timedelta(minutes=50))  # old rows: no line_pos
+    b = _render(store, NOW - timedelta(minutes=40))
+    film = _film(store, monkeypatch, NOW - timedelta(minutes=30))
+    c = _render(store, NOW - timedelta(minutes=20))
+    assert line.place(store, "render", c, 0)["index"] == 0  # to the front
+    assert _line(store) == [("render", c), ("render", a), ("render", b), ("film", film)]
+    line.place(store, "render", c, 3)  # to the end
+    assert _line(store) == [("render", a), ("render", b), ("film", film), ("render", c)]
+    line.hold(store, "render", b, True)
+    line.place(store, "render", a, 1)  # past the held one: index counts the not held only
+    assert _line(store) == [("render", b), ("film", film), ("render", a), ("render", c)]
+    line.place(store, "render", c, 0)  # the head of the not held: the held one stays first
+    assert _line(store) == [("render", b), ("render", c), ("film", film), ("render", a)]
+    late = _render(store, NOW)  # a new arrival still goes behind
+    assert _line(store)[-1] == ("render", late)
+    items = [i for i in planning.build_planning(store, s, NOW)["items"] if i["kind"] in line.KINDS]
+    assert [i["line_index"] for i in items] == [0, 1, 2, 3, None]  # the held one: listed last
+    with pytest.raises(ValueError, match="between 0 and 3"):
+        line.place(store, "render", c, 4)
+    store.update_render_job(late, state="running")
+    with pytest.raises(ValueError, match="est en cours"):
+        line.place(store, "render", late, 0)
+    with pytest.raises(KeyError):
+        line.place(store, "film", 999, 0)
+
+
 def test_pause_stops_the_film_and_the_runs_and_resumes(store, monkeypatch):
     s = cfg()
     monkeypatch.setattr(schedule, "preflight", lambda settings: None)
@@ -501,6 +529,11 @@ def test_the_control_routes_are_thin_doors(store, monkeypatch):
         assert r.status_code == 422 and "Déjà en tête" in r.json()["message"]
         assert tc.post(f"/api/planning/order/{order}/remove").json()["removed"]
         assert tc.post(f"/api/planning/order/{order}/move", json={"by": 1}).status_code == 422
+        assert tc.post(f"/api/planning/render/{job}/place", json={"index": 0}).json()[
+            "index"] == 0
+        r = tc.post(f"/api/planning/render/{job}/place", json={"index": 5})
+        assert r.status_code == 422 and "between 0 and" in r.json()["message"]
+        assert tc.post("/api/planning/render/999/place", json={"index": 0}).status_code == 404
         assert tc.post("/api/planning/render/999/remove").status_code == 404
         assert tc.put("/api/planning/pause", json={"paused": True}).json()["paused"]
         assert tc.get("/api/planning").json()["paused"]

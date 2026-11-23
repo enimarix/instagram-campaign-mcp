@@ -1,7 +1,8 @@
-"""Planning routes: what renders next and when, « start now », the timer, hold, move and
-remove of a waiting render or film (remove: an owner order too), the studio's pause
-switch, the delay preview (190), and Claude's planned videos: release, edit, remove (thin
-doors onto src/studio/planning.py, src/studio/line.py and src/studio/planned.py)."""
+"""Planning routes: what renders next and when, « start now », the timer, hold, move, place
+(drag and drop, 195) and remove of a waiting render or film (remove: an owner order too),
+the studio's pause switch, the delay preview (190), and Claude's planned videos: release,
+edit, remove (thin doors onto src/studio/planning.py, src/studio/line.py and
+src/studio/planned.py)."""
 
 from __future__ import annotations
 
@@ -30,6 +31,10 @@ class HoldIn(BaseModel):
 
 class MoveIn(BaseModel):
     by: Literal[-1, 1]  # -1 up, 1 down
+
+
+class PlaceIn(BaseModel):
+    index: int  # among the other waiting items not held: 0 the head (line.place)
 
 
 class PauseIn(BaseModel):
@@ -108,6 +113,11 @@ def hold(kind: Kind, item_id: int, body: HoldIn, store: CampaignStore = Depends(
 @router.post("/planning/{kind}/{item_id}/move")
 def move(kind: Kind, item_id: int, body: MoveIn, store: CampaignStore = Depends(get_store)):
     return call(line.move, store, kind, item_id, body.by)
+
+
+@router.post("/planning/{kind}/{item_id}/place")
+def place(kind: Kind, item_id: int, body: PlaceIn, store: CampaignStore = Depends(get_store)):
+    return call(line.place, store, kind, item_id, body.index)
 
 
 @router.post("/planning/{kind}/{item_id}/remove")
