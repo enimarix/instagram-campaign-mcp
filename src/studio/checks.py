@@ -119,9 +119,9 @@ def render_args(env: Optional[Dict[str, Any]], source: Optional[Dict[str, Any]]
     voice, music_audio_id (an Instagram track) or music (the template's bed)}; a reaction
     remix {tool, source_id, hook, script, trim_start_s, trim_end_s, layout, captions (only
     written ones: from the transcript they are null, so a changed trim derives them again,
-    193), voice, music (a bed or `none`)} of the idea's `source`. The voice and the script come from `voice_todo`, or `voiced_with` once voiced: a
-    recipe voiced before step 191 has none (null: the default voice; a remix must write its
-    script again). None when there is no recipe (a remix that failed before it had one).
+    193), voice, music (a bed or `none`)} of the idea's `source`. The voice and the script
+    come from `voice_todo`, or `voiced_with` once voiced: a recipe voiced before step 191
+    has none (null: the default voice; a remix must write its script again). None when there is no recipe (a remix that failed before it had one).
     The keys avoid `props` and `recipe`: the packet drops those (packet.DROP_KEYS)."""
     if not env:
         return None
