@@ -4,14 +4,17 @@ The check run (step 188c): a finished render is checked before the owner sees it
 The night run no longer waits for its renders. A video waits for its check once its render
 finished (in the last HORIZON): `ready`, not judged, never submitted, or `failed`; never a
 Lemo film (the film runner checks its own film: lemo-film.md, today's path), never one the
-check dropped, never one with a newer version (its re-render took over). The light check run
-(agent/playbooks/check-renders.md, started by schedule.check_run) looks at each one: frames
-and QC, a re-render (at most MAX_RERENDERS per video, counted over the versions the agent
-made of it), drop() with the reason, or submit_asset.
+check dropped, never one with a newer version (its re-render took over), never the owner's
+own re-render of a submitted video (next reaction piece, fixed transcript: today's path).
+The light check run (agent/playbooks/check-renders.md, started by schedule.check_run) looks
+at each one: frames and QC, a re-render (at most MAX_RERENDERS per video: the render jobs of
+the idea's versions nobody submitted or judged, minus the first), drop() with the reason, or
+submit_asset.
 
-The Inbox hides a `ready` video waiting for its check (flag), unless its render finished
-more than CHECK_INBOX_GRACE_HOURS ago or the check run cannot run (failing()): then it shows
-as before, so nothing is lost.
+The Inbox hides a `ready` video waiting for its check, and an unsubmitted one a newer
+version replaces (flag), unless its render finished more than CHECK_INBOX_GRACE_HOURS ago
+(a replaced one: HORIZON) or the check run cannot run (failing()): then it shows as before,
+so nothing is lost.
 """
 
 from __future__ import annotations
@@ -32,6 +35,8 @@ HORIZON = timedelta(hours=24)  # renders older than this stay the owner's, as be
 WHY_MAX = 300
 _FINISHED = ("COALESCE((SELECT MAX(j.finished_at) FROM render_jobs j"
              " WHERE j.asset_id = a.id), a.updated_at)")
+_OPEN = "a.verdict = 'none' AND a.self_score_reason IS NULL"  # nobody submitted or judged it
+_HAS_CHILD = "EXISTS (SELECT 1 FROM assets c WHERE c.parent_asset_id = a.id)"
 _WAITING = (
     "SELECT a.id, a.idea_id, a.parent_asset_id, a.status, a.caption, a.description, a.qc,"
     " json_extract(a.recipe, '$.template') AS template, i.track, i.hook, i.style,"
@@ -41,18 +46,21 @@ _WAITING = (
     " (SELECT d.sender_username FROM dm_picks d WHERE d.source_id = i.source_id"
     "  ORDER BY d.id LIMIT 1) AS dm_pick_sender"
     " FROM assets a JOIN ideas i ON i.id = a.idea_id"
-    " WHERE (a.status = 'ready' AND a.verdict = 'none' AND a.self_score_reason IS NULL"
-    "  OR a.status = 'failed')"
+    f" WHERE a.status IN ('ready', 'failed') AND {_OPEN}"
     " AND COALESCE(i.style, '') NOT LIKE 'lemo:%'"
     " AND COALESCE(json_extract(a.agent_decision, '$.kind'), '') <> 'dropped'"
-    " AND NOT EXISTS (SELECT 1 FROM assets c WHERE c.parent_asset_id = a.id)"
+    f" AND NOT {_HAS_CHILD}"
+    " AND NOT EXISTS (SELECT 1 FROM assets p WHERE p.id = a.parent_asset_id"
+    "  AND p.status = 'ready' AND p.self_score_reason IS NOT NULL)"  # the owner's re-render
     f" AND {_FINISHED} >= ? ORDER BY finished_at, a.id")
-# the video's render jobs and those of the older versions the agent re-rendered it from (a
-# parent still `ready`; a parent sent back for changes is the owner's, not a re-render)
-_JOBS = ("WITH RECURSIVE chain(id) AS (SELECT ? UNION ALL SELECT a.parent_asset_id"
-         " FROM assets a JOIN chain ON a.id = chain.id JOIN assets p ON p.id = a.parent_asset_id"
-         " WHERE p.status = 'ready')"
-         " SELECT COUNT(*) FROM render_jobs WHERE asset_id IN (SELECT id FROM chain)")
+# ready, unsubmitted, and a newer version of it exists (the check re-rendered it)
+_REPLACED = (f"SELECT a.id FROM assets a WHERE a.status = 'ready' AND {_OPEN}"
+             f" AND {_HAS_CHILD} AND {_FINISHED} >= ?")
+# the render jobs of the idea's versions nobody submitted or judged: the first render and
+# the re-renders (in place, a child or a new remix); a version sent back for changes, or
+# submitted, starts the count again
+_JOBS = ("SELECT COUNT(*) FROM render_jobs j JOIN assets a ON a.id = j.asset_id"
+         f" WHERE a.idea_id = ? AND a.status IN ('rendering', 'ready', 'failed') AND {_OPEN}")
 
 
 def waiting(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
@@ -60,7 +68,7 @@ def waiting(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
     with store._tx() as c:
         rows = [dict(r) for r in c.execute(_WAITING, (to_iso(now - HORIZON),))]
         for r in rows:
-            r["rerenders"] = max(0, c.execute(_JOBS, (r["id"],)).fetchone()[0] - 1)
+            r["rerenders"] = max(0, c.execute(_JOBS, (r["idea_id"],)).fetchone()[0] - 1)
     return rows
 
 
@@ -97,13 +105,16 @@ def failing(store: CampaignStore) -> bool:
 
 def flag(store: CampaignStore, settings: InstagramMCPSettings, rows: List[Dict[str, Any]],
          now: datetime) -> List[Dict[str, Any]]:
-    """The Inbox's asset rows with awaiting_check: a `ready` video waiting for its check whose
-    render finished less than CHECK_INBOX_GRACE_HOURS ago, while the check run can run."""
+    """The Inbox's asset rows with awaiting_check, while the check run can run: a `ready`
+    video waiting for its check whose render finished less than CHECK_INBOX_GRACE_HOURS
+    ago, or an unsubmitted one a newer version replaces (its render in the last HORIZON)."""
     hidden = set()
     if not failing(store):
         since = to_iso(now - timedelta(hours=settings.check_inbox_grace_hours))
         hidden = {r["id"] for r in waiting(store, now)
                   if r["status"] == "ready" and r["finished_at"] >= since}
+        with store._tx() as c:
+            hidden.update(r[0] for r in c.execute(_REPLACED, (to_iso(now - HORIZON),)))
     return [{**r, "awaiting_check": r["id"] in hidden} for r in rows]
 
 

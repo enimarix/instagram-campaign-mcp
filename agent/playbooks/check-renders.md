@@ -55,9 +55,10 @@ A `failed` one: its `qc` says why.
 A broken video with `rerenders_left` above 0: motion → `list_motion_templates` (once
 per run) for the template's schema, change only the props that break it, then
 `render_motion(template=…, props=…, asset_id=<asset_id>)` (a failed asset renders again
-in place; a ready one gets a new version); remix → `render_remix` again for the same
-idea and source with the fix (`list_sources` for its credit). Do not wait: the next check
-run reviews the new render.
+in place; a ready one gets a new version and leaves the feed by itself); remix →
+`render_remix` again for the same idea and source with the fix (`list_sources` for its
+credit), then `drop_render(<the old asset_id>, "replaced by a new version")`. Do not wait:
+the next check run reviews the new render.
 At 0 re-renders left, or a video not worth showing: `drop_render(asset_id, "<why, one
 line>")`. The owner reads the reason (the Inbox; a work order's video: Mes envois, where
 the order is skipped with it).

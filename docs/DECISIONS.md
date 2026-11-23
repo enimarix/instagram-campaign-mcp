@@ -23,8 +23,9 @@ write lock): past them `render_motion` / `render_remix` refuse with « no place 
 rule does not rest on the prompt; a day no packet opened gets the same count at its first plan.
 After renders finish, a light check run (`check-renders.md`, kind `light`, packet section
 `checks`) reviews each one: frames and QC for cut text, an unreadable first frame, voice vs
-picture, the remix credit; at most 2 re-renders per video (counted over the versions the agent
-made of it; each re-render joins the line and the next check run sees it), else
+picture, the remix credit; at most 2 re-renders per video (the render jobs of the idea's
+versions nobody submitted or judged, minus the first: in place, a child or a new remix whose
+old version it drops; each re-render joins the line and the next check run sees it), else
 `drop_render(asset_id, why)` (a new tool, in the `agent` profile: a local write that only
 marks the video `dropped` with the reason, skips its work order with it, shown in the Inbox as
 « Écartée par l'IA : … » and in Mes envois; only the owner archives), and `submit_asset` for
@@ -33,12 +34,13 @@ playbook → orders → checks, listed by Planning): CHECK_RUN_DEBOUNCE_MINUTES 
 the newest finished render, not while renders wait in the line (busy(): one on a timer or held
 does not count) or any run runs, not when a check run started since (it had them), at most
 MAX_CHECK_RUNS_PER_DAY (default 8), the preflight asked again 10 min after a failure, nothing
-while paused. The Inbox hides a `ready` video waiting for its check until it is submitted;
-fallback: it shows anyway CHECK_INBOX_GRACE_HOURS (default 3) after its render finished, or at
+while paused. The Inbox hides a `ready` video waiting for its check until it is submitted,
+and an unsubmitted version a re-render replaced; fallback: it shows anyway CHECK_INBOX_GRACE_HOURS (default 3) after its render finished, or at
 once while the check run cannot run (its preflight fails or its last run failed), and renders
 older than 24 h are never held back. Lemo films keep today's path (the film runner checks its
-own film; shown when ready); everything else (agent and owner-order videos, released Claude
-cards, change-request versions) goes through the check. daily-revise keeps its own wait and
+own film; shown when ready), and so does the owner's own re-render of a submitted video
+(next reaction piece, fixed transcript); everything else (agent and owner-order videos,
+released Claude cards, change-request versions) goes through the check. daily-revise keeps its own wait and
 review (a follow-up may move it to the check run); daily-learn and `--dry-run` (ideas only, no
 plan or render call) are unchanged.
 Reason: the owner reviews Claude's ideas before any GPU time is spent on them, and his own

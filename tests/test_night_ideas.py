@@ -83,8 +83,9 @@ def test_a_day_no_packet_opened_counts_its_places_at_once(store, s):
 def _done(store, minutes_ago, *, status="ready", style=None, parent=None, jobs=1, now=None):
     """A video whose last render finished `minutes_ago`."""
     at = to_iso((now or utcnow()) - timedelta(minutes=minutes_ago))
-    idea = store.add_idea("motion", hook="Un fait", batch_date=DAY, style=style)
-    a = store.add_asset(idea["id"], batch_date=DAY, parent_asset_id=parent)
+    idea_id = (store.get_asset(parent)["idea_id"] if parent else
+               store.add_idea("motion", hook="Un fait", batch_date=DAY, style=style)["id"])
+    a = store.add_asset(idea_id, batch_date=DAY, parent_asset_id=parent)
     with store._tx() as c:
         c.execute("UPDATE assets SET status=? WHERE id=?", (status, a["id"]))
         for n in range(jobs):
@@ -103,6 +104,9 @@ def test_what_waits_for_a_check(store):
     store.update_asset(submitted, self_score_reason="")
     old = _done(store, 30)
     child = _done(store, 2, parent=old)  # the re-render took over from `old`
+    shown = _done(store, 40)
+    store.update_asset(shown, self_score_reason="")
+    _done(store, 1, parent=shown)  # the owner's own re-render of a submitted video
     rows = checks.for_agent(store, now)["renders"]
     assert [r["asset_id"] for r in rows] == [failed, ready, child]
     by = {r["asset_id"]: r for r in rows}
@@ -220,10 +224,12 @@ def test_the_inbox_hides_a_video_until_its_check_with_a_fallback(store):
         store.update_asset(fresh, self_score_reason="")  # the check submitted it
         assert flags() == {fresh: False, late: False}
         waiting = _done(store, 5)
-        assert flags()[waiting] is True
+        replaced = _done(store, 60 * 5)
+        _done(store, 1, parent=replaced, status="rendering")  # the check re-renders it
+        assert flags()[waiting] is True and flags()[replaced] is True
         run = store.start_agent_run(checks.PLAYBOOK)
         store.finish_agent_run(run["id"], "failed", summary="exit 1")
-        assert flags()[waiting] is False  # the check run is failing: nothing is held back
+        assert not flags()[waiting] and not flags()[replaced]  # failing: nothing held back
 
 
 # --- the tool and the playbooks -----------------------------------------------------------
