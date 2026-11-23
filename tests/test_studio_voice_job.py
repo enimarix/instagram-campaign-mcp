@@ -181,3 +181,12 @@ def test_held_renders_and_failures_are_not_voiced_ahead(store, s, fake, monkeypa
     job, _ = _run(store, s)
     assert job["state"] == "done"  # a voice made ahead that fails never fails this job
     assert "voice_todo" in store.get_asset(later["id"])["recipe"]
+
+
+def test_no_voice_ahead_while_paused(store, s, fake):
+    _queue(store, s)
+    second = _queue(store, s)["asset"]
+    line.pause(store, True)
+    job, _ = _run(store, s)  # a job already running makes its own voice
+    assert job["state"] == "done" and len(fake.said) == 1
+    assert "voice_todo" in store.get_asset(second["id"])["recipe"]

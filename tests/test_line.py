@@ -505,3 +505,115 @@ def test_the_control_routes_are_thin_doors(store, monkeypatch):
         assert tc.put("/api/planning/pause", json={"paused": True}).json()["paused"]
         assert tc.get("/api/planning").json()["paused"]
         assert tc.put("/api/planning/pause", json={"paused": False}).json() == {"paused": None}
+
+
+# --- step 192: audit fixes ------------------------------------------------------------------
+def _film_render(store, monkeypatch):
+    """A running film's own render: its Lemo order in_production, its job queued."""
+    order = _film(store, monkeypatch, NOW - timedelta(minutes=60))
+    idea = store.add_idea("motion", hook="Un film", style="lemo:watercolor",
+                          batch_date="2026-11-17")
+    work_orders.start(store, order, idea)
+    asset = store.add_asset(idea["id"], batch_date="2026-11-17")
+    return store.add_render_job(asset["id"], f"film{asset['id']}")["id"]
+
+
+def test_a_films_own_render_refuses_hold_timer_and_remove(store, monkeypatch):
+    other = _render(store, NOW - timedelta(minutes=30))
+    job = _film_render(store, monkeypatch)
+    assert line.film_renders(store) == [job]
+    for act in (lambda: line.hold(store, "render", job, True),
+                lambda: line.set_timer(store, "render", job, NOW + timedelta(hours=1)),
+                lambda: line.remove(store, "render", job)):
+        with pytest.raises(ValueError, match="film en cours"):
+            act()
+    assert store.get_render_job(job)["state"] == "queued"
+    assert store.get_render_job(job)["not_before"] is None
+    line.hold(store, "render", other, True)  # the others as before
+    line.start_now(store, "render", job)  # what register_film does
+
+
+async def test_the_pause_lets_a_running_films_own_render_through(store, monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "keep_awake", nullcontext)
+    monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: True)
+    other = _render(store, utcnow() - timedelta(minutes=30))
+    job = _film_render(store, monkeypatch)
+    line.pause(store, True)
+    ran = []
+    loop = asyncio.create_task(worker.render_loop(
+        store, cfg(media_root=str(tmp_path)), run=lambda j: ran.append(j["id"]), interval=0.02))
+    try:
+        deadline = time.monotonic() + 5
+        while not ran and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+        await asyncio.sleep(0.2)
+    finally:
+        loop.cancel()
+        with suppress(asyncio.CancelledError):
+            await loop
+    assert ran == [job] and store.get_render_job(other)["state"] == "queued"
+
+
+def test_a_re_render_of_the_same_recipe_is_a_new_arrival(store):
+    from src.studio import render
+    from src.studio.assets import transition
+
+    job = _render(store, NOW - timedelta(days=4))
+    asset = store.get_render_job(job)["asset_id"]
+    store.update_render_job(job, state="failed")
+    with store._tx() as c:  # an old « start now » and a hold it kept
+        c.execute("UPDATE render_jobs SET line_pos=-5, not_before=? WHERE id=?",
+                  (line.HELD, job))
+    with store._tx() as c:
+        c.execute("UPDATE assets SET status='failed' WHERE id=?", (asset,))
+    transition(store, asset, "rendering", actor="agent")
+    later = _render(store, NOW - timedelta(days=1))
+    again = render.enqueue_render(store, asset, key=f"k{asset}")
+    assert again["id"] == job and again["state"] == "queued" and again["requeues"] == 1
+    assert again["line_pos"] is None and again["not_before"] is None
+    assert again["created_at"] > to_iso(NOW)
+    assert _line(store) == [("render", later), ("render", job)]
+
+
+def test_a_crashed_render_keeps_its_place_after_a_move(store):
+    s = cfg()
+    a, b, c = (_render(store, NOW - timedelta(minutes=m)) for m in (30, 20, 10))
+    store.claim_render_jobs(1, NOW - timedelta(days=1), ids=[a])
+    line.move(store, "render", c, -1)  # b and c placed: 1, 2
+    assert _line(store) == [("render", c), ("render", b)]
+    store.requeue_stale_render_jobs(utcnow() + timedelta(seconds=1))  # its heartbeat died
+    assert _line(store) == [("render", a), ("render", c), ("render", b)]
+    assert _head(store, s) == ("render", a)
+
+
+def test_two_start_now_at_once_get_distinct_places(tmp_path):
+    import threading
+
+    path = str(tmp_path / "line.db")
+    first = CampaignStore(path)
+    jobs = [_render(first, NOW - timedelta(minutes=m)) for m in range(40)]
+    second = CampaignStore(path)
+    go, got = threading.Barrier(2), []
+
+    def press(store, mine):
+        go.wait()
+        got.extend(line.start_now(store, "render", j)["line_pos"] for j in mine)
+
+    try:
+        threads = [threading.Thread(target=press, args=(st, jobs[n::2]))
+                   for n, st in enumerate((first, second))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        first.close()
+        second.close()
+    assert len(got) == len(jobs) == len(set(got))
+
+
+def test_a_lemo_style_is_case_sensitive(store, monkeypatch):
+    film = _film(store, monkeypatch, NOW)
+    with store._tx() as c:
+        c.execute("UPDATE work_orders SET style='LEMO:watercolor' WHERE id=?", (film,))
+    assert _line(store) == []  # lemo.is_lemo says no: not a film

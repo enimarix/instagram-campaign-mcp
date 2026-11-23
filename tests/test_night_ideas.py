@@ -116,6 +116,24 @@ def test_what_waits_for_a_check(store):
     assert json.loads(raw)["max_rerenders"] == checks.MAX_RERENDERS
 
 
+def test_an_unchanged_re_render_counts_for_the_cap(store):
+    # 192: the same recipe re-queues the same job row; it still counts
+    from src.studio import render
+    from src.studio.assets import transition
+
+    now = utcnow()
+    failed = _done(store, 20, status="failed")
+    left = {r["asset_id"]: r["rerenders_left"] for r in checks.for_agent(store, now)["renders"]}
+    assert left[failed] == checks.MAX_RERENDERS
+    transition(store, failed, "rendering", actor="agent")
+    job = render.enqueue_render(store, failed, key=f"{failed}:0")
+    assert job["state"] == "queued" and job["requeues"] == 1
+    store.update_render_job(job["id"], state="failed", finished_at=to_iso(utcnow()))
+    transition(store, failed, "failed", actor="worker")
+    left = {r["asset_id"]: r["rerenders_left"] for r in checks.for_agent(store, now)["renders"]}
+    assert left[failed] == checks.MAX_RERENDERS - 1
+
+
 def test_drop_shows_the_reason_and_skips_the_order(store):
     now = utcnow()
     [order] = work_orders.create_orders(store, [{"source_id": _ref(store, "A"),

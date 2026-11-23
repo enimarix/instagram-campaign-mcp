@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from src.agent import runner, runs, schedule
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
+from src.studio import line
 
 from .conftest import LOCAL
 
@@ -115,6 +116,21 @@ def test_run_due_runs_each_in_turn(store, agent_dir):
     assert calls == ["daily-produce", "review"] and rows == [
         {"playbook": "daily-produce", "status": "succeeded"}]
     assert schedule.run_due(store, cfg(agent_schedule=""), run=fake_run) == []
+
+
+def test_run_due_checks_the_pause_before_each_run(store, agent_dir):
+    (agent_dir / "playbooks" / "review.md").write_text("Review.\n")
+    s = cfg(agent_schedule="daily-produce@03:00,review@03:10")
+    calls = []
+
+    def fake_run(store_, settings, playbook):
+        calls.append(playbook)
+        line.pause(store_, True)  # the owner pauses during the first
+        return {"playbook": playbook}
+
+    assert schedule.run_due(store, s, run=fake_run, now=lambda: NOW) == [
+        {"playbook": "daily-produce"}]
+    assert calls == ["daily-produce"]
 
 
 def test_cli_run_due_exit_codes(monkeypatch):
