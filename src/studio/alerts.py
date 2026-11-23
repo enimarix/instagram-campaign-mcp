@@ -25,7 +25,7 @@ from ..config import InstagramMCPSettings
 from ..instagram_client import INVALID_TOKEN_CODE, InstagramClient
 from ..store import CampaignStore, parse_dt, to_iso
 from ..worker import ALIVE_WITHIN, graph_breaker
-from . import downloader_service, line, token, website
+from . import downloader_service, line, render, token, website
 
 STATE_KEY = "alerts_dismissed"
 RAISED_KEY = "alerts_raised"
@@ -64,7 +64,19 @@ def raise_alert(store: CampaignStore, kind: str, subject: Any, severity: str, ti
 
 def _raised(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
     return [a for a in (store.get_state(RAISED_KEY) or {}).values()
-            if now - parse_dt(a["since"]) < FORGET_AFTER]
+            if now - parse_dt(a["since"]) < FORGET_AFTER
+            and (a["kind"] != "render_machine" or _machine_failed(store, a["id"]))]
+
+
+def _machine_failed(store: CampaignStore, alert_id: str) -> bool:
+    """A render_machine alert (render.machine_wait) lasts while its video is failed for the
+    machine: a relaunch, a render that ends (ready, or failed for the video), an archive or
+    a removal resolves it."""
+    with store._tx() as c:
+        return c.execute(
+            "SELECT 1 FROM assets a WHERE a.id = ? AND a.status = 'failed' AND (SELECT failure"
+            " FROM render_jobs WHERE asset_id = a.id ORDER BY id DESC LIMIT 1) LIKE ?",
+            (int(alert_id.partition(":")[2]), f"{render.MACHINE}:%")).fetchone() is not None
 
 
 def _publishes(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:

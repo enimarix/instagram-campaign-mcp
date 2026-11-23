@@ -42,7 +42,7 @@ from dotenv import dotenv_values
 
 from ..config import ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from ..studio import lemo, sfx, voices, work_orders
+from ..studio import lemo, render, sfx, voices, work_orders
 from ..studio.production import qc_summary
 from ..studio.seed import local_today
 from .proc import started as process_started
@@ -71,7 +71,9 @@ DISALLOWED_TOOLS = ("PowerShell", "Monitor", "NotebookEdit", "WebSearch", "WebFe
                     "RemoteTrigger", "SendMessage", "SendUserFile", "PushNotification",
                     "EnterWorktree")
 MAX_TURNS = 400  # a film is long work; the time cap is the real limit
-RENDER_WAIT_S = 3600.0  # the worker renders + QCs the delivered film meanwhile
+# the worker renders + QCs the delivered film meanwhile; each machine failure of its render
+# starts the wait again (_wait_render)
+RENDER_WAIT_S = 3600.0
 POLL_S = 5.0
 PROMPT = ("Make the film described in BRIEF.md in your working directory, exactly as it says."
           " Never ask questions: decide and write your answers into the treatment. Everything"
@@ -182,11 +184,19 @@ def close_orphans(store: CampaignStore) -> int:
 
 def _wait_render(store: CampaignStore, asset_id: int, wait_s: float, poll_s: float
                  ) -> Dict[str, Any]:
-    deadline = time.monotonic() + wait_s
+    """The asset once its render is judged, or still `rendering` after `wait_s`. Each
+    machine failure of its job (render.machine_wait) starts the wait again: the machine's
+    backoff never counts against the film, and the job fails for good after
+    render.MACHINE_RETRIES of them (docs/DECISIONS.md 2026-11-23)."""
+    deadline, seen = time.monotonic() + wait_s, None
     asset = store.get_asset(asset_id)
     while asset["status"] == "rendering" and time.monotonic() < deadline:
         time.sleep(poll_s)
         asset = store.get_asset(asset_id)
+        job = next(iter(store.list_render_jobs(asset_id=asset_id, limit=1)), {})
+        if job.get("failure") != seen and render.machine_retries(job):
+            deadline = time.monotonic() + wait_s
+        seen = job.get("failure")
     return asset
 
 

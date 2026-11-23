@@ -338,3 +338,48 @@ def test_the_film_brief_is_not_an_agent_playbook(cfg):
 def test_gpu_run_runs_the_command_under_the_lock_and_returns_its_code(capsys):
     assert gpu_run.main(["--", sys.executable, "-c", "raise SystemExit(3)"]) == 3
     assert gpu_run.main([]) == 2 and "usage" in capsys.readouterr().err
+
+
+# --- step 198: the film waits through its render's machine backoff ----------------------
+def _waited(store, monkeypatch, events, wait_s=100, poll_s=10):
+    """_wait_render on a fake clock; events: {t: change(store, asset_id, job_id)} applied
+    once the clock reaches t. Returns (the asset it returned, the time it returned at)."""
+    from types import SimpleNamespace
+
+    asset = store.add_asset(store.add_idea("motion")["id"])
+    job = store.add_render_job(asset["id"], f"film{asset['id']}")["id"]
+    clock = {"t": 0.0}
+
+    def sleep(s):
+        clock["t"] += s
+        for at in sorted(t for t in events if t <= clock["t"]):
+            events.pop(at)(store, asset["id"], job)
+
+    monkeypatch.setattr(film, "time", SimpleNamespace(monotonic=lambda: clock["t"], sleep=sleep))
+    return film._wait_render(store, asset["id"], wait_s, poll_s), clock["t"]
+
+
+def _machine(n):  # render.machine_wait's mark on the job
+    return lambda store, a, j: store.update_render_job(
+        j, failure=f"machine {n}/6: TTSError: no answer in time")
+
+
+def _to(status):  # the worker judged the render
+    return lambda store, a, j: transition(store, a, status, actor="worker")
+
+
+def test_the_film_keeps_waiting_while_its_render_waits_for_the_machine(store, monkeypatch):
+    got, at = _waited(store, monkeypatch, {90: _machine(1), 180: _machine(2), 270: _to("ready")})
+    assert got["status"] == "ready" and at == 270  # past the first wait (100 here)
+
+
+def test_a_video_failure_still_ends_the_films_wait_at_once(store, monkeypatch):
+    got, at = _waited(store, monkeypatch, {30: _to("failed")})
+    assert got["status"] == "failed" and at == 30
+
+
+def test_a_render_that_never_ends_still_times_the_film_out(store, monkeypatch):
+    got, at = _waited(store, monkeypatch, {})
+    assert got["status"] == "rendering" and at == 100
+    got, at = _waited(store, monkeypatch, {50: _machine(1)})  # one restart, not one per poll
+    assert got["status"] == "rendering" and at == 150

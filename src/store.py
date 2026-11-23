@@ -2015,15 +2015,17 @@ class CampaignStore:
         return self._select("SELECT * FROM render_jobs", {"state": state, "asset_id": asset_id},
                             "id DESC", limit)
 
-    def requeue_render_job(self, job_id: int) -> Dict[str, Any]:
+    def requeue_render_job(self, job_id: int, *, count: bool = True) -> Dict[str, Any]:
         """A finished (failed or done) job queued again as a new arrival: created_at now, no
-        place nor timer (line_pos, not_before), requeues + 1. The job as it is now."""
+        place nor timer (line_pos, not_before), requeues + 1 when `count`. The job as it is
+        now."""
         now = to_iso(utcnow())
         with self._tx() as c:
             c.execute("UPDATE render_jobs SET state='queued', attempts=0, progress=0,"
                       " failure=NULL, finished_at=NULL, line_pos=NULL, not_before=NULL,"
-                      " requeues=requeues+1, created_at=?, updated_at=?"
-                      " WHERE id=? AND state IN ('failed', 'done')", (now, now, job_id))
+                      " requeues=requeues+?, created_at=?, updated_at=?"
+                      " WHERE id=? AND state IN ('failed', 'done')",
+                      (int(count), now, now, job_id))
         return self.get_render_job(job_id)
 
     def requeue_stale_render_jobs(self, stale_before: datetime) -> None:

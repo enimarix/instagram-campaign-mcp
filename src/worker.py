@@ -295,7 +295,7 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
         try:
             store.touch_render_jobs(list(running))
             paused = line.paused(store)  # the owner needs the GPU: what runs finishes
-            if paused and not line.film_renders(store):
+            if paused and not line.film_renders(store, utcnow()):
                 return
             if not housekeeping.disk_ok(settings):
                 if time.monotonic() - disk_warned >= DISK_WARN_EVERY:
@@ -308,7 +308,7 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
                 return
             stale = utcnow() - stale_after
             store.requeue_stale_render_jobs(stale)  # first: a crashed job keeps its place
-            ids = (line.film_renders(store)[:free] if paused  # a running film waits for it
+            ids = (line.film_renders(store, utcnow())[:free] if paused  # a running film waits
                    else line.renders_next(store, settings, utcnow(), free))  # every free slot
             for job in store.claim_render_jobs(free, stale_before=stale, ids=ids):
                 running[job["id"]] = asyncio.create_task(asyncio.to_thread(run, job))

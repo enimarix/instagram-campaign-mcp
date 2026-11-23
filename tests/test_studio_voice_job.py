@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from src.store import to_iso, utcnow
-from src.studio import checks, guard, line, motion, render, sitcom, tts, voices
+from src.studio import alerts, checks, guard, line, motion, render, sitcom, tts, voices
 from src.studio.ffmpeg import FFmpegError
 from src.studio.gpu_lock import LockTimeout
 from src.studio.tts import LineTiming, Synthesis, TTSError
@@ -241,6 +241,117 @@ def test_a_machine_failure_waits_in_line_without_counting_against_the_video(
     assert alert["link"] == f"/assets/{asset['id']}"
     [waiting] = checks.waiting(store, now)
     assert waiting["id"] == asset["id"] and waiting["rerenders"] == 0  # budget untouched
+
+
+def _machine_failed(store, s, fake):
+    """A queued voiced video whose job failed for the machine (past MACHINE_RETRIES)."""
+    asset = _queue(store, s)["asset"]
+    fake.fail = TTSError("the TTS service answered HTTP 503", status=503)
+    for _ in range(render.MACHINE_RETRIES + 1):
+        job, _ = _run(store, s)
+    fake.fail = None
+    assert job["failure"].startswith("machine:") and job["requeues"] == 0
+    return store.get_asset(asset["id"]), job
+
+
+async def _machine_alerts(store, s):
+    return [a for a in await alerts.alerts(store, s, utcnow()) if a["kind"] == "render_machine"]
+
+
+# --- step 198: audit fixes ------------------------------------------------------------------
+@pytest.mark.parametrize("error, voiced_after", [
+    (TTSError("no answer in time", unreachable=True), False),  # the machine: it stops
+    (TTSError("the TTS service answered HTTP 400", status=400), True)])  # the video's: on
+def test_voice_ahead_stops_at_a_machine_failure(store, s, fake, monkeypatch, error,
+                                                voiced_after):
+    _queue(store, s)
+    nxt, after = _queue(store, s)["asset"], _queue(store, s)["asset"]
+    real = render.voice_first
+
+    def first_ahead_fails(store_, asset, settings):
+        if asset["id"] == nxt["id"]:
+            raise error
+        return real(store_, asset, settings)
+
+    monkeypatch.setattr(render, "voice_first", first_ahead_fails)
+    job, _ = _run(store, s)
+    assert job["state"] == "done" and job["asset_id"] not in (nxt["id"], after["id"])
+    assert ("voice_todo" not in store.get_asset(after["id"])["recipe"]) is voiced_after
+
+
+def test_voice_ahead_stops_once_the_studio_is_paused(store, s, fake, monkeypatch):
+    _queue(store, s)
+    nxt, after = _queue(store, s)["asset"], _queue(store, s)["asset"]
+    real = render.voice_first
+
+    def pause_meanwhile(store_, asset, settings):
+        out = real(store_, asset, settings)
+        if asset["id"] == nxt["id"]:
+            line.pause(store, True)  # the owner pauses while the voice of `nxt` is made
+        return out
+
+    monkeypatch.setattr(render, "voice_first", pause_meanwhile)
+    _run(store, s)
+    assert "voice_todo" not in store.get_asset(nxt["id"])["recipe"]
+    assert "voice_todo" in store.get_asset(after["id"])["recipe"]
+
+
+def test_voice_ahead_voices_every_next_one_when_all_succeed(store, s, fake):
+    _queue(store, s)
+    later = [_queue(store, s)["asset"] for _ in range(3)]
+    _run(store, s)
+    assert len(fake.said) == 4
+    assert all("voice_todo" not in store.get_asset(a["id"])["recipe"] for a in later)
+
+
+def test_a_relaunch_after_a_machine_failure_is_not_a_re_render(store, s, fake):
+    asset, job = _machine_failed(store, s, fake)
+    again = render.rerender(store, s.media_root, asset["id"], asset["recipe"])["job"]
+    assert again["id"] == job["id"] and again["state"] == "queued" and again["requeues"] == 0
+    job = store.claim_render_jobs(1, stale_before=FAR_PAST)[0]
+    render.run_job(store, s.media_root, job, settings=s,
+                   render_fn=lambda *a: (INFO, {"file_path": "video.mp4"}),
+                   qc_fn=lambda *a: {"passed": False, "reason": "black frames"})
+    [waiting] = checks.waiting(store, utcnow())
+    assert waiting["id"] == asset["id"] and waiting["rerenders"] == 0
+
+
+def test_a_relaunch_after_a_video_failure_still_counts(store, s, fake):
+    idea = store.add_idea("motion")  # voiced already: the relaunch is the same recipe (job)
+    asset = store.add_asset(idea["id"], recipe={
+        "kind": "motion", "template": "FactQuest",
+        "props": {**FACTQUEST, "voice": {"lines": [], "audioSrc": "voice/old.wav"}}})
+    render.enqueue_render(store, asset["id"])
+    job = store.claim_render_jobs(1, stale_before=FAR_PAST)[0]
+    job = render.run_job(store, s.media_root, job, settings=s,
+                         render_fn=lambda *a: (INFO, {"file_path": "video.mp4"}),
+                         qc_fn=lambda *a: {"passed": False, "reason": "black frames"})
+    asset = store.get_asset(asset["id"])
+    again = render.rerender(store, s.media_root, asset["id"], asset["recipe"])["job"]
+    assert again["id"] == job["id"] and again["requeues"] == 1
+
+
+async def test_the_machine_alert_goes_once_the_video_renders(store, s, fake):
+    asset, _ = _machine_failed(store, s, fake)
+    [alert] = await _machine_alerts(store, s)  # the cap: it fires
+    assert alert["id"] == f"render_machine:{asset['id']}"
+    render.rerender(store, s.media_root, asset["id"], asset["recipe"])
+    job, _ = _run(store, s)
+    assert job["state"] == "done" and store.get_asset(asset["id"])["status"] == "ready"
+    assert await _machine_alerts(store, s) == []
+
+
+async def test_the_machine_alert_goes_once_the_video_is_relaunched_or_removed(store, s, fake):
+    asset, _ = _machine_failed(store, s, fake)
+    other, _ = _machine_failed(store, s, fake)
+    assert len(await _machine_alerts(store, s)) == 2
+    job = render.rerender(store, s.media_root, asset["id"], asset["recipe"])["job"]
+    [left] = await _machine_alerts(store, s)  # relaunched: the owner acted on it
+    assert left["id"] == f"render_machine:{other['id']}"
+    line.remove(store, "render", job["id"])  # then taken out of the Planning
+    assert store.get_asset(asset["id"])["status"] == "archived"
+    [left] = await _machine_alerts(store, s)
+    assert left["id"] == f"render_machine:{other['id']}"
 
 
 def test_a_qc_fail_after_a_machine_wait_counts_as_before(store, s, fake):

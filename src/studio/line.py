@@ -23,7 +23,7 @@ render job fails with REMOVED and its asset is archived, an order is skipped wit
 pause() stops everything heavy from starting (worker_state PAUSE_KEY): the render loop
 claims nothing, the catch-up and `agent run-due` start nothing; what runs finishes. A
 running film's own render (film_renders: the film waits for it) is part of what runs: the
-pause lets it through, and hold / timer / remove refuse it.
+pause lets it through (once its machine timer is past), and hold / timer / remove refuse it.
 """
 
 from __future__ import annotations
@@ -56,10 +56,10 @@ _WAITING = (
 _TABLE = {"render": ("render_jobs", "state = 'queued'"),
           "film": ("work_orders", f"status = 'scheduled' AND {_LEMO}")}
 # A running film's own render (lemo.register_film; film._wait_render waits for it): its
-# idea's Lemo order is in_production.
-_FILM_RENDERS = ("SELECT j.id FROM render_jobs j JOIN assets a ON a.id = j.asset_id"
-                 " JOIN work_orders w ON w.idea_id = a.idea_id WHERE j.state = 'queued'"
-                 " AND w.status = 'in_production' AND substr(w.style, 1, 5) = 'lemo:'"
+# idea's Lemo order is in_production (and the film's run is alive: film_renders).
+_FILM_RENDERS = ("SELECT j.id, j.not_before FROM render_jobs j JOIN assets a"
+                 " ON a.id = j.asset_id JOIN work_orders w ON w.idea_id = a.idea_id"
+                 " WHERE j.state = 'queued' AND w.status = 'in_production' AND substr(w.style, 1, 5) = 'lemo:'"
                  " ORDER BY j.id")
 FILM_RENDER = ("Ce rendu est celui d'un film en cours, qui l'attend : il ne peut être ni mis"
                " en pause, ni minuté, ni retiré.")
@@ -73,10 +73,20 @@ def waiting(store: CampaignStore) -> List[Dict[str, Any]]:
         return [dict(r) for r in c.execute(_WAITING)]
 
 
-def film_renders(store: CampaignStore) -> List[int]:
-    """The queued render jobs a running film waits for (module doc)."""
+def film_renders(store: CampaignStore, now: Optional[datetime] = None) -> List[int]:
+    """The queued render jobs a running film waits for (module doc). Only while the film's
+    run is alive (a film whose runner died is closed first, runner.close_dead_runs: its
+    render is then an ordinary one until film.close_orphans skips its order). With `now`:
+    only those whose timer is past (a machine backoff, render.machine_wait), the ones the
+    paused render loop may claim."""
+    from ..agent import film, runner  # here: they import this module
+
+    runner.close_dead_runs(store, film.PLAYBOOK)
+    if not store.running_agent_run(film.PLAYBOOK):
+        return []
     with store._tx() as c:
-        return [r[0] for r in c.execute(_FILM_RENDERS)]
+        rows = c.execute(_FILM_RENDERS).fetchall()
+    return [r[0] for r in rows if now is None or not r[1] or parse_iso(r[1]) <= now]
 
 
 def _not_film_render(store: CampaignStore, kind: str, item_id: int) -> None:
