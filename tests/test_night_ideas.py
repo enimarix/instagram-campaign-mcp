@@ -44,6 +44,20 @@ def test_the_packet_gives_the_places_left_and_opens_them(store, tmp_path, monkey
     assert work["manifest"]["sections"]["quotas"]["count"] == 1
 
 
+def test_no_batch_limit_gives_no_places_limit(store, tmp_path, monkeypatch):
+    monkeypatch.setattr(B, "BIBLE_PATH", tmp_path / "BIBLE.md")
+    packet.write_packet(store, cfg(batch_size=0), "daily-produce", tmp_path)  # schema-checked
+    quotas = json.loads((tmp_path / "work" / "quotas.json").read_text(encoding="utf-8"))
+    assert quotas["places"]["ideas_left"] is None and quotas["limits"]["ideas"] is None
+    brief = json.loads((tmp_path / "work" / "brief.json").read_text(encoding="utf-8"))
+    assert brief["mix"]["template"] and all(r["count"] is None for r in brief["mix"]["template"])
+    # a day opened with a limit keeps it; a day opened without one takes a later limit
+    assert planned.open_places(store, "2026-11-30", 2) == 2
+    assert planned.open_places(store, "2026-11-30", None) == 2
+    assert planned.open_places(store, "2026-12-01", None) is None
+    assert planned.open_places(store, "2026-12-01", 3) == 3
+
+
 @pytest.fixture
 def s(tmp_path, monkeypatch):
     monkeypatch.setattr(motion, "validate_props",
@@ -70,6 +84,13 @@ def test_a_plan_past_the_places_left_is_refused(store, s):
     out = motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
                                      idea_id=idea["id"])
     assert out["job"]["state"] == "queued"
+
+
+def test_no_batch_limit_plans_past_the_old_size(store, s):
+    s.batch_size = 0
+    planned.open_places(store, DAY, None)
+    for _ in range(12):
+        assert _plan(store, s)["status"] == "planned"
 
 
 def test_places_count_per_batch_day_minus_the_cards_already_planned(store, s):

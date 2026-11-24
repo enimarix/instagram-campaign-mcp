@@ -7,6 +7,7 @@
   "$defs": {
     "numbers": {"type": "object",
                 "required": ["ideas", "explore", "humour", "informative", "reactions"],
+                "properties": {"ideas": {"type": ["integer", "null"]}},
                 "additionalProperties": {"type": "integer"}}
   },
   "properties": {
@@ -16,9 +17,9 @@
     "humour_target": {"type": "integer"},
     "clips_available": {"type": "integer", "minimum": 0},
     "batch_size": {"type": "integer"},
-    "effective_batch_size": {"type": "integer"},
+    "effective_batch_size": {"type": ["integer", "null"]},
     "places": {"type": "object", "required": ["orders", "change_requests", "dm_picks", "ideas_left"],
-               "additionalProperties": {"type": "integer", "minimum": 0}},
+               "additionalProperties": {"type": ["integer", "null"], "minimum": 0}},
     "styles": {"type": "object",
                "additionalProperties": {"type": "object", "required": ["count", "limit"],
                                         "properties": {"count": {"type": "integer"},

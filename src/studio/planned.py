@@ -188,16 +188,18 @@ def archive(store: CampaignStore, asset_id: int) -> Dict[str, Any]:
     return transition(store, asset_id, "archived", actor="owner")
 
 
-def ideas_left(store: CampaignStore, settings: InstagramMCPSettings) -> Dict[str, int]:
+def ideas_left(store: CampaignStore, settings: InstagramMCPSettings
+               ) -> Dict[str, Optional[int]]:
     """The batch's places for Claude's own ideas (188c): BATCH_SIZE minus the owner's items
     the producing run makes first (scheduled work orders, change requests, new DM picks).
-    {orders, change_requests, dm_picks, ideas_left}."""
+    {orders, change_requests, dm_picks, ideas_left}; ideas_left None: no limit (206)."""
     from ..learning.learnings import list_revision_requests  # here: learning imports studio
 
     n = {"orders": len(work_orders.for_agent(store, "scheduled")),
          "change_requests": len(list_revision_requests(store)),
          "dm_picks": len(dm_picks.for_agent(store, "new"))}
-    return {**n, "ideas_left": max(0, settings.batch_size - sum(n.values()))}
+    left = max(0, settings.batch_size - sum(n.values())) if settings.batch_size else None
+    return {**n, "ideas_left": left}
 
 
 def _places(c: Any) -> Dict[str, Dict[str, int]]:
@@ -213,21 +215,26 @@ def _save_places(c: Any, days: Dict[str, Dict[str, int]]) -> None:
               (PLACES_KEY, json.dumps(keep), to_iso(utcnow())))
 
 
-def open_places(store: CampaignStore, day: str, places: int) -> int:
+def _lower(a: Optional[int], b: Optional[int]) -> Optional[int]:
+    """min() where None is no limit."""
+    return b if a is None else a if b is None else min(a, b)
+
+
+def open_places(store: CampaignStore, day: str, places: Optional[int]) -> Optional[int]:
     """The producing run's packet (188c) sets the places Claude's ideas may take in `day`'s
     batch; take_place() counts them down. The day's first packet fixes them, a later one
     may only lower them (199: once the first run made the owner's items, ideas_left() grows
     back; the batch stays the batch). Returns the places left: the day's places minus the
     Claude cards already planned for it (193: a retried packet or a second run of the day
-    never plans past the batch)."""
+    never plans past the batch). None: no limit (206)."""
     with store.immediate() as c:
         days = _places(c)
         st = days.get(day)
-        places = min(places, st["places"]) if st else places
+        places = _lower(places, st["places"]) if st else places
         taken = st["taken"] if st else 0
         days[day] = {"places": places, "taken": taken}
         _save_places(c, days)
-    return max(0, places - taken)
+    return None if places is None else max(0, places - taken)
 
 
 def take_place(store: CampaignStore, settings: InstagramMCPSettings, day: str) -> None:
@@ -239,7 +246,7 @@ def take_place(store: CampaignStore, settings: InstagramMCPSettings, day: str) -
     with store.immediate() as c:  # read-check-write: parallel plan calls take one each
         days = _places(c)
         st = days.get(day) or {"places": fresh, "taken": 0}
-        if st["taken"] >= st["places"]:
+        if st["places"] is not None and st["taken"] >= st["places"]:
             raise ValueError(f"no place left in the {day} batch for an idea of yours: the"
                              f" owner's items come first ({settings.batch_size} in all); stop"
                              " planning ideas and finish the run")

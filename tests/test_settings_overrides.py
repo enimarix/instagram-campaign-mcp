@@ -192,7 +192,7 @@ def test_studio_fields_editable_validated_no_password(store):
         "overridden": True, "type": "float", "ge": 0, "le": 1, "description": None}
     assert budget.audit_log(store)["rows"] == []
     assert (_field(out, "batch_size")["le"], _field(out, "max_posts_per_day")["le"]) == (50, 25)
-    for bad in ({"batch_size": 0}, {"batch_size": 51}, {"max_posts_per_day": 0},
+    for bad in ({"batch_size": -1}, {"batch_size": 51}, {"max_posts_per_day": 0},
                 {"max_posts_per_day": 26}, {"explore_share": 1.5}, {"humour_share": -0.1}):
         with pytest.raises(ov.SettingsInvalid, match=next(iter(bad))):
             ov.update(store, s, bad)

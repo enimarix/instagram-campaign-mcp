@@ -1212,7 +1212,7 @@ export type PlanningItem = {
   stage: string | null
   progress: number | null
   late_s?: number | null // a running item past its usual time (190)
-  picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number }
+  picks_up?: { orders: number; change_requests: number; dm_picks: number; ideas_left: number | null }
   idea?: ClaudeIdea // a claude_idea's card (section ideas, 188b)
   line_index?: number | null // a waiting render's or film's place among the line's not held: it can be dragged (195)
   playbook?: string | null // an AI run's

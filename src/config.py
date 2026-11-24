@@ -367,7 +367,7 @@ class InstagramMCPSettings(BaseSettings):
 
     # --- Daily quotas -----------------------------------------------------
     # create_idea guards (src/learning/quotas.py, GOAL.md §3.1-3.2).
-    batch_size: int = Field(10, ge=1, le=50, description="Ideas per daily batch")
+    batch_size: int = Field(10, ge=0, le=50, description="Ideas per daily batch; 0 = no limit")
     explore_share: float = Field(
         0.3, ge=0, le=1, description="Max share of explore ideas in a batch (rounded up)"
     )

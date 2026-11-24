@@ -99,12 +99,14 @@ def largest_remainder(shares: Mapping[str, float], n: int) -> Dict[str, int]:
     return counts
 
 
-def with_counts(mix: Dict[str, Any], n: int) -> Dict[str, Any]:
-    """The mix with a `count` per row: n ideas split by share in every dimension."""
+def with_counts(mix: Dict[str, Any], n: Optional[int]) -> Dict[str, Any]:
+    """The mix with a `count` per row: n ideas split by share in every dimension; n None
+    (no batch limit, 206): count None, the shares lead."""
     for dim in DIMENSIONS:
-        counts = largest_remainder({r["option"]: r["share"] for r in mix[dim]}, n)
+        counts = (largest_remainder({r["option"]: r["share"] for r in mix[dim]}, n)
+                  if n is not None else {})
         for row in mix[dim]:
-            row["count"] = counts[row["option"]]
+            row["count"] = counts.get(row["option"])
     return mix
 
 
