@@ -107,7 +107,7 @@ def films_ready(store: CampaignStore, settings: InstagramMCPSettings, now: datet
 
     failed = store.get_state("order_preflight_failed_at")
     return (not store.running_agent_runs(limit=1)
-            and film.films_today(store, settings, now) < settings.lemo_films_per_day
+            and film.films_left(store, settings, now) > 0
             and not (failed and now - parse_iso(failed) < schedule.ORDER_RETRY))
 
 

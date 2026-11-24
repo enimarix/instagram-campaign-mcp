@@ -53,6 +53,7 @@ EDITABLE: Dict[str, str] = {
     "max_posts_per_day": "studio",
     "explore_share": "studio",
     "humour_share": "studio",
+    "lemo_films_per_day": "studio",
 }
 CAPS = ("ads_daily_cap", "ads_test_cap", "ads_lifetime_cap")
 REFRESH_EVERY = 30.0  # seconds, the worker's check

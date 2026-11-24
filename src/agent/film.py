@@ -17,7 +17,8 @@ Write/Edit, which the content agent never has (runner.py). The locks it keeps:
 - a time cap (LEMO_FILM_MAX_MIN) with the CLI's process tree killed after it;
 - one film at a time (agent_runs playbook `lemo-film`, the agent runs' lock: the Agent page
   lists the films with their logs and usage, and no other run starts while one films) and
-  LEMO_FILMS_PER_DAY started per owner-local day (each one costs many tokens);
+  LEMO_FILMS_PER_DAY started per owner-local day (each one costs many tokens; 0 = no
+  limit; a film the studio restart killed does not count);
 - the GPU lock for every heavy command (the brief: src/studio/gpu_run.py).
 
 Flow: the oldest scheduled Lemo order is picked by the worker's catch-up
@@ -30,6 +31,7 @@ with the reason (156: never silent). tests/test_lemo_film.py fails if the comman
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import time
@@ -47,6 +49,7 @@ from ..studio.production import qc_summary
 from ..studio.seed import local_today
 from .proc import started as process_started
 from .runner import (
+    DEAD_RUN,
     MARKER,
     AgentError,
     _check_workspace,
@@ -153,14 +156,24 @@ def films_today(store: CampaignStore, settings: InstagramMCPSettings, now: datet
     local = now.astimezone(ZoneInfo(settings.timezone))
     day = local.replace(hour=0, minute=0, second=0, microsecond=0)
     # ponytail: the last 50 films; a cap above 50 a day would need a COUNT query.
-    return sum(parse_iso(r["started_at"]) >= day
+    # A film the studio restart killed (DEAD_RUN) is not the film's doing: it does not count.
+    return sum(parse_iso(r["started_at"]) >= day and r["summary"] != DEAD_RUN
                for r in store.list_agent_runs(PLAYBOOK, limit=50))
+
+
+def films_per_day(settings: InstagramMCPSettings) -> float:
+    """LEMO_FILMS_PER_DAY, 0 = no limit (math.inf)."""
+    return settings.lemo_films_per_day or math.inf
+
+
+def films_left(store: CampaignStore, settings: InstagramMCPSettings, now: datetime) -> float:
+    return films_per_day(settings) - films_today(store, settings, now)
 
 
 def check_film(store: CampaignStore, settings: InstagramMCPSettings, now: datetime) -> None:
     """AgentRunRefused while a film runs; AgentError once today's films are made."""
     check_lock(store, PLAYBOOK, settings.lemo_film_max_min * 60 + RENDER_WAIT_S)
-    if films_today(store, settings, now) >= settings.lemo_films_per_day:
+    if films_left(store, settings, now) <= 0:
         raise AgentError(f"les {settings.lemo_films_per_day} films du jour sont faits :"
                          " il attend demain")
 

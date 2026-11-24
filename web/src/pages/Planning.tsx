@@ -30,6 +30,9 @@ const WAIT: Record<PlanningWait, string> = {
   daily_cap: 'quota du jour atteint', preflight: "l'IA ne peut pas démarrer", next_ai_run: 'attend le prochain run',
   needs_instruction: 'attend ta consigne',
 }
+/** The wait in words; a film's daily cap is the owner's « Lemo films per day » setting (205). */
+const waitLabel = (i: PlanningItem) => i.kind === 'film' && i.waits_on === 'daily_cap'
+  ? 'limite de films du jour atteinte (Réglages)' : WAIT[i.waits_on!] ?? i.waits_on
 const SOURCE: Record<string, string> = {
   dm: 'envoyé en DM', trend: 'depuis Trending', create: "créé dans l'app", change: 'demande de changement',
   agent: "l'IA", schedule: 'planning des runs',
@@ -323,7 +326,7 @@ function Slot({ item: i }: { item: PlanningItem }) {
       : i.waits_on === 'machine' && i.not_before ? `En attente de la machine — nouvel essai vers ${at(i.not_before)}`
         : i.not_before ? `Minuteur : ${at(i.not_before)}`
           : timed ? `${MAKES.includes(i.kind) ? 'Génération prévue' : 'Prévu'} vers ${at(i.est_start!)}`
-            : `Pas d'heure : ${i.waits_on ? WAIT[i.waits_on] ?? i.waits_on : 'rien ne part sans toi'}.`
+            : `Pas d'heure : ${i.waits_on ? waitLabel(i) : 'rien ne part sans toi'}.`
   return (
     <p className={`tabular-nums ${i.late_s ? 'text-warn' : timed || i.waits_on === 'held' ? '' : 'text-muted'}`}>
       {when}{timed && ` · ${duration(i.est_duration_s!)} · prête ~${at(i.est_ready!)}`}
@@ -341,7 +344,7 @@ function ItemCard({ item: i, grip, ...actions }: { item: PlanningItem; grip?: Re
         {grip}
         <Chip tone={i.section === 'running' ? 'explore' : 'info'}>{KIND[i.kind]}</Chip>
         {i.launch_requested && <Chip tone="success">{REQUESTED}</Chip>}
-        {i.waits_on && i.waits_on !== 'held' && <Chip tone="warn">{WAIT[i.waits_on] ?? i.waits_on}</Chip>}
+        {i.waits_on && i.waits_on !== 'held' && <Chip tone="warn">{waitLabel(i)}</Chip>}
         {!!i.late_s && <Chip tone="warn">en retard de {Math.max(1, Math.round(i.late_s / 60))} min</Chip>}
       </div>
       <h3 className="font-semibold break-words">{i.title}</h3>

@@ -1003,3 +1003,13 @@ says so once per new failure. ElevenLabs' error bodies are not in docs we could 
 non-2xx falls back, whatever its code.
 Reason: owner 2026-11-24 (« first ElevenLabs, then if there's no credits or a bug, the local
 audios »; « super important to use the ElevenLabs emotion tags »).
+
+## 2026-11-24: The Lemo film limit is the owner's, 0 = no limit (205)
+`LEMO_FILMS_PER_DAY` (default 3) is now in Studio settings, where the owner can change it.
+0 means no limit (it used to mean no films). A film the studio restart killed
+(`DEAD_RUN`) no longer counts toward the limit; a timed-out film still does, since its tokens
+were spent. "Videos made per day" (`BATCH_SIZE`) keeps its 1..50 range: it is how many ideas
+the AI makes on its own each night, not a cap on the owner's orders (they already pass a
+full batch, 134), so "no limit" has no meaning there.
+Reason: owner 2026-11-24. A hidden limit blocked an order as « quota du jour atteint »;
+two of that day's three films had died (one timeout, one restart).

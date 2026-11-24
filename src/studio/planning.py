@@ -283,7 +283,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         # the drag and drop's index (line.place, 195): the place among the not held
         index = {(i["kind"], i["id"]): n for n, i in enumerate(pending)}
         took = _run_s(store, film.PLAYBOOK, settings.lemo_film_max_min * 60)
-        quota = left = settings.lemo_films_per_day - film.films_today(store, settings, now)
+        quota = left = film.films_left(store, settings, now)  # inf: no limit
         reset, films_n, idle_at, n = _midnight(settings, now), 0, None, len(items)
         ahead = any(i["kind"] == "render" for i in items)  # a running film holds no render
         films: List[Dict[str, Any]] = []  # the films' cards, in line order
@@ -310,7 +310,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
 
         while pending:
             if gpu >= reset:  # the caps reset at owner-local midnight
-                left, reset = settings.lemo_films_per_day, _midnight(settings, gpu)
+                left, reset = film.films_per_day(settings), _midnight(settings, gpu)
             if todo and not line.head([p for p in pending if p["kind"] == "render"], gpu):
                 launches(gpu)  # no render waits: the owner's launches go before the films
             # a film waits for the running AI run (line.films_ready), the renders don't
