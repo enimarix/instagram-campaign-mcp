@@ -326,13 +326,11 @@ def say_cast(store: CampaignStore) -> Optional[Dict[str, Tuple[str, str]]]:
     return cast
 
 
-def agent_copy(store: CampaignStore, dest: Path, local_only: bool = False) -> None:
+def agent_copy(store: CampaignStore, dest: Path) -> None:
     """Write the agent's voices.json: the voices on only, the default moved to the voice
     check_voice(None) gives. Recipes stay out (the agent picks a voice, never makes one).
-    `local_only`: no ElevenLabs card (a Lemo film calls the local voice service itself)."""
+    A Lemo film gets the same (207: it speaks through the film runner's voice door)."""
     on = {v["id"] for v in enabled_voices(store)}
-    if local_only:  # a card on stands for its local relay voice
-        on = {v if not el_card(v) else el_card(v)["fallback"] for v in on}
     if not on:
         return
     default = default_voice(store)
