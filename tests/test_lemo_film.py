@@ -227,6 +227,8 @@ def test_a_film_reaches_the_inbox(store, cfg, judged, tmp_path):
     assert Path(seen["cwd"]).resolve() == (tmp_path / "ws" / "films" / str(order["id"]))
     assert "watercolor" in seen["brief"] and "Où partent les calories ?" in seen["brief"]
     assert "$" not in seen["brief"].replace("$LIB", "")  # every placeholder filled in
+    # 207: the film speaks through the runner's voice door, never the local service directly
+    assert "http://127.0.0.1:" in seen["brief"] and "127.0.0.1:8766" not in seen["brief"]
     assert not any(TOKEN in v for v in seen["env"].values())
     done = work_orders.get_order(store, order["id"])
     assert done["status"] == "in_feed"

@@ -64,9 +64,11 @@ def check_style(style: str) -> str:
 
 
 def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dict[str, Any],
-               from_video: Optional[Dict[str, Any]] = None) -> str:
+               from_video: Optional[Dict[str, Any]] = None,
+               tts_url: Optional[str] = None) -> str:
     """The film's BRIEF.md: the template (minus its comments) with this order filled in.
-    Placeholders are `$name`; the owner's words are data inside it."""
+    Placeholders are `$name`; the owner's words are data inside it. tts_url: the film
+    runner's voice door (agent/film_voice.py, 207), else the local voice service."""
     remake = ""
     if from_video:
         remake = ("This order remakes one of our videos in this style: keep its topic, "
@@ -81,7 +83,7 @@ def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dic
         remake=remake, film_dir=FILM_DIR,
         library=Path(settings.lemo_library).expanduser().as_posix(),
         gpu_run=f'"{Path(sys.executable).as_posix()}" "{GPU_RUN.as_posix()}" --',
-        tts_url=settings.tts_http_url or DEFAULT_TTS)
+        tts_url=tts_url or settings.tts_http_url or DEFAULT_TTS)
 
 
 def _post(film: Path) -> Dict[str, Any]:

@@ -42,21 +42,29 @@ $remake
 
 ## Voice: the studio's approved voices only
 
-- POST `$tts_url` with JSON `{"text": "<one line>", "voice": "<id>"}`. It answers JSON
-  `{"audio": <base64 WAV>, "words": [...], "take": {"score", "duration_s", ...}}`. One
-  request per line, one at a time, then lay them on the timeline. Call it directly, NOT
-  through the GPU lock command (the service takes the lock itself: inside it, it would wait
-  forever). The first call loads the model (~35 s); then ~1 s of compute per second of
-  speech or more. On 503, retry once after 30 s.
+- POST `$tts_url` with JSON `{"text": "<one line>", "voice": "<id>"}`: the studio's own
+  voice engines, ElevenLabs first or the local voice as the owner set them, each taking
+  over when the other fails. It answers JSON `{"audio": <base64 WAV>, "words": [...],
+  "take": {"voice", "engine", "fallback", "duration_s"}}`: `engine` says who spoke
+  (`elevenlabs` or `local`), `fallback` why the first engine did not (then say so in your
+  summary). One request per line, one at a time, then lay them on the timeline. Call it
+  directly, NOT through the GPU lock command (the local engine takes the lock itself:
+  inside it, it would wait forever). The local engine's first call loads its model (~35 s).
+  On 503, retry once after 30 s; on 422, rewrite the line.
 - Voices: read `voices.json` in your working folder: the voices the owner keeps on, each
-  with its `description` and `address` (tu / vous). Use only those ids; the library's
-  Kokoro / edge-tts voices are NOT approved for macroBody.
+  with its `description` and `address` (tu / vous). Ids starting `el_` are ElevenLabs
+  voices. Use only those ids; the library's Kokoro / edge-tts voices are NOT approved for
+  macroBody.
 - Address: « vous » by default (explainers, calm or painterly styles); « tu » for humour,
   coaching or a playful style. Pick the voice whose `address` fits and whose `use_for` matches
   the film (storytelling vs. energy, the speaker's gender); the `default` one only when
-  none fits. The owner's instruction wins when it says. Write your choice in
-  TREATMENT.md.
-- VoxCPM2 can garble short or unusual phrasings: if a take mis-says a word, rewrite the line.
+  none fits. The owner's instruction wins when it says: when it asks for another voice,
+  pick a different id from the one the remade video used. Write your choice in TREATMENT.md.
+- ElevenLabs hears emotion tags in the line: `[excited]`, `[laughs]`, `[whispers]`,
+  `[sighs]`… one where the feeling changes, never on every line; never write them in
+  on-screen text (the local engine never hears them).
+- The local engine (VoxCPM2) can garble short or unusual phrasings: if a take mis-says a
+  word, rewrite the line.
 - Mix: the voice clearly on top, music ducked well under it, always.
 
 ## Sound effects (optional): the studio's library

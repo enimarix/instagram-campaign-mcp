@@ -1026,3 +1026,16 @@ places were opened with a limit keeps it until midnight. "Most posts per day" st
 1..25: the publishing slots and the bench's supply days divide by it.
 Reason: owner 2026-11-24 (« Videos made per day must do the same… where 0 can be
 unlimited »).
+
+## 2026-11-24: Lemo films speak through the studio's voice engines (207)
+204 left Lemo films on the local voice service (`voices.json` without the ElevenLabs cards,
+the brief pointing at the service), because a film holds no secret and could not call
+ElevenLabs. So a film sent back with « new voice » could only pick another local voice
+(video 78). Now the film runner serves the studio's own engines (`tts.get_provider`:
+ElevenLabs and the local voice in the owner's order, each taking over for the other) on a
+loopback port behind a one-run token, for as long as the film runs (`src/agent/film_voice.py`).
+The brief points the film there with the same request and answer as the local service
+(base64 WAV), plus `take.engine` and `take.fallback`. The film gets the ElevenLabs cards in
+its `voices.json` and may write audio tags. The key stays in the runner process.
+Reason: owner 2026-11-24 (« it should be generating the same video, only with the 11 Labs
+voice »).
