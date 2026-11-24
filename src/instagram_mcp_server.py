@@ -609,8 +609,9 @@ async def list_work_orders(status: Optional[WorkOrderStatus] = "scheduled") -> D
 @mcp.tool(annotations=LOCAL_WRITE)
 async def skip_work_order(id: int, reason: str) -> Dict[str, Any]:
     """Skip an open work order (id from list_work_orders) you cannot make, with a one-line
-    reason the owner reads (e.g. the downloader refused the Reel: private)."""
-    order = await _studio(work_orders.skip_order, store(), id, reason)
+    reason the owner reads (e.g. the downloader refused the Reel: private). A Lemo film
+    order (style lemo:...) is the film runner's: refused."""
+    order = await _studio(work_orders.skip_for_agent, store(), id, reason)
     return {k: order[k] for k in work_orders.AGENT_KEYS}
 
 
@@ -1043,7 +1044,8 @@ async def decide_revision(asset_id: int, decision: Literal["remade", "restyled",
     own style, the film runner makes it from `why`, what to change), restyled (its style
     cannot meet the note: remade in `style`, an enabled one;
     returns a « même vidéo, autre style » work order: make it with create_idea(
-    work_order_id=...), the old video is archived once the new one is submitted) or
+    work_order_id=...); in a Lemo style (lemo:...) make nothing, the film runner makes it;
+    the old video is archived once the new one is submitted) or
     waiting (why: what it waits for). No style fits: request_style instead."""
     return await _studio(feedback_.decide_revision, store(), asset_id, decision, why, style)
 

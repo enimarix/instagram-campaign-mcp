@@ -414,13 +414,30 @@ def _same_reel(url: Optional[str], other: Optional[str]) -> bool:
         return False
 
 
+def _not_a_film(order: Dict[str, Any]) -> None:
+    """203: the agent never makes or skips a Lemo-Opuscar order: taken by the agent, it was
+    in_production with no film running, and the film runner closed it as interrupted."""
+    if lemo.is_lemo(order["style"]):
+        raise ValueError(f"work order {order['id']} is a Lemo-Opuscar film ({order['style']}):"
+                         " the studio's film runner makes it; leave it as it is (no"
+                         " create_idea, no skip_work_order)")
+
+
+def skip_for_agent(store: CampaignStore, order_id: int, reason: str) -> Dict[str, Any]:
+    """skip_work_order: skip_order, but never a Lemo-Opuscar order (_not_a_film)."""
+    _not_a_film(get_order(store, order_id))
+    return skip_order(store, order_id, reason)
+
+
 def check_idea(store: CampaignStore, order_id: int, track: str,
                source_id: Optional[int], style: Optional[str] = None) -> Dict[str, Any]:
     """Before create_idea(work_order_id=...) writes: the order is scheduled and has no idea
     yet; react -> a remix of the order's Reel; inspired -> nothing of the Reel reused;
     owner -> the agent reads the instruction (the idea's own checks still apply); an order
-    with a style -> the idea is in that style."""
+    with a style -> the idea is in that style; a Lemo-Opuscar order is refused: the film
+    runner writes its own idea (203)."""
     order = get_order(store, order_id)
+    _not_a_film(order)
     if order["status"] != "scheduled":
         raise ValueError(f"work order {order_id} is {order['status']}: only a scheduled one"
                          " gets an idea")
