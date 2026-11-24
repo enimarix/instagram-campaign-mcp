@@ -133,6 +133,15 @@ def test_waits_on_grace_daily_cap_and_a_running_run(store, agent_dir, monkeypatc
     assert next(i for i in items if i["kind"] == "order_run")["waits_on"] == "agent_running"
 
 
+def test_no_film_limit_at_0(store, agent_dir, monkeypatch):
+    s = cfg(lemo_films_per_day=0)
+    for h in (2, 4, 6):
+        _run(store, "lemo-film", NOW - timedelta(hours=h), minutes=40)
+    _order(store, monkeypatch, "Un film", "lemo:watercolor", minutes_ago=30)
+    film = next(i for i in planning.build_planning(store, s, NOW)["items"] if i["kind"] == "film")
+    assert film["waits_on"] != "daily_cap" and parse_iso(film["est_start"]) < MIDNIGHT
+
+
 def test_no_order_no_light_run(store, agent_dir):
     assert planning.build_planning(store, cfg(), NOW)["items"] == []
 

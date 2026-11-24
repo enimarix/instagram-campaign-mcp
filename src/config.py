@@ -466,7 +466,8 @@ class InstagramMCPSettings(BaseSettings):
         90.0, gt=0, description="Wall-clock limit of one film; the CLI is killed after it"
     )
     lemo_films_per_day: int = Field(
-        3, ge=0, description="Films started per owner-local day (each one costs many tokens)"
+        3, ge=0, description="Films started per owner-local day (each one costs many tokens);"
+        " 0 = no limit. A film the studio restart killed does not count"
     )
 
     # --- Winner scoring ---------------------------------------------------

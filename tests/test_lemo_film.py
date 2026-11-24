@@ -295,6 +295,21 @@ def test_one_film_at_a_time_and_a_daily_cap(store, cfg, judged):
     assert work_orders.get_order(store, second["id"])["status"] == "scheduled"
 
 
+def test_no_film_limit_at_0_and_a_restart_kill_does_not_count(store, cfg):
+    killed = store.start_agent_run(film.PLAYBOOK, os.getpid())
+    store.finish_agent_run(killed["id"], "failed", summary=runner.DEAD_RUN)
+    assert film.films_today(store, cfg, utcnow()) == 0
+    for _ in range(5):
+        done = store.start_agent_run(film.PLAYBOOK, os.getpid())
+        store.finish_agent_run(done["id"], "succeeded")
+    cfg.lemo_films_per_day = 0
+    film.check_film(store, cfg, utcnow())  # no limit: no AgentError
+    cfg.lemo_films_per_day = 5
+    with pytest.raises(runner.AgentError, match="films du jour"):
+        film.check_film(store, cfg, utcnow())
+    cfg.lemo_films_per_day = 3
+
+
 # --- the worker's catch-up -----------------------------------------------------------
 def test_catch_up_hands_the_oldest_lemo_order_to_the_film_runner(store, cfg):
     first, _ = _order(store), _order(store, text="Les protéines")
@@ -306,7 +321,9 @@ def test_catch_up_hands_the_oldest_lemo_order_to_the_film_runner(store, cfg):
 
 def test_catch_up_says_why_lemo_orders_wait(store, cfg):
     order = _order(store)
-    cfg.lemo_films_per_day = 0
+    cfg.lemo_films_per_day = 1
+    done = store.start_agent_run(film.PLAYBOOK, os.getpid())
+    store.finish_agent_run(done["id"], "succeeded")
     assert schedule.film_run(store, cfg, utcnow(), start=None, check=None) is None
     assert "films du jour" in work_orders.get_order(store, order["id"])["blocked_reason"]
     cfg.lemo_films_per_day = 3

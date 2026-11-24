@@ -25,6 +25,7 @@ const COPY: Record<string, { label: string; help: string; pct?: boolean }> = {
   max_posts_per_day: { label: 'Most posts per day', help: 'Never more posts than this on one day.' },
   explore_share: { label: 'Share of new ideas to try (explore)', help: "At most this part of each day's videos tries something new.", pct: true },
   humour_share: { label: 'Share of funny videos', help: 'Where the funny / informative split starts; your likes move it from there.', pct: true },
+  lemo_films_per_day: { label: 'Lemo films per day', help: 'Films your Lemo-style orders start each day (each one costs a few dollars of tokens). 0 = no limit. A film killed by a studio restart does not count.' },
 }
 const label = (name: string) => COPY[name]?.label ?? humanize(name)
 
