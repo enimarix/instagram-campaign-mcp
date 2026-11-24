@@ -53,6 +53,7 @@ from . import (  # render.py imports us
     sfx,
     sitcom,
     styles,
+    tts,
     voices,
 )
 from .assets import checked_fields, clean_caption
@@ -78,7 +79,9 @@ def _paper_line(labels: Sequence[Any]) -> str:
     line = ""
     for label in labels:
         text = label if isinstance(label, str) else label["text"]
-        if line and not re.search(r"[.!?…:;,]$", line) and text[:1].isupper():
+        # ElevenLabs tags (204) never change the join: tagged and plain lines must match
+        if (line and not re.search(r"[.!?…:;,]$", tts.strip_tags(line))
+                and tts.strip_tags(text)[:1].isupper()):
             line = f"{line}. {text}"
         else:
             line = f"{line} {text}" if line else text
@@ -91,9 +94,9 @@ def _editorial_line(first: str, second: Optional[str] = None) -> str:
     motion/src/templates/Editorial/schema.ts)."""
     if not second:
         return first
-    if re.search(r"[.!?…:;,]$", first):
+    if re.search(r"[.!?…:;,]$", tts.strip_tags(first)):  # tags never change the join (204)
         return f"{first} {second}"
-    return f"{first}. {second}" if second[:1].isupper() else f"{first}, {second}"
+    return f"{first}. {second}" if tts.strip_tags(second)[:1].isupper() else f"{first}, {second}"
 
 
 def _editorial_script(p: Dict[str, Any]) -> List[str]:
@@ -202,22 +205,82 @@ def validate_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def strip_props(value: Any, spoken: Sequence[str] = ()) -> Any:
+    """`value` (props) with ElevenLabs audio tags taken out of the strings the voice reads
+    (each one a part of a `spoken` line, raw_lines): the viewer never sees them (step 204);
+    the voice gets them from tagged_lines. Other strings (sources, titles) stay as written."""
+    if isinstance(value, str):
+        if not tts.TAG.search(value):
+            return value
+        flat = " ".join(value.replace("*", "").split())  # PixelCinema's *key word* stars
+        return tts.strip_tags(value) if any(flat in line for line in spoken) else value
+    if isinstance(value, list):
+        return [strip_props(v, spoken) for v in value]
+    if isinstance(value, dict):
+        return {k: strip_props(v, spoken) for k, v in value.items()}
+    return value
+
+
+def raw_lines(template: str, props: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    """(narrator lines, sitcom character lines) of `props` as written, tags kept; ([], [])
+    when the props do not fit the template yet (validate_props says why)."""
+    try:
+        spoken = [" ".join(line.split()) for line in SCRIPTS[template](props)]
+        says = ([" ".join(s["text"].split()) for s in sitcom.says(props)]
+                if template == sitcom.TEMPLATE else [])
+    except (KeyError, TypeError, AttributeError):
+        return [], []
+    return spoken, says
+
+
+def tagged_lines(template: str, props: Dict[str, Any]) -> Dict[str, List[str]]:
+    """The voice's own lines of `props` as the agent wrote them, audio tags kept, for the
+    voice todo: {spoken: narrator lines, spoken_says: sitcom character lines}; only those
+    that carry a tag ({} when none does, or the props do not fit the template yet)."""
+    out: Dict[str, List[str]] = {}
+    spoken, says = raw_lines(template, props)
+    if any(tts.TAG.search(line) for line in spoken):
+        out["spoken"] = spoken
+    if any(tts.TAG.search(line) for line in says):
+        out["spoken_says"] = says
+    return out
+
+
+def voiced_by(synths: List[Any]) -> Optional[Dict[str, Any]]:
+    """What spoke a video (the asset page's badge): {engine, voice, fallback}, the
+    narrator's engine (the last synthesis), a fallback reason when any engine fell back."""
+    spoke = [s for s in synths if getattr(s, "audio_path", None)]
+    if not spoke:
+        return None
+    reasons = [s.fallback for s in spoke if getattr(s, "fallback", None)]
+    return {"engine": getattr(spoke[-1], "provider", None), "voice": getattr(spoke[-1], "voice", None),
+            "fallback": reasons[0] if reasons else None}
+
+
 def build_props(template: str, props: Dict[str, Any], settings: InstagramMCPSettings,
                 voice: Optional[str] = None,
-                cast: Optional[Dict[str, Tuple[str, str]]] = None) -> Dict[str, Any]:
+                cast: Optional[Dict[str, Tuple[str, str]]] = None,
+                spoken: Optional[List[str]] = None, spoken_says: Optional[List[str]] = None,
+                report: Optional[List[Any]] = None) -> Dict[str, Any]:
     """`props` with `voice` filled from the TTS provider (line timings, plus the audio copied
     to `<media root>/voice/` when there is a voice). Templates without a script, or props
     that already carry a voice, come back unchanged. `cast`: the sitcom's character voices
-    (voices.say_cast)."""
+    (voices.say_cast). `spoken` / `spoken_says`: the same lines with audio tags (tagged_lines),
+    used when they still match the props' lines one for one. `report` collects every
+    Synthesis made (voiced_by)."""
     script = SCRIPTS.get(template)
     if script is None:
         return props
+    provider = get_provider(settings)  # one per video: an engine that failed stays skipped
     if template == sitcom.TEMPLATE:  # each character line in its own voice
-        props = sitcom.voice_says(props, settings, voice, cast)
+        props = sitcom.voice_says(props, settings, voice, cast, spoken_says, report, provider)
     if "voice" in props:
         return props
     lines = [" ".join(line.split()) for line in script(props)]  # one script line per line
-    synth = get_provider(settings).synthesize("\n".join(lines), voice)
+    lines = tts.retag(lines, spoken)  # the tags ride along; the timings come back without them
+    synth = provider.synthesize("\n".join(lines), voice)
+    if report is not None:
+        report.append(synth)
     filled: Dict[str, Any] = {"lines": [{"text": t.text, "start_s": t.start_s, "end_s": t.end_s}
                                         for t in synth.lines]}
     if synth.audio_path:
@@ -241,10 +304,15 @@ def voice_recipe(env: Dict[str, Any], settings: InstagramMCPSettings, todo: Dict
     `v`: validate_props of env's props when the caller has it. The render job runs this for
     a recipe queued with `voice_todo` (step 188a), queue_motion_render for the others."""
     template = env["template"]
-    voiced = build_props(template, env["props"], settings, todo.get("voice"), todo.get("cast"))
+    report: List[Any] = []
+    voiced = build_props(template, env["props"], settings, todo.get("voice"), todo.get("cast"),
+                         todo.get("spoken"), todo.get("spoken_says"), report)
     if v is None or voiced is not v["props"]:
         v = validate_props(template, voiced)
     env = {**env, "props": v["props"]}
+    by = voiced_by(report)
+    if by:  # the asset page's badge: which engine spoke, and why it fell back
+        env["voiced_by"] = by
     if todo.get("music_audio_id"):  # the lines on the track's beat; publish attaches the track
         props, env["ig_audio"] = music.apply(v["props"], settings.media_root,
                                              todo["music_audio_id"])
@@ -475,7 +543,10 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
         ("caption", caption if plan else None), ("description", description)) if x is not None})
     idea = store.get_idea(idea_id if idea_id is not None
                           else store.get_asset(asset_id)["idea_id"])
-    env = motion_recipe(store, settings, idea, template, props, voice, music_audio_id, plan)
+    old = (store.get_asset(asset_id)["recipe"] or {}) if asset_id is not None else {}
+    keep = old.get("voice_todo") or old.get("voiced_with")  # a re-render keeps its tags (204)
+    env = motion_recipe(store, settings, idea, template, props, voice, music_audio_id, plan,
+                        keep=keep)
     if asset_id is not None:
         out = render.rerender(store, settings.media_root, asset_id, env, actor=actor)
         if fields:  # a re-render's description: what the new version changed
@@ -495,18 +566,25 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
 
 def motion_recipe(store: CampaignStore, settings: InstagramMCPSettings, idea: Dict[str, Any],
                   template: str, props: Dict[str, Any], voice: Optional[str],
-                  music_audio_id: Optional[str], plan: bool = False) -> Dict[str, Any]:
+                  music_audio_id: Optional[str], plan: bool = False,
+                  keep: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """The checked recipe queue_motion_render stores (ValueError names the problem). `plan`:
     always with `voice_todo`, so the voice, the track and the cover are made at render time
-    and an edit of a planned card (planned.edit) only re-runs this."""
+    and an edit of a planned card (planned.edit) only re-runs this. `keep`: the voice todo
+    being rebuilt: its tagged lines stay when the new props carry none (tts.retag drops a
+    line's tags once the line itself changed)."""
     styles.check_template(store, idea, template)  # 138: the template in the idea's style
     if music_audio_id and template in (cinematic.TEMPLATE, sitcom.TEMPLATE):
         # ponytail: the Blender engines time shots and character voices off the narrator
         # lines; moving the narrator alone would desync them. Remotion templates only.
         raise ValueError(f"{template} cannot take an Instagram track yet: use its own bed")
+    tagged = tagged_lines(template, props) or {  # 204: the voice hears the tags, never the viewer
+        k: keep[k] for k in ("spoken", "spoken_says") if keep and keep.get(k)}
+    narrator, says = raw_lines(template, props)
+    props = strip_props(props, [line.replace("*", "") for line in narrator + says])
     v = validate_props(template, props)  # at once: the agent gets bad props now, not at render
     cast = None
-    if settings.tts_provider != "none":  # only voices the owner keeps on (Voix page)
+    if tts.voiced(settings):  # only voices the owner keeps on (Voix page)
         if "voice" not in v["props"]:  # a new voice-over; a re-render keeps its own audio
             voice = voices.check_voice(store, voice)
         elif voice is None:  # the sitcom compares character voices with the narrator's
@@ -519,8 +597,8 @@ def motion_recipe(store: CampaignStore, settings: InstagramMCPSettings, idea: Di
     credits = sfx.credits(v["props"])  # ValueError for a library sound not cached (150)
     if credits:  # the caption must carry them: submit_asset adds them, the publish guard checks
         env["sfx_credits"] = credits
-    todo = {"voice": voice, "cast": cast, "music_audio_id": music_audio_id}
-    if plan or (settings.tts_provider != "none" and voice_pending(template, v["props"])):
+    todo = {"voice": voice, "cast": cast, "music_audio_id": music_audio_id, **tagged}
+    if plan or (tts.voiced(settings) and voice_pending(template, v["props"])):
         if music_audio_id:  # what music.apply can tell before the voice exists
             music.load_beats(settings.media_root, music_audio_id)
         # 188a: the render job makes the voice (render.voice_first), in line order

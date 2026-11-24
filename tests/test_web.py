@@ -150,5 +150,6 @@ def test_csp_allows_instagram_frames_and_cdn_media_only(site):
         csp = dict(d.split(" ", 1) for d in r.headers["Content-Security-Policy"].split("; "))
         assert csp["frame-src"] == "https://www.instagram.com", path
         assert "https://*.cdninstagram.com https://*.fbcdn.net" in csp["media-src"]
+        assert "https://*.elevenlabs.io" in csp["media-src"]  # voice previews (204)
         assert "https://*.cdninstagram.com https://*.fbcdn.net" in csp["img-src"]
         assert csp["frame-ancestors"] == "'none'"

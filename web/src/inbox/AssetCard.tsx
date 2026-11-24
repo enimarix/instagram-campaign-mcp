@@ -5,6 +5,7 @@ import { IconButton } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { BookmarkIcon, CheckIcon, CloseIcon, EditIcon, InfoIcon, SoundOffIcon, SoundOnIcon } from '../ui/icons'
 import { buttonClass } from '../ui/styles'
+import { VoiceBadge } from '../voices/VoiceBadge'
 
 type Props = {
   asset: Asset
@@ -74,6 +75,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
             {a.dm_pick_sender && <Chip tone="accent">DM pick from @{a.dm_pick_sender}</Chip>}
             {a.rights_basis === 'commentary' && <Chip tone="warn">commentary</Chip>}
             {a.recipe?.inputs?.reaction && <Chip tone="accent">reaction</Chip>}
+            {a.recipe?.voiced_by && <VoiceBadge by={a.recipe.voiced_by} />}
             {a.strategy === 'explore' && <Chip tone="explore">Explore</Chip>}
             {a.track && <Chip>{a.track}</Chip>}
             {a.pillar && <Chip>{a.pillar}</Chip>}

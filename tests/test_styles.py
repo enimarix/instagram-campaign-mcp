@@ -155,7 +155,7 @@ def test_render_motion_refuses_a_template_outside_the_style(store, settings, tmp
     calls = []
     monkeypatch.setattr(motion, "validate_props", lambda t, p: calls.append(t) or {
         "props": p, "fps": 30, "durationInFrames": 90, "coverFrame": None})
-    monkeypatch.setattr(motion, "build_props", lambda t, p, s, v=None, cast=None: p)  # no TTS
+    monkeypatch.setattr(motion, "build_props", lambda t, p, s, v=None, cast=None, *a: p)  # no TTS
     s = _settings(media_root=str(tmp_path))
     idea = _idea(store, settings, "Voxel hook", style="voxel")
     with pytest.raises(ValueError, match=r"style 'voxel': template PaperStory is 'paper';"

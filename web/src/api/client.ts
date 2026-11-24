@@ -74,7 +74,11 @@ export type Asset = {
   // the detail page (016)
   best_before?: string | null
   duration?: number | null
-  recipe?: { template?: string; edit?: string; ops?: { op: string }[]; inputs?: Record<string, string> }
+  recipe?: {
+    template?: string; edit?: string; ops?: { op: string }[]; inputs?: Record<string, string>
+    /** 204: what spoke the voice-over: engine `elevenlabs` or `http` (the local voice), and why it fell back */
+    voiced_by?: { engine: string | null; voice: string | null; fallback: string | null }
+  }
   qc?: { passed?: boolean; reason?: string; reasons?: string[]; warnings?: string[] } | null
   // what happens in the video (110): 2-3 sentences, and events in seconds (t, d)
   description?: string | null
@@ -1075,10 +1079,79 @@ export type Voice = {
   enabled: boolean
   sample_text: string | null
   sample: string | null
+  engine?: VoiceEngine // 204: which engine speaks it ('local' when absent)
+  gender?: string | null
+  fallback?: string | null // an ElevenLabs card's local voice
+  language?: string | null
+  accent?: string | null
 }
 export const listVoices = () => request<Voice[]>('/api/voices')
 export const setVoiceEnabled = (id: string, enabled: boolean) =>
   send<Voice>('PATCH', `/api/voices/${encodeURIComponent(id)}`, { enabled })
+
+/** Step 204: the voice engines (Voix page). `priority` speaks first, the other takes over. */
+export type VoiceEngine = 'elevenlabs' | 'local'
+export type EngineStatus = {
+  priority: VoiceEngine
+  model: string
+  local: boolean // the local voice service is set up
+  elevenlabs: {
+    configured: boolean // ELEVENLABS_API_KEY is set
+    credits: { used: number; limit: number; left: number; resets_at: number | null; tier: string | null } | null
+    error: string | null
+  }
+}
+export type ElevenModel = { id: string; name: string; description: string; languages: string[]; cost: number | null }
+export type ElevenVoice = {
+  voice_id: string
+  public_owner_id: string | null // set: a Voice Library voice (adding it uses a voice slot)
+  name: string
+  description: string
+  gender: string | null
+  age: string | null
+  accent: string | null
+  language: string | null
+  use_case: string | null
+  descriptive: string | null
+  category: string | null
+  preview_url: string | null
+  free_users_allowed: boolean
+}
+export type VoiceSearch = {
+  source: 'library' | 'account'
+  search?: string
+  language?: string
+  accent?: string
+  gender?: string
+  age?: string
+  sort?: string
+  use_cases?: string
+  descriptives?: string
+  page?: string
+}
+export type NewCard = {
+  voice_id: string
+  public_owner_id?: string | null
+  label: string
+  fallback: string
+  gender?: string | null
+  use_for?: string
+  description?: string
+  language?: string | null
+  accent?: string | null
+  preview_url?: string | null
+  address?: string[]
+}
+export const getEngine = () => request<EngineStatus>('/api/voices/engine')
+export const setEngine = (change: { priority?: VoiceEngine; model?: string }) =>
+  send<{ priority: VoiceEngine; model: string }>('PATCH', '/api/voices/engine', change)
+export const listElevenModels = () => request<ElevenModel[]>('/api/voices/elevenlabs/models')
+export const searchElevenVoices = (q: VoiceSearch) => {
+  const params = new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])
+  return request<{ voices: ElevenVoice[]; next: string | null; total: number | null }>(`/api/voices/elevenlabs/search?${params}`)
+}
+export const addElevenCard = (card: NewCard) => send<Voice>('POST', '/api/voices/elevenlabs', card)
+export const removeVoice = (id: string) => send<{ removed: boolean }>('DELETE', `/api/voices/${encodeURIComponent(id)}`)
 
 /** The AI's latest decision on a video sent back for changes (156); `text` is what the
  * Inbox shows: « Refaite en Macro 3D », « Nouveau style demandé : … », « En attente : … ». */

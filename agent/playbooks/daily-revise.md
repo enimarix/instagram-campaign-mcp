@@ -60,7 +60,8 @@ fits, `create_idea(style=…)`.
    reused: `create_idea(track="motion", work_order_id=<id>, …)` with no `source_id`, then
    `list_motion_templates` (once), `preview_motion` and
    `render_motion(template=…, props=…, idea_id=…, voice=<id>)`, the voice picked from
-   `voices.json` by what the video is (its `use_for`), as in daily-produce.
+   `voices.json` by what the video is (its `use_for`), as in daily-produce, with its
+   emotion tags written as daily-produce says.
 3. `react`: a commentary remix with credit: `download_reel(<the order's source_id, or its
    permalink>)`, then watch it as in step 3 below (`list_sources`, `get_clip_frames`,
    `set_clip_timeline`),

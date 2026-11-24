@@ -82,6 +82,9 @@ class VoiceTodo(BaseModel):
     music_audio_id: Optional[str] = None  # motion: the Instagram track, applied once voiced
     script: Optional[str] = None  # remix: the voice-over text
     max_s: Optional[float] = None  # remix: the trimmed clip it must fit in
+    # 204: motion lines with ElevenLabs audio tags (motion.tagged_lines): narrator, sitcom says
+    spoken: Optional[List[str]] = None
+    spoken_says: Optional[List[str]] = None
 
 
 class _Envelope(BaseModel):
@@ -90,6 +93,7 @@ class _Envelope(BaseModel):
     ig_audio: Optional[IgAudio] = None
     voice_todo: Optional[VoiceTodo] = None
     voiced_with: Optional[VoiceTodo] = None  # the voice_todo its voice was made from (191)
+    voiced_by: Optional[Dict[str, Any]] = None  # 204: {engine, voice, fallback} (motion.voiced_by)
 
 
 class FfmpegRecipe(_Envelope):
@@ -262,6 +266,16 @@ def voice_first(store: CampaignStore, asset: Dict[str, Any], settings: Instagram
         raise TTSError(f"voice-over failed: {e}", status=e.status,
                        unreachable=e.unreachable) from None
     env["voiced_with"] = todo  # 191: the voice and script, gone from the voiced props
+    why = (env.get("voiced_by") or {}).get("fallback")
+    if why:  # 204: the owner hears of a fallback once per new failure (the bell)
+        from . import alerts  # alerts imports us
+
+        engine = env["voiced_by"]["engine"]
+        alerts.raise_alert(store, "tts_fallback", None, "warn",
+                           "ElevenLabs n'a pas parlé : la voix locale a pris le relais"
+                           if engine == "http"
+                           else "La voix locale a échoué : ElevenLabs a pris le relais",
+                           f"Vidéo {asset['id']} : {why}", "/voices", utcnow(), renew=True)
     return store.update_asset(asset["id"], recipe=validate_recipe(env, settings.media_root))
 
 

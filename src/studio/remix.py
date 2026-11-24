@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
 from ..store import CampaignStore
-from . import ffmpeg, frames, media, motion, render, stt, voices
+from . import ffmpeg, frames, media, motion, render, stt, tts, voices
 from .assets import checked_fields, clean_caption, transition
 from .reactions import next_reaction_piece
 from .recipe import (
@@ -224,7 +224,7 @@ def _remix_env(store: CampaignStore, settings: InstagramMCPSettings, idea_id: in
     inputs = {"source": source["local_path"]}
     todo = {}
     if (script or "").strip():
-        if settings.tts_provider == "none":
+        if not tts.voiced(settings):
             raise ValueError("no TTS engine is set up (TTS_PROVIDER=none), so there is no"
                              " voice-over: a remix with a script is refused (never faked)")
         # 188a: the render job makes the voice (voice_over), in line order
@@ -298,8 +298,12 @@ def voice_over(env: Dict[str, Any], settings: InstagramMCPSettings, todo: Dict[s
     if synth.duration_s > todo["max_s"] + 0.05:
         raise ValueError(f"the voice-over is {synth.duration_s:.1f} s, longer than the"
                          f" {todo['max_s']:.1f} s clip: shorten the script or widen the trim")
-    return {**env, "inputs": {**env["inputs"],
-                              "voice": motion.store_voice(settings, synth.audio_path)}}
+    out = {**env, "inputs": {**env["inputs"],
+                             "voice": motion.store_voice(settings, synth.audio_path)}}
+    by = motion.voiced_by([synth])
+    if by:  # 204: the asset page's badge
+        out["voiced_by"] = by
+    return out
 
 
 def _warnings(source: Dict[str, Any], recipe: Recipe, settings: InstagramMCPSettings

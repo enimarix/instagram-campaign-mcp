@@ -987,3 +987,19 @@ restyle into a Lemo style. The film runner writes the idea itself (no duplicate 
 reuses its script on purpose), as it already did for a remade film (202).
 Reason: the AI's decision must be carried out (« AI never parks », 156).
 
+
+## 2026-11-24: ElevenLabs speaks first, the local voice takes over (204)
+GOAL.md §4.1 / H3 planned one local TTS service. The owner added ElevenLabs: with
+`ELEVENLABS_API_KEY` set, every voice-over goes through two engines in the owner's order (Voix
+page: « ElevenLabs d'abord » by default, or « Voix locale d'abord »), the other one taking over
+on any failure (no credits, an HTTP error, no answer). ElevenLabs voices are their own cards
+(owner's choice over one twin per local card), added from the Voice Library on the Voix page;
+each names a local relay voice, so a fallback keeps the gender and the role the AI picked. The
+model is the owner's pick (default `eleven_v4`). Credits are checked before each call: too few
+is a fallback, never a cut-off voice. Scripts carry ElevenLabs audio tags (`[excited]`,
+`[laughs]`): the studio strips them from all on-screen text and from the local engine's text,
+so only ElevenLabs hears them. A video whose voice fell back shows it on its card, and the bell
+says so once per new failure. ElevenLabs' error bodies are not in docs we could read: every
+non-2xx falls back, whatever its code.
+Reason: owner 2026-11-24 (« first ElevenLabs, then if there's no credits or a bug, the local
+audios »; « super important to use the ElevenLabs emotion tags »).

@@ -76,7 +76,9 @@ exactly as it is. Never rewrite the video from memory.
   template's schema for the fix. A failed asset renders again in place; a ready one gets
   a new version and leaves the feed by itself (it comes back in your list if the new
   version fails or is dropped: judge it again as it is). The voice is made again for the lines as
-  they are now.
+  they are now. `template_props` come back without their emotion tags: the studio keeps the
+  tags of every line you leave unchanged; a line you rewrite may carry its own tags
+  (daily-produce, emotion tags).
 - remix: `render_remix(idea_id=<idea_id>, source_id=…, hook=…, script=…, trim_start_s=…,
   trim_end_s=…, layout=…, captions=…, voice=…, music=…)` with the fix (`list_sources` for
   its credit; leave out `captions` when null: a new trim takes the transcript's again),

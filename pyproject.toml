@@ -23,12 +23,13 @@ dependencies = [
     "pillow>=10.0",
     "jsonschema>=4.18",
     "tzdata; sys_platform == 'win32'",
+    # The voice service's French normaliser (vendor/voxcpm_tts/speech.py), also used for
+    # what ElevenLabs says (src/studio/tts.py, 204).
+    "num2words==0.5.14",
 ]
 
 [project.optional-dependencies]
-# num2words: tests of the voice service's French normaliser (vendor/voxcpm_tts/speech.py).
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-timeout>=2.3", "respx>=0.21", "ruff>=0.15",
-       "num2words==0.5.14"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-timeout>=2.3", "respx>=0.21", "ruff>=0.15"]
 # Local transcription (src/studio/stt.py). Not in dev: CI never downloads models.
 stt = ["faster-whisper==1.2.1"]
 # Fallback Reel downloader (src/studio/downloader.py). yt-dlp 2026.10.26 needs Python 3.11+.
