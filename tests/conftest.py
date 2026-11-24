@@ -68,7 +68,7 @@ def _real_machine_untouched():
 from src.config import InstagramMCPSettings  # noqa: E402
 from src.instagram_client import InstagramClient  # noqa: E402
 from src.store import CampaignStore  # noqa: E402
-from src.studio import downloader_service, sfx  # noqa: E402
+from src.studio import downloader_service, sfx, voices  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +82,12 @@ def _no_real_downloader(monkeypatch, tmp_path_factory):
 def _own_sfx_library(monkeypatch, tmp_path):
     """Each test gets an empty sound library, never the checkout's data/sfx (150)."""
     monkeypatch.setattr(sfx, "SFX_DIR", tmp_path / "sfx")
+
+
+@pytest.fixture(autouse=True)
+def _own_elevenlabs_cards(monkeypatch, tmp_path):
+    """Each test starts with no ElevenLabs cards, never the checkout's data/voices (204)."""
+    monkeypatch.setattr(voices, "EL_PATH", tmp_path / "el" / "elevenlabs.json")
 
 API = "https://graph.facebook.com/v25.0"
 # TestClient base URL: without UI_PASSWORD the Host guard refuses Starlette's "testserver".

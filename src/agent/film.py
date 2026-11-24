@@ -227,7 +227,8 @@ def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
         exe = preflight(settings)
         ws = prepare_workspace(settings, order_id, lemo.film_brief(
             settings, order, style, _from_video(store, order)))
-        voices.agent_copy(store, ws / "voices.json")  # the voices the owner keeps on
+        # the voices the owner keeps on, local ones only: the film calls the local service (204)
+        voices.agent_copy(store, ws / "voices.json", local_only=True)
         idea = store.add_idea("motion", hook=(order["instruction"] or style["label"])[:200],
                               style=order["style"], batch_date=local_today(settings.timezone))
         work_orders.start(store, order_id, idea)

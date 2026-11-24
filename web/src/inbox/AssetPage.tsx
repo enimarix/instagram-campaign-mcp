@@ -23,6 +23,7 @@ import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { field, link, verdictButton } from '../ui/styles'
 import { AI_LABEL_LINE, safeUrl } from './ui'
+import { VoiceBadge } from '../voices/VoiceBadge'
 
 function ExternalLink({ url, children }: { url?: string | null; children: ReactNode }) {
   const href = safeUrl(url)
@@ -219,6 +220,15 @@ function AssetPage({ id }: { id: number }) {
               </Row>
               <Row label="Pillar">{label('pillars', idea.pillar)}</Row>
               <Row label="Recipe">{recipeSummary(asset.recipe)}</Row>
+              {asset.recipe?.voiced_by && (
+                <Row label="Voice">
+                  <VoiceBadge by={asset.recipe.voiced_by} />
+                  {asset.recipe.voiced_by.voice && <span className="ml-2">{asset.recipe.voiced_by.voice}</span>}
+                  {asset.recipe.voiced_by.fallback && (
+                    <span className="mt-1 block text-warn">Fallback: {asset.recipe.voiced_by.fallback}</span>
+                  )}
+                </Row>
+              )}
               {source && (
                 <Row label="Rights">
                   {source.rights_basis.replace('_', ' ')}

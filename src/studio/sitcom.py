@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from ..config import InstagramMCPSettings
 from . import cinematic, ffmpeg, media, troupe
 from .ffmpeg import PathLike
-from .tts import get_provider
+from .tts import get_provider, retag
 
 TEMPLATE = "SitcomSkit"
 FPS = troupe.FPS  # the shots render at the troupe's 24 fps
@@ -63,19 +63,28 @@ def say_voice(who: str, narrator: Optional[str],
 
 def voice_says(props: Dict[str, Any], settings: InstagramMCPSettings,
                narrator: Optional[str],
-               cast: Optional[Dict[str, Tuple[str, str]]] = None) -> Dict[str, Any]:
+               cast: Optional[Dict[str, Tuple[str, str]]] = None,
+               spoken_says: Optional[List[str]] = None, report: Optional[List[Any]] = None,
+               provider: Any = None) -> Dict[str, Any]:
     """`props` with each character line's `seconds` (and `audioSrc` when the provider makes
     audio) filled, one TTS call per line in the character's own voice. Props whose lines are
-    all filled come back unchanged (the same object)."""
+    all filled come back unchanged (the same object). `spoken_says`: the same lines with
+    ElevenLabs audio tags (motion.tagged_lines, tts.retag); `report` collects each
+    Synthesis; `provider`: the video's own (motion.build_props)."""
     narrator = narrator or settings.tts_voice or None  # the voice the narrator gets
-    provider, out, changed = get_provider(settings), [], False
+    provider, out, changed = provider or get_provider(settings), [], False
+    tagged = retag([" ".join(s["text"].split()) for s in says(props)], spoken_says)
+    i = -1
     for scene in props["scenes"]:
         beats = []
         for b in scene["beats"]:
             say = b.get("say")
+            if say:
+                i += 1
             if say and "seconds" not in say:
-                synth = provider.synthesize(" ".join(say["text"].split()),
-                                            say_voice(say["who"], narrator, cast))
+                synth = provider.synthesize(tagged[i], say_voice(say["who"], narrator, cast))
+                if report is not None:
+                    report.append(synth)
                 say = {**say, "seconds": round(max(0.4, synth.duration_s), 3)}
                 if synth.audio_path:
                     from .motion import store_voice  # motion imports us

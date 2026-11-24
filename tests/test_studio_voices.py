@@ -180,7 +180,7 @@ def test_a_sitcom_re_render_compares_with_the_default_narrator(store, folder, tm
         "props": p, "fps": 30, "durationInFrames": 90, "coverFrame": 12})
     monkeypatch.setattr(motion, "list_templates", lambda: [{"id": sitcom.TEMPLATE, "style": "sitcom"}])
     monkeypatch.setattr(motion, "build_props",
-                        lambda t, p, s, v=None, cast=None: seen.update(voice=v, cast=cast) or p)
+                        lambda t, p, s, v=None, cast=None, *a: seen.update(voice=v, cast=cast) or p)
     s = _settings(tts_provider="http", tts_http_url="http://127.0.0.1:1/tts",
                   media_root=str(tmp_path))
     idea = store.add_idea("motion")

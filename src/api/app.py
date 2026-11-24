@@ -61,12 +61,15 @@ from .downloader import router as downloader_router
 PUBLIC_PATHS = {"/api/health", "/api/login", "/api/logout", "/api/session"}
 
 # What the website may frame and show from elsewhere (step 135): Instagram's embed pages and
-# CDN media (Trending page), Pexels previews (stock search, 064). Nobody may frame the studio.
+# CDN media (Trending page), Pexels previews (stock search, 064), ElevenLabs voice previews
+# (Voix page, 204: their public bucket and their own hosts). Nobody may frame the studio.
 # Scripts and styles are not listed: index.html's theme script is inline.
 CSP = "; ".join((
     "frame-src https://www.instagram.com",
     "img-src 'self' data: https://*.cdninstagram.com https://*.fbcdn.net https://images.pexels.com",
-    "media-src 'self' https://*.cdninstagram.com https://*.fbcdn.net",
+    "media-src 'self' https://*.cdninstagram.com https://*.fbcdn.net"
+    " https://storage.googleapis.com/eleven-public-prod/ https://*.elevenlabs.io"
+    " https://*.elevenlabsusercontent.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

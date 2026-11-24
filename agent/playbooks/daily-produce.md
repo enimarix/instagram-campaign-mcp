@@ -386,7 +386,25 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    between voices that fit equally. The `default` voice is only for when none fits. Only
    the voices listed there are on: never pass another id. Write numbers, units and times as the viewer should
    read them (308 kcal, 21 h, macrobody.fr): the studio spells them out for the voice.
-   Anything in brackets is shown in the captions but not said: no stage directions.
+   **Emotion tags (ElevenLabs).** Direct the delivery with audio tags in square brackets,
+   in English, right before the words they colour, inside the spoken texts (hook, lines,
+   beats, outro, a sitcom character's `say` text, a remix `script`): `[excited]`,
+   `[curious]`, `[sarcastic]`, `[warmly]`, `[tired]`, `[surprised]`; `[whispers]`,
+   `[softly]`, `[dramatically]`, `[slowly]`; `[laughs]`, `[chuckles]`, `[sighs]`,
+   `[gasps]`, `[exhales]`; `[short pause]`, `[pause]`, `[long pause]`; in a sitcom,
+   `[interrupting]`, `[jumping in]`. A tag holds until the next one: put one where the
+   delivery **changes** (the hook's energy, the turn, the punchline, the payoff), about one
+   per line or two, never one on every sentence. Stack two for a layered mood
+   (`[sad] [whispers] …`). Tags say **how the line is spoken**, never what someone does:
+   `[grinning]`, `[pointing]`, `[music]`, `[cut to]` are not performed and are never
+   written. Plain words, no hyphens, no digits (`[high voice]`, not `[high-pitched]`).
+   Punctuation and sparse CAPITALS still carry the rhythm (`…` a long beat, `—` a short
+   one, « c'est TON assiette »). The studio takes the tags out of everything the viewer
+   sees (captions, on-screen text) and out of the local voice's script: only ElevenLabs
+   hears them, so a tag never costs a video. Example hook: « [curious] Tu sais pourquoi tes
+   jambes tremblent au dernier rep ? [short pause] Ce n'est pas de la faiblesse… ».
+   Text in (parentheses) is shown in the captions but never said, by either voice: no
+   stage directions there either (« (rires) » makes nobody laugh: write `[laughs]`).
    **The end card, per video.** Every template ends on its style's animated end card (the
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:

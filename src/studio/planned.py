@@ -102,7 +102,7 @@ def _motion_env(store: CampaignStore, settings: InstagramMCPSettings, asset: Dic
         props = _set_lines(env["template"], props, lines)
     return motion.motion_recipe(store, settings, store.get_idea(asset["idea_id"]),
                                 env["template"], props, voice or todo.get("voice"), track,
-                                plan=True)
+                                plan=True, keep=todo)
 
 
 def _remix_changes(voice: Optional[str], music: Optional[str],

@@ -296,6 +296,12 @@ class InstagramMCPSettings(BaseSettings):
     # Set to the python of the voice service's venv: `ig-campaign up` then starts
     # vendor/voxcpm_tts/server.py on TTS_HTTP_URL's port, waits for it before the worker
     # starts, and stops it on exit. TTS_SERVER_HF_HOME = its model cache (HF_HOME).
+    # ElevenLabs (src/studio/elevenlabs.py): set the key and the studio can speak with the
+    # owner's ElevenLabs voices (Voix page), the local service above as the other engine. Which
+    # one goes first and the model are the owner's choice on the Voix page. Never logged.
+    elevenlabs_api_key: Optional[SecretStr] = Field(None, description="ElevenLabs API key")
+    elevenlabs_url: str = Field("https://api.elevenlabs.io", description="ElevenLabs API base")
+    elevenlabs_timeout_s: float = Field(180.0, gt=0, description="ElevenLabs request timeout")
     tts_server_python: Optional[str] = Field(None, description="Voice service venv python")
     tts_server_hf_home: Optional[str] = Field(None, description="HF_HOME for the voice service")
     # Step 178: CPJKU/beat_this (MIT) in its own venv, CPU only (src/studio/music.py has the
