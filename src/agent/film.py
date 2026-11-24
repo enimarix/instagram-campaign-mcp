@@ -14,6 +14,8 @@ Write/Edit, which the content agent never has (runner.py). The locks it keeps:
   no MCP server at all (it never sees the studio's tools); Write/Edit are pre-approved in
   the workspace only;
 - an environment without any secret (film_env: every .env name, every secret value);
+- its voice through the runner's voice door (film_voice.py, 207): the studio's engines,
+  ElevenLabs first as the owner set them, while the key stays in the runner;
 - a time cap (LEMO_FILM_MAX_MIN) with the CLI's process tree killed after it;
 - one film at a time (agent_runs playbook `lemo-film`, the agent runs' lock: the Agent page
   lists the films with their logs and usage, and no other run starts while one films) and
@@ -47,6 +49,7 @@ from ..store import CampaignStore, parse_iso, utcnow
 from ..studio import lemo, render, sfx, voices, work_orders
 from ..studio.production import qc_summary
 from ..studio.seed import local_today
+from .film_voice import VoiceDoor
 from .proc import started as process_started
 from .runner import (
     DEAD_RUN,
@@ -238,17 +241,20 @@ def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
     try:
         style = lemo.style_info(order["style"], settings)
         exe = preflight(settings)
-        ws = prepare_workspace(settings, order_id, lemo.film_brief(
-            settings, order, style, _from_video(store, order)))
-        # the voices the owner keeps on, local ones only: the film calls the local service (204)
-        voices.agent_copy(store, ws / "voices.json", local_only=True)
-        idea = store.add_idea("motion", hook=(order["instruction"] or style["label"])[:200],
-                              style=order["style"], batch_date=local_today(settings.timezone))
-        work_orders.start(store, order_id, idea)
-        cmd = [exe, *build_command(settings, ws)[1:]]
-        timeout_s = settings.lemo_film_max_min * 60
-        code, stdout = run_cli(cmd, ws, film_env(settings), log, timeout_s,
-                               f"run {run['id']} film of work order {order_id} ({style['id']})")
+        # 207: the film speaks through the studio's engines (ElevenLabs first, the owner's
+        # order) at the voice door this process serves while the film runs: no key in the film
+        with VoiceDoor(settings) as door:
+            ws = prepare_workspace(settings, order_id, lemo.film_brief(
+                settings, order, style, _from_video(store, order), tts_url=door.url))
+            voices.agent_copy(store, ws / "voices.json")  # the voices the owner keeps on
+            idea = store.add_idea("motion", hook=(order["instruction"] or style["label"])[:200],
+                                  style=order["style"], batch_date=local_today(settings.timezone))
+            work_orders.start(store, order_id, idea)
+            cmd = [exe, *build_command(settings, ws)[1:]]
+            timeout_s = settings.lemo_film_max_min * 60
+            code, stdout = run_cli(cmd, ws, film_env(settings), log, timeout_s,
+                                   f"run {run['id']} film of work order {order_id}"
+                                   f" ({style['id']})")
         if code is None:
             summary = f"timed out after {timeout_s / 60:g} min: killed"
         else:

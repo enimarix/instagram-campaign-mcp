@@ -9,6 +9,7 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
+from src.agent import film_voice
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.studio import elevenlabs, ffmpeg, motion, render, tts, voices
@@ -372,13 +373,54 @@ def test_alignment_lines_one_span_per_line_that_speaks():
     assert len(spans) == 2 and spans[0][1] < spans[1][0]
 
 
-def test_films_get_local_voices_only(store, card, tmp_path):
-    voices.set_enabled(store, "energique_homme", False)  # Hugo on stands for its relay
-    voices.agent_copy(store, tmp_path / "v.json", local_only=True)
-    ids = [v["id"] for v in json.loads((tmp_path / "v.json").read_text("utf-8"))["voices"]]
-    assert ids == ["souriante", "energique_homme"]
-    assert sum(v.get("default", False) for v in json.loads(
-        (tmp_path / "v.json").read_text("utf-8"))["voices"]) == 1
+def test_films_get_the_elevenlabs_cards_too(store, card, tmp_path):
+    voices.agent_copy(store, tmp_path / "v.json")  # 207: films speak through the voice door
+    listed = json.loads((tmp_path / "v.json").read_text("utf-8"))["voices"]
+    assert card["id"] in [v["id"] for v in listed]
+    assert not any(k in v for v in listed for k in ("el_voice_id", "fallback", "recipe"))
+    assert sum(v.get("default", False) for v in listed) == 1
+
+
+def _door(tmp_path, monkeypatch):
+    monkeypatch.setattr(film_voice, "_wav", lambda path: b"RIFFwav")
+    door = film_voice.VoiceDoor(_settings(tmp_path))
+    door.server.server_close()  # answer() is tested without a socket
+    return door
+
+
+def _say(door, voice, text="[excited] Salut toi."):
+    return door.answer(f"/{door.token}", json.dumps({"text": text, "voice": voice}).encode())
+
+
+@respx.mock
+def test_the_film_voice_door_speaks_elevenlabs_first(tmp_path, card, monkeypatch):
+    _el_routes()
+    door = _door(tmp_path, monkeypatch)
+    code, out = _say(door, "energique_homme")  # a local voice speaks through its card
+    assert code == 200 and base64.b64decode(out["audio"]) == b"RIFFwav" and out["words"]
+    assert out["take"]["engine"] == "elevenlabs" and out["take"]["voice"] == card["id"]
+    assert out["take"]["fallback"] is None
+    assert door.answer("/not-the-token", b"{}")[0] == 404
+    assert door.answer(f"/{door.token}", b"not json")[0] == 400
+    assert door.answer(f"/{door.token}", b'{"text": " "}')[0] == 400
+
+
+@respx.mock
+def test_the_film_voice_door_falls_back_to_the_local_voice(tmp_path, card, monkeypatch):
+    _el_routes(tts_status=500)
+    local = _local_route()
+    code, out = _say(_door(tmp_path, monkeypatch), card["id"])
+    assert code == 200 and out["take"]["engine"] == "local"
+    assert out["take"]["voice"] == "energique_homme" and out["take"]["fallback"]
+    assert "[excited]" not in json.loads(local.calls.last.request.content)["text"]
+
+
+@respx.mock
+def test_the_film_voice_door_says_503_when_no_engine_speaks(tmp_path, card, monkeypatch):
+    _el_routes(tts_status=500)
+    respx.post(LOCAL_TTS).respond(503)
+    code, out = _say(_door(tmp_path, monkeypatch), card["id"])
+    assert code == 503 and out["error"]
 
 
 @respx.mock
