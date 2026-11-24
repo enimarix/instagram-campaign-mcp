@@ -146,8 +146,8 @@ def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str
       new one is in the Inbox;
     - restyled: the note cannot be met in its style: remade in `style` (an enabled one,
       not its own) through a « même vidéo, autre style » work order (order; make it with
-      create_idea(work_order_id=...)); once that video is submitted the old one is
-      archived;
+      create_idea(work_order_id=...); in a Lemo style the film runner makes it, 203); once
+      that video is submitted the old one is archived;
     - waiting: it waits, and `why` says for what (a render pending). A missing style is not
       waiting: request_style.
     The order of an earlier decision with nothing made yet is skipped (202).

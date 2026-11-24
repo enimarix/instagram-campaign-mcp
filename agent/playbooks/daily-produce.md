@@ -229,7 +229,8 @@ per run):
    the studio's film runner remakes it in the same look from that line.
 3. Its style cannot, another enabled one can: `decide_revision(asset_id, "restyled",
    "<why this style>", style=<id>)` and make the work order it returns like any change
-   order (phase 1a).
+   order (phase 1a). In a Lemo style (`lemo:…`) make nothing: no `create_idea`, no
+   `skip_work_order`; the studio's film runner makes that order after this run.
 4. No enabled style can: `request_style(…, unblocks_asset_ids=[…])` (a reference or an
    invented style; see `daily-revise` step 2).
 5. Only when it must wait (a render pending): `decide_revision(asset_id, "waiting",

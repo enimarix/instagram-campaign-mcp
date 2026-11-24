@@ -146,7 +146,8 @@ you change the style, not that you stop. For each request (newest first):
    work_order_id=<its id>)`, same topic, script and message, a template of that style,
    `render_motion(…, idea_id=…, voice=<id>)`, the voice picked as above, or the owner's
    when the note names one). The old video is archived once the new one is
-   submitted.
+   submitted. **In a Lemo style** (`lemo:…`) make nothing: no `create_idea`, no
+   `skip_work_order`; the studio's film runner makes that order after this run.
 4. **No enabled style can**: `request_style(kind="reference" or "invented", …,
    unblocks_asset_ids=[<this video and every other waiting one it fits>])`: what is
    missing, 3 example scenes, why it would work. An `invented` style is welcome: an

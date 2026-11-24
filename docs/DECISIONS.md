@@ -974,3 +974,16 @@ another decision since (still sent back, or archived meanwhile: order 31, replac
 37), it is skipped instead. Lemo orders keep
 `film.close_orphans`.
 Reason: « AI never parks » (156): the owner relaunched a run for video 43 and nothing came of it.
+
+## 2026-11-24: The AI never makes or skips a Lemo film order (203)
+The 03:00 run of 24/11 restyled videos 2, 3, 4 and 5 into Lemo-Opuscar styles (orders 63–66)
+and then, as the playbooks said for every restyle, wrote their ideas itself with
+`create_idea(work_order_id=…)`. Two were refused as near-duplicates of earlier remakes of the
+same scripts and the AI skipped them; the other two were `in_production` with no film running,
+so the film runner's `close_orphans` closed them as interrupted. No film was made and the four
+videos went back to waiting. Now `create_idea(work_order_id=…)` and `skip_work_order` refuse a
+Lemo order (« the studio's film runner makes it »), and both playbooks say to make nothing for a
+restyle into a Lemo style. The film runner writes the idea itself (no duplicate check: a remake
+reuses its script on purpose), as it already did for a remade film (202).
+Reason: the AI's decision must be carried out (« AI never parks », 156).
+

@@ -13,7 +13,7 @@ import pytest
 from src.agent import film, runner, schedule
 from src.config import InstagramMCPSettings
 from src.store import to_iso, utcnow
-from src.studio import feedback, gpu_run, lemo, media, work_orders
+from src.studio import feedback, gpu_run, lemo, media, production, work_orders
 from src.studio.assets import transition
 from src.studio.feedback import add_comment
 
@@ -420,6 +420,24 @@ def test_a_sent_back_film_is_remade_in_its_own_look(store, cfg, judged):
     assert feedback.decide_revision(store, other, "remade", "x")["order"] is None
     with pytest.raises(ValueError, match="not a Lemo film"):
         work_orders.refilm(store, other, "x")
+
+
+def test_a_video_restyled_into_a_film_is_made_by_the_film_runner(store, cfg, judged):
+    """Was: orders 63 and 66, the AI wrote their idea itself (in_production, no film), and
+    the film runner closed them as interrupted; 64 and 65 it skipped as duplicates."""
+    aid = add_comment(store, _asset(store), text="plus de scènes", wants_changes=True
+                      )["asset"]["id"]
+    order = feedback.decide_revision(store, aid, "restyled", "un vrai film",
+                                     style="lemo:watercolor")["order"]
+    with pytest.raises(ValueError, match="film runner makes it"):
+        production.create_idea(store, cfg, "motion", hook="h", work_order_id=order["id"])
+    with pytest.raises(ValueError, match="film runner makes it"):
+        work_orders.skip_for_agent(store, order["id"], "doublon")
+    assert work_orders.get_order(store, order["id"])["status"] == "scheduled"
+    assert film.close_orphans(store) == 0  # nothing to mistake for a dead film
+    assert film.next_order(store)["id"] == order["id"]
+    assert film.run_film(store, cfg, order["id"])["status"] == "succeeded"
+    assert store.get_asset(aid)["status"] == "archived"  # the film replaced it
 
 
 def test_an_order_a_dead_run_left_half_made_comes_back(store, cfg):
