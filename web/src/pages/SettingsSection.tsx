@@ -21,7 +21,7 @@ type Change = { values?: Record<string, unknown>; reset?: string[] }
 
 // Plain words where the field name says little (step 125); pct: stored 0-1, shown in %.
 const COPY: Record<string, { label: string; help: string; pct?: boolean }> = {
-  batch_size: { label: 'Videos made per day', help: 'Ideas the AI makes on its own each day (fewer while many liked videos wait). Your own orders always go through: they take places from these.' },
+  batch_size: { label: 'Videos made per day', help: 'Ideas the AI makes on its own each day (fewer while many liked videos wait). Your own orders always go through: they take places from these. 0 = no limit: the AI makes as many as its run allows.' },
   max_posts_per_day: { label: 'Most posts per day', help: 'Never more posts than this on one day.' },
   explore_share: { label: 'Share of new ideas to try (explore)', help: "At most this part of each day's videos tries something new.", pct: true },
   humour_share: { label: 'Share of funny videos', help: 'Where the funny / informative split starts; your likes move it from there.', pct: true },

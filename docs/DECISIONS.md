@@ -1013,3 +1013,16 @@ the AI makes on its own each night, not a cap on the owner's orders (they alread
 full batch, 134), so "no limit" has no meaning there.
 Reason: owner 2026-11-24. A hidden limit blocked an order as « quota du jour atteint »;
 two of that day's three films had died (one timeout, one restart).
+
+## 2026-11-24: "Videos made per day" 0 = no limit (206)
+`BATCH_SIZE` 0 means no limit, like `LEMO_FILMS_PER_DAY` (205, whose note that it keeps
+1..50 this replaces). The night run then makes as many good ideas as its turn budget allows:
+`limits.ideas`, `effective_batch_size` and `places.ideas_left` are null, the mix's `count`
+is null (the agent follows each option's `share`), and there is no bench brake (BATCH_FLOOR
+and the bench surplus only shrink a set size). The shares still hold, measured on the
+batch so far with the next idea included: explore at most ceil(n x EXPLORE_SHARE), the
+humour / informative split within ±1 of its target, the owner's style shares. A day whose
+places were opened with a limit keeps it until midnight. "Most posts per day" stays
+1..25: the publishing slots and the bench's supply days divide by it.
+Reason: owner 2026-11-24 (« Videos made per day must do the same… where 0 can be
+unlimited »).

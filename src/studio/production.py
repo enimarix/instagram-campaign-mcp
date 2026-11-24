@@ -103,7 +103,8 @@ def _dm_pick_extra(store: CampaignStore, settings: InstagramMCPSettings, q: Dict
     ponytail: a bench that grows during the day lowers limits.ideas and eats into it."""
     if track != "remix" or source_id is None:
         return False
-    if q["counts"]["ideas"] - q["limits"]["ideas"] >= settings.max_dm_pick_extras_per_day:
+    if (q["limits"]["ideas"] is not None  # None: no limit (206), no extras to count
+            and q["counts"]["ideas"] - q["limits"]["ideas"] >= settings.max_dm_pick_extras_per_day):
         return False
     with store._tx() as c:
         return c.execute("SELECT 1 FROM dm_picks WHERE source_id = ?"
@@ -117,7 +118,7 @@ def _check_quotas(q: Dict[str, Any], track: str, pillar: Optional[str],
     outside the batch's humour / informative split (full or not: the owner's 7th fact order
     was refused « informative 7/6 »), the explore and reaction quotas still apply."""
     limits, counts = q["limits"], q["counts"]
-    full = counts["ideas"] >= limits["ideas"]
+    full = limits["ideas"] is not None and counts["ideas"] >= limits["ideas"]
     if full and not extra:
         raise ValueError(f"batch full: {counts['ideas']}/{limits['ideas']} ideas today")
     if strategy == "explore" and counts["explore"] >= limits["explore"]:

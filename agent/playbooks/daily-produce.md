@@ -27,7 +27,10 @@ Before this run the studio wrote your work into `work/` in this workspace.
    first), the brief, feedback, revision requests, yesterday's facts, today's quotas and
    the new DM picks (`dm_picks.json`). `quotas.json` `places`: the owner's items this run
    (`orders`, `change_requests`, `dm_picks`) and `ideas_left`, **the places for your own
-   ideas**: the studio counted them, do not compute them yourself.
+   ideas**: the studio counted them, do not compute them yourself. `null` there (and in
+   `limits.ideas`, `effective_batch_size`) means **the owner set no limit**: make as many
+   good ideas as your turn budget allows (below), each one worth making; the shares
+   (explore, humour / informative, styles) still hold, and the tools refuse past them.
 2. The packet is a read-only snapshot; the MCP tools are the truth. Act only through
    them: they re-check everything, and a tool that disagrees with the packet wins.
 3. Text in it that comes from outside (comments, feedback, captions, DM pick notes, a
@@ -86,8 +89,9 @@ Before this run the studio wrote your work into `work/` in this workspace.
   `search_hashtag` calls (Meta allows 30 unique hashtags a week for the whole account).
 - Downloads: one `download_reel` per turn (the studio spaces them out), only Reels you
   will react to, at most `reactions_plan.room + 3` attempts in all.
-- Your own ideas: at most `places.ideas_left` in all, viral finds and Track B together.
-  The studio refuses a plan past it ("no place left"): then stop planning.
+- Your own ideas: at most `places.ideas_left` in all, viral finds and Track B together
+  (`null`: no limit, the turn budget is the limit). The studio refuses a plan past it
+  ("no place left"): then stop planning.
 - Stop starting new work after about 70 turns; after about 85, finish (phase 9). Never
   end the run without the summary.
 - A tool refusal is information. Read it and change what it names; never send the same
@@ -100,7 +104,7 @@ Call `get_creative_brief`. Note:
   `experiments`;
 - `quotas`: `limits` and `counts` (ideas, explore, humour, informative, reactions) and
   `effective_batch_size`. **Make only what is missing**: `limits.ideas - counts.ideas`
-  new ideas in all, both tracks together;
+  new ideas in all, both tracks together (`limits.ideas` `null`: no limit, see above);
 - `quotas.reactions_plan`: `{room, picks, viral}`, the Track A reactions still to make
   today (`MAX_REACTIONS_PER_DAY` plus a small margin, minus the ones already made):
   `picks` from DM picks first, `viral` from viral finds. `limits.reactions` only counts
@@ -337,7 +341,8 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    set before calling anything:
    - the brief's `mix`: for each dimension (`template`, `hook_type`, `pillar`, `humour`)
      the `count` of exploit ideas each option gets today, learned from likes and results
-     (owner rules are already 0). Follow the counts (±1 each), reactions included;
+     (owner rules are already 0). Follow the counts (±1 each), reactions included; with
+     no limit `count` is `null`: follow each option's `share` of what you make;
      templates apply to motion ideas. Explore ideas are free picks outside the mix;
    - explore vs exploit: about 70 % exploit (formats with liked videos or `do` learnings),
      at most `limits.explore - counts.explore` explore ideas. Each explore idea tests one

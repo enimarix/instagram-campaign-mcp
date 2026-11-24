@@ -95,7 +95,9 @@ def creative_brief(store: CampaignStore, settings: InstagramMCPSettings,
         # 138: the styles to make ideas in (quotas.styles: today's count and share limit)
         "styles": agent_styles(store),
         # Exploit ideas follow the mix; explore ideas (limits.explore) are free picks.
-        "mix": with_counts(mix, quotas["limits"]["ideas"] - quotas["limits"]["explore"]),
+        # 206: no batch limit, count None: the exploit ideas follow the shares
+        "mix": with_counts(mix, None if quotas["limits"]["ideas"] is None else
+                           quotas["limits"]["ideas"] - quotas["limits"]["explore"]),
         "today": [{k: i[k] for k in IDEA_KEYS}
                   for i in store.list_ideas(batch_date=today, limit=100)],
         "recent_hooks": [r["hook"] for r in _rows(

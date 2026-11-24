@@ -69,6 +69,13 @@ describe('Planning', () => {
     expect(document.querySelector('a[href="/calendar"]')).toBeNull() // publishing is the Calendar's (195)
   })
 
+  it('a run with no batch limit says so (206)', async () => {
+    stub([item({ section: 'planned', kind: 'agent_run', title: 'Run daily-produce', source: 'schedule',
+      picks_up: { orders: 0, change_requests: 0, dm_picks: 0, ideas_left: null } })])
+    show()
+    expect((await screen.findByText(/pour les idées de Claude/)).textContent).toContain('sans limite pour les idées de Claude')
+  })
+
   it('says when nothing is planned', async () => {
     stub([])
     show()

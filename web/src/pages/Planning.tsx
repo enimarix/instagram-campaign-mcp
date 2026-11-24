@@ -360,7 +360,8 @@ function ItemCard({ item: i, grip, ...actions }: { item: PlanningItem; grip?: Re
       {i.picks_up && (
         <p>
           Reprend d'abord : {i.picks_up.orders} commande(s), {i.picks_up.change_requests} changement(s),{' '}
-          {i.picks_up.dm_picks} DM · <strong>{i.picks_up.ideas_left}</strong> place(s) pour les idées de Claude
+          {i.picks_up.dm_picks} DM · {i.picks_up.ideas_left === null ? <><strong>sans limite</strong> pour les idées de Claude</>
+            : <><strong>{i.picks_up.ideas_left}</strong> place(s) pour les idées de Claude</>}
         </p>
       )}
       <p className="text-muted">{i.why_here}</p>

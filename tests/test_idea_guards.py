@@ -48,6 +48,19 @@ def test_batch_full(store, settings):
         _new(store, settings, "Something new")
 
 
+def test_no_batch_limit_at_0_the_shares_still_hold(store, settings):
+    settings.batch_size = 0  # owner, 206: no limit
+    for i, w in enumerate(WORDS[:12]):  # past the default 10: never "batch full"
+        _new(store, settings, w * 3, pillar=("stories", "everyday_humor")[i % 2])
+    q = todays_quotas(store, settings, DAY)
+    assert q["limits"]["ideas"] is None and q["effective_batch_size"] is None
+    assert q["limits"]["explore"] == 4  # ceil(13 x 0.3): the ideas so far and the next one
+    _new(store, settings, WORDS[12] * 3)
+    _new(store, settings, WORDS[13] * 3)
+    with pytest.raises(ValueError, match="pick a humour pillar"):  # 8 of 15: past the split
+        _new(store, settings, WORDS[14] * 3)
+
+
 def test_explore_quota(store, settings):
     _fill(store, settings, 3, strategy="explore")  # ceil(10 x 0.3) = 3
     with pytest.raises(ValueError, match="explore quota used: 3/3; make it exploit"):
