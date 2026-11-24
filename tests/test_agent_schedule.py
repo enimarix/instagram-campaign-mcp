@@ -309,7 +309,9 @@ def test_weekly_entry_is_due_on_its_weekday_only(store, agent_dir):
     s = cfg(agent_schedule="weekly-ads@tue 03:00,later@wed 03:00")  # NOW: Tuesday 03:30
     assert schedule.due_runs(store, s, NOW - timedelta(minutes=31)) == []
     assert schedule.due_runs(store, s, NOW) == ["weekly-ads"]
-    store.finish_agent_run(store.start_agent_run("weekly-ads")["id"], "succeeded")
+    run = store.start_agent_run("weekly-ads")["id"]
+    started_at(store, run, NOW)  # 202: not the real clock (failed on the Tuesday NOW + 7 d)
+    store.finish_agent_run(run, "succeeded")
     assert schedule.due_runs(store, s, NOW) == []
     for days in range(1, 7):  # not again the rest of the week
         assert schedule.due_runs(store, s, NOW + timedelta(days=days)) == []

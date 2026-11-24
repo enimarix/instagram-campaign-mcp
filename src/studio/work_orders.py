@@ -36,6 +36,7 @@ twice is two orders. A DM order's pick follows it (in_production, skipped).
 from __future__ import annotations
 
 import contextlib
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, to_iso, utcnow
@@ -56,6 +57,7 @@ REASON_MAX = 300
 ANALYSIS_MAX = 600
 MAX_ITEMS = 20
 CAPTION_LINE = 120
+_UNMADE = "NOT EXISTS (SELECT 1 FROM assets a WHERE a.idea_id = w.idea_id)"  # nothing made
 TRENDING_PROVIDER = "instagram"  # research.PROVIDER (research imports this module)
 AGENT_KEYS = ("id", "source", "source_id", "pick_id", "mode", "style", "instruction", "status",
               "permalink", "own_reel", "sender_username", "topic", "caption_quote", "likes",
@@ -285,6 +287,61 @@ def restyle(store: CampaignStore, asset_id: int, style: Optional[str],
             with contextlib.suppress(InvalidTransition):  # moved meanwhile: it stays
                 transition(store, asset_id, "archived", actor="owner")
     return order
+
+
+def refilm(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
+    """202: a Lemo film the owner sent back, remade in its own style (the agent's
+    decide_revision remade): a film has no template to re-render, so this is a change order
+    the film runner makes, `why` (what to change) in its instruction. ValueError when the
+    video is not a Lemo film."""
+    style = store.get_idea(store.get_asset(asset_id)["idea_id"])["style"]
+    if not lemo.is_lemo(style):
+        raise ValueError(f"video {asset_id} is not a Lemo film: re-render it with"
+                         " render_motion(asset_id=...)")
+    text = (f"Même film, refait : refais la vidéo {asset_id} (même sujet, même message) dans"
+            f" son style « {lemo.style_info(style)['label']} » ({style}), en changeant ce que"
+            f" le propriétaire a demandé : {' '.join(why.split())}")
+    return _insert_owner_order(store, "change", text[:INSTRUCTION_MAX], style, asset_id)
+
+
+def drop_unmade(store: CampaignStore, order_id: int, reason: str) -> bool:
+    """202: an open order with nothing made yet (no video of its idea) is skipped with
+    `reason` (a newer decision on its video replaced it); True when it was."""
+    with store._tx() as c:
+        hit = c.execute(f"SELECT 1 FROM work_orders w WHERE w.id=? AND w.status IN"
+                        f" ('needs_instruction','scheduled','in_production') AND {_UNMADE}",
+                        (order_id,)).fetchone()
+    if hit:
+        skip_order(store, order_id, reason)
+    return bool(hit)
+
+
+def recover(store: CampaignStore, stale_before: datetime) -> Dict[str, List[int]]:
+    """202: orders a dead agent run left in_production with nothing made (no video of their
+    idea, untouched since `stale_before`, the agent's time cap ago) -> {rescheduled,
+    skipped}. Back to scheduled with the idea unlinked, so the next run makes them; a
+    change order whose video got another decision since (sent back or archived meanwhile)
+    is skipped: that decision replaced it. Lemo orders are the film runner's
+    (film.close_orphans). ponytail: "another decision" = the video's latest agent_decision
+    names another order; an owner's change order (no agent decision) comes back."""
+    with store._tx() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT w.* FROM work_orders w WHERE w.status='in_production' AND w.updated_at < ?"
+            f" AND COALESCE(w.style, '') NOT LIKE ? AND {_UNMADE}",
+            (to_iso(stale_before), lemo.PREFIX + "%"))]
+    out: Dict[str, List[int]] = {"rescheduled": [], "skipped": []}
+    for o in rows:
+        asset = store.get_asset(o["from_asset_id"]) if o["from_asset_id"] else None
+        decided = (asset or {}).get("agent_decision") or {}
+        if o["origin"] == "change" and decided and decided.get("order_id") != o["id"]:
+            skip_order(store, o["id"], f"remplacée : la vidéo {asset['id']} a eu une autre"
+                       " décision depuis (le run qui l'avait commencée s'est arrêté)")
+            out["skipped"].append(o["id"])
+            continue
+        store._update("work_orders", ("status", "idea_id", "blocked_reason"), o["id"],
+                      {"status": "scheduled", "idea_id": None, "blocked_reason": None})
+        out["rescheduled"].append(o["id"])
+    return out
 
 
 def remade_idea(store: CampaignStore, order: Dict[str, Any]) -> Optional[int]:

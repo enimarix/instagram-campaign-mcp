@@ -1039,7 +1039,9 @@ async def decide_revision(asset_id: int, decision: Literal["remade", "restyled",
                           why: str, style: Optional[str] = None) -> Dict[str, Any]:
     """Say what you did with a video the owner sent back (its Inbox card shows it; never
     leave one without): remade (re-rendered in its own style with render_motion(asset_id=
-    ...)), restyled (its style cannot meet the note: remade in `style`, an enabled one;
+    ...); a Lemo film (style lemo:...) has no template: remade returns a film order in its
+    own style, the film runner makes it from `why`, what to change), restyled (its style
+    cannot meet the note: remade in `style`, an enabled one;
     returns a « même vidéo, autre style » work order: make it with create_idea(
     work_order_id=...), the old video is archived once the new one is submitted) or
     waiting (why: what it waits for). No style fits: request_style instead."""

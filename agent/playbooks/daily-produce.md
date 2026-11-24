@@ -224,6 +224,9 @@ per run):
    props=…, asset_id=<that asset>)`; remix video (its idea has track `remix`):
    `render_remix` again for the same idea and source with the hook, script or trim
    changed as asked. Then `decide_revision(asset_id, "remade", "<what you changed>")`.
+   A Lemo film (its style starts with `lemo:`) has no template: render nothing, just
+   `decide_revision(asset_id, "remade", "<what to change, from the owner's comments>")`:
+   the studio's film runner remakes it in the same look from that line.
 3. Its style cannot, another enabled one can: `decide_revision(asset_id, "restyled",
    "<why this style>", style=<id>)` and make the work order it returns like any change
    order (phase 1a).

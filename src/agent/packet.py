@@ -118,6 +118,8 @@ def _dm_picks(store: CampaignStore, settings: InstagramMCPSettings, now: datetim
 
 
 def _work_orders(store: CampaignStore, settings: InstagramMCPSettings, now: datetime):
+    # 202: an order a dead run left half-made comes back (or is skipped when replaced)
+    work_orders.recover(store, now - timedelta(minutes=settings.agent_timeout_minutes))
     orders = work_orders.for_agent(store, "scheduled", MAX_ITEMS)
     return {"untrusted_captions": True, "orders": orders}, len(orders)
 

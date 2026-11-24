@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, to_iso, utcnow
-from . import styles, work_orders
+from . import lemo, styles, work_orders
 from .assets import InvalidTransition, transition
 
 
@@ -124,7 +124,8 @@ def set_decision(store: CampaignStore, asset_id: int, kind: str, why: Optional[s
     label = None
     if style:
         try:
-            label = styles.get_style(store, style)["label"]
+            label = (lemo.style_info(style) if lemo.is_lemo(style)
+                     else styles.get_style(store, style))["label"]
         except (ValueError, RuntimeError):  # unknown, or no Node (MotionError): the id
             label = style
     text = {"remade": f"Refaite en {label}" if label else "Refaite",
@@ -139,13 +140,17 @@ def set_decision(store: CampaignStore, asset_id: int, kind: str, why: Optional[s
 def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str,
                     style: Optional[str] = None) -> Dict[str, Any]:
     """The agent's decision on a video the owner sent back -> {asset, order}:
-    - remade: re-rendered in its own style (render_motion(asset_id=...)) as asked;
+    - remade: re-rendered in its own style (render_motion(asset_id=...)) as asked; a Lemo
+      film (no template) gets a film order in its own style instead (order, 202): the film
+      runner remakes it with `why` (what to change), the old video is archived once the
+      new one is in the Inbox;
     - restyled: the note cannot be met in its style: remade in `style` (an enabled one,
       not its own) through a « même vidéo, autre style » work order (order; make it with
       create_idea(work_order_id=...)); once that video is submitted the old one is
       archived;
-    - waiting: it waits, and `why` says for what (a render pending, a non-motion video
-      for the night run). A missing style is not waiting: request_style.
+    - waiting: it waits, and `why` says for what (a render pending). A missing style is not
+      waiting: request_style.
+    The order of an earlier decision with nothing made yet is skipped (202).
     ValueError names the problem; KeyError: no such video."""
     if decision not in AGENT_DECISIONS:
         raise ValueError(f"decision must be one of {', '.join(AGENT_DECISIONS)}"
@@ -155,14 +160,20 @@ def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str
         raise ValueError(f"video {asset_id} is {asset['status']}: only a video sent back for"
                          " changes gets a decision")
     order = None
+    before = (asset.get("agent_decision") or {}).get("order_id")
     if decision == "restyled":
         if not style:
             raise ValueError("restyled needs the style to remake it in")
         order = work_orders.restyle(store, asset_id, style, why)
     elif decision == "remade":
         style = store.get_idea(asset["idea_id"])["style"]
+        if lemo.is_lemo(style):  # 202: a film has no template: the film runner remakes it
+            order = work_orders.refilm(store, asset_id, why)
     asset = set_decision(store, asset_id, decision, why, style=style,
                          order_id=order and order["id"])
+    if before and before != (order and order["id"]):  # 202: never two remakes of one video
+        work_orders.drop_unmade(store, before, f"remplacée : nouvelle décision sur la vidéo"
+                                f" {asset_id} ({decision})")
     return {"asset": asset, "order": order}
 
 
