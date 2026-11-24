@@ -82,6 +82,12 @@ describe('Planning', () => {
     expect(screen.getByText("Pas d'heure : attend ta consigne.")).toBeTruthy()
   })
 
+  it("a film past the daily cap points at the owner's setting (205)", async () => {
+    stub([item({ kind: 'film', title: 'Un film', ids: { order_id: 4 }, waits_on: 'daily_cap', est_start: null, est_ready: null, est_duration_s: null })])
+    show()
+    expect(await screen.findByText('limite de films du jour atteinte (Réglages)')).toBeTruthy()
+  })
+
   it('a waiting render starts now; the running card has no such button', async () => {
     const calls = stubCalls([
       item({ section: 'running', title: 'Le rendu actuel', ids: { asset_id: 17, job_id: 5 }, progress: 0.5 }),
