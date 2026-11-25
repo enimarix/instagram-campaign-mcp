@@ -37,7 +37,10 @@ describe('App', () => {
   it('renders the sidebar, the phone tab bar and the setup-mode banner on Settings', async () => {
     const health = { status: 'ok', instagram_configured: false, version: '1.0' }
     // every route answers the health body, except the lists the Settings page maps over
-    const objects: Record<string, unknown> = { '/api/settings': { version: 0, fields: [] }, '/api/ads/presets': { presets: [] } }
+    const objects: Record<string, unknown> = {
+      '/api/settings': { version: 0, fields: [] }, '/api/ads/presets': { presets: [] },
+      '/api/storage': { media_bytes: 0, db_bytes: 0, free_bytes: 1e10, last_backup: null },
+    }
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
       new Response(JSON.stringify(
         ['/api/agent/schedule', '/api/reactions', '/api/pinned-accounts', '/api/dm-picks', '/api/permissions', '/api/styles'].includes(url) || url.startsWith('/api/sources')
@@ -56,7 +59,7 @@ describe('App', () => {
     const tabs = within(screen.getByRole('navigation', { name: 'Onglets' })).getAllByRole('link')
     expect(tabs.map((l) => l.textContent)).toEqual(['Inbox', 'Créer', 'Planning', 'Trending', 'Calendrier', 'Plus'])
     expect(tabs.filter((l) => l.getAttribute('aria-current')).map((l) => l.textContent)).toEqual(['Plus'])
-    expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
+    expect(await screen.findByText('Mode configuration : ajoute ton token Instagram')).toBeTruthy()
   })
 
   it.each([['/planning', 'Planning'], ['/agent', 'Plus']])('marks the current tab on %s', (path, current) => {

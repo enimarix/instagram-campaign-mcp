@@ -37,7 +37,7 @@ describe('Settings: Styles (138)', () => {
     expect(paper.checked).toBe(true)
     fireEvent.click(paper)
     expect(await within(section).findByRole('checkbox', { name: 'Papier', checked: false })).toBeTruthy()
-    const share = within(section).getByLabelText('3D 8-bit daily share (%)') as HTMLInputElement
+    const share = within(section).getByLabelText('Part par jour de 3D 8-bit (%)') as HTMLInputElement
     expect(share.value).toBe('30')
     fireEvent.blur(share, { target: { value: '30' } }) // unchanged: nothing sent
     fireEvent.blur(share, { target: { value: '50' } })
@@ -52,7 +52,7 @@ describe('Settings: Styles (138)', () => {
       'PATCH /api/styles/voxel': [422, { error: 'invalid', message: 'share must be above 0 and at most 1 (or empty: no limit)' }],
     })
     render(<StylesSection />)
-    const share = await screen.findByLabelText('3D 8-bit daily share (%)')
+    const share = await screen.findByLabelText('Part par jour de 3D 8-bit (%)')
     fireEvent.blur(share, { target: { value: '150' } })
     expect((await screen.findByRole('alert')).textContent).toContain('share must be')
   })

@@ -32,8 +32,8 @@ export default function StylesSection() {
     <Card as="section" id="styles" aria-label="Styles" className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">Styles</h2>
       <p className="mt-1 text-sm text-muted">
-        One launch button per style that is on; the AI only picks those. Daily share: at most that
-        part of a day's batch in the style (empty: no limit; your own orders always pass).
+        Un bouton de lancement par style allumé ; l’IA ne choisit que ceux-là. Part par jour : au plus
+        cette part des vidéos du jour dans ce style (vide : pas de limite ; tes commandes passent toujours).
       </p>
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       {styles === undefined ? (
@@ -48,8 +48,8 @@ export default function StylesSection() {
                 {s.label}
               </label>
               <label className="ml-auto flex items-center gap-2 text-muted">
-                Daily share
-                <input type="number" min={1} max={100} step={1} inputMode="numeric" aria-label={`${s.label} daily share (%)`}
+                Part par jour
+                <input type="number" min={1} max={100} step={1} inputMode="numeric" aria-label={`Part par jour de ${s.label} (%)`}
                   key={s.share ?? 'none'} defaultValue={s.share == null ? '' : Math.round(s.share * 100)}
                   onBlur={(e) => saveShare(s, e.target.value)} className={`${field} w-20`} />
                 %

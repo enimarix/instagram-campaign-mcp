@@ -1,6 +1,6 @@
 // Shared by the analytics pages (078, 079): fetch state and number formats.
 import { useEffect, useState } from 'react'
-import { errorMessage, type RetentionFinding } from '../api/client'
+import { errorMessage, type AgentRun, type RetentionFinding } from '../api/client'
 import type { Tone } from '../ui/styles'
 
 // Chip tone per post verdict; the others are neutral.
@@ -54,6 +54,10 @@ const PLAYBOOKS: Record<string, string> = {
   'check-renders': 'Vérifier les rendus', 'weekly-ads': 'Pubs de la semaine',
 }
 export const playbookName = (id: string) => PLAYBOOKS[id] ?? id
+/** An agent run's status chip (Agent page, Settings' agent schedule). */
+export const RUN_STATUS: Record<AgentRun['status'], [Tone, string]> = {
+  running: ['info', 'en cours'], succeeded: ['success', 'réussi'], failed: ['danger', 'échoué'], cancelled: ['neutral', 'annulé'],
+}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 /** 754 → "12:34", 3725 → "1:02:05". */

@@ -69,29 +69,29 @@ describe('Settings', () => {
   it('renders every section from the APIs', async () => {
     stubApi()
     render(<MemoryRouter><Settings /></MemoryRouter>)
-    await screen.findByText('Running')
+    await screen.findByText('En marche')
     const worker = section('Worker')
-    expect(within(worker).getByText('3 minutes ago')).toBeTruthy()
-    expect(within(worker).getByText('1 published')).toBeTruthy()
+    expect(within(worker).getByText(/^il y a 3\smin$/)).toBeTruthy()
+    expect(within(worker).getByText('1 publié')).toBeTruthy()
 
     const ig = section('Instagram')
-    expect(within(ig).getByText('Valid')).toBeTruthy()
+    expect(within(ig).getByText('Valide')).toBeTruthy()
     expect(within(ig).getByText('macrobody')).toBeTruthy()
-    expect(within(ig).getByText('3 / 100 in 24 h')).toBeTruthy()
-    expect(await within(ig).findByText(/\(40 days left\)$/)).toBeTruthy()
+    expect(within(ig).getByText('3 / 100 en 24 h')).toBeTruthy()
+    expect(await within(ig).findByText(/\(encore 40 jours\)$/)).toBeTruthy()
 
-    const storage = section('Storage')
-    expect(within(storage).getByText('2.5 GB')).toBeTruthy()
-    expect(within(storage).getByText('12.0 MB')).toBeTruthy()
-    expect(within(storage).getByRole('alert').textContent).toMatch(/Low/)
-    expect(within(section('Backups')).getByText('No backups yet')).toBeTruthy()
+    const storage = section('Stockage')
+    expect(within(storage).getByText('2,5 Go')).toBeTruthy()
+    expect(within(storage).getByText('12,0 Mo')).toBeTruthy()
+    expect(within(storage).getByRole('alert').textContent).toMatch(/Faible/)
+    expect(within(section('Sauvegardes')).getByText('Pas encore de sauvegarde')).toBeTruthy()
 
-    const agent = section('Agent schedule')
+    const agent = section("Planning de l'IA")
     const next = new Date('2026-11-18T03:00:00+01:00').toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
-    expect(within(agent).getByText('Vidéos du jour at 03:00')).toBeTruthy()
-    expect(within(agent).getByText(`Next ${next} · last failed 2 hours ago`)).toBeTruthy()
-    expect(within(agent).getByText('Playbook not written yet · never ran')).toBeTruthy()
-    expect(screen.queryByText('Setup mode: add your Instagram token')).toBeNull()
+    expect(within(agent).getByText('Vidéos du jour à 03:00')).toBeTruthy()
+    expect(within(agent).getByText((t) => t.startsWith(`Prochain run le ${next} · dernier run échoué il y a 2`))).toBeTruthy()
+    expect(within(agent).getByText('Playbook pas encore écrit · jamais lancé')).toBeTruthy()
+    expect(screen.queryByText('Mode configuration : ajoute ton token Instagram')).toBeNull()
   })
 
   it('indexes every section: each chip points at an id on the page, in page order', () => {
@@ -104,7 +104,9 @@ describe('Settings', () => {
     const onPage = [...container.querySelectorAll('[id]')].map((el) => el.id).filter((id) => ids.includes(id))
     expect(onPage).toEqual(ids)
     for (const id of ids) expect(document.getElementById(id)!.className).toContain('scroll-mt-16 lg:scroll-mt-4')
-    expect(document.getElementById('ads')!.getAttribute('aria-label')).toBe('Ads')
+    // each section is titled like its chip
+    for (const l of chips) expect(screen.getByRole('region', { name: l.textContent! })).toBeTruthy()
+    expect(document.getElementById('ads')!.getAttribute('aria-label')).toBe('Pubs')
   })
 
   it('scrolls to the section of the URL hash', () => {
@@ -133,37 +135,37 @@ describe('Settings', () => {
   it('says so when no agent run is scheduled', async () => {
     stubApi({ 'GET /api/agent/schedule': [200, []] })
     render(<MemoryRouter><Settings /></MemoryRouter>)
-    expect(await within(section('Agent schedule')).findByText('None (AGENT_SCHEDULE is empty)')).toBeTruthy()
+    expect(await within(section("Planning de l'IA")).findByText('Aucun (AGENT_SCHEDULE est vide)')).toBeTruthy()
   })
 
   it('pauses publishing after a confirm', async () => {
     const calls = stubApi()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     render(<MemoryRouter><Settings /></MemoryRouter>)
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause publishing' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mettre la publication en pause' }))
     expect(calls).not.toContain('POST /api/worker/pause')
-    fireEvent.click(screen.getByRole('button', { name: 'Pause publishing' }))
-    expect(await screen.findByRole('button', { name: 'Resume publishing' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Mettre la publication en pause' }))
+    expect(await screen.findByRole('button', { name: 'Reprendre la publication' })).toBeTruthy()
     expect(calls).toContain('POST /api/worker/pause')
     expect(confirm).toHaveBeenCalledTimes(2)
   })
 
   it.each([
-    [downloader({}), 'up', ['1 hour ago']],
-    [downloader({ health: { status: 'down', checked_at: HOUR_AGO } }), 'down', []],
-    [downloader({ health: { status: 'broken', checked_at: HOUR_AGO, detail: 'HTTP 500' } }), 'broken', ['1 hour ago · HTTP 500']],
-    [downloader({ health_configured: false, health: { status: 'not_configured', checked_at: HOUR_AGO } }), 'not configured',
-      ['Off: set DOWNLOADER_HEALTH_URL in .env']],
-    [downloader({ health: null }), 'not checked yet', []],
-    [downloader({ set_up: false, health: null }), 'not set up', ['ig-campaign downloader setup']],
+    [downloader({}), 'en marche', ['il y a 1']],
+    [downloader({ health: { status: 'down', checked_at: HOUR_AGO } }), 'arrêté', []],
+    [downloader({ health: { status: 'broken', checked_at: HOUR_AGO, detail: 'HTTP 500' } }), 'en panne', ['h · HTTP 500']],
+    [downloader({ health_configured: false, health: { status: 'not_configured', checked_at: HOUR_AGO } }), 'non configuré',
+      ['Désactivé : mets DOWNLOADER_HEALTH_URL dans .env']],
+    [downloader({ health: null }), 'pas encore vérifié', []],
+    [downloader({ set_up: false, health: null }), 'pas installé', ['ig-campaign downloader setup']],
   ] as const)('shows the Reel downloader state %#', async (status, chip, texts) => {
     stubApi({ 'GET /api/downloader/status': [200, status] })
     render(<MemoryRouter><Settings /></MemoryRouter>)
-    const dl = section('Reel downloader')
+    const dl = section('Téléchargeur')
     expect(await within(dl).findByText(chip)).toBeTruthy()
     for (const t of texts) expect(within(dl).getByText((_, el) => el?.tagName === 'DD' && el.textContent?.includes(t) === true)).toBeTruthy()
-    expect(within(dl).queryByText('Set it up') === null).toBe(status.set_up)
-    expect(within(dl).queryByText('Health check') === null).toBe(status.health_configured)
+    expect(within(dl).queryByText('L’installer') === null).toBe(status.set_up)
+    expect(within(dl).queryByText('Contrôle de santé') === null).toBe(status.health_configured)
   })
 
   it('shows the setup banner, not an error, in setup mode', async () => {
@@ -173,10 +175,10 @@ describe('Settings', () => {
       'GET /api/token': [200, { configured: false, valid: null, expires_at: null, days_left: null, can_refresh: false, scopes: [] }],
     })
     render(<MemoryRouter><Settings /></MemoryRouter>)
-    expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
+    expect(await screen.findByText('Mode configuration : ajoute ton token Instagram')).toBeTruthy()
     const ig = section('Instagram')
-    expect(within(ig).getByText('No')).toBeTruthy()
+    expect(within(ig).getByText('Non')).toBeTruthy()
     expect(within(ig).queryByRole('alert')).toBeNull()
-    expect(await within(ig).findByText('No token')).toBeTruthy()
+    expect(await within(ig).findByText('Pas de token')).toBeTruthy()
   })
 })
