@@ -9,7 +9,7 @@ from src.agent.packet import SKIPPED
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.store import to_iso, utcnow
-from src.studio import alerts, downloader_service
+from src.studio import alerts, dm_picks, downloader_service
 
 from .conftest import LOCAL
 
@@ -178,6 +178,11 @@ async def test_dm_picks_skipped_today(store, cfg):
     found = await alerts.alerts(store, cfg, utcnow())
     assert [a["id"] for a in found] == ["dm_skipped"]
     assert found[0]["detail"] == "Latest, from @friend: too long"
+
+
+async def test_a_dm_gap_warns_the_owner(store, cfg):
+    store.set_state(dm_picks.GAP_KEY, {"at": to_iso(utcnow()), "conversations": 1})
+    assert await _ids(store, cfg) == ["dm_gap"]
 
 
 async def test_ids_are_stable_and_newest_first(store, cfg):

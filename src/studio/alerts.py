@@ -26,7 +26,7 @@ from ..config import InstagramMCPSettings
 from ..instagram_client import INVALID_TOKEN_CODE, InstagramClient
 from ..store import CampaignStore, parse_dt, to_iso
 from ..worker import ALIVE_WITHIN, JOB_ERRORS, graph_breaker
-from . import downloader_service, line, render, token, website
+from . import dm_picks, downloader_service, line, render, token, website
 
 STATE_KEY = "alerts_dismissed"
 RAISED_KEY = "alerts_raised"
@@ -249,6 +249,18 @@ def _dm_skipped(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
                    f"Latest, from @{who}: {reason}", "/settings", at)]
 
 
+def _dm_gap(store: CampaignStore) -> List[Dict[str, Any]]:
+    """A DM poll after a long stop saw only messages newer than the last full poll:
+    Instagram gives the 20 newest only, so older shares may be lost (dm_picks.GAP_KEY)."""
+    gap = store.get_state(dm_picks.GAP_KEY)
+    if not gap:
+        return []
+    return [_alert("dm_gap", None, "warn", "Des messages Instagram ont pu être manqués",
+                   "Le studio était arrêté pendant que des Reels arrivaient : Instagram ne"
+                   " donne que les 20 derniers messages. Vérifie tes DM et renvoie ceux qui"
+                   " manquent.", "/settings", gap.get("at"))]
+
+
 async def alerts(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
                  client: Optional[InstagramClient] = None) -> List[Dict[str, Any]]:
     """[{id, kind, severity info|warn|error, title, detail, link, since}], newest first,
@@ -256,7 +268,7 @@ async def alerts(store: CampaignStore, settings: InstagramMCPSettings, now: date
     t = await token.token_status(client, settings)  # a failed check: valid None, no alert
     found = [*_publishes(store, now), *_replanned(store, now), *_token(t),
              *_agent_runs(store), *_qc_spike(store), *_worker(store, now), *_jobs(store),
-             *_graph_blocked(store, settings), *_downloader(store), *_dm_skipped(store, now),
+             *_graph_blocked(store, settings), *_downloader(store), *_dm_skipped(store, now), *_dm_gap(store),
              *_website(store), *_paused(store), *_raised(store, now)]
     dismissed = store.get_state(STATE_KEY) or {}
     shown = [a for a in found if a["id"] not in dismissed
