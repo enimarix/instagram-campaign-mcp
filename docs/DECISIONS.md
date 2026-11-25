@@ -8,6 +8,30 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-25: Winners and learnings need more than one event (pipeline audit)
+Scoring (`src/scoring.py`): a count signal (shares, saves, follows, ...) is no longer the
+post's rate over the baseline's median rate (+0.0005, capped at 5x). It is observed events
+over the events expected at the baseline's pooled rate (their events / their reach) for
+this post's reach, both plus 3 pseudo-events (`PRIOR_EVENTS`). Watch time and watch ratio
+keep the median. A baseline post read at over 2x (or under half) the scored post's age is
+left out (`MAX_AGE_GAP`). Live, 2026-11-25: the 8 matured 48 h Reels were 0.66–0.81 or
+3.35–3.51 (one share and one save on reach 321 and 468 made 2 "winners"); now they are
+0.79–0.94 and the Reel with 10 shares and 11 saves (reach 1056) stays the winner at 2.43.
+The two 30-day-old Reels are only compared with each other (16 shares: 1.85, 1 share: 0.77).
+Experiments (`src/learning/experiments.py`): a do / dont also needs a seeded permutation
+test over all variants at p < 0.05; with a variant under EVIDENCE_MIN_N_MEDIUM scored
+posts, no learning is written (result `not_enough_data`). Template, hour and duration
+experiments count each post under the value it really has.
+Learnings (agent edits): rewording a learning or changing its kind or scope puts it back to
+`low` (the evidence engine lifts it again when the numbers back it); evidence dicts must
+name a post with insights, an ad test or a work order, duplicates are dropped and sources
+counted once; an owner instruction the agent stores is scoped to what the commented video
+is, or has no predicate.
+Reason: audit 2026-11-25. On an account with reach in the hundreds, one share was a 5x
+signal on a weight-3 metric, and that label fed ad-test candidates, daily facts, breakdowns,
+evidence, the mix and slot weights. The owner: learning comes from real metrics and owner
+feedback, not noise.
+
 ## 2026-11-25: The resource guard no longer pauses or stops running jobs
 Gone: the watchdog's pause on low RAM and its kill after 3 min, the GPU heat pause (83/74 °C),
 the GPU power pause, the CPU throttling pause, the 15-min duty cycle, and the 10-min startup
@@ -1068,3 +1092,27 @@ The brief points the film there with the same request and answer as the local se
 its `voices.json` and may write audio tags. The key stays in the runner process.
 Reason: owner 2026-11-24 (« it should be generating the same video, only with the 11 Labs
 voice »).
+
+## 2026-11-25: The Voix page casts, ElevenLabs is retried, one engine per video (audit)
+Changes 204's "the other engine takes over on any failure". With ElevenLabs first, the
+cards on are the voices the AI, the films and the sitcom cast pick from, and a local voice
+with no card of its own (the default « souriante ») speaks in a card of its gender: the
+local voices are relays only. ElevenLabs' passing faults (no answer, 429, 5xx) are retried
+twice with a short backoff; a bad text (400 / 422) fails that line for a rewrite, not the
+engine. An engine failing before any line spoke hands over as before; one failing after
+lines already spoke stops the video as a machine error (it is voiced again later in one
+engine), never a switch of voice mid-video. A card's relay must be of its gender. Films
+record their takes, so their fallback shows on the card and rings the bell like a video's.
+Reason: owner 2026-11-25 (« voices follow what is checked and preferred from the UI »);
+video 76 / 78 spoke VoxCPM, and one 429 could turn ElevenLabs off for a whole video.
+
+## 2026-11-25: A style the owner bans is swapped for its closest alternative
+An owner `dont` rule on a style (or a template) no longer refuses the work: the studio
+remakes it in the closest style he keeps (styles.alternative: same address tu / vous, then
+the most words the two descriptions share; a Lemo style first tries its own category).
+Orders and ideas asked in it get the alternative (check_style), a send-back remake in it is
+restyled in it (decide_revision, the decision's why says so), an idea already in it moves
+to it at render (check_template), and the AI's style list leaves it out. A banned template
+alone sends the AI to another template of the same style.
+Reason: owner 2026-11-25 (« If I ban a style, then it should automatically choose the best
+suiting styles alternative that can be used »).

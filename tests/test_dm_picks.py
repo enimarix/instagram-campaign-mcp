@@ -120,6 +120,17 @@ async def test_note_comes_only_from_the_same_sender_within_two_minutes(client, s
 
 
 @respx.mock
+async def test_twenty_messages_all_after_the_last_poll_flag_a_gap(client, store):
+    D.pin_account(store, "friend.one")
+    _mock([("C1", [BRAND, FRIEND])], {"C1": [
+        _msg(f"t{i}", FRIEND, f"{i:02d}:00", "hi") for i in range(D.MESSAGES, 0, -1)]})
+    assert "maybe_missed" not in await _poll(client, store)  # first poll: nothing to compare
+    store.set_state(D.POLLED_KEY, "2026-11-17T09:00:00+00:00")  # the worker was off since
+    assert (await _poll(client, store))["maybe_missed"] == 1
+    assert store.get_state(D.GAP_KEY)["conversations"] == 1
+
+
+@respx.mock
 async def test_budget_and_rate_limit_stop_the_poll(client, store):
     D.pin_account(store, "friend.one")
     routes = _mock([("C1", [FRIEND]), ("C2", [FRIEND])], {"C1": [], "C2": []})

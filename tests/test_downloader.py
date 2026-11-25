@@ -305,6 +305,19 @@ def test_dm_pick_marked_downloaded_or_skipped(store, cfg, no_ytdlp):
 
 
 @respx.mock
+def test_refused_download_leaves_a_pick_its_open_order_holds(store, cfg, no_ytdlp):
+    from src.studio import work_orders
+
+    held = _pick(store, "m1", "https://www.instagram.com/reel/PRIV/")
+    with store._tx() as c:
+        work_orders.add_for_pick(c, held, "fais-en une vidéo", False, "t")
+    respx.get(API, params={"postUrl": "https://www.instagram.com/reel/PRIV/"}).mock(
+        return_value=answer(owner={"username": "p", "is_private": True}))
+    assert run(store, cfg, "https://www.instagram.com/reel/PRIV/")["status"] == "refused"
+    assert store._get("dm_picks", held)["status"] == "new"  # the order decides
+
+
+@respx.mock
 def test_route(store, cfg, no_ytdlp):
     respx.get(API).mock(return_value=answer())
     respx.get(CDN).mock(return_value=httpx.Response(200, content=VIDEO))

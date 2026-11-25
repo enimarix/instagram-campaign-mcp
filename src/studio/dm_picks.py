@@ -30,6 +30,10 @@ NOTE_MAX = 300
 NOTE_WINDOW = timedelta(minutes=2)  # a text just after (or before) the share is its note
 CONVERSATIONS = 50  # newest first; a pinned friend's new message moves theirs to the top
 MESSAGES = 20  # Meta: details only for the 20 most recent messages
+POLLED_KEY = "dm_picks_polled_at"  # worker_state: when the last full poll started
+# worker_state {at, conversations}: a poll whose 20 messages all came after the last full
+# poll (the worker was off): older shares may be lost, the owner should look at the DMs
+GAP_KEY = "dm_picks_gap"
 AGENT_KEYS = ("id", "status", "reel_url", "sender_username", "sender_note", "received_at",
               "skip_reason")
 _USERNAME = re.compile(r"[a-z0-9._]{1,30}")
@@ -102,26 +106,41 @@ def for_agent(store: CampaignStore, status: Optional[str] = "new",
 
 def mark_pick(store: CampaignStore, pick_id: int, status: str,
               reason: Optional[str] = None) -> Dict[str, Any]:
-    """Move a pick; skipped needs a reason (kept), any other status clears it."""
+    """Move a pick; skipped needs a reason (kept), any other status clears it. Skipping a
+    pick whose work order is still open skips the order (work_orders.skip_order, which
+    skips the pick): the owner's « Écarter » stops the work."""
     if status not in STATUSES:
         raise ValueError(f"status must be one of {', '.join(STATUSES)}")
     reason = (reason or "").strip()[:NOTE_MAX] or None
     if status == "skipped" and not reason:
         raise ValueError("say why the pick is skipped")
+    if status == "skipped":
+        with store._tx() as c:
+            order = c.execute("SELECT id FROM work_orders WHERE pick_id=? AND status IN"
+                              " ('needs_instruction','scheduled','in_production')",
+                              (pick_id,)).fetchone()
+        if order:
+            from . import work_orders  # here: work_orders imports this module
+
+            work_orders.skip_order(store, order[0], reason)
+            return store._get("dm_picks", pick_id)
     return store._update("dm_picks", ("status", "skip_reason"), pick_id,
                          {"status": status, "skip_reason": reason if status == "skipped"
                           else None})
 
 
 def mark_posted(store: CampaignStore, asset_id: int) -> int:
-    """The asset was published: picks of its idea's source that are being made (downloaded,
-    in_production) become posted. Returns how many moved."""
+    """The asset was published: picks being made (downloaded, in_production) of its idea's
+    source, or whose work order made its idea (an owner or inspired idea has no source),
+    become posted. Returns how many moved."""
     with store._tx() as c:
         return c.execute(
             "UPDATE dm_picks SET status='posted', skip_reason=NULL, updated_at=?"
-            " WHERE status IN ('downloaded','in_production') AND source_id IN"
+            " WHERE status IN ('downloaded','in_production') AND (source_id IN"
             " (SELECT i.source_id FROM assets a JOIN ideas i ON i.id = a.idea_id"
-            " WHERE a.id = ?)", (to_iso(utcnow()), asset_id)).rowcount
+            " WHERE a.id = ?) OR id IN (SELECT w.pick_id FROM work_orders w JOIN assets a"
+            " ON a.idea_id = w.idea_id WHERE a.id = ?))",
+            (to_iso(utcnow()), asset_id, asset_id)).rowcount
 
 
 # ---------------------------------------------------------------- polling
@@ -230,6 +249,7 @@ async def poll_dm_picks(client: Optional[InstagramClient], store: CampaignStore,
     if client is None or not pinned:
         return {"skipped": "not configured" if client is None else "no pinned accounts"}
     out: Dict[str, Any] = {"conversations": 0, "picks": 0, "stopped": None}
+    last, started = store.get_state(POLLED_KEY), to_iso(utcnow())
     try:
         if not budget_left():
             out["stopped"] = "request_budget"
@@ -254,6 +274,10 @@ async def poll_dm_picks(client: Optional[InstagramClient], store: CampaignStore,
             # real order (141).
             msgs = sorted(reversed(await client.get_conversation_messages(
                 conv["id"], limit=MESSAGES)), key=lambda m: parse_dt(m["created_time"]))
+            # all 20 came after the last full poll: older ones since then are out of reach
+            if (last and len(msgs) >= MESSAGES
+                    and parse_dt(msgs[0]["created_time"]) > parse_dt(last)):
+                out["maybe_missed"] = out.get("maybe_missed", 0) + 1
             for i, msg in enumerate(msgs):
                 p, reel = _match(pinned, msg.get("from") or {}), _reel(msg)
                 if not p or not reel or not msg.get("id"):
@@ -281,4 +305,8 @@ async def poll_dm_picks(client: Optional[InstagramClient], store: CampaignStore,
                     out["picks"] += cur.rowcount
     except RateLimitExceeded:
         out["stopped"] = "rate_limited"
+    if out.get("maybe_missed"):  # for alerts to show (studio/alerts.py reads worker_state)
+        store.set_state(GAP_KEY, {"at": started, "conversations": out["maybe_missed"]})
+    if out["stopped"] is None:
+        store.set_state(POLLED_KEY, started)
     return out

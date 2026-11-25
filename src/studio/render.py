@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from . import ffmpeg, gpu_lock, media, motion, music
+from . import ffmpeg, gpu_lock, guard, media, motion, music, rights
 from .assets import DESCRIPTION_CHARS, InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
 from .qc import run_qc
@@ -131,6 +131,23 @@ def validate_recipe(value: Any, media_root: PathLike) -> Dict[str, Any]:
     return env.model_dump(mode="json", exclude_none=True)
 
 
+def check_rights(store: CampaignStore, env: Dict[str, Any], media_root: PathLike) -> None:
+    """ValueError when an ffmpeg recipe's input is the file of a source with rights_basis
+    `unknown` (GOAL.md §5: never queued; remix checks it when it builds, a re-render or an
+    edited recipe went unchecked). A file no source holds (films/, reaction pieces, music beds)
+    is the studio's own."""
+    if (env or {}).get("kind") != "ffmpeg":
+        return
+    paths = [media.relative(media_root, media.resolve(media_root, p))  # one spelling per file
+             for p in env["inputs"].values()]
+    with store._tx() as c:
+        rows = c.execute("SELECT id, rights_basis FROM sources WHERE local_path IN"
+                         f" ({','.join('?' * len(paths))})", paths).fetchall()
+    for r in rows:
+        if rights.basis(dict(r)) == "unknown":
+            raise ValueError(f"source {r['id']} has rights_basis unknown: it is never rendered")
+
+
 def recipe_hash(recipe: Any) -> str:
     return hashlib.sha256(json.dumps(recipe, sort_keys=True).encode()).hexdigest()[:16]
 
@@ -143,6 +160,7 @@ def enqueue_render(store: CampaignStore, asset_id: int, *, key: Optional[str] = 
     after a failed QC): as a new arrival, counted (store.requeue_render_job), unless it
     failed for the machine (machine_wait: a machine problem is not the video's fault)."""
     asset = store.get_asset(asset_id)
+    check_rights(store, asset["recipe"], get_settings().media_root)
     job = store.add_render_job(asset_id, key or f"{asset_id}:{recipe_hash(asset['recipe'])}")
     if job["state"] in ("failed", "done") and asset["status"] == "rendering":
         job = store.requeue_render_job(job["id"], count=not (job["failure"] or "").startswith(
@@ -159,6 +177,7 @@ def rerender(store: CampaignStore, media_root: PathLike, asset_id: int, recipe: 
     from . import checks  # here: checks imports remix, which imports this module
 
     env = validate_recipe(recipe, media_root)
+    check_rights(store, env, media_root)  # before anything changes
     asset = check_rerender(store.get_asset(asset_id))
     checks.revive(store, asset_id)
     if asset["status"] == "failed":
@@ -350,10 +369,13 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
     except Exception as e:  # noqa: BLE001 - any render error is the job's failure reason
         reason = f"{type(e).__name__}: {e}"[:FAILURE_CHARS]
         if machine_failure(e):
-            return machine_wait(store, job, reason)
+            return machine_wait(store, job, reason, short_of_ram(settings))
         if isinstance(e, ValueError) or job["attempts"] >= MAX_ATTEMPTS:
             return _fail(store, job, reason)
-        return store.update_render_job(job_id, state="queued", failure=reason)
+        # a tool error that will likely repeat: not again at once at the head of the line
+        wait = MACHINE_BACKOFF_MIN[min(job["attempts"], len(MACHINE_BACKOFF_MIN)) - 1]
+        return store.update_render_job(job_id, state="queued", failure=reason,
+                                       not_before=to_iso(utcnow() + timedelta(minutes=wait)))
     render_ms = round((time.monotonic() - start) * 1000)
     store.update_asset(asset["id"], **files, duration=info.duration, qc=qc,
                        description=asset["description"] or auto_description(idea, asset))
@@ -381,12 +403,24 @@ def machine_retries(job: Dict[str, Any]) -> int:
     return int(m.group(1)) if m else 0
 
 
-def machine_wait(store: CampaignStore, job: Dict[str, Any], reason: str) -> Dict[str, Any]:
+def short_of_ram(settings: InstagramMCPSettings) -> bool:
+    """The guard admits no heavy job now for want of free RAM (the owner's game, his apps)."""
+    ram = guard.free_ram_gb()
+    return ram is not None and ram < settings.guard_min_free_ram_gb
+
+
+def machine_wait(store: CampaignStore, job: Dict[str, Any], reason: str,
+                 waiting: bool = False) -> Dict[str, Any]:
     """A machine failure: the job goes back to the line at its place (arrival, line_pos and
     requeues untouched: the check run's re-render count stays as it was; the claim's attempt
     is given back), skipped until a backoff timer, the asset still `rendering`. Past
-    MACHINE_RETRIES it fails with the reason and one website alert per video."""
-    n = machine_retries(job) + 1
+    MACHINE_RETRIES it fails with the reason and one website alert per video. `waiting`
+    (short_of_ram): the machine was busy, not failing, so it is no retry either (2026-11-25:
+    voices that timed out waiting for RAM failed their videos while the owner played); a
+    first one still reads 1 (the line and films tell a machine wait by its count)."""
+    n = max(machine_retries(job) + (not waiting), 1)
+    if waiting:
+        reason = f"waiting for RAM (not counted): {reason}"
     if n > MACHINE_RETRIES:
         from . import alerts  # alerts imports the worker, which imports us
 

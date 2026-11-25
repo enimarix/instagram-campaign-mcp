@@ -118,6 +118,13 @@ def test_run_due_runs_each_in_turn(store, agent_dir):
     assert schedule.run_due(store, cfg(agent_schedule=""), run=fake_run) == []
 
 
+
+def test_run_due_skips_while_any_run_runs(store, agent_dir):
+    store.start_agent_run("daily-revise")  # the worker's run, in the shared workspace
+    calls = []
+    assert schedule.run_due(store, cfg(), run=lambda *a: calls.append(a), now=lambda: NOW) == []
+    assert calls == []
+
 def test_run_due_checks_the_pause_before_each_run(store, agent_dir):
     (agent_dir / "playbooks" / "review.md").write_text("Review.\n")
     s = cfg(agent_schedule="daily-produce@03:00,review@03:10")

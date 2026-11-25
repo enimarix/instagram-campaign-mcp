@@ -105,6 +105,8 @@ class InstagramAPIError(Exception):
         # True only when the network failure hit the final media_publish call:
         # the post may be live, so retrying could double-post.
         self.maybe_published = False
+        # True when refused before any request left (breaker tripped, budget spent).
+        self.unsent = False
         super().__init__(message)
 
 
@@ -365,8 +367,12 @@ class GraphClient:
 
         if method not in ("GET", "POST", "DELETE"):
             raise ValueError(f"Unsupported HTTP method: {method}")
-        probe = self.breaker.check()  # tripped: AccessBlocked, no call, no budget slot
-        await self.budget.acquire()
+        try:
+            probe = self.breaker.check()  # tripped: AccessBlocked, no call, no budget slot
+            await self.budget.acquire()
+        except InstagramAPIError as e:
+            e.unsent = True
+            raise
         try:
             if method == "GET":
                 response = await self.client.get(url, params=params, headers=headers)
@@ -728,15 +734,16 @@ class InstagramClient(GraphClient):
                 f"{self.account_id}/media_publish",
                 data={"creation_id": container_id},
             )
-        except RateLimitExceeded:
-            raise
         except InstagramAPIError as e:
+            if e.unsent:
+                raise  # never reached Meta: nothing was published
             if e.network:
                 # The request may still be running at Meta: assume it might post.
                 e.maybe_published = True
             elif await self._container_published(container_id):
                 # Meta sometimes publishes and still answers with an error
-                # ("unknown error", "service unavailable"): never retry those.
+                # ("unknown error", "service unavailable", even a rate limit or a
+                # block): never retry those.
                 e.maybe_published = True
                 e.message = f"{e.message} (but Instagram reports the post as published)"
             raise

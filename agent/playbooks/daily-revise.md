@@ -104,6 +104,10 @@ learnings with origin `taste` exactly as the night playbook does: one comment �
 `do` / `dont` or `update_learning` on an existing one (`list_learnings`); only an
 explicit owner rule ("always …", "never …") → `owner_instruction=True`. Then
 `mark_feedback_digested` with every id you read, including ones that taught nothing.
+**"Never this style again"** (a bad style, not one template): `kind="dont"`,
+`owner_instruction=True`, `scope={"tag": "style", "value": <that video's style>}`, never
+the template alone; the studio then refuses that style (render_motion, decide_revision).
+Say in the summary that the owner can also switch it off in Settings.
 
 Owner decisions teach the most; the same rules apply to them:
 - **Decline motives.** Every decline carries a motive (reason chips and/or the owner's
@@ -124,8 +128,14 @@ Owner decisions teach the most; the same rules apply to them:
 ## Step 2: change requests
 
 Skip this step in a dry run. `revisions.json` holds `requests` (each video the owner sent
-back, with their comments) and `styles` (the enabled styles, each with its one-line
-`description` and `templates`). **Never leave a request without a decision**: doing
+back, with their comments and `earlier_decision`: your last decision on it, or null) and
+`styles` (the enabled styles, each with its one-line `description` and `templates`). A
+video whose remake is on its way is not listed. An `earlier_decision` of kind `waiting`
+naming an `order_id` is a remake film that failed: decide again (another style, or
+`request_style`), never `waiting` again. A style the owner ruled out (an owner `dont` on
+that style or template) is never used: the studio swaps it for the closest style he keeps
+(the decision comes back restyled in it, and the idea's style moves too); make the video
+in the style it names. **Never leave a request without a decision**: doing
 nothing is not an outcome, and "the same template would only give the same video" means
 you change the style, not that you stop. For each request (newest first):
 1. Read the comments as the owner means them ("more scenes, more people, real
@@ -135,11 +145,18 @@ you change the style, not that you stop. For each request (newest first):
    props from the idea's hook and the comments (change what the owner asked for and
    nothing else), `render_motion(template=…, props=…, asset_id=<that asset>)`, then
    `decide_revision(asset_id, "remade", "<one line: what you changed>")`.
-   **A Lemo film** (its style starts with `lemo:`, a custom film with no template) can
-   always be remade in its own look: render nothing, just `decide_revision(asset_id,
-   "remade", "<one line: what to change, from the owner's comments>")`. It returns a
-   film order that the studio's film runner makes from that line; the old video is
-   archived once the new one is in the Inbox. Never "waiting" for a film.
+   **Instagram music** ("music from Instagram", "un son tendance"): `trending_music`,
+   `fetch_music(audio_id)`, then `render_motion(…, music_audio_id=<audio_id>)`. Only
+   template styles take a track: not a Lemo film, not the Blender templates
+   (CinematicSkit, SitcomSkit).
+   **A Lemo film** (its style starts with `lemo:`, a custom film with no template) is
+   remade in its own look: render nothing, just `decide_revision(asset_id, "remade",
+   "<one line: what to change, from the owner's comments>")`. It returns a film order
+   that the studio's film runner makes; its brief quotes the owner's comments word for
+   word. The old video is archived once the new one is in the Inbox. Never "waiting" for
+   a film. When the owner asks for Instagram music, a film cannot carry it
+   (`decide_revision` refuses): restyle it (step 3) in a template style that takes a
+   track, and say in `why` that it is for the music.
 3. **It cannot, another enabled style can**: pick the best-fitting one from `styles`
    (its description against the note), then `decide_revision(asset_id, "restyled",
    "<one line: why this style meets the note>", style=<id>)`. It returns a « même vidéo,

@@ -197,8 +197,21 @@ def test_baseline_is_read_at_a_similar_age():
     cfg = ScoringConfig(min_reach=100)
     without = {r["media_id"]: r for r in score_posts(latest, cfg)}["new"]
     with_hist = {r["media_id"]: r for r in score_posts(latest, cfg, history=history)}["new"]
-    assert without["reach_index"] == pytest.approx(0.33, abs=0.01)
+    assert without["verdict"] == "no_baseline"  # 720 h baselines are > 2x its 48 h: left out
     assert with_hist["reach_index"] == pytest.approx(1.0)
+
+
+def test_one_share_and_one_save_is_not_a_winner():
+    def reel(mid, reach, shares, saved):
+        return {"media_id": mid, "media_product_type": "REELS", "age_hours": 48,
+                "metrics": {"reach": reach, "shares": shares, "saved": saved, "likes": 5}}
+
+    base = [reel(f"b{i}", 300, 0, 0) for i in range(6)] + [reel("b9", 1000, 3, 3)]
+    scored = {r["media_id"]: r for r in score_posts(
+        [reel("one", 468, 1, 1), reel("ten", 1000, 10, 11)] + base)}
+    assert scored["one"]["verdict"] == "average"  # was 3.35 "winner": one event hit the 5x cap
+    assert scored["one"]["engagement_index"] < 1.2
+    assert scored["ten"]["verdict"] == "winner"   # real differences still show
 
 
 # ------------------------------------------------ 10. config home

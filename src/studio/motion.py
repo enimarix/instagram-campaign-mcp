@@ -345,6 +345,7 @@ def bundle_dir() -> Path:
     with _bundle_lock:
         if _bundle is None or not (_bundle / "index.html").is_file():
             path = Path(tempfile.gettempdir()) / f"growth-studio-motion-{os.getpid()}"
+            prune_bundles(path.parent)
             find_node()  # clear error before touching node_modules/
             # Another process may be bundling: wait for it (up to one bundle's time).
             try:
@@ -356,6 +357,17 @@ def bundle_dir() -> Path:
             atexit.register(shutil.rmtree, path, True)
             _bundle = path
         return _bundle
+
+
+def prune_bundles(folder: Path) -> None:
+    """Delete the bundles in `folder` of processes gone without their atexit (killed, a crash,
+    a power cut: 28 of them held 1.8 GB of %TEMP%, 2026-11-25)."""
+    from ..agent import proc  # stdlib only
+
+    for old in folder.glob("growth-studio-motion-*"):
+        pid = old.name.rsplit("-", 1)[1]
+        if pid.isdigit() and int(pid) != os.getpid() and proc.started(int(pid)) is None:
+            shutil.rmtree(old, ignore_errors=True)
 
 
 def _stage_audio(bundle: Path, props: Dict[str, Any], media_root: PathLike) -> Dict[str, Any]:
@@ -490,14 +502,28 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
             recipe.compress_timeline(v["events"]), v.get("voiceParts") or listen.VOICE_FROM_START)
 
 
+@functools.lru_cache(maxsize=1)
+def endcards_hash() -> str:
+    """The end cards' code (motion/src/endcards): an edit renders the cards again, like
+    troupe.engine_hash. Read once per process, like the bundle it renders with (bundle_dir).
+    ponytail: the shared motion/src code they import (brand.ts, components) is not hashed."""
+    h = hashlib.sha256()
+    for f in sorted((MOTION_DIR / "src" / "endcards").rglob("*")):
+        if f.is_file():
+            h.update(f.name.encode() + f.read_bytes())
+    return h.hexdigest()[:12]
+
+
 def render_end_card(media_root: PathLike, props: Dict[str, Any], backdrop: Optional[Path] = None,
                     *, timeout_s: float) -> Path:
     """The animated end card (motion `EndCard`, step 137) as a clip, rendered once and cached
-    as `<media root>/endcards/<key>.mp4`, the key hashing the props and the backdrop's bytes
-    (the live card animates over `backdrop`, the video's last frame). MotionError when Node or
-    Remotion fails (the recipe then draws the static card)."""
+    as `<media root>/endcards/<key>.mp4`, the key hashing the props, the backdrop's bytes
+    (the live card animates over `backdrop`, the video's last frame) and the cards' code
+    (endcards_hash). MotionError when Node or Remotion fails (the recipe then draws the static
+    card)."""
     picture = hashlib.sha256(backdrop.read_bytes()).hexdigest()[:16] if backdrop else None
-    out = Path(media_root) / "endcards" / f"{render.recipe_hash([props, picture])}.mp4"
+    key = render.recipe_hash([props, picture, endcards_hash()])
+    out = Path(media_root) / "endcards" / f"{key}.mp4"
     if out.is_file():
         return out
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -532,11 +558,26 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     `plan` (188b): a new asset `planned` with its recipe, caption and description, and no
     job (job None): nothing renders or is voiced until the owner releases it
     (src/studio/planned.py); refused past the places left for Claude's ideas in its batch
-    (planned.take_place, 188c)."""
+    (planned.take_place, 188c). The night run (packet.RUNS kind `produce`, running) renders
+    only the owner's items: a new video of an idea no work order made is refused unless
+    planned (the owner reviews Claude's own ideas before anything renders)."""
     if (idea_id is None) == (asset_id is None):
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
     if plan and asset_id is not None:
         raise ValueError("plan a new video (idea_id), not a re-render")
+    if not plan and asset_id is None and actor == "agent":
+        from ..agent.packet import RUNS  # here: the packet imports most of the studio
+
+        night = [p for p, (kind, _) in RUNS.items() if kind == "produce"]
+        with store._tx() as c:
+            own = c.execute(
+                "SELECT NOT EXISTS (SELECT 1 FROM work_orders WHERE idea_id = ?) AND EXISTS"
+                " (SELECT 1 FROM agent_runs WHERE status = 'running' AND playbook IN"
+                f" ({','.join('?' * len(night))}))", (idea_id, *night)).fetchone()[0]
+        if own:
+            raise ValueError(f"idea {idea_id} is your own idea and this is the night run: it"
+                             " only writes ideas; render_motion(..., plan=True,"
+                             " description=...) puts it on the owner's Planning page")
     # 193: the description is stored for every video; a queued one's caption is written
     # again at submit_asset
     fields = checked_fields("planned" if plan else "rendering", **{k: x for k, x in (

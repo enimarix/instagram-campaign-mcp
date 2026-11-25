@@ -59,7 +59,9 @@ def create_idea(store: CampaignStore, settings: InstagramMCPSettings, track: str
         if order["style"]:
             fields.setdefault("style", order["style"])
     if fields.get("style") and not (order and order["style"]):  # the owner's pick stands
-        styles.check_style(store, fields["style"])
+        fields["style"] = styles.check_style(store, fields["style"])  # a banned one: swapped
+    elif fields.get("style"):
+        fields["style"] = styles.swap_banned(store, fields["style"])[0]  # ruled out since
     check_idea(store, track, fields)
     fields.setdefault("batch_date", local_today(settings.timezone))
     validate("tracks", track)

@@ -1638,10 +1638,12 @@ class CampaignStore:
     def get_idea(self, idea_id: int) -> Dict[str, Any]:
         return self._get("ideas", idea_id)
 
-    def set_idea_style(self, idea_id: int, style: str) -> None:
-        """Record the style an idea was made in, once (render_motion, step 138)."""
+    def set_idea_style(self, idea_id: int, style: str, *, replace: bool = False) -> None:
+        """Record the style an idea was made in, once (render_motion, step 138); replace: a
+        style the owner ruled out moves to its alternative (styles.check_template)."""
         with self._tx() as c:
-            c.execute("UPDATE ideas SET style=? WHERE id=? AND style IS NULL", (style, idea_id))
+            c.execute("UPDATE ideas SET style=? WHERE id=?" + ("" if replace else
+                      " AND style IS NULL"), (style, idea_id))
 
     def list_ideas(
         self, track: Optional[str] = None, batch_date: Optional[Any] = None, limit: int = 100

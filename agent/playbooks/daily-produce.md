@@ -208,7 +208,8 @@ Skip this phase in a dry run.
    - only when the owner **explicitly** gave a rule in one comment ("always …",
      "never …", "stop doing …") → `owner_instruction=True` with exactly that comment as
      evidence, and quote the comment's words in the statement. Never for your own
-     reading of a dislike;
+     reading of a dislike. "Never this style again" is scoped to the style
+     (`scope={"tag": "style", "value": <its style>}`), not one template;
    - a learning that new feedback contradicts → `update_learning(status="contradicted")`.
 3. `mark_feedback_digested` with the ids you read, including ones that taught nothing.
 
@@ -230,7 +231,10 @@ per run):
    changed as asked. Then `decide_revision(asset_id, "remade", "<what you changed>")`.
    A Lemo film (its style starts with `lemo:`) has no template: render nothing, just
    `decide_revision(asset_id, "remade", "<what to change, from the owner's comments>")`:
-   the studio's film runner remakes it in the same look from that line.
+   the studio's film runner remakes it in the same look, with the owner's comments.
+   A film cannot carry Instagram music: when the owner asks for it, restyle (3.) in a
+   template style that takes a track (see `daily-revise` step 2). Each request's
+   `earlier_decision` and a style the owner ruled out: as `daily-revise` step 2 says.
 3. Its style cannot, another enabled one can: `decide_revision(asset_id, "restyled",
    "<why this style>", style=<id>)` and make the work order it returns like any change
    order (phase 1a). In a Lemo style (`lemo:…`) make nothing: no `create_idea`, no
@@ -430,9 +434,10 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    by submit_asset: leave it there.
    **Trending music.** A Reel cut on a fresh trending track does better than one on a
    template's own bed. Once per run, `trending_music()` (and `trending_music("gym")`,
-   `("workout")`, `("lofi")` for the mood) lists Instagram's trending tracks; prefer
-   `audio_type` `music` (royalty-free, little-known: the owner's pick) over
-   `original_sound` (viral, but famous songs in it can get the Reel muted). Pick a track
+   `("workout")`, `("lofi")` for the mood) lists Instagram's trending tracks; use
+   `audio_type` `music` (royalty-free, little-known: the owner's pick); `original_sound`
+   is for reading the trend only (the studio refuses to put one in a video: famous songs
+   in it can get the Reel muted). Pick a track
    whose mood fits the story and that runs at least 10 s longer than the video, vary
    tracks across the batch, then `fetch_music(audio_id)` (its tempo and drop) and pass
    `render_motion(..., music_audio_id=<audio_id>)`: the lines then start on its beats and

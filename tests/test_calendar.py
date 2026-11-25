@@ -140,6 +140,20 @@ def test_replan_asset_row_queues_the_asset_again(tc, store, cfg):
     assert store.get_asset(a["id"])["status"] == "scheduled"
 
 
+def test_replan_keeps_a_trial_reel_a_trial(tc, store, cfg):
+    a = _asset(store, cfg, status="scheduled")
+    with store._tx() as c:  # an explore idea may go out as a trial Reel
+        c.execute("UPDATE ideas SET strategy='explore' WHERE id=?", (a["idea_id"],))
+    post = store.schedule("reel", {"caption": "x", "trial_graduation": "MANUAL"},
+                          utcnow() - timedelta(minutes=5), asset_id=a["id"])
+    store.claim_due()
+    store.mark_failed(post["id"], "boom", None)
+    transition(store, a["id"], "approved", actor="worker")
+    r = tc.post(f"/api/posts/{post['id']}/replan", headers=H)
+    assert r.status_code == 200, r.text
+    assert r.json()["payload"].get("trial_graduation") == "MANUAL"  # not to every follower
+
+
 def test_replan_refuses_unsettled_asset_until_released(tc, store, cfg):
     a = _asset(store, cfg, status="scheduled")
     post = _failed(store, a["id"])

@@ -66,6 +66,9 @@ $remake
 - The local engine (VoxCPM2) can garble short or unusual phrasings: if a take mis-says a
   word, rewrite the line.
 - Mix: the voice clearly on top, music ducked well under it, always.
+- Music: a bed you make or pick here. A film cannot carry an Instagram track (the studio
+  attaches those to its template videos only): when the owner asks for one, make the film
+  with your own bed and say so in NOTES.md and your report.
 
 ## Sound effects (optional): the studio's library
 

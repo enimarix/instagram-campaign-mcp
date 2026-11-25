@@ -8,7 +8,10 @@ character_end_times_seconds}}; GET /v1/user/subscription (character_count, chara
 next_character_count_reset_unix); GET /v1/models; GET /v2/voices (next_page_token);
 GET /v1/shared-voices (page); POST /v1/voices/add/{public_owner_id}/{voice_id} {new_name}.
 Error bodies are not documented in pages we could read: every non-2xx is an ElevenLabsError
-with its status, and the studio falls back to the local voice on any of them (tts.py).
+with its status. docs/developers/resources/errors (read 2026-11-25): 429 is a rate or
+concurrency limit (« implement exponential backoff »), 500 / 503 a passing server fault; no
+Retry-After is documented (kept when sent). The studio retries those (tts.py), then falls back
+to the local voice.
 """
 
 from __future__ import annotations
@@ -35,11 +38,14 @@ def _id(value: str) -> str:
 
 
 class ElevenLabsError(RuntimeError):
-    """A failed call: `status` the HTTP status (None: no answer). Never carries the key."""
+    """A failed call: `status` the HTTP status (None: no answer), `retry_after` the answer's
+    Retry-After seconds when it sent one. Never carries the key."""
 
-    def __init__(self, message: str, status: Optional[int] = None):
+    def __init__(self, message: str, status: Optional[int] = None,
+                 retry_after: Optional[float] = None):
         super().__init__(message)
         self.status = status
+        self.retry_after = retry_after
 
 
 def configured(settings: InstagramMCPSettings) -> bool:
@@ -73,8 +79,10 @@ def _call(settings: InstagramMCPSettings, method: str, path: str, *,
             http.close()
     if resp.status_code >= 400:
         why = _detail(resp)
+        after = resp.headers.get("retry-after", "")
         raise ElevenLabsError(f"ElevenLabs answered HTTP {resp.status_code}"
-                              + (f": {why}" if why else ""), resp.status_code)
+                              + (f": {why}" if why else ""), resp.status_code,
+                              float(after) if after.isdigit() else None)
     try:
         return resp.json()
     except ValueError:

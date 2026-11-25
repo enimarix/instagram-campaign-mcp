@@ -9,8 +9,8 @@ there). HTTP results are cached by a hash of everything that changes the audio.
 
 Step 204: with ELEVENLABS_API_KEY set, get_provider gives an EngineProvider: ElevenLabs
 (`elevenlabs`) and the local service (`http`) in the owner's priority order (voices.engine),
-the other one taking over on any failure, in the voice paired with the one asked
-(voices.engine_plan). Scripts may carry ElevenLabs audio tags (`[excited]`, `[laughs]`): only
+the other one taking over on a machine failure before a line spoke, in the voice paired with
+the one asked (voices.engine_plan). Scripts may carry ElevenLabs audio tags (`[excited]`, `[laughs]`): only
 ElevenLabs hears them; the local engine and every line timing (captions) get the text
 without them (strip_tags).
 """
@@ -26,6 +26,7 @@ import json
 import mimetypes
 import os
 import re
+import time
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -191,24 +192,32 @@ def _alnum(s: str) -> int:
     return sum(ch.isalnum() for ch in s)
 
 
+def _said(s: str) -> int:
+    """The letters and digits a voice says of `s`: numbers spelled out, a (bracketed) part
+    unsaid (say_as_written), so a caption's aside never shifts the lines after it."""
+    return _alnum(say_as_written(s))
+
+
 def group_words_into_lines(words: Sequence[WordTiming],
                            lines: Sequence[str]) -> List[LineTiming]:
     """Line timings from the engine's word timings. Words are matched to lines by position in
-    the letters and digits of the script, so punctuation or a different split of a word by the
-    engine does not shift the grouping. A line that got no word sits at the previous end."""
+    the letters and digits the voice says (_said, both sides), so punctuation, a different
+    split of a word by the engine or a (bracketed) aside does not shift the grouping. A line
+    that got no word (one only in brackets) sits at the previous end."""
     if not words:
         raise TTSError("the engine returned no word timings")
     bounds, acc = [], 0
     for line in lines:
-        acc += _alnum(line)
+        acc += _said(line)
         bounds.append(acc)
     total_line = acc or 1
-    total_word = sum(_alnum(w.text) for w in words) or 1
+    sizes = [_said(w.text) for w in words]
+    total_word = sum(sizes) or 1
     groups: List[List[WordTiming]] = [[] for _ in lines]
     pos, i = 0, 0
-    for w in words:
-        mid = (pos + _alnum(w.text) / 2) * total_line / total_word
-        pos += _alnum(w.text)
+    for w, size in zip(words, sizes):
+        mid = (pos + size / 2) * total_line / total_word
+        pos += size
         while i < len(lines) - 1 and mid >= bounds[i]:
             i += 1
         groups[i].append(w)
@@ -342,6 +351,10 @@ class HttpProvider(_Cached):
         recipe = voices.recipe(voice)  # a designed voice re-tuned under the same id: new audio
         if recipe is not None:
             parts.append(recipe)
+        card = voices.sample_file(voice)  # a cloned voice's <id>.wav replaced: new audio too
+        if card is not None:
+            st = card.stat()
+            parts.append([st.st_size, st.st_mtime_ns])
         return hashlib.sha256(json.dumps(parts, sort_keys=True).encode("utf-8")).hexdigest()
 
     def _request(self, text: str, voice: str):
@@ -463,15 +476,52 @@ def alignment_lines(alignment: Optional[dict]) -> Optional[List[Tuple[float, flo
     return spans or None
 
 
+RETRY_WAITS_S = (1.0, 4.0)  # ElevenLabs' passing faults (429, 5xx, no answer): two more tries
+MAX_RETRY_AFTER_S = 30.0  # a longer Retry-After is not waited for: the engine failed
+
+
+def _passing(e: elevenlabs.ElevenLabsError) -> bool:
+    """A fault worth another try (docs: 429 rate / concurrency limit, 5xx, no answer)."""
+    return e.status is None or e.status == 429 or e.status >= 500
+
+
 class ElevenLabsProvider(_Cached):
     """An ElevenLabs card's voice (voices.el_card) through the API, model from the owner's
     choice (voices.engine). It hears the audio tags. Before spending, the account's credits
-    are checked against the text: too few is a TTSError, never a cut-off voice (a key that
-    may not read them goes ahead). Its failures are the machine's (TTSError.machine: the
-    video waits, never fails for its script), except a request ElevenLabs refused as bad
-    (400, 422)."""
+    are checked against the text at the model's rate (_budget): too few is a TTSError, never
+    a cut-off voice (a key that may not read them goes ahead). A passing fault is tried again
+    (RETRY_WAITS_S, or the answer's Retry-After). Its failures are the machine's
+    (TTSError.machine: the video waits, never fails for its script), except a request
+    ElevenLabs refused as bad (400, 422): that line's text."""
 
     name = "elevenlabs"
+
+    def __init__(self, settings: InstagramMCPSettings, *,
+                 http_client: Optional[httpx.Client] = None):
+        super().__init__(settings, http_client=http_client)
+        self._checked, self._left = False, None  # _budget
+
+    def _budget(self) -> Optional[float]:
+        """The characters this provider may still send: the account's credits over the
+        model's character_cost_multiplier (1 when unknown), read once per provider (one
+        video, one film) and counted down as it speaks; None for a key that may not read
+        them."""
+        if self._checked:
+            return self._left
+        self._checked = True
+        try:
+            left = elevenlabs.credits(self.s, client=self.http)["left"]
+        except elevenlabs.ElevenLabsError as e:  # e.g. a key scoped to text to speech only
+            logger.info("tts.elevenlabs_credits_unknown", error=str(e)[:200])
+            return None
+        model = voices.engine()["model"]
+        try:
+            cost = next((m["cost"] for m in elevenlabs.models(self.s, client=self.http)
+                         if m["id"] == model), None)
+        except elevenlabs.ElevenLabsError:
+            cost = None
+        self._left = left / (cost or 1)
+        return self._left
 
     def _voice(self, voice: Optional[str]) -> str:
         return voice or ""
@@ -504,34 +554,42 @@ class ElevenLabsProvider(_Cached):
 
     def _request(self, text: str, voice: str):
         card = self._card(voice)
-        try:
-            left = elevenlabs.credits(self.s, client=self.http)["left"]
-        except elevenlabs.ElevenLabsError as e:  # e.g. a key scoped to text to speech only
-            left = None
-            logger.info("tts.elevenlabs_credits_unknown", error=str(e)[:200])
+        left = self._budget()
         if left is not None and left < len(text):
-            raise TTSError(f"ElevenLabs credits: {left} left, this voice-over needs "
-                           f"{len(text)}", unreachable=True)
-        try:
-            # no language_code: a card's label is the voice's language, not the script's
-            audio, alignment = elevenlabs.speech(self.s, card["el_voice_id"], text,
-                                                 voices.engine()["model"], client=self.http)
-        except elevenlabs.ElevenLabsError as e:
-            raise TTSError(str(e), status=e.status,
-                           unreachable=e.status not in (400, 422)) from None
-        except ValueError as e:  # a card id that is not an ElevenLabs id
-            raise TTSError(str(e)) from None
+            raise TTSError(f"ElevenLabs credits: {int(left)} characters left at this model's "
+                           f"rate, this voice-over needs {len(text)}", unreachable=True)
+        for wait in (*RETRY_WAITS_S, None):
+            try:
+                # no language_code: a card's label is the voice's language, not the script's
+                audio, alignment = elevenlabs.speech(self.s, card["el_voice_id"], text,
+                                                     voices.engine()["model"], client=self.http)
+                break
+            except elevenlabs.ElevenLabsError as e:
+                if wait is not None and e.retry_after is not None:
+                    wait = e.retry_after if e.retry_after <= MAX_RETRY_AFTER_S else None
+                if wait is None or not _passing(e):
+                    raise TTSError(str(e), status=e.status,
+                                   unreachable=e.status not in (400, 422)) from None
+                logger.info("tts.elevenlabs_retry", status=e.status, wait_s=wait)
+                time.sleep(wait)
+            except ValueError as e:  # a card id that is not an ElevenLabs id: not the text's
+                raise TTSError(str(e), unreachable=True) from None
         if not audio:
             raise TTSError("ElevenLabs returned no audio")
+        if self._left is not None:
+            self._left -= len(text)
         self._spans = alignment_lines(alignment)
         return audio, ".mp3", alignment_words(alignment)
 
 
 class EngineProvider:
     """The owner's engines in priority order (voices.engine_plan for the voice asked): the
-    first one that speaks wins; one that failed is skipped for the rest of this provider's
-    life (one video, one engine: a sitcom's lines never switch engines mid-video once one
-    failed). The result's `fallback` says why the first engine did not speak."""
+    first one that speaks wins. One video, one engine: an engine whose machine failed is
+    skipped for the rest of this provider's life, and one that fails after lines already
+    spoke with it stops the video (a machine error: render.machine_wait voices it again
+    later, all in one engine) instead of handing the rest to the other. A text the engine
+    refused (TTSError not machine) fails that line only. The result's `fallback` says why
+    the first engine did not speak."""
 
     name = "engine"
 
@@ -539,8 +597,12 @@ class EngineProvider:
                  eleven: Optional[TTSProvider]):
         self.engines = {"local": local, "elevenlabs": eleven}
         self.failed: Dict[str, str] = {}
+        self.spoke: set = set()  # the engines that spoke a line
+        self.stopped: Optional[str] = None
 
     def synthesize(self, text: str, voice: Optional[str] = None) -> Synthesis:
+        if self.stopped:
+            raise TTSError(self.stopped, unreachable=True)
         why: Optional[str] = None
         last: Optional[TTSError] = None
         for engine, v in voices.engine_plan(voice):
@@ -551,10 +613,16 @@ class EngineProvider:
             try:
                 synth = provider.synthesize(text, v)
             except TTSError as e:
+                if not e.machine:  # the text, not the engine: the caller rewrites this line
+                    raise
                 self.failed[engine] = str(e)[:200]
-                why, last = why or self.failed[engine], e
                 logger.warning("tts.engine_failed", engine=engine, error=str(e)[:200])
+                if engine in self.spoke:
+                    self.stopped = f"{engine} failed mid-video: {self.failed[engine]}"
+                    raise TTSError(self.stopped, status=e.status, unreachable=True) from None
+                why, last = why or self.failed[engine], e
                 continue
+            self.spoke.add(engine)
             synth.voice, synth.fallback = v, why
             return synth
         if last is not None:

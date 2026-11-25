@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..config import InstagramMCPSettings
-from . import cinematic, ffmpeg, media, troupe
+from . import cinematic, ffmpeg, media, troupe, voices
 from .ffmpeg import PathLike
 from .tts import get_provider, retag
 
@@ -56,9 +56,10 @@ def _gender(who: str) -> str:
 def say_voice(who: str, narrator: Optional[str],
               cast: Optional[Dict[str, Tuple[str, str]]] = None) -> str:
     """The voice of `who`'s lines: its gender's first voice in `cast` (default SAY_VOICES),
-    the other one when the narrator already speaks with it."""
+    the other one when the narrator already speaks with it (compared as voices.speaker: a
+    cast queued with local ids still never doubles an ElevenLabs narrator)."""
     first, other = (cast or SAY_VOICES)[_gender(who)]
-    return other if first == (narrator or NARRATOR) else first
+    return other if voices.speaker(first) == voices.speaker(narrator or NARRATOR) else first
 
 
 def voice_says(props: Dict[str, Any], settings: InstagramMCPSettings,

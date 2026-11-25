@@ -115,10 +115,10 @@ def build_remix(source: Dict[str, Any], *, hook: str, script: Optional[str],
         ops.append(MuteOriginal())
     # Covered: the clip's sound stays, ducked under the reaction (clip_gain_db) and the voice.
     ops.append(ReactionCollage(layout=layout, pip_corner="top_right"))
+    if music and not covered:  # before the voice: its sidechain ducks the bed (audio-mix)
+        ops.append(Music())
     if (script or "").strip():
         ops.append(VoiceOver())
-    if music and not covered:
-        ops.append(Music())
     ops.append(HookText(text=hook, position="center"))
     if captions:
         ops.append(Captions(lines=captions))

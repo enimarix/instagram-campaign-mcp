@@ -801,8 +801,8 @@ async def trending_music(query: Optional[str] = None,
     """Instagram's trending audio right now (Audio API), or a search with `query` ("gym",
     "phonk", "lofi"). audio_type `music`: for our business account, the royalty-free
     library: fresh, little-known tracks, the safe pick. `original_sound`: the viral sounds of
-    the moment, often carrying famous songs that can still get a Reel muted. Each has an
-    audio_id for fetch_music."""
+    the moment, to read the trend only: the studio refuses to put one in a video (the famous
+    songs they carry can get a Reel muted). Each has an audio_id for fetch_music."""
     tracks = await _studio_async(music.trending(client(), query, audio_type))
     return {"tracks": tracks}
 

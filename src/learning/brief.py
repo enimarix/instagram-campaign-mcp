@@ -47,12 +47,13 @@ def _rows(store: CampaignStore, sql: str, *args: Any) -> List[Dict[str, Any]]:
 
 
 def agent_styles(store: CampaignStore) -> Optional[List[Dict[str, Any]]]:
-    """The styles the owner has on (138): pick one per idea (Auto orders, own ideas)."""
+    """The styles the owner has on and did not rule out (138, owner_ban): pick one per idea
+    (Auto orders, own ideas)."""
     from ..studio.motion import MotionError  # here: motion pulls in most of the studio
 
     try:
         return [{k: s[k] for k in STYLE_KEYS} for s in styles.list_styles(store)
-                if s["enabled"]]
+                if s["enabled"] and not styles.owner_ban(store, s["id"])]
     except MotionError:  # no Node here: list_motion_templates says the same
         return None
 

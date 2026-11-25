@@ -119,7 +119,7 @@ async def test_daily_jobs_once_per_local_day_and_account_row(store):
         await worker.data_jobs(fake, store, cfg, now=lambda t=t: t)
     assert fake.account_calls == 2
     rows = store.account_snapshots()
-    assert [r["date"] for r in rows] == ["2026-11-17", "2026-11-18"]
+    assert [r["date"] for r in rows] == ["2026-11-16", "2026-11-17"]  # the day the data covers
     assert (rows[0]["followers"], rows[0]["reach"], rows[0]["views"],
             rows[0]["reach_followers"], rows[0]["reach_non_followers"]) == (120, 100, 400, 30, 70)
 

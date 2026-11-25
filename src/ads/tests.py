@@ -349,6 +349,9 @@ async def launch(
     amount = _amount(budget)
     variants, spec, need = test["variants"], abtest.TestSpec(**test["spec"]), test["needed"]
     per = (amount / len(variants)).quantize(CENT, rounding=ROUND_DOWN)
+    if per < CENT:  # refused here: a launch failing on it would cancel the proposal
+        raise AdTestRefused("invalid", f"budget {amount} split over {len(variants)} variants"
+                            " is under 0.01 each: give a larger budget")
     total = per * len(variants)
     short = abtest.underpowered(spec, float(total), test["baseline_rate"], test["min_lift"],
                                 cpm=need["cpm"], cpc=need["cpc"])

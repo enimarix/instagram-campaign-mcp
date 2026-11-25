@@ -93,14 +93,15 @@ def test_line_spans_weigh_spelled_out_numbers_like_the_digits():
     assert [(t.start_s, t.end_s) for t in timings] == [(0.0, 1.9), (2.2, 2.9)]
 
 
-def test_studio_grouping_alone_would_misplace_spelled_numbers():
-    # why the service sends line spans: raw words in spoken form shift the line bounds
+def test_studio_grouping_weighs_spelled_numbers_too():
+    # raw words in spoken form once shifted the line bounds (the lines counted as written);
+    # the studio now counts the lines as said (tts._said), like the service's line spans
     lines = ["308 kcal, 1 800 kcal, 21 h", "Une pomme ou une pizza ce soir"]
     words = [WordTiming(w, i, i + 1) for i, w in enumerate(
         speech.speak(lines[0]).split() + lines[1].split())]
     grouped = tts.group_words_into_lines(words, lines)
     said = len(speech.speak(lines[0]).split())  # 12 words, the last ends at 12 s
-    assert grouped[0].end_s < said  # line 1 cut short: its last words went to line 2
+    assert grouped[0].end_s == said and grouped[1].start_s == said
 
 
 # --- voices -----------------------------------------------------------------------------
@@ -306,6 +307,25 @@ def test_a_failed_load_releases_the_gpu(tmp_path):
                             gpu_path=str(lock))
     answer = TestClient(app, raise_server_exceptions=False).post("/tts", json={"text": SCRIPT})
     assert answer.status_code == 500 and _gpu_free(lock)
+
+
+def test_a_request_nobody_waits_for_is_dropped(monkeypatch):
+    """2026-11-25: the studio timed out (waiting for RAM): no load, no takes for nobody."""
+    from starlette.requests import Request
+
+    gone = []  # one answer per check: before the load, after it
+
+    async def disconnected(self):
+        return gone.pop(0)
+
+    monkeypatch.setattr(Request, "is_disconnected", disconnected)
+    engine = FakeEngine([GOOD])
+    http = TestClient(server.create_app(engine, server.Settings(), server.load_voices()))
+    gone[:] = [True]
+    assert http.post("/tts", json={"text": SCRIPT}).status_code == 503 and engine.loads == 0
+    gone[:] = [False, True]  # gone while it waited for the GPU
+    assert http.post("/tts", json={"text": SCRIPT}).status_code == 503 and engine.loads == 1
+    assert engine.texts == []
 
 
 # --- the engine's worker process (step 146) ---------------------------------------------

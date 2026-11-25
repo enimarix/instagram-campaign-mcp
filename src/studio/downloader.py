@@ -279,13 +279,18 @@ def _record_failure(store: CampaignStore, source_id: int, reason: str, now: date
 
 def _mark_picks(store: CampaignStore, url: str, result: Dict[str, Any]) -> None:
     """DM picks (113) of this Reel still `new`: downloaded with the source, or skipped with
-    the refusal. A failure leaves them new (the next run retries). 113b does the rest."""
+    the refusal unless their work order is still open (it decides: an owner order may not
+    need the file). A failure leaves them new (the next run retries). 113b does the rest."""
     status = result["status"]
     if status not in ("downloaded", "exists", "refused"):
         return
     post = _same_post(url)
+    held = (" AND id NOT IN (SELECT pick_id FROM work_orders WHERE pick_id IS NOT NULL AND"
+            " status IN ('needs_instruction','scheduled','in_production'))"
+            if status == "refused" else "")
     with store._tx() as c:
-        picks = [r[0] for r in c.execute("SELECT id, reel_url FROM dm_picks WHERE status='new'")
+        picks = [r[0] for r in c.execute("SELECT id, reel_url FROM dm_picks WHERE status='new'"
+                                         + held)
                  if _PERMALINK.fullmatch(r[1]) and permalink(r[1]) in post]
     for pick_id in picks:
         if status == "refused":

@@ -1,6 +1,7 @@
 """Step 027: housekeeping (archive rules, file purge, database backup, disk floor, daily run)."""
 
 import asyncio
+import os
 import sqlite3
 import threading
 import time
@@ -116,6 +117,31 @@ def test_purge(store, tmp_path):
         assert all(store.get_asset(i)[f] is None for f in housekeeping.PATH_FIELDS)
     assert store.get_asset(published)["file_path"] is not None
     assert housekeeping.purge_archived_files(store, s, TODAY) == []
+
+
+def test_leftover_work_folders_and_old_cache_files_go(store, tmp_path):
+    """2026-11-25: killed renders' work folders and the media caches grew forever."""
+    s = _settings(tmp_path)
+    root = Path(s.media_root)
+    old = (datetime.combine(TODAY, datetime.min.time()) - timedelta(days=31)).timestamp()
+    paths = {p: root / p for p in ("2026-11-01/7/cinematic-x1/f.png", "troupe/troupe-x2/a.png",
+                                   "troupe/shots/k.mp4", "voice/played.wav", "voice/old.wav",
+                                   "endcards/new.mp4", "2026-11-01/7/video.mp4")}
+    for p in paths.values():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x")
+        if "new" not in p.name:
+            os.utime(p, (old, old))
+            os.utime(p.parent, (old, old))
+    a = store.add_asset(store.add_idea("motion")["id"], recipe={
+        "kind": "motion", "template": "FactQuest", "props": {"voice": {
+            "audioSrc": "voice/played.wav"}}})
+    assert housekeeping.prune_leftovers(store, s, TODAY) == 4
+    assert sorted(p for p, f in paths.items() if f.exists()) == [
+        "2026-11-01/7/video.mp4", "endcards/new.mp4", "voice/played.wav"]  # not a cache, new, used
+    transition(store, a["id"], "ready", actor="worker")
+    transition(store, a["id"], "archived", actor="owner")
+    assert housekeeping.prune_leftovers(store, s, TODAY) == 1  # archived: no longer kept
 
 
 def test_backup_copies_a_wal_db_and_rotates(tmp_path):

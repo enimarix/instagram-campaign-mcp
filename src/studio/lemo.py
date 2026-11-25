@@ -32,8 +32,10 @@ TEMPLATE = REPO / "agent" / "playbooks" / "lemo-film.md"
 GPU_RUN = REPO / "src" / "studio" / "gpu_run.py"
 PREFIX = style_catalog.LEMO_PREFIX
 FILM_DIR = "film"  # the film's project folder inside its workspace
+VOICE_TAKES = "voice_takes.json"  # the voice door's takes, in the workspace (film_voice.py)
 DEFAULT_TTS = "http://127.0.0.1:8766/tts"
 HOOK_CHARS = 200
+MAX_ASKED = 50  # the owner's comments on a remade video quoted in its brief
 SCRIPT_CHARS = 8000
 # Normalise to our spec (1080x1920, 30 fps, H.264 + AAC) and loudness; a film is already
 # vertical, so the crop cuts nothing.
@@ -65,16 +67,27 @@ def check_style(style: str) -> str:
 
 def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dict[str, Any],
                from_video: Optional[Dict[str, Any]] = None,
-               tts_url: Optional[str] = None) -> str:
+               tts_url: Optional[str] = None, *,
+               store: Optional[CampaignStore] = None) -> str:
     """The film's BRIEF.md: the template (minus its comments) with this order filled in.
     Placeholders are `$name`; the owner's words are data inside it. tts_url: the film
-    runner's voice door (agent/film_voice.py, 207), else the local voice service."""
+    runner's voice door (agent/film_voice.py, 207), else the local voice service. store:
+    a remake's brief quotes the owner's own change requests on the old video, verbatim
+    (the order's instruction is only the AI's one-line summary of them)."""
     remake = ""
     if from_video:
         remake = ("This order remakes one of our videos in this style: keep its topic, "
                   "message and facts.\n"
                   f"- Its hook: {from_video.get('hook') or '-'}\n"
                   f"- Its script: {from_video.get('script') or '-'}\n")
+    asked = [fb["text"] or ", ".join(fb["reason_codes"]) for fb in (
+        store.list_feedback(asset_id=order["from_asset_id"], limit=MAX_ASKED)
+        if store is not None and order.get("from_asset_id") else ()) if fb["wants_changes"]]
+    if asked:
+        remake += ("- What the owner asked to change on it, **his own words** as he wrote"
+                   " them (oldest first). Make every one of them; they win over the"
+                   " instruction's summary:\n"
+                   + "".join("  > " + " ".join(a.split()) + "\n" for a in asked if a))
     text = re.sub(r"<!--.*?-->\n*", "", TEMPLATE.read_text(encoding="utf-8"), flags=re.S)
     return Template(text).safe_substitute(
         order_id=order["id"], style_id=style["id"], slug=style["slug"],
@@ -119,11 +132,30 @@ def _citations(sources: Any) -> List[Dict[str, str]]:
     return out
 
 
+def _voiced_by(workspace: Path) -> Optional[Dict[str, Any]]:
+    """What spoke the film (motion.voiced_by's shape) from the voice door's takes: engine
+    elevenlabs only if every take was, the last take's voice, the first fallback reason. None
+    when the film spoke through no door take."""
+    try:
+        takes = json.loads((workspace / VOICE_TAKES).read_text(encoding="utf-8"))
+        engines = {t["engine"] for t in takes}
+        reasons = [t["fallback"] for t in takes if t.get("fallback")]
+        voice = takes[-1].get("voice")
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return None
+    return {"engine": "elevenlabs" if engines == {"elevenlabs"} else "http", "voice": voice,
+            "fallback": reasons[0] if reasons else None}
+
+
 def register_film(store: CampaignStore, settings: InstagramMCPSettings,
                   order: Dict[str, Any], idea: Dict[str, Any], workspace: Path
                   ) -> Dict[str, Any]:
     """The delivered film becomes an asset of the order's idea, queued for render + QC at
-    the front of the heavy line (186).
+    the front of the heavy line (186), with what spoke it (_voiced_by: the asset's badge and
+    the tts_fallback alert, as render.voice_first does for our videos).
+    ponytail: QC never runs voice_above_bed on a film: the film mixes its own takes and keeps
+    no voice stem (listen.voice_track finds none). Needs the film to deliver its voice track
+    (e.g. film/voice.wav, as a recipe input) for that check.
     Returns {asset, job}; ValueError when the film delivered no final.mp4."""
     from .production import default_best_before  # here: production imports work_orders
 
@@ -142,13 +174,26 @@ def register_film(store: CampaignStore, settings: InstagramMCPSettings,
     with store._tx() as c:  # the idea was made at the film's start from the instruction
         c.execute("UPDATE ideas SET hook=?, script=?, citations=? WHERE id=?",
                   (hook, script, json.dumps(_citations(post.get("sources"))), idea["id"]))
+    env = {"kind": "ffmpeg", "recipe": RECIPE, "inputs": {"source": rel}}
+    by = _voiced_by(workspace)
+    if by:
+        env["voiced_by"] = by
     asset = store.add_asset(
-        idea["id"], batch_date=idea["batch_date"],
-        recipe={"kind": "ffmpeg", "recipe": RECIPE, "inputs": {"source": rel}},
+        idea["id"], batch_date=idea["batch_date"], recipe=env,
         caption=_text(post.get("caption"), 2200) or hook,
         description=_text(post.get("description"), DESCRIPTION_CHARS)
         or f"Un film Lemo-Opuscar ({idea['style']}) : {hook}"[:DESCRIPTION_CHARS],
         best_before=default_best_before(store, settings, {"idea_id": idea["id"]}))
+    if by and by["fallback"]:  # the owner hears of a fallback, as for our videos (204)
+        from ..store import utcnow
+        from . import alerts  # alerts imports the worker, which imports us
+
+        alerts.raise_alert(store, "tts_fallback", None, "warn",
+                           "ElevenLabs n'a pas parlé : la voix locale a pris le relais"
+                           if by["engine"] == "http"
+                           else "La voix locale a échoué : ElevenLabs a pris le relais",
+                           f"Vidéo {asset['id']} : {by['fallback']}", "/voices", utcnow(),
+                           renew=True)
     job = enqueue_render(store, asset["id"])
     try:  # the film waits for this render (film._wait_render): it goes first in the line
         line.start_now(store, "render", job["id"])

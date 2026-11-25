@@ -174,7 +174,9 @@ def hold_queue(store: CampaignStore, settings: InstagramMCPSettings,
     gap = timedelta(minutes=settings.min_slot_gap_minutes)
     max_late = timedelta(minutes=settings.max_late_minutes)
     rows = store.queue_times(since=now - timedelta(days=1))
-    sent = [parse_dt(r["updated_at"]) for r in rows if r["status"] != "pending"]
+    # A sent post counts from its slot, like the planner spaces them (learning/slots.py):
+    # its updated_at is the publish finish, ~1 min later, which would bump the next slot.
+    sent = [parse_dt(r["publish_at"]) for r in rows if r["status"] != "pending"]
     pending = sorted((parse_dt(r["publish_at"]), r["id"]) for r in rows
                      if r["status"] == "pending")
     planned = [at for at, _ in pending if at > now]
@@ -238,26 +240,7 @@ async def run_due(
             store.mark_published(post["id"], result["media_id"], result.get("permalink"))
             published.append({"id": post["id"], **result})
             _asset_outcome(store, post["asset_id"], "published")
-        except RateLimitExceeded as e:
-            store.mark_failed(post["id"], f"Rate limited: {e.message}",
-                              retry_in_minutes=BACKOFF_MINUTES, count_attempt=False)
-            retrying.append({"id": post["id"], "error": e.message})
-            break  # stop hammering the API this round
-        except AccessBlocked as e:
-            # Meta blocked the API (step 167): the post waits for the breaker's next try,
-            # its attempts unchanged.
-            wait = max(1, math.ceil((e.until - utcnow().timestamp()) / 60))
-            store.mark_failed(post["id"], e.message, retry_in_minutes=wait, count_attempt=False)
-            retrying.append({"id": post["id"], "error": e.message})
-            break
         except InstagramAPIError as e:
-            if e.error_subcode == PUBLISH_QUOTA_SUBCODE and not e.maybe_published:
-                # ~100 API posts per rolling 24h: wait, don't burn attempts.
-                msg = f"Daily publishing quota reached: {e.message}"
-                store.mark_failed(post["id"], msg, retry_in_minutes=BACKOFF_MINUTES,
-                                  count_attempt=False)
-                retrying.append({"id": post["id"], "error": msg})
-                break
             if e.maybe_published:
                 # media_publish may have reached Meta; retrying could double-post.
                 msg = f"{e.message} - check Instagram before retrying (reschedule_post)"
@@ -265,6 +248,23 @@ async def run_due(
                 failed.append({"id": post["id"], "error": msg})
                 _asset_outcome(store, post["asset_id"], "publish_check")
                 continue
+            if isinstance(e, AccessBlocked):
+                # Meta blocked the API (step 167): the post waits for the breaker's next
+                # try, its attempts unchanged.
+                wait = max(1, math.ceil((e.until - utcnow().timestamp()) / 60))
+                store.mark_failed(post["id"], e.message, retry_in_minutes=wait,
+                                  count_attempt=False)
+                retrying.append({"id": post["id"], "error": e.message})
+                break
+            if isinstance(e, RateLimitExceeded) or e.error_subcode == PUBLISH_QUOTA_SUBCODE:
+                # Rate limited, or ~100 API posts per rolling 24h: wait without burning
+                # attempts, and stop hammering the API this round.
+                msg = (f"Rate limited: {e.message}" if isinstance(e, RateLimitExceeded)
+                       else f"Daily publishing quota reached: {e.message}")
+                store.mark_failed(post["id"], msg, retry_in_minutes=BACKOFF_MINUTES,
+                                  count_attempt=False)
+                retrying.append({"id": post["id"], "error": msg})
+                break
             permanent = isinstance(e, InvalidMedia) or e.error_subcode in PERMANENT_SUBCODES
             if not permanent and post["attempts"] < MAX_ATTEMPTS:
                 store.mark_failed(post["id"], e.message, retry_in_minutes=RETRY_MINUTES)
@@ -422,7 +422,8 @@ async def collect_due_insights(
 async def snapshot_account(client: InstagramClient, store: CampaignStore,
                            day: date) -> Dict[str, Any]:
     """Save the account row of owner-local `day`: followers now, reach and views over the
-    24 h before (Meta's default range), and reach by follow_type when Meta answers it."""
+    24 h before (Meta's default range), and reach by follow_type when Meta answers it. The
+    worker runs it after local midnight with `day` the day those 24 h covered."""
     profile = await client.get_profile_info()
     insights = await client.get_account_insights(["reach", "views"])
     totals = {i.get("name"): (i.get("total_value") or {}).get("value") for i in insights}

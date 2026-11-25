@@ -213,6 +213,17 @@ def test_lock_held_refuses_a_second_run(cfg, agent_dir, store, tmp_path):
     assert not (tmp_path / "seen.json").exists()
 
 
+
+def test_another_playbook_running_in_the_workspace_refuses(cfg, agent_dir, store, tmp_path):
+    store.start_agent_run("daily-produce", os.getpid(), runner.process_started(os.getpid()))
+    with pytest.raises(runner.AgentRunRefused, match="daily-produce"):
+        runner.run_agent(store, cfg, "hello", agent_dir=agent_dir, timeout_s=60)
+    assert store.running_agent_run("hello") is None
+    store.start_agent_run(runner.TEMPLATES[0])  # a film has its own workspace: no lock
+    store.finish_agent_run(store.running_agent_run("daily-produce")["id"], "failed")
+    assert runner.run_agent(store, cfg, "hello", agent_dir=agent_dir,
+                            timeout_s=60)["status"] == "succeeded"
+
 def test_stale_lock_is_released(cfg, agent_dir, store):
     held = store.start_agent_run("hello")
     with store._tx() as c:

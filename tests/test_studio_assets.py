@@ -219,6 +219,15 @@ def test_approved_at_set_on_approve_kept_on_return_cleared_on_unapprove(store):
     assert transition(store, a["id"], "ready", actor="owner")["approved_at"] is None
 
 
+def test_an_old_version_is_not_approved_once_its_new_one_is(store):
+    parent = _asset_in(store, "ready")
+    child = store.add_asset(parent["idea_id"], parent_asset_id=parent["id"])
+    for to, actor in PATH["scheduled"]:
+        transition(store, child["id"], to, actor=actor)
+    with pytest.raises(InvalidTransition, match="version plus récente"):
+        transition(store, parent["id"], "approved", actor="owner")
+
+
 def test_verdict_never_moves_status(store):
     a = _asset_in(store, "approved")
     for v in ("liked", "disliked", "none", "liked"):

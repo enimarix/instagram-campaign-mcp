@@ -50,6 +50,8 @@ def spawn(settings: InstagramMCPSettings, log_path: Path = LOG_PATH,
     # the studio's resource guard (166): its RAM floor
     env["GUARD_MIN_FREE_RAM_GB"] = str(settings.guard_min_free_ram_gb)
     env["GUARD_CPU_SHARE"] = str(settings.guard_cpu_share)  # its CPUs and torch threads (171)
+    if settings.guard_log:  # its waits for RAM / VRAM / a game go where the owner looks
+        env["GUARD_LOG_PATH"] = str(APP_HOME / "data" / "logs" / "guard.log")
     cmd = command(settings)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab") as log:  # the child keeps its own handle

@@ -15,7 +15,8 @@ steps, then its tempo; a cloned voice (no recipe) at cfg 1.6, 30 steps, from the
 as continuation (prompt wav + text) AND reference. Each take is
 transcribed by Whisper (CPU, so VRAM stays under 8 GB with VoxCPM2 loaded) and compared to
 the text; under VOXCPM_MIN_SCORE the take is redone, up to VOXCPM_MAX_TAKES, and the best
-take is kept. One request at a time.
+take is kept. One request at a time; one whose client is gone (the studio's timeout) is
+dropped before the model load and before the takes.
 
 The GPU is shared (step 145): the models load on the first request, under the machine's GPU
 lock (src/studio/gpu_lock.py, the one Blender and Remotion renders take), and the lock is held
@@ -46,7 +47,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from anyio import from_thread
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from engine_worker import MODEL_ID, WHISPER_ID, Engine, Worker, WorkerFailed
@@ -213,7 +215,11 @@ def create_app(engine: Worker, settings: Settings, voices: Dict[str, Voice], *,
                 "recipes": {v.id: v.recipe.model_dump() for v in voices.values() if v.recipe}}
 
     @app.post("/tts")
-    def tts(req: TTSRequest) -> Dict[str, Any]:  # sync: FastAPI runs it in a thread
+    def tts(req: TTSRequest, request: Request) -> Dict[str, Any]:  # sync: run in a thread
+        def gone() -> None:  # the studio gave up waiting (its timeout): nobody to speak for
+            if from_thread.run(request.is_disconnected):
+                raise HTTPException(503, "the client is gone")
+
         voice = voices.get(req.voice or default)
         if voice is None:
             raise HTTPException(400, f"unknown voice {req.voice!r}; voices: {sorted(voices)}")
@@ -221,7 +227,9 @@ def create_app(engine: Worker, settings: Settings, voices: Dict[str, Voice], *,
             raise HTTPException(400, "nothing to say: the text is empty")
         with busy:
             try:
-                load()
+                gone()  # it may have waited behind another request
+                load()  # may wait long for RAM / VRAM / the GPU lock
+                gone()  # 2026-11-25: never synthesise for nobody ahead of a render
                 return synthesize(engine, settings, req.text, voice)
             except ValueError as e:
                 raise HTTPException(400, str(e)) from None

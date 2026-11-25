@@ -9,7 +9,7 @@ from src.agent.packet import SKIPPED
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
 from src.store import to_iso, utcnow
-from src.studio import alerts, downloader_service
+from src.studio import alerts, dm_picks, downloader_service
 
 from .conftest import LOCAL
 
@@ -132,6 +132,30 @@ async def test_stale_worker_heartbeat(store, cfg):
     assert await _ids(store, cfg) == ["worker"]
 
 
+async def test_a_worker_job_that_keeps_failing(store, cfg, monkeypatch):
+    from src import worker
+
+    outcome = RuntimeError("db gone")
+
+    async def run_due(*a, **kw):
+        if outcome:
+            raise outcome
+        return {}
+
+    monkeypatch.setattr(worker, "run_due", run_due)
+    await worker.cycle(None, store, cfg)
+    assert await _ids(store, cfg, kind="worker_job") == []  # one blip stays quiet
+    await worker.cycle(None, store, cfg)
+    (a,) = [a for a in await alerts.alerts(store, cfg, utcnow()) if a["kind"] == "worker_job"]
+    assert a["id"] == "worker_job:publish" and a["severity"] == "error"
+    assert "2 échecs" in a["detail"] and "db gone" in a["detail"]
+    worker.note_job(store, "dm_picks", utcnow(), "boom")  # a data job: the same state
+    worker.note_job(store, "dm_picks", utcnow(), "boom")
+    outcome = None
+    await worker.cycle(None, store, cfg)  # the publish pass works again
+    assert await _ids(store, cfg, kind="worker_job") == ["worker_job:dm_picks"]
+
+
 @pytest.mark.parametrize("status, ids", [
     ("up", []), ("not_configured", []), ("down", ["downloader"]), ("broken", ["downloader"]),
 ])
@@ -154,6 +178,11 @@ async def test_dm_picks_skipped_today(store, cfg):
     found = await alerts.alerts(store, cfg, utcnow())
     assert [a["id"] for a in found] == ["dm_skipped"]
     assert found[0]["detail"] == "Latest, from @friend: too long"
+
+
+async def test_a_dm_gap_warns_the_owner(store, cfg):
+    store.set_state(dm_picks.GAP_KEY, {"at": to_iso(utcnow()), "conversations": 1})
+    assert await _ids(store, cfg) == ["dm_gap"]
 
 
 async def test_ids_are_stable_and_newest_first(store, cfg):

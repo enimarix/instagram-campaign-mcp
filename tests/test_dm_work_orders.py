@@ -21,6 +21,7 @@ from src.learning import brief as B
 from src.store import MIGRATIONS, CampaignStore, to_iso
 from src.studio import dm_picks as D
 from src.studio import production, work_orders
+from src.studio.assets import transition
 
 from .conftest import API, LOCAL
 from .test_api_assets import _settings
@@ -318,6 +319,7 @@ async def test_analysed_path(store, settings, monkeypatch):
     with pytest.raises(srv.ToolError):
         await srv.analyse_work_order(oid, sid, "again")
     assert (await srv.list_work_orders("analysed"))["orders"][0]["id"] == oid
+    assert D.list_picks(store, None)[0]["status"] == "skipped"  # closed with its order
     assert "analyse_work_order" in srv.AGENT_TOOLS
 
 
@@ -325,6 +327,76 @@ def test_skipping_a_dm_order_skips_its_pick(store):
     oid = _dm_order(store, "recoupe-la")
     work_orders.skip_order(store, oid, "not our Reel: no recut of someone else's")
     assert D.list_picks(store, "skipped")[0]["skip_reason"].startswith("not our Reel")
+
+
+# --- the owner's cancel / skip stops the work; the order follows its video ---------------
+def _started(store):
+    """A DM order in production, with its idea's first video (rendering)."""
+    oid = _dm_order(store, "fais-en une vidéo")
+    idea = store.add_idea("motion", pillar="myths", hook_type="pov")
+    work_orders.start(store, oid, idea)
+    return oid, store.add_asset(idea["id"])["id"]
+
+
+def test_cancelling_a_dm_order_skips_its_pick(store):
+    oid = _dm_order(store)
+    work_orders.delete_order(store, oid)
+    [pick] = D.list_picks(store, None)
+    assert (pick["status"], pick["skip_reason"]) == ("skipped", work_orders.CANCELLED)
+    assert D.for_agent(store) == []  # never back as a pre-orders pick
+
+
+def test_skipping_a_pick_skips_its_open_order(store):
+    oid = _dm_order(store, "réagis")
+    pick_id = work_orders.get_order(store, oid)["pick_id"]
+    D.mark_pick(store, pick_id, "skipped", "pas pour nous")
+    got = work_orders.get_order(store, oid)
+    assert (got["status"], got["skip_reason"]) == ("skipped", "pas pour nous")
+    assert store._get("dm_picks", pick_id)["status"] == "skipped"
+
+
+def test_the_order_follows_its_video_to_the_feed_or_out(store):
+    kept, a = _started(store)
+    gone, b = _started(store)
+    for asset_id in (a, b):
+        transition(store, asset_id, "ready", actor="worker")
+    transition(store, a, "approved", actor="owner")  # never through submit_asset
+    transition(store, b, "archived", actor="owner")
+    got = work_orders.get_order(store, kept)
+    assert (got["status"], got["asset_id"]) == ("in_feed", a)
+    got = work_orders.get_order(store, gone)
+    assert got["status"] == "skipped" and "archivée" in got["skip_reason"]
+    assert store._get("dm_picks", got["pick_id"])["status"] == "skipped"
+
+
+def test_a_published_owner_video_posts_its_dm_pick(store):
+    oid, a = _started(store)  # an owner idea: no source to match the pick by
+    for to, actor in (("ready", "worker"), ("approved", "owner"), ("scheduled", "system"),
+                      ("published", "worker")):
+        transition(store, a, to, actor=actor)
+    pick_id = work_orders.get_order(store, oid)["pick_id"]
+    assert store._get("dm_picks", pick_id)["status"] == "posted"
+
+
+def test_recover_closes_orders_a_decided_video_left_in_production(store):
+    approved, a = _started(store)
+    gone, b = _started(store)
+    with store._tx() as c:  # decided before the orders followed their videos
+        c.execute("UPDATE assets SET status='approved' WHERE id=?", (a,))
+        c.execute("UPDATE assets SET status='archived' WHERE id=?", (b,))
+    work_orders.recover(store, T0)
+    got = work_orders.get_order(store, approved)
+    assert (got["status"], got["asset_id"]) == ("in_feed", a)
+    assert work_orders.get_order(store, gone)["status"] == "skipped"
+
+
+def test_restyle_keeps_a_long_owner_note_whole(store):
+    asset = store.add_asset(store.add_idea("motion", pillar="myths", hook_type="pov")["id"])
+    note = "garde la fin " * 35  # ~450 characters: the note alone fits
+    order = work_orders.restyle(store, asset["id"], None, note)
+    assert order["instruction"].endswith(note.strip())
+    with pytest.raises(ValueError, match="the note is at most 500"):
+        work_orders.restyle(store, asset["id"], None, "x" * 501)
 
 
 def test_packet_and_brief_carry_dm_orders(store, settings, tmp_path, monkeypatch):

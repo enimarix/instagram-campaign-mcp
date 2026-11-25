@@ -43,7 +43,8 @@ def build(source, **kw):
 
 def test_not_covered_mutes_adds_music_and_transcript_captions(store):
     r = build(_source(store), trim=(10, 40), music=True)
-    assert _ops(r) == ["trim", "mute_original", "reaction_collage", "voice_over", "music",
+    # the music before the voice-over: the voice's sidechain ducks the bed under it
+    assert _ops(r) == ["trim", "mute_original", "reaction_collage", "music", "voice_over",
                        "hook_text", "captions", "credit", "logo"]
     captions = next(op for op in r.ops if op.op == "captions")
     # Only the trimmed span, in the trimmed clip's seconds.

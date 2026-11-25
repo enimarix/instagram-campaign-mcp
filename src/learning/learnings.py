@@ -24,6 +24,7 @@ from ..store import CampaignStore, utcnow
 from ..studio.media import media_url
 from ..studio.production import MAX_LIST, compact_asset
 from ..taxonomy import load_taxonomy
+from .analytics import studio_side
 from .evidence import evaluate_learning, predicate
 
 Actor = Literal["agent", "owner"]
@@ -150,12 +151,24 @@ def mark_feedback_digested(store: CampaignStore, ids: Sequence[int]) -> Dict[str
 
 def list_revision_requests(store: CampaignStore) -> List[Dict[str, Any]]:
     """Assets the owner sent back (`revision_requested`) with their wanting-changes
-    comments, newest first: re-render each with render_motion(asset_id=...). A request whose
-    new version is still rendering is being handled: left out."""
+    comments, newest first, with the agent's earlier decision on it (156, None before one):
+    re-render each with render_motion(asset_id=...). A request being handled is left out:
+    its new version is rendering, or the remake its decision ordered (restyle, refilm) is
+    still scheduled or in production, or rendering or ready, unless the owner asked for
+    changes again since that decision (never two remakes of one video)."""
     with store._tx() as c:
         pending = {r[0] for r in c.execute(
             "SELECT parent_asset_id FROM assets WHERE status = 'rendering'"
             " AND parent_asset_id IS NOT NULL")}
+        pending |= {r[0] for r in c.execute(
+            "SELECT a.id FROM assets a JOIN work_orders w"
+            " ON w.id = json_extract(a.agent_decision, '$.order_id')"
+            " WHERE a.status = 'revision_requested'"
+            " AND (w.status IN ('scheduled', 'in_production') OR EXISTS (SELECT 1 FROM assets"
+            " b WHERE b.idea_id = w.idea_id AND b.status IN ('rendering', 'ready')))"
+            " AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.asset_id = a.id"
+            " AND f.wants_changes = 1"
+            " AND f.updated_at > json_extract(a.agent_decision, '$.at'))")}
     labels = _labels()
     out = []
     for asset in store.list_assets(status="revision_requested", limit=MAX_LIST):
@@ -164,7 +177,8 @@ def list_revision_requests(store: CampaignStore) -> List[Dict[str, Any]]:
         comments = [_comment(fb, labels) for fb in store.list_feedback(asset_id=asset["id"],
                                                                        limit=MAX_LIST)
                     if fb["wants_changes"]]
-        out.append({"asset": asset_context(store, asset), "comments": comments[::-1]})
+        out.append({"asset": asset_context(store, asset), "comments": comments[::-1],
+                    "earlier_decision": asset.get("agent_decision")})
     return out
 
 
@@ -181,10 +195,18 @@ def _check_confidence(confidence: str) -> None:
         raise ValueError(f"confidence {confidence!r} is not for the agent: use low or medium")
 
 
+def _sources(evidence: Sequence[Any]) -> int:
+    """How many distinct comments, posts, ad tests or work orders the evidence cites: two
+    metrics of one Reel are one Reel (an item naming none, e.g. the engine's, is its own)."""
+    keys = ("feedback_id", *ANCHORS)
+    return len({tuple(str(e.get(k)) for k in keys)
+                if any(e.get(k) is not None for k in keys) else repr(e) for e in evidence})
+
+
 def _check_caps(kind: str, confidence: str, evidence: Sequence[Any]) -> None:
-    """The agent's limits: no owner/high confidence; do/dont/medium need >= 2 items."""
+    """The agent's limits: no owner/high confidence; do/dont/medium need >= 2 sources."""
     _check_confidence(confidence)
-    if len(evidence) < 2 and (kind != "hypothesis" or confidence != "low"):
+    if _sources(evidence) < 2 and (kind != "hypothesis" or confidence != "low"):
         raise ValueError("one piece of evidence makes a low-confidence hypothesis only:"
                          " do/dont or medium needs at least 2")
 
@@ -195,10 +217,53 @@ def _check_scope(scope: Any) -> None:
     predicate(scope)  # ValueError: an unknown tag or value
 
 
-def _check_evidence(origin: str, evidence: Optional[Sequence[Any]]) -> None:
-    if evidence and (origin == "taste" or not all(isinstance(e, dict) and e for e in evidence)):
+# evidence dict key -> (table, column) it must exist in
+ANCHORS = {"media_id": ("insight_snapshots", "media_id"), "test_id": ("ad_tests", "id"),
+           "work_order_id": ("work_orders", "id")}
+
+
+def _check_evidence(store: CampaignStore, origin: str, evidence: Optional[Sequence[Any]],
+                    actor: Actor, known: Sequence[Any] = ()) -> List[Dict[str, Any]]:
+    """Audience/ads evidence dicts, duplicates (and ones already in `known`) dropped. The
+    agent's each name a post with insights (media_id), an ad test or a work order: KeyError
+    when it does not exist, so no claim rests on a number the studio never saw."""
+    if not evidence:
+        return []
+    if origin == "taste" or not all(isinstance(e, dict) and e for e in evidence):
         raise ValueError("evidence dicts are for audience/ads learnings;"
                          " taste cites evidence_feedback_ids")
+    out: List[Dict[str, Any]] = []
+    for e in evidence:
+        if e in out or e in known:
+            continue
+        out.append(e)
+        if actor == "owner":
+            continue
+        keys = [k for k in ANCHORS if e.get(k) is not None]
+        if not keys:
+            raise ValueError("each evidence dict names its media_id (a post with insights),"
+                             " test_id or work_order_id")
+        for k in keys:
+            table, col = ANCHORS[k]
+            with store._tx() as c:
+                if not c.execute(f"SELECT 1 FROM {table} WHERE {col} = ? LIMIT 1",
+                                 (str(e[k]) if k == "media_id" else e[k],)).fetchone():
+                    raise KeyError(f"no {k} {e[k]!r}: cite what the studio measured")
+    return out
+
+
+def _check_owner_scope(store: CampaignStore, scope: Any, feedback: Dict[str, Any]) -> None:
+    """An owner instruction the agent stores binds every later batch (mix, check_template):
+    its predicate must be what the commented video is (e.g. template=DialogStory on a
+    DialogStory video), not a wider rule the agent read into the comment."""
+    pred = predicate(scope)
+    if pred is None:
+        return
+    tags = studio_side(store, feedback["asset_id"])["tags"] or {}
+    if tags.get(pred[0]) != pred[1]:
+        raise ValueError(f"an owner instruction's scope must match the commented video:"
+                         f" video {feedback['asset_id']} has {pred[0]}={tags.get(pred[0])!r},"
+                         f" not {pred[1]!r}")
 
 
 def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
@@ -215,15 +280,18 @@ def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
     _one_of("kind", kind, KINDS)
     _one_of("origin", origin, ORIGINS)
     _check_scope(scope)
-    _check_evidence(origin, evidence)
-    items = _feedback_evidence(store, evidence_feedback_ids) + list(evidence or [])
+    items = (_feedback_evidence(store, evidence_feedback_ids)
+             + _check_evidence(store, origin, evidence, actor))
     note = None
     if owner_instruction:
         if origin != "taste" or kind not in ("do", "dont") or len(items) != 1:
             raise ValueError("an owner instruction is a taste do/dont citing exactly one"
                              " feedback id")
-        if not (store.get_feedback(items[0]["feedback_id"])["text"] or "").strip():
+        fb = store.get_feedback(items[0]["feedback_id"])
+        if not (fb["text"] or "").strip():
             raise ValueError("an owner instruction needs a comment with text, not chips only")
+        if actor != "owner":
+            _check_owner_scope(store, scope, fb)
         confidence = "owner"
     elif actor == "owner":
         confidence = _one_of("confidence", confidence or "owner", CONFIDENCES)
@@ -232,7 +300,7 @@ def add_learning(store: CampaignStore, statement: str, kind: str, origin: str,
             raise ValueError("cite evidence: feedback ids for taste, evidence dicts otherwise")
         confidence = confidence or "low"
         _check_confidence(confidence)  # owner/high are refused, never silently forced
-        if len(items) == 1 and (kind, confidence) != ("hypothesis", "low"):
+        if _sources(items) == 1 and (kind, confidence) != ("hypothesis", "low"):
             note = (f"one piece of evidence: stored as a low-confidence hypothesis"
                     f" (asked {kind}/{confidence})")
             kind, confidence = "hypothesis", "low"
@@ -277,8 +345,12 @@ def update_learning(store: CampaignStore, learning_id: int, *,
             e for e in _feedback_evidence(store, evidence_feedback_ids_to_add)
             if e["feedback_id"] not in known]
     if evidence_to_add:
-        _check_evidence(current["origin"], evidence_to_add)
-        fields["evidence"] = fields.get("evidence", current["evidence"]) + list(evidence_to_add)
+        fields["evidence"] = fields.get("evidence", current["evidence"]) + _check_evidence(
+            store, current["origin"], evidence_to_add, actor, known=current["evidence"])
+    if actor != "owner" and fields.keys() & {"statement", "kind", "scope"}:
+        # a changed claim is a new claim: it starts low unless re-rated within the caps,
+        # and the re-check below lifts it when the numbers back it
+        fields.setdefault("confidence", "low")
     if actor != "owner" and (kind is not None or confidence is not None):
         _check_caps(fields.get("kind", current["kind"]),
                     fields.get("confidence", current["confidence"]),
