@@ -207,28 +207,14 @@ class InstagramMCPSettings(BaseSettings):
         8.0, ge=0, description="A render or the voice model starts only with this much free RAM"
         " (GB; 0: no check)"
     )
-    guard_startup_grace_min: float = Field(
-        10.0, ge=0, description="Minutes after the studio starts before any render, agent run or"
-        " voice model load (0: none)"
-    )
-    guard_watchdog: bool = Field(
-        True, description="Pause the studio's heavy jobs while free RAM or the GPU temperature"
-        " is critical"
+    guard_log: bool = Field(
+        True, description="Write data/logs/guard.log (GPU heat, clock, RAM) while the GPU lock"
+        " is held"
     )
     # Heat budget (step 171: the laptop powered itself off under one long Blender render)
     guard_cpu_share: float = Field(
         0.5, gt=0, le=1, description="Share of the logical CPUs a heavy job may use (its"
         " affinity and thread counts)"
-    )
-    guard_suspend_temp_c: float = Field(
-        83.0, gt=0, description="GPU temperature (°C) that pauses heavy jobs to cool"
-    )
-    guard_resume_temp_c: float = Field(
-        74.0, gt=0, description="GPU temperature (°C) at or under which paused jobs resume"
-    )
-    guard_max_busy_min: float = Field(
-        15.0, ge=0, description="Minutes of continuous heavy work before a 3-minute cooling"
-        " pause (0: no duty cycle)"
     )
 
     # --- Housekeeping -----------------------------------------------------

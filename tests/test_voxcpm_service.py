@@ -231,7 +231,7 @@ def test_http_shape_default_voice_and_errors():
     http = TestClient(app)
     health = http.get("/health").json()
     assert not health["loaded"] and health["default_voice"] == "souriante"
-    assert health["worker_pid"] is None  # no model worker yet (166: the watchdog's target)
+    assert health["worker_pid"] is None  # no model worker yet
     assert health["recipes"]["souriante"]["tempo"] == 1.08  # what designed voices really use
     assert "conteur_grave" not in health["recipes"]
     assert health["voices"] == ["coach_energique", "conteur_grave", "douce_nuit",
@@ -444,12 +444,11 @@ def test_spawn_runs_the_server_on_the_url_port_with_hf_home(tmp_path):
     assert seen["cmd"] == ["py.exe", str(VENDOR / "server.py"), "--host", "127.0.0.1",
                            "--port", "8766", "--exit-with-pid", str(os.getpid())]
     assert seen["env"]["HF_HOME"] == "D:/hf" and seen["stdin"] == subprocess.DEVNULL
-    # step 166: low priority, the studio's RAM floor, no model load in its startup grace
+    # step 166: low priority and the studio's RAM floor (no startup grace since 2026-11-25)
     if sys.platform == "win32":
         assert seen["creationflags"] & guard.BELOW_NORMAL
     assert seen["env"]["GUARD_MIN_FREE_RAM_GB"] == str(cfg.guard_min_free_ram_gb)
-    grace_ends = float(seen["env"]["GUARD_NOT_BEFORE"]) - time.time()
-    assert abs(grace_ends - cfg.guard_startup_grace_min * 60) < 30
+    assert "GUARD_NOT_BEFORE" not in seen["env"]
     with pytest.raises(ValueError, match="port"):
         tts_service.command(_cfg(tts_http_url="http://127.0.0.1/tts"))
     assert tts_service.health_url(_cfg()) == "http://127.0.0.1:8766/health"
@@ -484,8 +483,8 @@ async def test_up_starts_the_voice_before_the_worker_and_stops_it(monkeypatch):
                 await asyncio.sleep(0)
             events.append("serve")
 
-    async def worker(settings, voice_pid):
-        events.append(("worker", voice_pid()))
+    async def worker(settings):
+        events.append("worker")
 
     async def ready(settings, proc):
         events.append("ready")
@@ -497,22 +496,10 @@ async def test_up_starts_the_voice_before_the_worker_and_stops_it(monkeypatch):
     monkeypatch.setattr("src.api.app.create_app", lambda s: None)
     monkeypatch.setattr(scheduler, "_worker", worker)
     monkeypatch.setattr(tts_service, "spawn", lambda s: events.append("spawn") or "proc")
-    monkeypatch.setattr(tts_service, "worker_pid", lambda s: 4242)  # the watchdog may stop it
     monkeypatch.setattr(tts_service, "wait_ready", ready)
     monkeypatch.setattr(scheduler.downloader_service, "stop", lambda p: events.append(("stop", p)))
     await scheduler._up("127.0.0.1", 0)
-    assert events == ["spawn", "ready", ("worker", 4242), "serve", ("stop", "proc")]
-
-
-@respx.mock
-def test_worker_pid_comes_from_health():
-    route = respx.get("http://127.0.0.1:8766/health")
-    route.respond(json={"loaded": True, "worker_pid": 77})
-    assert tts_service.worker_pid(_cfg()) == 77
-    route.respond(json={"loaded": False, "worker_pid": None})
-    assert tts_service.worker_pid(_cfg()) is None
-    route.side_effect = httpx.ConnectError("down")
-    assert tts_service.worker_pid(_cfg()) is None
+    assert events == ["spawn", "ready", "worker", "serve", ("stop", "proc")]
 
 
 def test_no_voice_service_without_tts_server_python():

@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from ..config import InstagramMCPSettings
-from ..studio import ffmpeg, guard, tts
+from ..studio import ffmpeg, tts
 
 USAGE = 'POST JSON {"text": "<one line>", "voice": "<id from voices.json>"}'
 
@@ -89,7 +89,7 @@ class VoiceDoor:
             audio = _wav(synth.audio_path)
         except tts.TTSError as e:
             return (503 if e.machine else 422), {"error": str(e)}
-        except (ffmpeg.FFmpegError, ffmpeg.FFmpegNotFound, guard.Stopped) as e:
+        except (ffmpeg.FFmpegError, ffmpeg.FFmpegNotFound) as e:
             return 503, {"error": f"the take could not be turned into WAV: {e}"}
         return 200, {
             "audio": base64.b64encode(audio).decode("ascii"),

@@ -8,6 +8,19 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-25: The resource guard no longer pauses or stops running jobs
+Gone: the watchdog's pause on low RAM and its kill after 3 min, the GPU heat pause (83/74 °C),
+the GPU power pause, the CPU throttling pause, the 15-min duty cycle, and the 10-min startup
+grace (settings GUARD_WATCHDOG, GUARD_STARTUP_GRACE_MIN, GUARD_SUSPEND_TEMP_C,
+GUARD_RESUME_TEMP_C, GUARD_MAX_BUSY_MIN removed). Kept: the GPU lock, one render at a time,
+the admission checks before a job starts (free RAM 8 GB, free VRAM, no game), the free disk
+check, low priority and half the CPUs. guard.log still gets a state line every 30 s while
+the GPU lock is held (GUARD_LOG). This reverses parts of 166 and 171 below.
+Reason: the owner capped the GPU clock at 1500 MHz, which keeps the card at 50–67 °C, and
+the RAM kill stopped the voice model mid-load (it takes ~8 GB while loading; paused, it can
+never give that back) and failed a render on 2026-11-25. Owner: « remove the startup grace,
+RAM pause and kill, duty cycle, GPU heat, GPU power, CPU throttle ».
+
 ## 2026-11-25: The website is in French (215)
 Every page, nav label, sheet, toast and error of the website is written in French, with
 « tu » and the French typography rule above (no-break space before ? ! : ; » and after «);

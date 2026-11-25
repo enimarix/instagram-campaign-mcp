@@ -68,7 +68,7 @@ def build(settings: InstagramMCPSettings) -> Dict[str, Any]:
                     (r.stdout or "") + (r.stderr or "")).strip()[-ERROR_TAIL:]
             elif not (new / "index.html").is_file():
                 error = "npm run build wrote no index.html"
-        except (OSError, subprocess.SubprocessError, guard.Stopped) as e:
+        except (OSError, subprocess.SubprocessError) as e:
             error = f"npm run build failed: {e}"
         if error is None:
             old = dist.with_name(dist.name + ".old")

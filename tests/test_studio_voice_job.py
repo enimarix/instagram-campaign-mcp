@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from src.store import to_iso, utcnow
-from src.studio import alerts, checks, guard, line, motion, render, sitcom, tts, voices
+from src.studio import alerts, checks, line, motion, render, sitcom, tts, voices
 from src.studio.ffmpeg import FFmpegError
 from src.studio.gpu_lock import LockTimeout
 from src.studio.tts import LineTiming, Synthesis, TTSError
@@ -199,7 +199,7 @@ def test_no_voice_ahead_while_paused(store, s, fake):
 
 def test_machine_failures_are_told_from_the_video_s():
     machine = [TTSError("x", status=503), TTSError("x", status=500),
-               TTSError("x", unreachable=True), LockTimeout("x"), guard.Stopped("x")]
+               TTSError("x", unreachable=True), LockTimeout("x")]
     video = [TTSError("x", status=400), TTSError("the TTS service returned no audio"),
              ValueError("bad props"), FFmpegError("ffmpeg exited with code 1"),
              RuntimeError("x")]

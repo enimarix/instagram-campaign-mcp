@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from ..config import InstagramMCPSettings, get_settings
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from . import ffmpeg, gpu_lock, guard, media, motion, music
+from . import ffmpeg, gpu_lock, media, motion, music
 from .assets import DESCRIPTION_CHARS, InvalidTransition, transition
 from .ffmpeg import MediaInfo, PathLike
 from .qc import run_qc
@@ -367,13 +367,12 @@ def run_job(store: CampaignStore, media_root: PathLike, job: Dict[str, Any], *,
 def machine_failure(e: BaseException) -> bool:
     """Whether the machine, not the video, made the job fail (step 197), the one place that
     decides it. Machine: the voice service down, not answering in time or answering HTTP 5xx
-    (TTSError.machine: 503 when its engine died, was stopped by the guard or is loading),
-    the GPU lock not had in time (gpu_lock.LockTimeout), the resource guard killing the
-    render for free RAM (guard.Stopped). Everything else is the video's: a QC fail, a bad
+    (TTSError.machine: 503 when its engine died or is loading),
+    the GPU lock not had in time (gpu_lock.LockTimeout). Everything else is the video's: a QC fail, a bad
     recipe or props (ValueError), a render tool's error, a TTS 4xx or unreadable answer."""
     if isinstance(e, TTSError):
         return e.machine
-    return isinstance(e, (gpu_lock.LockTimeout, guard.Stopped))
+    return isinstance(e, gpu_lock.LockTimeout)
 
 
 def machine_retries(job: Dict[str, Any]) -> int:

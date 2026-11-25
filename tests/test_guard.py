@@ -1,5 +1,6 @@
 """Step 166: the resource guard (src/studio/guard.py). Fakes everywhere, except dummy child
-processes started here (never a real render, never a process this test did not start)."""
+processes started here (never a real render). 2026-11-25: the watchdog and the startup grace
+are gone; guard.log stays."""
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from src.agent import schedule
-from src.studio import alerts, gpu_lock, guard
+from src.studio import gpu_lock, guard
 
 ROOT = Path(__file__).resolve().parents[1]
 # A venv's python.exe on Windows is a launcher that runs the real interpreter as its child:
@@ -51,61 +52,16 @@ def test_low_priority_keeps_the_callers_flags():
 def test_run_timeout_kills_the_child():
     with pytest.raises(subprocess.TimeoutExpired):
         guard.run([PY, "-c", "import time; time.sleep(60)"], timeout=0.5)
-    assert not guard._running
 
 
-def test_a_child_the_watchdog_killed_raises_stopped_with_the_reason():
-    def kill_when_started():
-        deadline = time.monotonic() + 30
-        while not guard._running and time.monotonic() < deadline:
-            time.sleep(0.02)
-        pid = next(iter(guard._running))
-        guard.KILLED[pid] = "stopped by the resource guard: free RAM 2.0 GB for 3 min"
-        guard._act(pid, "kill")
-
-    threading.Thread(target=kill_when_started, daemon=True).start()
-    with pytest.raises(guard.Stopped, match="free RAM 2.0 GB"):
-        guard.run([PY, "-c", "import time; time.sleep(60)"], timeout=60)
-    assert not guard.KILLED
-
-
-def test_suspend_and_resume_a_real_dummy_child(tmp_path):
-    out = tmp_path / "ticks"
-    child = subprocess.Popen([PY, "-c", (
-        "import sys, time\n"
-        "with open(sys.argv[1], 'a') as f:\n"
-        "    while True:\n"
-        "        f.write('.'); f.flush(); time.sleep(0.02)\n"), str(out)])
-    try:
-        deadline = time.monotonic() + 30
-        while (not out.exists() or out.stat().st_size < 3) and time.monotonic() < deadline:
-            time.sleep(0.05)
-        guard._act(child.pid, "suspend")
-        time.sleep(0.2)
-        paused = out.stat().st_size
-        time.sleep(0.4)
-        assert out.stat().st_size == paused  # suspended: no tick
-        guard._act(child.pid, "resume")
-        deadline = time.monotonic() + 10
-        while out.stat().st_size == paused and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert out.stat().st_size > paused
-    finally:
-        child.kill()
-        child.wait()
-
-
-def test_blockers_name_ram_vram_a_game_and_the_grace(monkeypatch):
+def test_blockers_name_ram_vram_and_a_game(monkeypatch):
     monkeypatch.setattr(guard, "free_ram_gb", lambda: 5.0)
     monkeypatch.setattr(guard, "gpu_status", lambda: {"free_vram_gb": 2.0, "temp_c": 60.0,
                                                       "util_pct": 97.0})
-    monkeypatch.setenv("GUARD_NOT_BEFORE", str(time.time() + 300))
     why = guard.blockers(3.0, 8.0)
-    assert [w.split(":")[0] for w in why] == ["waiting for the startup grace", "waiting for RAM",
-                                             "waiting for VRAM",
+    assert [w.split(":")[0] for w in why] == ["waiting for RAM", "waiting for VRAM",
                                              "waiting for a game (the GPU is busy)"]
-    assert why[3].endswith("97 %")
-    monkeypatch.setenv("GUARD_NOT_BEFORE", "0")
+    assert why[2].endswith("97 %")
     monkeypatch.setattr(guard, "free_ram_gb", lambda: 20.0)
     # 2026-11-23: an idle card is no game, whatever the desktop apps hold (Discord / dwm made
     # every voice wait forever through Windows' per-process counters); util unknown: no game
@@ -293,150 +249,32 @@ def test_studio_jobs_ask_for_their_vram(monkeypatch, settings):
     assert seen == [("Remotion Hello render", 1.5, 9.0)]
 
 
-# --- watchdog -----------------------------------------------------------------------------
+# --- guard.log ----------------------------------------------------------------------------
 
-class Box:
-    """Probes are (free RAM, GPU °C) or a dict of Watchdog._probe's keys."""
-
-    def __init__(self, *probes, log_path=None):
-        self.probes, self.now, self.acts = list(probes), 0.0, []
-        self.log_path = log_path
-
-    def probe(self, heavy):
-        r = self.probes.pop(0)
-        return r if isinstance(r, dict) else {"ram": r[0], "temp": r[1]}
-
-    def dog(self, children=(11, 12), theirs=(), holder="pid 7: Blender (dev)"):
-        dog = guard.Watchdog(root=1, probe=self.probe,
-                             children=lambda root, voice: list(children),
-                             holder=lambda root: (holder, list(theirs)),
-                             act=lambda pid, a: self.acts.append((a, pid)),
-                             clock=lambda: self.now, log_path=self.log_path or Path(
-                                 os.devnull))
-        dog.started = lambda pid: {11: 100, 12: 200, 31: 300}.get(pid)  # 12 newer than 11
-        dog._mark = lambda pid, why: self.acts.append(("mark", pid))
-        return dog
+def test_state_line_shows_the_machine_and_the_lock(monkeypatch):
+    monkeypatch.setattr(guard, "gpu_status", lambda: {
+        "temp_c": 71.0, "power_w": 98.0, "power_limit_w": 130.0, "util_pct": 96.0,
+        "used_vram_gb": 2.14, "total_vram_gb": 8.0, "clock_mhz": 1500.0})
+    monkeypatch.setattr(guard, "cpu_perf_limit", lambda: 100.0)
+    monkeypatch.setattr(guard, "free_ram_gb", lambda: 18.2)
+    assert guard.state_line("pid 7: Blender (dev)") == (
+        "GPU 71 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used, clock 1500 MHz | CPU limit 100 % | "
+        "RAM 18.2 GB free | lock pid 7: Blender (dev)")
 
 
-@pytest.fixture(autouse=True)
-def no_paused_time():
-    guard._paused[:] = [0.0, None]
-    yield
-    guard._paused[:] = [0.0, None]
-
-
-def test_watchdog_pauses_on_low_ram_and_resumes_when_it_is_back():
-    box = Box((2.5, 60.0), (4.0, 60.0), (6.5, 60.0))
-    dog = box.dog()
-    assert dog.tick() == ["paused 2 heavy job process(es) (free RAM 2.5 GB): free RAM 2.5 GB, "
-                          "GPU 60 °C"]
-    assert dog.tick() == []  # between the marks: stays paused
-    assert dog.tick() == ["resumed 2 paused process(es): free RAM 6.5 GB, GPU 60 °C"]
-    assert box.acts == [("suspend", 11), ("suspend", 12), ("resume", 11), ("resume", 12)]
-
-
-def test_watchdog_kills_the_newest_after_three_minutes_short_of_ram():
-    box = Box((2.0, 60.0), (4.0, 60.0), (4.0, 60.0), (7.0, 60.0))
-    dog = box.dog()
-    assert dog.tick()[0].startswith("paused 2")
-    box.now = guard.KILL_AFTER_S - 1
-    assert dog.tick() == []
-    box.now = guard.KILL_AFTER_S
-    assert dog.tick() == ["stopped process 12: free RAM 4.0 GB, GPU 60 °C for 3 min"]
-    assert dog.tick()[0].startswith("resumed 1")
-    assert box.acts[2:] == [("mark", 12), ("kill", 12), ("resume", 11)]
-
-
-def test_heat_pauses_at_83_resumes_at_74_and_never_kills():
-    box = Box((20.0, 82.0), (20.0, 83.0), (20.0, 80.0), (20.0, 75.0), (20.0, 74.0))
-    dog = box.dog()
-    assert dog.tick() == []  # under the limit
-    assert dog.tick()[0].startswith("paused 2 heavy job process(es) (GPU 83 °C)")
-    box.now = 3600  # an hour hot: still paused, nothing killed (paused, it cools)
-    assert dog.tick() == [] and dog.tick() == []
-    assert dog.tick()[0].startswith("resumed 2")
-    assert [a for a, _ in box.acts] == ["suspend", "suspend", "resume", "resume"]
-
-
-def test_a_minute_at_the_gpu_power_limit_cools_three_minutes():
-    hot = {"ram": 20.0, "temp": 70.0, "watts": 125.0, "limit": 130.0, "util": 99.0}
-    box = Box(hot, {**hot, "watts": 100.0}, hot, hot, {**hot, "watts": 20.0},
-              {**hot, "watts": 20.0})
-    dog = box.dog()
-    assert dog.tick() == []
-    box.now = 30
-    assert dog.tick() == []  # dipped under 95 %: the minute starts again
-    box.now = 40
-    assert dog.tick() == []
-    box.now = 100
-    assert dog.tick() == ["paused 2 heavy job process(es) (GPU at 96% of its 130 W limit for "
-                          "60 s; cooling 3 min): free RAM 20.0 GB, GPU 70 °C"]
-    box.now = 100 + guard.COOL_S - 1
-    assert dog.tick() == []  # cooling
-    box.now = 100 + guard.COOL_S
-    assert dog.tick()[0].startswith("resumed 2")
-
-
-def test_a_throttled_cpu_for_a_minute_cools_three_minutes():
-    hot = {"ram": 20.0, "temp": 60.0, "perf": 62.0, "util": 50.0}
-    box = Box(hot, hot)
-    dog = box.dog()
-    assert dog.tick() == []
-    box.now = guard.SUSTAIN_S
-    assert dog.tick()[0].startswith("paused 2 heavy job process(es) (CPU held back to 62 % "
-                                    "(heat) for 60 s; cooling 3 min)")
-
-
-def test_duty_cycle_cools_after_fifteen_busy_minutes():
-    busy = {"ram": 20.0, "temp": 70.0, "util": 97.0}
-    idle = {**busy, "util": 2.0}
-    box = Box(busy, busy, busy, busy, busy, busy, idle, idle, busy)
-    dog = box.dog()
-    assert dog.max_busy_s == 15 * 60  # GUARD_MAX_BUSY_MIN default
-    for t in (0, 600, 899):
-        box.now = t
-        assert dog.tick() == []
-    box.now = 900
-    assert "15 min of heavy work; cooling 3 min" in dog.tick()[0]
-    box.now = 900 + guard.COOL_S
-    assert dog.tick()[0].startswith("resumed 2")
-    box.now = 1100
-    assert dog.tick() == [] and dog.busy_since == 1100  # counting afresh
-    box.now = 1200  # an idle GPU (a loaded voice model waiting) is no heavy work ...
-    assert dog.tick() == []
-    box.now = 1200 + guard.COOL_S  # ... and a rest as long as a cooling pause resets the count
-    assert dog.tick() == [] and dog.busy_since is None
-    box.now = 1500
-    assert dog.tick() == [] and dog.busy_since == 1500
-
-
-def test_watchdog_guards_the_gpu_lock_holders_processes():
-    box = Box((2.0, 60.0), (9.0, 60.0))
-    dog = box.dog(children=(), theirs=(31,))
-    assert dog.tick()[0].startswith("paused 1")
-    assert dog.tick()[0].startswith("resumed 1")
-    assert box.acts == [("suspend", 31), ("resume", 31)]
-
-
-def test_guard_log_has_a_line_per_action_and_every_30_s(tmp_path):
-    log = tmp_path / "logs" / "guard.log"
-    probe = {"ram": 18.2, "temp": 71.0, "watts": 98.0, "limit": 130.0, "util": 96.0,
-             "perf": 100.0, "vram": 2.14, "vram_total": 8.0, "clock": 1500.0}
-    box = Box(probe, probe, probe, {**probe, "temp": 84.0}, log_path=log)
-    dog = box.dog(children=(11,))
-    for t in (0, 10, 30, 31):
-        box.now = t
-        dog.tick()
+async def test_log_loop_writes_only_while_the_lock_is_held(monkeypatch, tmp_path):
+    log, holders = tmp_path / "logs" / "guard.log", ["pid 7: Blender (dev)", None]
+    monkeypatch.setattr(gpu_lock, "held_by", lambda path=None: holders.pop(0) if holders else None)
+    monkeypatch.setattr(guard, "state_line", lambda by: f"state | lock {by}")
+    task = asyncio.create_task(guard.log_loop(every_s=0.01, log_path=log))
+    deadline = time.monotonic() + 5
+    while holders and time.monotonic() < deadline:
+        await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
     lines = log.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 3  # 0 s, 30 s, and the pause at 31 s
-    assert lines[0].endswith("GPU 71 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used, clock 1500 MHz | "
-                             "CPU limit 100 % | "
-                             "RAM 18.2 GB free | lock pid 7: Blender (dev) | heavy 1, paused 0")
-    assert lines[2].endswith("GPU 84 °C 98/130 W 96 % | VRAM 2.1/8.0 GB used, clock 1500 MHz | "
-                             "CPU limit 100 % | "
-                             "RAM 18.2 GB free | "
-                             "lock pid 7: Blender (dev) | heavy 1, paused 1 | paused 1 heavy "
-                             "job process(es) (GPU 84 °C): free RAM 18.2 GB, GPU 84 °C")
+    assert len(lines) == 1 and lines[0].endswith("state | lock pid 7: Blender (dev)")
 
 
 def test_guard_log_rotates(tmp_path, monkeypatch):
@@ -446,20 +284,6 @@ def test_guard_log_rotates(tmp_path, monkeypatch):
     guard.write_log(log, "b")
     assert log.read_text(encoding="utf-8").endswith(" b\n")
     assert "a" * 20 in log.with_name("guard.log.1").read_text(encoding="utf-8")
-
-
-def test_holder_tree_is_under_the_lock_holder_only(monkeypatch):
-    born = {7: 10, 70: 20, 71: 21, 72: 22, 73: 5, 100: 1, 200: 30}
-    monkeypatch.setattr("src.agent.proc.started", born.get)
-    table = [(7, 1, "python"),  # a dev script holding the lock
-             (70, 7, "blender"), (71, 70, "python"), (72, 7, "conhost"),
-             (73, 7, "python"),  # older than the script: its real parent died
-             (100, 1, "python"), (200, 100, "blender")]  # the studio and its own render
-    monkeypatch.setattr(gpu_lock, "held_by", lambda path=None: "pid 7: Blender (dev) x")
-    assert guard.holder_tree(100, table) == ("pid 7: Blender (dev) x", [70, 71])
-    assert guard.holder_tree(7, table) == ("pid 7: Blender (dev) x", [])  # the studio: covered
-    monkeypatch.setattr(gpu_lock, "held_by", lambda path=None: None)  # free: a stale .holder
-    assert guard.holder_tree(100, table) == (None, [])
 
 
 def test_held_by_reads_the_lock_not_the_stale_holder_file(tmp_path, monkeypatch):
@@ -537,92 +361,7 @@ def test_tools_get_thread_counts_to_match(monkeypatch, tmp_path):
     assert motion._concurrency() == 2
 
 
-def test_run_timeout_skips_the_time_the_watchdog_kept_jobs_paused():
-    guard._paused[:] = [0.0, time.monotonic()]  # a pause running now
-    out = guard.run([PY, "-c", "import time; time.sleep(1.5); print('done')"],
-                    capture_output=True, text=True, timeout=0.5)
-    assert out.stdout.strip() == "done"
-
-
-def test_watchdog_leaves_processes_alone_when_all_is_well():
-    box = Box((None, None), (10.0, 70.0))
-    dog = box.dog()
-    assert dog.tick() == [] and dog.tick() == [] and box.acts == []
-
-
-def test_watchdog_never_resumes_a_reused_pid():
-    box = Box((2.0, None), (9.0, None))
-    dog = box.dog(children=(11,))
-    dog.tick()
-    dog.started = lambda pid: 999  # 11 died and another process has the pid now
-    assert dog.tick() == [] and box.acts == [("suspend", 11)]
-
-
-def test_heavy_children_are_renderers_under_us_and_the_voice_worker(monkeypatch):
-    born = {100: 50, 200: 60, 201: 60, 202: 60, 300: 70, 400: 80, 301: 85, 500: 90, 600: 10}
-    monkeypatch.setattr("src.agent.proc.started", born.get)
-    table = [(100, 1, "python"),  # the studio (root)
-             (200, 100, "blender"), (201, 100, "python"),  # a render, the voice service
-             (300, 201, "python"),  # its model worker
-             (202, 100, "python"), (400, 202, "claude"), (301, 400, "python"),  # an agent run
-             (500, 301, "blender"),  # its MCP server's preview
-             (600, 100, "node"),  # older than the studio: its real parent died, not ours
-             (700, 1, "blender"),  # the owner's own Blender
-             (210, 100, "node"), (211, 210, "node")]  # the Reel downloader (no run() child)
-    born.update({210: 60, 211: 61})
-    assert sorted(guard.heavy_children(100, 300, table, ours={200})) == [200, 300, 500]
-    assert sorted(guard.heavy_children(100, None, table, ours={200})) == [200, 500]  # unloaded
-
-
-def test_process_table_has_this_process():
-    table = {pid: (ppid, name) for pid, ppid, name in guard.processes()}
-    if not table:
-        pytest.skip("no process table on this OS")
-    assert any(n in table[os.getpid()][1].lower() for n in ("python", "pytest"))  # Linux CI: "pytest"
-
-
-async def test_watchdog_loop_raises_an_alert_and_resumes_on_stop(store):
-    class Dog:
-        resumed = 0
-
-        def tick(self):
-            return ["paused 1 heavy job process(es): free RAM 2.0 GB"]
-
-        def resume_all(self):
-            self.resumed += 1
-
-    dog = Dog()
-    task = asyncio.create_task(guard.watchdog_loop(store, every_s=3600, dog=dog))
-    deadline = time.monotonic() + 5
-    while not store.get_state(alerts.RAISED_KEY) and time.monotonic() < deadline:
-        await asyncio.sleep(0.01)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    raised = store.get_state(alerts.RAISED_KEY)["guard"]
-    assert raised["title"] == "The resource guard stepped in" and "free RAM" in raised["detail"]
-    assert dog.resumed == 1
-
-
-# --- startup grace and catch-up -----------------------------------------------------------
-
-async def test_no_render_or_agent_run_in_the_startup_grace(monkeypatch, settings, capsys):
-    from src import scheduler
-
-    started = []
-
-    async def loop(store, settings):
-        started.append("ran")
-
-    monkeypatch.setattr(scheduler.worker, "render_loop", loop)
-    monkeypatch.setattr(schedule, "catch_up_loop", loop)
-    s = settings.model_copy(update={"guard_startup_grace_min": 1.0,
-                                    "instagram_access_token": None})
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(scheduler._worker(s), 0.3)
-    assert started == [] and "startup grace: no render or agent run for 1 min" in \
-        capsys.readouterr().err
-
+# --- catch-up ------------------------------------------------------------------------------
 
 def test_catch_up_starts_one_run_then_waits_for_it_and_its_renders(store, settings, tmp_path,
                                                                    monkeypatch):

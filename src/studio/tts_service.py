@@ -3,7 +3,7 @@ The local VoxCPM2 voice service (step 038, vendor/voxcpm_tts) as a child of `ig-
 when TTS_SERVER_PYTHON is set: spawn() on TTS_HTTP_URL's port (loopback), wait_ready() before
 the worker starts, downloader_service.stop() on exit. The child watches this process's pid and
 exits when it is gone, so a killed studio leaves no process holding the GPU. It runs at low
-priority and loads no model before the startup grace ends (step 166).
+priority (step 166).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List
 from urllib.parse import urlsplit
 
 import httpx
@@ -47,10 +47,9 @@ def spawn(settings: InstagramMCPSettings, log_path: Path = LOG_PATH,
         env["HF_HOME"] = settings.tts_server_hf_home
     if settings.gpu_lock_path:  # the same GPU lock as this studio's renders (.env is ours)
         env["GPU_LOCK_PATH"] = settings.gpu_lock_path
-    # the studio's resource guard (166): its RAM floor, and no model load in the startup grace
+    # the studio's resource guard (166): its RAM floor
     env["GUARD_MIN_FREE_RAM_GB"] = str(settings.guard_min_free_ram_gb)
     env["GUARD_CPU_SHARE"] = str(settings.guard_cpu_share)  # its CPUs and torch threads (171)
-    env["GUARD_NOT_BEFORE"] = str(time.time() + settings.guard_startup_grace_min * 60)
     cmd = command(settings)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab") as log:  # the child keeps its own handle
@@ -73,13 +72,3 @@ async def wait_ready(settings: InstagramMCPSettings, proc: subprocess.Popen, *,
                 pass
             await asyncio.sleep(poll_s)
     return False
-
-
-def worker_pid(settings: InstagramMCPSettings) -> Optional[int]:
-    """The voice model worker's pid while its models are loaded, else None (the resource
-    guard's watchdog may pause or stop it, never the service itself: step 166)."""
-    try:
-        pid = httpx.get(health_url(settings), timeout=2, trust_env=False).json()["worker_pid"]
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
-        return None
-    return pid if isinstance(pid, int) else None

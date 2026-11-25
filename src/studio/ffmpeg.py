@@ -179,7 +179,7 @@ def run(args: Sequence[PathLike], *, timeout_s: float,
     try:
         # On timeout subprocess.run kills the child and waits for it (no orphan:
         # ffmpeg spawns no children of its own).
-        # Low priority (166): guard.Stopped when the resource guard killed it.
+        # Low priority (166).
         proc = guard.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.PIPE, timeout=timeout_s)
         returncode, stderr = proc.returncode, _decode(proc.stderr)
