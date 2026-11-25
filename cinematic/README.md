@@ -72,26 +72,22 @@ for every shot not cached yet). Example: `shotlists/proof.json`.
   (nvidia-smi, minus the baseline) and the scene's texture MB (`<out>/measure.json`, the
   still beside it). Proof dinner of 7: 2.29 GB -> 1.20 GB, textures 601 -> 121 MB.
 
-## The physique look (« Physique Scan », owner order 75)
+## The physique engine (« Physique Scan », owner order 75)
 
-Troupe shots with `look: blueprint` (`engine/bands.py`), the template `PhysiqueScan`
-(`src/studio/physique.py` turns its timed shots into the shot list):
+`engine/anatomy.py`, standalone (no troupe), fed by `src/studio/physique.py` from the template
+`PhysiqueScan`'s timed shots:
 
-- The room, its walls and tall decor go; the world is cream to the camera and lights nothing
-  (the key light alone shapes the toon ramps), the floor a drafting grid with orange measuring
-  rings round each actor; the props are cream with an ink edge (inverted hull).
-- The actors are statues: a three-tone navy toon skin, orange shorts (and a sports top on a
-  woman) drawn by the shader from the body's rest height (`rest_z`, arms excluded), hair and
-  eyes in ink. Only the cast entries tagged `physique` (`hero`, `hero_b`, `hero_f`, no clothes
-  mesh) play here, and only here (`troupe.py` refuses them elsewhere).
-- `bands` (up to 4 a shot): `{who, on (chest, abs, arm_r/l, forearm_r/l, thigh_r/l), text,
-  tone (light, dark, orange), turns, slide}`. A band is an open cylinder round the part's bone
-  (its girth from the vertices weighted to it, plus 2.5 cm) with ink rims and tape ticks, and
-  the type: the text mesh repeated round it, wrapped onto the cylinder (letters stand on the
-  band, face out, read left to right). Its ride along the bone is baked each frame in world
-  space; it rolls `turns` times over the shot.
-- Cameras: `orbit` (round the part, pushing in), and `close` / `dolly` with `part` aim at a
-  muscle instead of the head.
+- A muscle belly of 40 fascicles (tubes, each its own shade of wet subsurface red with fine
+  fibres), a flat tendon below, veins winding up it, cut open near the top so the bundles show
+  (a voronoi section). A seamless backdrop and three area lights; colours from a palette
+  (`lab`, `neon`, `candy`), the flat ones lifted to stay true under the exposure.
+- `bands`: `{text, tone (light, dark, accent, pop), path (stops along the belly), squeeze (one
+  per stop), turns, tilt, lag, cinch}`. A band is an open cylinder with rims and tape ticks,
+  its type a text mesh wrapped round it; between two stops it holds, grips, lets go, whooshes
+  (the leading band first), clamps down at the next stop, rocking and leaning as it flies. A
+  Geometry Nodes Set Position pinches the flesh under each band and bulges it between them;
+  the band's radius rides that same pinch frame by frame.
+- Cameras: `orbit`, `push`, `top` (down into the cut), `glide` (along it).
 
 | Piece | Source | License |
 |---|---|---|

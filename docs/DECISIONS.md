@@ -1149,3 +1149,19 @@ The Reel's song cannot be reused (a famous track, rights rules): the template ke
 beds, and an Instagram track is not attached (music.apply needs a voice).
 Reason: owner 2026-11-25 (« reopen and build »); render cost like the sitcom's (8 shots of
 1 s: ~9 min, then cached).
+
+## 2026-11-25: « Physique Scan » rebuilt round a 3D muscle (the statue dropped)
+The owner rejected the first build: « there is only one band », « there is a 3D model of a
+person, and I said 3D objects [...] a super detailed 3D mesh object of a muscle », « the colors
+are really bad. Have some more freedom with the colors », « a lot of bands going over it and
+maybe, squeezing it », then « the band, the tilt, and whoosh, and go up and down, and do
+different squeezes on different parts ». Replaces the entry above's engine: the troupe's
+`blueprint` look, bands.py and the three statues are gone (troupe, cast and sitcom back as they
+were). `cinematic/engine/anatomy.py` (standalone, ~1.5 s a frame) draws a muscle of 40 fibre
+bundles cut open, a tendon and veins, in a palette per scene (lab, neon, candy), with 2-6 bands
+per scene that pull tight, rock, whoosh between stops (up or down together, the leading band
+first, never through each other) and squeeze the flesh under them by Geometry Nodes, each stop
+its own grip. The template's scenes are now {palette, bands [{text, tone, squeeze}], label,
+beats, camera (orbit, push, top, glide)}; a whoosh plays as the bands fly. Cached per shot under
+media/physique.
+Reason: owner review in chat 2026-11-25.

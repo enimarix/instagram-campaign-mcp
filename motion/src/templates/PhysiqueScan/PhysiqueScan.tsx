@@ -1,9 +1,9 @@
-// PhysiqueScan (owner order 75): « Physique Scan ». The troupe's blueprint shots (a jacked statue
-// on a cream drafting grid, bands of macro and calorie text wrapping round his muscles and
-// rolling: src/studio/physique.py, cinematic/engine/bands.py) cut on the bed's beat, under the
-// hook slammed in one word per beat, a measure readout popping in as each scene opens, a small
-// push on every beat and a swish on every cut. No voice: the words are on the bands. Ends on
-// the physique end card.
+// PhysiqueScan (owner order 75): « Physique Scan ». The muscle's shots (a detailed muscle cut
+// open, bands of macro and calorie text gripping it, rocking, whooshing up and down and
+// squeezing it: src/studio/physique.py, cinematic/engine/anatomy.py) cut on the bed's beat, under
+// the hook slammed in one word per beat, a measure readout popping in as each scene opens, a
+// small push on every beat, a whoosh as the bands fly and a swish on each new scene. No voice:
+// the words are on the bands. Ends on the physique end card.
 import { useMemo } from "react";
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { MusicBed } from "../../components/MusicBed";
@@ -12,7 +12,7 @@ import { Sfx } from "../../components/Sfx";
 import { EndCard } from "../../endcards/EndCard";
 import { Plate } from "../SitcomSkit/kit";
 import { Hook, PHYSIQUE, Readout } from "./kit";
-import { BEDS, beatAt, layoutOf, type PhysiqueProps } from "./schema";
+import { BEDS, beatAt, layoutOf, WHOOSH, type PhysiqueProps } from "./schema";
 
 export const PhysiqueScan = (props: PhysiqueProps) => {
   const frame = useCurrentFrame();
@@ -45,9 +45,10 @@ export const PhysiqueScan = (props: PhysiqueProps) => {
           <EndCard style="physique" tagline={props.outro} accent={props.accent} address={props.address} pixelate={1} />
         </Sequence>
       )}
-      {shots.slice(1).map((s, i) => (
-        <Sfx key={`w${i}`} id="sfx-swish" at={at(s.start_s)} db={s.shot === 0 ? 0 : -6} />
-      ))}
+      {shots.map((s, i) =>
+        // the bands fly about a third into each shot (cinematic/engine/anatomy.py state); a new scene swishes in
+        [<Sfx key={`b${i}`} id="sfx-swish" at={at(s.start_s + WHOOSH * (s.end_s - s.start_s))} db={-5} />,
+         i > 0 && s.shot === 0 ? <Sfx key={`w${i}`} id="sfx-swish" at={at(s.start_s)} db={0} /> : null])}
       <MusicBed id={props.music} />
       <SafeZoneGuide show={!!props.safeZone} />
     </AbsoluteFill>

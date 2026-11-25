@@ -1,21 +1,21 @@
 // PhysiqueScan (owner order 75): schema, the shots on the bed's beat (what src/studio/physique.py
-// renders in the blueprint look), the cameras coming round, the hook and the end card.
+// renders with cinematic/engine/anatomy.py), the cameras coming round, the hook and the end card.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { CAMEOS, CARD_S, END_CARD_STYLES } from "../src/endcards/schema.ts";
-import { BEDS, beatAt, coverOf, HOOK_MIN_S, layoutOf, physiqueSchema, SHOT_BEATS } from "../src/templates/PhysiqueScan/schema.ts";
+import { BEDS, beatAt, CAMERAS, coverOf, HOOK_MIN_S, layoutOf, physiqueSchema, SHOT_BEATS } from "../src/templates/PhysiqueScan/schema.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
 const EXAMPLE = physiqueSchema.parse(read("physiquescan"));
 const ok = (p: object) => physiqueSchema.safeParse(p).success;
 
-test("the example parses: a statue, 2-6 scenes of 1-3 bands, no voice, the card after the shots", () => {
+test("the example parses: 2-6 scenes of 2-6 bands, no voice, the card after the shots", () => {
   const { shots, cardStart, total } = layoutOf(EXAMPLE);
   assert.ok(total - cardStart >= CARD_S.physique);
   assert.equal(shots[0].start_s, 0);
   assert.ok(!("voice" in EXAMPLE));
-  assert.ok(EXAMPLE.scenes.every((s) => s.bands.length >= 1 && s.bands.length <= 3));
+  assert.ok(EXAMPLE.scenes.every((s) => s.bands.length >= 2 && s.bands.length <= 6));
 });
 
 test("every cut falls on the bed's beat, shots run end to end, SHOT_BEATS each at most", () => {
@@ -32,12 +32,11 @@ test("every cut falls on the bed's beat, shots run end to end, SHOT_BEATS each a
   }
 });
 
-test("a scene's cameras never repeat back to back, and a close-up looks at one of its bands", () => {
-  const p = physiqueSchema.parse({ ...read("physiquescan"), scenes: read("physiquescan").scenes.map((s: object) => ({ ...s, beats: 8, camera: "close" })) });
-  const { shots } = layoutOf(p);
-  for (const [i, s] of shots.entries()) {
-    if (i && shots[i - 1].scene === s.scene) assert.notEqual(s.camera, shots[i - 1].camera);
-    if (s.camera === "close") assert.ok(p.scenes[s.scene].bands.some((b) => b.on === s.part));
+test("a scene's cameras never repeat back to back", () => {
+  for (const camera of CAMERAS) {
+    const p = physiqueSchema.parse({ ...read("physiquescan"), scenes: read("physiquescan").scenes.map((s: object) => ({ ...s, beats: 8, camera })) });
+    const { shots } = layoutOf(p);
+    for (const [i, s] of shots.entries()) if (i && shots[i - 1].scene === s.scene) assert.notEqual(s.camera, shots[i - 1].camera);
   }
 });
 
@@ -48,13 +47,19 @@ test("the hook is 5 words at most and stays readable; the cover shows it", () =>
   assert.ok(coverOf(EXAMPLE, 30) / 30 < hookOut);
 });
 
-test("bands ride the statue's parts only, with a short text; scenes 2-6", () => {
+test("bands: 2-6 a scene, a short text, a palette tone, a squeeze in 0..1; scenes 2-6; known palettes", () => {
   const base = read("physiquescan");
   const scene = base.scenes[0];
-  assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [{ on: "head", text: "x" }] }, scene] }));
-  assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [{ on: "chest", text: "x".repeat(29) }] }, scene] }));
+  const band = { text: "x" };
+  assert.ok(ok({ ...base, scenes: [{ ...scene, bands: [band, band] }, scene] }));
+  assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [band] }, scene] }));
+  assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: Array(7).fill(band) }, scene] }));
+  assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [band, { text: "x".repeat(29) }] }, scene] }));
+  assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [band, { text: "x", tone: "orange" }] }, scene] }));
+  assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [band, { text: "x", squeeze: 1.5 }] }, scene] }));
+  assert.ok(!ok({ ...base, scenes: [{ ...scene, palette: "sepia" }, scene] }));
   assert.ok(!ok({ ...base, scenes: [scene] }));
-  assert.ok(!ok({ ...base, hero: "dad" }));
+  assert.ok(!ok({ ...base, hero: "hero" }));
 });
 
 test("the physique end card is a card style of its own", () => {

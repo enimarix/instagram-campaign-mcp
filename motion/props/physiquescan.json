@@ -1,77 +1,86 @@
 {
   "hook": "Ce physique ? Des maths.",
-  "hero": "hero",
   "scenes": [
     {
-      "set": "gym",
-      "action": "curl",
+      "palette": "lab",
       "label": "+180 G",
       "beats": 4,
       "camera": "orbit",
       "bands": [
         {
-          "on": "arm_r",
-          "text": "Protéines 180 g",
-          "tone": "light"
-        },
-        {
-          "on": "chest",
-          "text": "2 800 kcal",
-          "tone": "dark"
-        }
-      ]
-    },
-    {
-      "set": "gym",
-      "action": "bar_strain",
-      "beats": 4,
-      "bands": [
-        {
-          "on": "chest",
-          "text": "Glucides 300 g",
-          "tone": "orange"
-        },
-        {
-          "on": "abs",
-          "text": "Lipides 70 g",
-          "tone": "light"
-        }
-      ]
-    },
-    {
-      "set": "dinner",
-      "action": "fork_up",
-      "label": "520 KCAL",
-      "beats": 4,
-      "camera": "orbit",
-      "bands": [
-        {
-          "on": "arm_l",
-          "text": "P 45 g · G 60 g",
-          "tone": "light"
-        },
-        {
-          "on": "chest",
-          "text": "520 kcal",
-          "tone": "dark"
-        }
-      ]
-    },
-    {
-      "set": "gym",
-      "action": "cheer",
-      "beats": 4,
-      "camera": "dolly",
-      "bands": [
-        {
-          "on": "chest",
-          "text": "Calculé pour toi",
-          "tone": "dark"
-        },
-        {
-          "on": "abs",
           "text": "macroBody",
-          "tone": "orange"
+          "tone": "dark",
+          "squeeze": 0.6
+        },
+        {
+          "text": "Protéines 180 g",
+          "tone": "accent",
+          "squeeze": 1
+        },
+        {
+          "text": "2 800 kcal",
+          "tone": "light",
+          "squeeze": 0.8
+        },
+        {
+          "text": "Glucides 300 g",
+          "tone": "pop",
+          "squeeze": 0.9
+        },
+        {
+          "text": "Lipides 70 g",
+          "tone": "dark",
+          "squeeze": 0.5
+        }
+      ]
+    },
+    {
+      "palette": "neon",
+      "label": "300 G",
+      "beats": 4,
+      "bands": [
+        {
+          "text": "Glucides 300 g",
+          "tone": "light",
+          "squeeze": 1
+        },
+        {
+          "text": "Avant l'effort",
+          "tone": "accent",
+          "squeeze": 0.7
+        },
+        {
+          "text": "Riz · patates · avoine",
+          "tone": "pop",
+          "squeeze": 0.8
+        }
+      ]
+    },
+    {
+      "palette": "candy",
+      "label": "2 800 KCAL",
+      "beats": 4,
+      "camera": "push",
+      "bands": [
+        {
+          "text": "2 800 kcal",
+          "tone": "dark",
+          "squeeze": 1
+        },
+        {
+          "text": "Calculé pour toi",
+          "tone": "accent",
+          "squeeze": 0.6
+        },
+        {
+          "text": "Chaque jour",
+          "tone": "light",
+          "squeeze": 0.8
+        },
+        {
+          "text": "macroBody",
+          "tone": "pop",
+          "squeeze": 0.9
         }
       ]
     }

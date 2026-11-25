@@ -136,12 +136,10 @@ RAW = json.loads((cinematic.ROOT / "cast.json").read_text("utf-8"))
 def test_every_logo_garment_is_repainted_and_no_two_characters_share_a_top():
     garments = RAW["_garments"]
     for who, look in cinematic.CAST.items():
-        if not look["clothes"]:  # a physique statue: drawn, it wears nothing to repaint
-            continue
         garment = Path(look["clothes"][0]).stem
         if garment in garments:  # the MakeHuman tees and their shared prints
             assert look.get("top"), f"{who} wears {garment} as is"
-    tops = [(c["clothes"][0], tuple(c.get("top") or ())) for c in cinematic.CAST.values() if c["clothes"]]
+    tops = [(c["clothes"][0], tuple(c.get("top") or ())) for c in cinematic.CAST.values()]
     assert len(set(tops)) == len(tops)
     for name, spec in garments.items():
         assert spec["mode"] in ("flat", "pattern")
@@ -170,8 +168,7 @@ def test_the_engine_dresses_every_actor():
 def test_bubble_names_match_the_troupe():
     ts = (motion.MOTION_DIR / "src" / "templates" / "SitcomSkit" / "cast.ts").read_text("utf-8")
     names = dict(re.findall(r"^  (\w+): \"([^\"]+)\",$", ts, re.M))
-    assert names == {who: c["label"] for who, c in cinematic.CAST.items()
-                     if "physique" not in c.get("tags", ())}  # the statues never act in a skit
+    assert names == {who: c["label"] for who, c in cinematic.CAST.items()}
 
 
 # --- voices --------------------------------------------------------------------------------

@@ -488,19 +488,19 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    itself: never describe cameras. Narrate with an energetic « tu » voice from `voices.json`
    (`energique_femme` when it is listed, else the closest one listed); the characters' voices
    are picked by the studio.
-   **PhysiqueScan (« Physique Scan »)**: 3D kinetic type on bands that wrap round a jacked
-   statue's muscles and roll, on a cream drafting grid (the owner's reference look). No
-   voice: the words are on the bands, so `voice` is not passed. Write 2-6 `scenes`: a `set`
-   (gym, kitchen, dinner, living...), the statue's `action` (the template's schema lists
-   them: a dumbbell, bar_strain, cheer at the gym; fork_up or carry_plate to eat), 1-3 `bands` (`on`: chest, abs,
-   arm_r / arm_l, forearm_r / forearm_l, thigh_r / thigh_l; `text`: a macro or a calorie
-   count, under 28 characters, « Protéines 180 g », « 520 kcal »; `tone` light, dark or
-   orange, mixed), maybe a `label` readout (« +180 G ») and `beats` (2-8, a cut every 2).
-   `hero`: hero, hero_b or hero_f. The hook is 5 words at most, one word lands per beat.
-   The cuts fall on the bed's beat and the cameras come round by themselves (orbit,
-   close-ups on each band, push in): only the scene's first `camera` may be set. A stated
-   number needs its source in `citations`. Previews build each still's statue (a few
-   minutes): one is enough, at most 3 frames.
+   **PhysiqueScan (« Physique Scan »)**: 3D kinetic type on bands round a detailed muscle cut
+   open (its fibres showing), the bands pulling tight, rocking, whooshing up and down it and
+   squeezing it (the owner's reference look). No voice: the words are on the bands, so
+   `voice` is not passed. Write 2-6 `scenes`, one idea each: a `palette` (lab: cream, navy,
+   orange, teal; neon: night and acid tones; candy: pink, violet, yellow; vary them), 2-6
+   `bands` listed top to bottom (`text`: a macro, a calorie count or a short phrase, under 28
+   characters, « Protéines 180 g », « 520 kcal »; `tone` light, dark, accent or pop, mixed;
+   `squeeze` 0-1, how hard it bites), maybe a `label` readout (« +180 G ») and `beats` (2-8, a
+   cut every 2). End a scene's bands on « macroBody » once. The hook is 5 words at most, one
+   word lands per beat. The cuts fall on the bed's beat and the cameras come round by
+   themselves (orbit, push in, down into the cut, along the muscle): only the scene's first
+   `camera` may be set. A stated number needs its source in `citations`. One preview of at
+   most 3 frames is enough.
 4. Send them in parallel, each with a `caption` (1–3 short lines in the video's
    language, adds something the video does not say, at most 5 hashtags; sources as
    "Source: <site name>"):

@@ -203,7 +203,7 @@ def validate_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError(out["error"])
     if template == sitcom.TEMPLATE:  # the troupe checks the cast, sets, spots and actions
         out["shots"] = sitcom.shot_list(out["props"], out["plates"])
-    elif template == physique.TEMPLATE:  # the statue's shots in the blueprint look
+    elif template == physique.TEMPLATE:  # the muscle's shots (cinematic/engine/anatomy.py)
         out["shots"] = physique.shot_list(out["props"], out["plates"])
     return out
 
@@ -491,7 +491,7 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
                                                               timeout_s=timeout_s))
         staged = {**_stage_says(bundle_dir(), staged, media_root),
                   "plate": macro3d.stage(bundle_dir(), track, track.name)}
-    elif template == physique.TEMPLATE:  # the statue's shots first, under the type
+    elif template == physique.TEMPLATE:  # the muscle's shots first, under the type
         track = media.resolve(media_root, physique.render_track(v["shots"], media_root,
                                                                 timeout_s=timeout_s))
         staged = {**staged, "plate": macro3d.stage(bundle_dir(), track, track.name)}

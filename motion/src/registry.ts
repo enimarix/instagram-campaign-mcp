@@ -542,12 +542,10 @@ export const templates = {
     schema: physiqueSchema,
     defaultProps: {
       hook: "Ce physique ? Des maths.",
-      hero: "hero",
       scenes: [
-        { set: "gym", action: "curl", label: "+180 G", beats: 4, camera: "orbit", bands: [{ on: "arm_r", text: "Protéines 180 g", tone: "light" }, { on: "chest", text: "2 800 kcal", tone: "dark" }] },
-        { set: "gym", action: "bar_strain", beats: 4, bands: [{ on: "chest", text: "Glucides 300 g", tone: "orange" }, { on: "abs", text: "Lipides 70 g", tone: "light" }] },
-        { set: "dinner", action: "fork_up", label: "520 KCAL", beats: 4, camera: "orbit", bands: [{ on: "arm_l", text: "P 45 g · G 60 g", tone: "light" }, { on: "chest", text: "520 kcal", tone: "dark" }] },
-        { set: "gym", action: "cheer", beats: 4, camera: "dolly", bands: [{ on: "chest", text: "Calculé pour toi", tone: "dark" }, { on: "abs", text: "macroBody", tone: "orange" }] },
+        { palette: "lab", label: "+180 G", beats: 4, camera: "orbit", bands: [{ text: "macroBody", tone: "dark", squeeze: 0.6 }, { text: "Protéines 180 g", tone: "accent", squeeze: 1 }, { text: "2 800 kcal", tone: "light", squeeze: 0.8 }, { text: "Glucides 300 g", tone: "pop", squeeze: 0.9 }, { text: "Lipides 70 g", tone: "dark", squeeze: 0.5 }] },
+        { palette: "neon", label: "300 G", beats: 4, bands: [{ text: "Glucides 300 g", tone: "light", squeeze: 1 }, { text: "Avant l'effort", tone: "accent", squeeze: 0.7 }, { text: "Riz · patates · avoine", tone: "pop", squeeze: 0.8 }] },
+        { palette: "candy", label: "2 800 KCAL", beats: 4, camera: "push", bands: [{ text: "2 800 kcal", tone: "dark", squeeze: 1 }, { text: "Calculé pour toi", tone: "accent", squeeze: 0.6 }, { text: "Chaque jour", tone: "light", squeeze: 0.8 }, { text: "macroBody", tone: "pop", squeeze: 0.9 }] },
       ],
       outro: "Tes macros, calculées pour toi.",
       address: "tu",
@@ -564,10 +562,10 @@ export const templates = {
       const events: Event[] = [{ t: 0, d: hookOut, e: "hook: one word slams in per beat", text: p.hook }];
       for (const x of shots) {
         const s = p.scenes[x.scene];
-        const bands = s.bands.map((b) => `« ${b.text} » round the ${b.on}`).join(", ");
-        events.push({ t: x.start_s, d: x.end_s - x.start_s, e: `scene ${x.scene + 1} (${s.set}): the statue ${s.action}, ${x.camera} on the ${x.part}; bands ${bands}${x.shot === 0 && s.label ? `; readout « ${s.label} »` : ""}` });
+        const bands = s.bands.map((b) => `« ${b.text} »`).join(", ");
+        events.push({ t: x.start_s, d: x.end_s - x.start_s, e: `scene ${x.scene + 1} (${s.palette} palette): the muscle, camera ${x.camera}; bands grip, whoosh and squeeze: ${bands}${x.shot === 0 && s.label ? `; readout « ${s.label} »` : ""}` });
       }
-      events.push({ t: 0, d: total, e: `music bed (${p.music}), the cuts on its beat` });
+      events.push({ t: 0, d: total, e: `music bed (${p.music}), the cuts on its beat; a whoosh as the bands fly in each shot` });
       events.push({ t: cardStart, d: total - cardStart, e: "end card (physique): bands roll across the drafting grid, the mB tile drops onto an orange measuring ring, macroBody, 7 jours gratuits, macrobody.fr" });
       return events;
     },

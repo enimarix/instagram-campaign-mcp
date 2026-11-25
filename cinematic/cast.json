@@ -43,11 +43,5 @@
  "waiter": {"label": "Hugo", "tags": ["staff", "adult"], "phenotype": {"gender": 1.0, "age": 0.46, "muscle": 0.45, "weight": 0.4, "height": 0.7, "race": {"asian": 1.0}},
   "skin": "young_asian_male/young_asian_male.mhmat", "hair": "short04/short04.mhclo", "clothes": ["male_elegantsuit01/male_elegantsuit01.mhclo"]},
  "neighbour": {"label": "Mémé Rose", "tags": ["elder"], "phenotype": {"gender": 0.0, "age": 0.9, "muscle": 0.3, "weight": 0.75, "height": 0.35, "race": {"african": 1.0}},
-  "skin": "old_african_female/old_african_female.mhmat", "hair": "bob01/bob01.mhclo", "clothes": ["female_casualsuit01/female_casualsuit01.mhclo"], "top": [0.56, 0.16, 0.42]},
- "hero": {"label": "Le statuaire", "tags": ["physique", "gym", "adult"], "phenotype": {"gender": 1.0, "age": 0.48, "muscle": 1.0, "weight": 0.55, "height": 0.7, "proportions": 0.8, "race": {"caucasian": 1.0}},
-  "skin": "young_caucasian_male/young_caucasian_male.mhmat", "hair": "short02/short02.mhclo", "clothes": []},
- "hero_b": {"label": "Le colosse", "tags": ["physique", "gym", "adult"], "phenotype": {"gender": 1.0, "age": 0.5, "muscle": 1.0, "weight": 0.62, "height": 0.75, "proportions": 0.8, "race": {"african": 1.0}},
-  "skin": "young_african_male/young_african_male.mhmat", "hair": "short03/short03.mhclo", "clothes": []},
- "hero_f": {"label": "L'athlète", "tags": ["physique", "gym", "adult"], "phenotype": {"gender": 0.0, "age": 0.45, "muscle": 1.0, "weight": 0.5, "height": 0.6, "proportions": 0.8, "race": {"asian": 0.5, "caucasian": 0.5}},
-  "skin": "young_caucasian_female2/young_caucasian_female2.mhmat", "hair": "ponytail01/ponytail01.mhclo", "clothes": []}
+  "skin": "old_african_female/old_african_female.mhmat", "hair": "bob01/bob01.mhclo", "clothes": ["female_casualsuit01/female_casualsuit01.mhclo"], "top": [0.56, 0.16, 0.42]}
 }

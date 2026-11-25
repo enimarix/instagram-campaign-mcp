@@ -267,7 +267,7 @@ def render_track(data: Dict[str, Any], media_root: PathLike, *, timeout_s: float
 
 
 def track_stills(data: Dict[str, Any], seconds: Dict[int, float], folder: Path, *,
-                 timeout_s: float, grade: str = GRADE) -> Dict[int, Path]:
+                 timeout_s: float) -> Dict[int, Path]:
     """One graded picture per output frame `{frame: s into the video}` that falls on a shot,
     rendered as Blender stills into `folder`: {frame: png}. ponytail: each still builds its
     shot's set and actors (~10 s an actor)."""
@@ -282,7 +282,7 @@ def track_stills(data: Dict[str, Any], seconds: Dict[int, float], folder: Path, 
             continue
         job = troupe.job(shots[i])
         n = min(job["frames"], 1 + int((t - starts[i]) * FPS))
-        key = troupe.shot_key(shots[i], engine, grade)
+        key = troupe.shot_key(shots[i], engine, GRADE)
         want.setdefault(key, {"id": key, **job, "stills": []})["stills"].append(n)
         where[f] = (key, n)
     if not want:
@@ -296,7 +296,7 @@ def track_stills(data: Dict[str, Any], seconds: Dict[int, float], folder: Path, 
         for f, (key, n) in where.items():
             dest = folder / f"plate-{f}.png"
             ffmpeg.run(["-i", work / key / f"still_{n}.png", "-filter_complex",
-                        f"[0:v]{grade.replace(',format=yuv420p', '')}[v]", "-map", "[v]",
+                        f"[0:v]{GRADE.replace(',format=yuv420p', '')}[v]", "-map", "[v]",
                         "-frames:v", "1", "-update", "1", dest], timeout_s=timeout_s)
             out[f] = dest
     return out
