@@ -48,6 +48,7 @@ from . import (  # render.py imports us
     macro3d,
     media,
     music,
+    physique,
     recipe,
     render,
     sfx,
@@ -202,6 +203,8 @@ def validate_props(template: str, props: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError(out["error"])
     if template == sitcom.TEMPLATE:  # the troupe checks the cast, sets, spots and actions
         out["shots"] = sitcom.shot_list(out["props"], out["plates"])
+    elif template == physique.TEMPLATE:  # the statue's shots in the blueprint look
+        out["shots"] = physique.shot_list(out["props"], out["plates"])
     return out
 
 
@@ -433,7 +436,7 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     still_props = {**v["props"]}
     if "voice" in still_props:
         still_props["voice"] = {k: x for k, x in still_props["voice"].items() if k != "audioSrc"}
-    still_props.pop("plate", None)  # Macro3D / SitcomSkit: the studio's own plates only, never the props'
+    still_props.pop("plate", None)  # Macro3D / SitcomSkit / PhysiqueScan: the studio's own plates only, never the props'
     for say in sitcom.says(still_props) if template == sitcom.TEMPLATE else ():
         say.pop("audioSrc", None)
     if sfx.refs(still_props):  # silent in a still, but the file must load
@@ -443,9 +446,10 @@ def preview_stills(template: str, props: Dict[str, Any], media_root: PathLike,
     plates = {}
     if template == macro3d.TEMPLATE:
         plates = macro3d.plate_stills(v["plates"], frames, folder, timeout_s=STILL_TIMEOUT_S)
-    elif template == sitcom.TEMPLATE:
-        plates = sitcom.track_stills(v["shots"], {f: f / v["fps"] for f in frames}, folder,
-                                     timeout_s=STILL_TIMEOUT_S * 4)
+    elif template in (sitcom.TEMPLATE, physique.TEMPLATE):
+        stills = sitcom.track_stills if template == sitcom.TEMPLATE else physique.track_stills
+        plates = stills(v["shots"], {f: f / v["fps"] for f in frames}, folder,
+                        timeout_s=STILL_TIMEOUT_S * 4)
     paths = []
     with tempfile.TemporaryDirectory(dir=folder) as work:
         for f in dict.fromkeys(frames):
@@ -487,6 +491,10 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
                                                               timeout_s=timeout_s))
         staged = {**_stage_says(bundle_dir(), staged, media_root),
                   "plate": macro3d.stage(bundle_dir(), track, track.name)}
+    elif template == physique.TEMPLATE:  # the statue's shots first, under the type
+        track = media.resolve(media_root, physique.render_track(v["shots"], media_root,
+                                                                timeout_s=timeout_s))
+        staged = {**staged, "plate": macro3d.stage(bundle_dir(), track, track.name)}
     with tempfile.TemporaryDirectory(prefix="motion-", dir=out.parent) as work:
         raw = Path(work) / "raw.mp4"
         _render(template, staged, raw, Path(work), timeout_s=timeout_s,
@@ -615,9 +623,10 @@ def motion_recipe(store: CampaignStore, settings: InstagramMCPSettings, idea: Di
     being rebuilt: its tagged lines stay when the new props carry none (tts.retag drops a
     line's tags once the line itself changed)."""
     styles.check_template(store, idea, template)  # 138: the template in the idea's style
-    if music_audio_id and template in (cinematic.TEMPLATE, sitcom.TEMPLATE):
+    if music_audio_id and template in (cinematic.TEMPLATE, sitcom.TEMPLATE, physique.TEMPLATE):
         # ponytail: the Blender engines time shots and character voices off the narrator
-        # lines; moving the narrator alone would desync them. Remotion templates only.
+        # lines; moving the narrator alone would desync them. PhysiqueScan cuts on its own
+        # bed's beat and has no voice (music.apply needs one). Remotion templates only.
         raise ValueError(f"{template} cannot take an Instagram track yet: use its own bed")
     tagged = tagged_lines(template, props) or {  # 204: the voice hears the tags, never the viewer
         k: keep[k] for k in ("spoken", "spoken_says") if keep and keep.get(k)}

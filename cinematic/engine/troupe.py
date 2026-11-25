@@ -12,6 +12,7 @@ troupe.py. Every shot is its own scene: the set (engine/<sets.json module>.py), 
 """
 import importlib
 import json
+import math
 import os
 import random
 import sys
@@ -20,6 +21,7 @@ import bpy
 
 ENGINE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ENGINE)
+import bands  # noqa: E402
 import people  # noqa: E402
 import retarget  # noqa: E402
 import stage  # noqa: E402
@@ -43,7 +45,7 @@ def render_shot(cfg, shot):
     sun = importlib.import_module(spec["module"]).build(cfg, spec)
     stage.ambient(preset)
     rng = random.Random(shot.get("seed", 0))
-    actors = {}
+    actors, bodies = {}, {}
     for a, move, smp, times in zip(shot["cast"], moves, sampled, clocks):
         body, rig = people.build(a["look"], a["who"])
         people.dress(rig, a["look"], a["who"])
@@ -57,8 +59,14 @@ def render_shot(cfg, shot):
             rig.keyframe_insert("location", frame=frames)
         if move.get("lie"):
             people.ground(body, rig)
-        actors[a["who"]] = rig
+        actors[a["who"]], bodies[a["who"]] = rig, body
     people.crush_textures(cfg.get("texture_px", 1024))
+    if shot.get("look") == "blueprint":  # the physique style: the owner's reference look
+        for a in shot["cast"]:
+            bands.statue(bodies[a["who"]], actors[a["who"]], a["look"])
+        bands.restyle({w: (bodies[w], actors[w]) for w in actors})
+        for i, b in enumerate(shot.get("bands") or ()):
+            bands.band(bodies[b["who"]], actors[b["who"]], b, frames, f"band{i}")
     stage.lights(sun or stage.sun_dir(preset), preset)
     s.frame_start, s.frame_end = 1, frames
     cam = shot["camera"]
@@ -66,7 +74,16 @@ def render_shot(cfg, shot):
     s.frame_set(frames if cam.get("aim") == "end" else 1)  # where the actor ends up, or starts
     head, look = people.head(on) if on else (None, None)
     s.frame_set(1)
-    stage.camera(cam["kind"], frames, spec["wide"], spec["center"], head, look, high=cam.get("aim") == "end")
+    if cam["kind"] == "orbit" or cam.get("part") and cam["kind"] in ("close", "dolly"):
+        # round the actor's body part (orbit: a wide arc pushing in; close: a slow drift;
+        # dolly: a push in)
+        c = bands.part_center(on, cam.get("part") or "chest")
+        facing = math.degrees(on.rotation_euler.z)
+        arc = {"orbit": (-35, 70, 1.7, 0.3), "close": (-6, 12, 1.25, 0.0), "dolly": (-10, 20, 1.7, 0.35)}
+        start, sweep, radius, push = arc[cam["kind"]]
+        bands.orbit(frames, c, radius, c.z + 0.12, facing + start, sweep, lens=32, push=push)
+    else:
+        stage.camera(cam["kind"], frames, spec["wide"], spec["center"], head, look, high=cam.get("aim") == "end")
     out = os.path.join(os.path.abspath(cfg["out"]), shot["id"])
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "stats.json"), "w", encoding="utf-8") as f:

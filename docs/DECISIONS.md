@@ -1131,3 +1131,21 @@ Reason: owner 2026-11-25: DM order 75 asked for a band rolling over a jacked man
 with the Reel's music. Run 73 requested « Physique Scan » and left the order open; run 74 saw
 it open and made it in Sitcom 3D with library music, without watching the Reel.
 « The AI should literally do what I tell it to do. »
+
+## 2026-11-25: « Physique Scan », the style built for the owner's DM order 75
+The style requests « Muscle Scan » (4), « Scan 3D Athlète » (5) and « Physique Scan » (19) all
+asked for the same Reel (https://www.instagram.com/reel/DetQ8tOOEkg/): it is 3D kinetic type on
+rolling bands over a cream drafting grid (navy, orange, teal), not a realistic body scan. The
+owner's words: the same effect, the bands rolling over a jacked person's muscles while he
+trains and eats, macro and calorie texts, ending on macroBody. Built as one style `physique`:
+template `PhysiqueScan` (motion/src/templates/PhysiqueScan) over the troupe engine in a new
+`blueprint` look (cinematic/engine/bands.py): a flat navy statue (three looks tagged
+`physique` in cast.json, orange shorts and a sports top drawn by the shader, no clothes
+mesh), the room and its decor removed for a cream world and grid floor, the set in cream
+with ink edges, and up to 4 bands per shot whose type is wrapped onto a cylinder round a
+body part's bone and rolls. Cuts fall on the bed's beat (three studio beds measured with
+music.measure); no voice; its own end card. The statues are refused in any other look.
+The Reel's song cannot be reused (a famous track, rights rules): the template keeps its own
+beds, and an Instagram track is not attached (music.apply needs a voice).
+Reason: owner 2026-11-25 (« reopen and build »); render cost like the sitcom's (8 shots of
+1 s: ~9 min, then cached).

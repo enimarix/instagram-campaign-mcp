@@ -32,13 +32,15 @@ import { coverOf as macro3dCover, shotsOf as macro3dShots, type Shot } from "./t
 import { macro3dSchema, timelineOf as macro3dTimeline } from "./templates/Macro3D/schema";
 import { SitcomSkit } from "./templates/SitcomSkit/SitcomSkit";
 import { coverOf as sitcomCover, layoutOf as sitcomLayout, type Part, sitcomSchema } from "./templates/SitcomSkit/schema";
+import { PhysiqueScan } from "./templates/PhysiqueScan/PhysiqueScan";
+import { coverOf as physiqueCover, layoutOf as physiqueLayout, physiqueSchema, type Shot as PhysiqueShot } from "./templates/PhysiqueScan/schema";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné", macro3d: "Macro 3D", sitcom: "Sitcom 3D" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné", macro3d: "Macro 3D", sitcom: "Sitcom 3D", physique: "Physique Scan" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -53,7 +55,7 @@ export type Template<S extends z.ZodType> = {
   /** What happens when (assets.timeline, step 110); none = the whole video as one event. */
   events?: (props: z.infer<S>) => Event[];
   /** Shots another engine renders before the template (Macro3D: the Blender plates, src/studio/macro3d.py; SitcomSkit: its timed parts, shot by src/studio/sitcom.py). */
-  plates?: (props: z.infer<S>) => Shot[] | Part[];
+  plates?: (props: z.infer<S>) => Shot[] | Part[] | PhysiqueShot[];
   /** Where the voice file plays when the template pauses it: from audio_s on it plays at video at_s (the QC listens there, step 158); none = the whole file from 0. */
   voiceParts?: (props: z.infer<S>) => VoicePart[];
 };
@@ -531,6 +533,42 @@ export const templates = {
       if (p.music !== "none") events.push({ t: 0, d: total, e: `music bed (${p.music})` });
       if (p.voice?.audioSrc) events.push({ t: 0, d: cardStart, e: "voice-over reads the lines (paused for the characters' lines and the freeze)" });
       events.push({ t: cardStart, d: total - cardStart, e: "end card (sitcom): sunburst, the panel boings in, « APPLAUDISSEZ » lights up, mB tile, macroBody, 7 jours gratuits, macrobody.fr" });
+      return events;
+    },
+  }),
+  PhysiqueScan: template({
+    style: "physique",
+    component: PhysiqueScan,
+    schema: physiqueSchema,
+    defaultProps: {
+      hook: "Ce physique ? Des maths.",
+      hero: "hero",
+      scenes: [
+        { set: "gym", action: "curl", label: "+180 G", beats: 4, camera: "orbit", bands: [{ on: "arm_r", text: "Protéines 180 g", tone: "light" }, { on: "chest", text: "2 800 kcal", tone: "dark" }] },
+        { set: "gym", action: "bar_strain", beats: 4, bands: [{ on: "chest", text: "Glucides 300 g", tone: "orange" }, { on: "abs", text: "Lipides 70 g", tone: "light" }] },
+        { set: "dinner", action: "fork_up", label: "520 KCAL", beats: 4, camera: "orbit", bands: [{ on: "arm_l", text: "P 45 g · G 60 g", tone: "light" }, { on: "chest", text: "520 kcal", tone: "dark" }] },
+        { set: "gym", action: "cheer", beats: 4, camera: "dolly", bands: [{ on: "chest", text: "Calculé pour toi", tone: "dark" }, { on: "abs", text: "macroBody", tone: "orange" }] },
+      ],
+      outro: "Tes macros, calculées pour toi.",
+      address: "tu",
+      accent: "brand",
+      citations: [],
+      music: "music-cutaway-c",
+      loop: false,
+    },
+    durationInFrames: (p) => Math.round(physiqueLayout(p).total * FPS),
+    coverFrame: (p) => physiqueCover(p, FPS),
+    plates: (p) => physiqueLayout(p).shots,
+    events: (p) => {
+      const { shots, hookOut, cardStart, total } = physiqueLayout(p);
+      const events: Event[] = [{ t: 0, d: hookOut, e: "hook: one word slams in per beat", text: p.hook }];
+      for (const x of shots) {
+        const s = p.scenes[x.scene];
+        const bands = s.bands.map((b) => `« ${b.text} » round the ${b.on}`).join(", ");
+        events.push({ t: x.start_s, d: x.end_s - x.start_s, e: `scene ${x.scene + 1} (${s.set}): the statue ${s.action}, ${x.camera} on the ${x.part}; bands ${bands}${x.shot === 0 && s.label ? `; readout « ${s.label} »` : ""}` });
+      }
+      events.push({ t: 0, d: total, e: `music bed (${p.music}), the cuts on its beat` });
+      events.push({ t: cardStart, d: total - cardStart, e: "end card (physique): bands roll across the drafting grid, the mB tile drops onto an orange measuring ring, macroBody, 7 jours gratuits, macrobody.fr" });
       return events;
     },
   }),

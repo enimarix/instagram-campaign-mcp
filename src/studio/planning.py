@@ -59,6 +59,7 @@ from . import (
     lemo,
     line,
     macro3d,
+    physique,
     planned,
     render,
     scheduling,
@@ -76,8 +77,9 @@ RUN_S = 15 * 60.0  # an agent run with no finished run to measure (guess)
 HORIZON = timedelta(hours=24)
 SAMPLES = 100  # recent finished jobs / runs the medians look at
 TEMPLATE_ENGINES = {cinematic.TEMPLATE: "blender", sitcom.TEMPLATE: "blender",
-                    macro3d.TEMPLATE: "macro3d"}
-STYLE_ENGINES = {cinematic.STYLE: "blender", "sitcom": "blender", "macro3d": "macro3d"}
+                    physique.TEMPLATE: "blender", macro3d.TEMPLATE: "macro3d"}
+STYLE_ENGINES = {cinematic.STYLE: "blender", "sitcom": "blender", physique.STYLE: "blender",
+                 "macro3d": "macro3d"}
 # The AI's jobs in the owner's words (UI-015; web/src/pages/load.ts PLAYBOOKS holds the same).
 PLAYBOOK_LABELS = {"daily-learn": "Analyse de la nuit", "daily-produce": "Vidéos du jour",
                    schedule.ORDER_PLAYBOOK: "Tes changements", checks.PLAYBOOK: "Vérifier les rendus",

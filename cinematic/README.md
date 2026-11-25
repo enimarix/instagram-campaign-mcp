@@ -72,6 +72,27 @@ for every shot not cached yet). Example: `shotlists/proof.json`.
   (nvidia-smi, minus the baseline) and the scene's texture MB (`<out>/measure.json`, the
   still beside it). Proof dinner of 7: 2.29 GB -> 1.20 GB, textures 601 -> 121 MB.
 
+## The physique look (« Physique Scan », owner order 75)
+
+Troupe shots with `look: blueprint` (`engine/bands.py`), the template `PhysiqueScan`
+(`src/studio/physique.py` turns its timed shots into the shot list):
+
+- The room, its walls and tall decor go; the world is cream to the camera and lights nothing
+  (the key light alone shapes the toon ramps), the floor a drafting grid with orange measuring
+  rings round each actor; the props are cream with an ink edge (inverted hull).
+- The actors are statues: a three-tone navy toon skin, orange shorts (and a sports top on a
+  woman) drawn by the shader from the body's rest height (`rest_z`, arms excluded), hair and
+  eyes in ink. Only the cast entries tagged `physique` (`hero`, `hero_b`, `hero_f`, no clothes
+  mesh) play here, and only here (`troupe.py` refuses them elsewhere).
+- `bands` (up to 4 a shot): `{who, on (chest, abs, arm_r/l, forearm_r/l, thigh_r/l), text,
+  tone (light, dark, orange), turns, slide}`. A band is an open cylinder round the part's bone
+  (its girth from the vertices weighted to it, plus 2.5 cm) with ink rims and tape ticks, and
+  the type: the text mesh repeated round it, wrapped onto the cylinder (letters stand on the
+  band, face out, read left to right). Its ride along the bone is baked each frame in world
+  space; it rolls `turns` times over the shot.
+- Cameras: `orbit` (round the part, pushing in), and `close` / `dolly` with `part` aim at a
+  muscle instead of the head.
+
 | Piece | Source | License |
 |---|---|---|
 | 3D + render | Blender 5.2.4 portable (EEVEE) | GPL (a tool, nothing of it ships in the video) |

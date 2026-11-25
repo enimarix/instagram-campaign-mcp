@@ -40,7 +40,10 @@ SIZE = cinematic.RENDER_SIZE
 SAMPLES = 64  # EEVEE samples, as the skit
 S_PER_FRAME = 8.0  # Blender timeout budget per frame
 S_PER_ACTOR = 40.0  # ... and per actor built (measured ~10 s)
-ON_ACTOR = ("close", "whip", "crash", "dolly")
+ON_ACTOR = ("close", "whip", "crash", "dolly", "orbit")
+# the physique style's bands (cinematic/engine/bands.py PARTS): the body parts a band rides
+PARTS = ("chest", "abs", "arm_r", "arm_l", "forearm_r", "forearm_l", "thigh_r", "thigh_l")
+Part = Literal["chest", "abs", "arm_r", "arm_l", "forearm_r", "forearm_l", "thigh_r", "thigh_l"]
 Speed = Union[float, Tuple[float, float]]
 
 
@@ -64,15 +67,31 @@ class Actor(_Model):
 
 
 class Camera(_Model):
-    kind: Literal["wide", "close", "top", "whip", "crash", "dolly"] = "wide"
-    on: Optional[str] = Field(None, description="The actor the close / whip / crash / dolly lands on")
+    kind: Literal["wide", "close", "top", "whip", "crash", "dolly", "orbit"] = "wide"
+    on: Optional[str] = Field(None, description="The actor the close / whip / crash / dolly / orbit lands on")
+    part: Optional[Part] = Field(None, description="A body part to aim at instead of the head "
+                                 "(close, dolly, orbit)")
     aim: Literal["start", "end"] = Field(
         "start", description="Where the actor is aimed at: its head on the shot's first frame, or "
         "on its last (a frozen punchline: a faint or a fall ends in frame)")
 
 
+class Band(_Model):
+    """A band of bold type that wraps round a body part and rolls (the physique style)."""
+    who: str = Field(description="The actor it wraps")
+    on: Part
+    text: str = Field(min_length=1, max_length=40)
+    tone: Literal["light", "dark", "orange"] = "light"
+    turns: float = Field(0.5, ge=-3, le=3, description="Rolls over the shot")
+    slide: Optional[Tuple[float, float]] = Field(
+        None, description="From, to along the bone (0 = its root, 1 = its end); default: the middle")
+
+
 class Shot(_Model):
     set: str
+    look: Literal["troupe", "blueprint"] = Field(
+        "troupe", description="blueprint: the physique style (cream grid world, a navy statue)")
+    bands: List[Band] = Field(default_factory=list, max_length=4)
     light: Optional[str] = Field(None, description="A sets.json light preset; default: the set's")
     cast: List[Actor] = Field(min_length=1, max_length=8)
     camera: Camera = Camera()
@@ -97,6 +116,9 @@ class Shot(_Model):
         for a in self.cast:
             if a.who not in cinematic.CAST:
                 raise ValueError(f"{a.who!r} is not in the troupe ({', '.join(cinematic.CAST)})")
+            if "physique" in cinematic.CAST[a.who].get("tags", ()) and self.look != "blueprint":
+                # the statues wear nothing: they only exist drawn as statues
+                raise ValueError(f"{a.who!r} plays only in the physique style (look blueprint)")
             for spot in (a.at, a.to):
                 if isinstance(spot, str) and spot not in spec["spots"]:
                     raise ValueError(f"{self.set} has no spot {spot!r} ({', '.join(spec['spots'])})")
@@ -109,11 +131,20 @@ class Shot(_Model):
                 raise ValueError(f"{a.who}: sitting actions go on seat spots, others elsewhere")
             if a.face is not None and a.face not in FACES:
                 raise ValueError(f"face must be one of {', '.join(FACES)}")
-        tops = [(cinematic.CAST[w]["clothes"][0], tuple(cinematic.CAST[w].get("top") or ())) for w in who]
+        tops = [((cinematic.CAST[w]["clothes"] or [w])[0], tuple(cinematic.CAST[w].get("top") or ()))
+                for w in who]  # a statue (no clothes, the physique style) is its own
         if len(set(tops)) != len(tops):  # 164: never two in the same top (cast.json `top`)
             raise ValueError("two actors of the shot wear the same top (give one a cast.json top)")
         if self.camera.kind in ON_ACTOR and self.camera.on not in who:
             raise ValueError(f"a {self.camera.kind} camera lands on an actor of the shot (camera.on)")
+        if self.bands and self.look != "blueprint":
+            raise ValueError("bands belong to the blueprint look")
+        for b in self.bands:
+            if b.who not in who:
+                raise ValueError(f"a band wraps an actor of the shot ({b.who!r} is not)")
+            for u in b.slide or ():
+                if not 0 <= u <= 1:
+                    raise ValueError("a band's slide lies in 0..1")
         return self
 
 
@@ -150,8 +181,14 @@ def job(shot: Shot) -> Dict[str, Any]:
              "face": a.face, "face_at": a.face_at,
              "offset": a.offset if a.offset is not None else _offset(a, shot.seed)}
             for a in shot.cast]
-    return {"set": shot.set, "light": shot.light, "frames": max(2, round(shot.duration * FPS)),
-            "speed": shot.speed, "seed": shot.seed, "camera": shot.camera.model_dump(), "cast": cast}
+    camera = shot.camera.model_dump()
+    if camera["part"] is None:  # the shots cached before the physique style keep their keys
+        del camera["part"]
+    out = {"set": shot.set, "light": shot.light, "frames": max(2, round(shot.duration * FPS)),
+           "speed": shot.speed, "seed": shot.seed, "camera": camera, "cast": cast}
+    if shot.look != "troupe":  # 164's shots keep their keys (and their cache)
+        out.update(look=shot.look, bands=[b.model_dump(exclude_none=True) for b in shot.bands])
+    return out
 
 
 def engine_hash() -> str:

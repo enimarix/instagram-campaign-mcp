@@ -171,7 +171,7 @@ you change the style, not that you stop. For each request (newest first):
    **Instagram music** ("music from Instagram", "un son tendance"): `trending_music`,
    `fetch_music(audio_id)`, then `render_motion(…, music_audio_id=<audio_id>)`. Only
    template styles take a track: not a Lemo film, not the Blender templates
-   (CinematicSkit, SitcomSkit).
+   (CinematicSkit, SitcomSkit, PhysiqueScan).
    **A Lemo film** (its style starts with `lemo:`, a custom film with no template) is
    remade in its own look: render nothing, just `decide_revision(asset_id, "remade",
    "<one line: what to change, from the owner's comments>")`. It returns a film order

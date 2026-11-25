@@ -71,6 +71,14 @@
       "end_card": "sitcom",
       "address": "tu",
       "enabled": true
+    },
+    "physique": {
+      "label": "Physique Scan",
+      "description": "Typo 3D sur des bandes qui roulent autour des muscles d'un athlète : il s'entraîne, il mange, ses macros et ses calories défilent.",
+      "preview": {"still": "physique/physique-cover.png", "clip": "physique/physique-phone.mp4"},
+      "end_card": "physique",
+      "address": "tu",
+      "enabled": true
     }
   }
 }

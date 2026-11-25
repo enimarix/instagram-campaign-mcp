@@ -441,7 +441,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:
    - **tagline**: one short line tied to the payoff, in the video's address (e.g. « Fini
-     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D, SitcomSkit), `cta`
+     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D, SitcomSkit, PhysiqueScan), `cta`
      (QuizChest) or `tagline` (BossBattle, DialogStory, PixelSkit); no line = the app's own.
    - **accent**: the macro colour of the topic: `protein`, `carbs`, `fat`, `kcal`, or
      `brand` (emerald) when none fits; on the templates that take an `accent` prop.
@@ -466,7 +466,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    `render_motion(..., music_audio_id=<audio_id>)`: the lines then start on its beats and
    the payoff on the drop, the template's bed is off, and the Reel is published with that
    Instagram track. Voiced videos only (a voice other than `none`), not the Blender
-   templates (CinematicSkit, SitcomSkit: they keep their own bed); when fetch_music
+   templates (CinematicSkit, SitcomSkit, PhysiqueScan: they keep their own bed); when fetch_music
    finds no beat or the download fails, pick another track.
 3. `preview_motion(template, props)` returns stills. Look at them: the hook readable in
    the first frame, no text cut off or overflowing, nothing hidden in the bottom third
@@ -488,6 +488,19 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    itself: never describe cameras. Narrate with an energetic « tu » voice from `voices.json`
    (`energique_femme` when it is listed, else the closest one listed); the characters' voices
    are picked by the studio.
+   **PhysiqueScan (« Physique Scan »)**: 3D kinetic type on bands that wrap round a jacked
+   statue's muscles and roll, on a cream drafting grid (the owner's reference look). No
+   voice: the words are on the bands, so `voice` is not passed. Write 2-6 `scenes`: a `set`
+   (gym, kitchen, dinner, living...), the statue's `action` (the template's schema lists
+   them: a dumbbell, bar_strain, cheer at the gym; fork_up or carry_plate to eat), 1-3 `bands` (`on`: chest, abs,
+   arm_r / arm_l, forearm_r / forearm_l, thigh_r / thigh_l; `text`: a macro or a calorie
+   count, under 28 characters, « Protéines 180 g », « 520 kcal »; `tone` light, dark or
+   orange, mixed), maybe a `label` readout (« +180 G ») and `beats` (2-8, a cut every 2).
+   `hero`: hero, hero_b or hero_f. The hook is 5 words at most, one word lands per beat.
+   The cuts fall on the bed's beat and the cameras come round by themselves (orbit,
+   close-ups on each band, push in): only the scene's first `camera` may be set. A stated
+   number needs its source in `citations`. Previews build each still's statue (a few
+   minutes): one is enough, at most 3 frames.
 4. Send them in parallel, each with a `caption` (1–3 short lines in the video's
    language, adds something the video does not say, at most 5 hashtags; sources as
    "Source: <site name>"):

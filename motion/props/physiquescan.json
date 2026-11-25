@@ -1,0 +1,85 @@
+{
+  "hook": "Ce physique ? Des maths.",
+  "hero": "hero",
+  "scenes": [
+    {
+      "set": "gym",
+      "action": "curl",
+      "label": "+180 G",
+      "beats": 4,
+      "camera": "orbit",
+      "bands": [
+        {
+          "on": "arm_r",
+          "text": "Protéines 180 g",
+          "tone": "light"
+        },
+        {
+          "on": "chest",
+          "text": "2 800 kcal",
+          "tone": "dark"
+        }
+      ]
+    },
+    {
+      "set": "gym",
+      "action": "bar_strain",
+      "beats": 4,
+      "bands": [
+        {
+          "on": "chest",
+          "text": "Glucides 300 g",
+          "tone": "orange"
+        },
+        {
+          "on": "abs",
+          "text": "Lipides 70 g",
+          "tone": "light"
+        }
+      ]
+    },
+    {
+      "set": "dinner",
+      "action": "fork_up",
+      "label": "520 KCAL",
+      "beats": 4,
+      "camera": "orbit",
+      "bands": [
+        {
+          "on": "arm_l",
+          "text": "P 45 g · G 60 g",
+          "tone": "light"
+        },
+        {
+          "on": "chest",
+          "text": "520 kcal",
+          "tone": "dark"
+        }
+      ]
+    },
+    {
+      "set": "gym",
+      "action": "cheer",
+      "beats": 4,
+      "camera": "dolly",
+      "bands": [
+        {
+          "on": "chest",
+          "text": "Calculé pour toi",
+          "tone": "dark"
+        },
+        {
+          "on": "abs",
+          "text": "macroBody",
+          "tone": "orange"
+        }
+      ]
+    }
+  ],
+  "outro": "Tes macros, calculées pour toi.",
+  "address": "tu",
+  "accent": "brand",
+  "citations": [],
+  "music": "music-cutaway-c",
+  "loop": false
+}

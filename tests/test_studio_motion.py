@@ -152,7 +152,7 @@ def test_schema_export_gives_every_template_a_style():
     styles = {s["id"]: s["label"] for s in out["styles"]}
     assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier",
                       "cutaway": "Pixel explicatif", "editorial": "Éditorial", "cinema": "Pixel ciné",
-                      "macro3d": "Macro 3D", "sitcom": "Sitcom 3D"}
+                      "macro3d": "Macro 3D", "sitcom": "Sitcom 3D", "physique": "Physique Scan"}
     by_id = {t["id"]: t["style"] for t in out["templates"]}
     assert set(by_id.values()) <= set(styles)
     assert by_id["VoxelQuest"] == "voxel" and by_id["FactQuest"] == "pixel"
