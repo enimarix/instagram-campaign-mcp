@@ -356,3 +356,6 @@ motion/out/
 
 # UI audit evidence (screenshots stay local)
 docs/ui-audit/**/screenshots/
+
+# rea-video (src/studio/rea.py): cloned by `ig-campaign rea setup`
+vendor/rea-video/

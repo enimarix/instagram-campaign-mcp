@@ -25,6 +25,7 @@ has to be awake at 18:00 to publish. Use one of:
   python -m src.scheduler agent film 12       # make Lemo-Opuscar work order 12 into a film (173)
   python -m src.scheduler agent install-schedule [--remove]  # OS autostart + daily runs
   python -m src.scheduler downloader setup|update|status  # Reel downloader service (063a)
+  python -m src.scheduler rea setup|status    # rea-video, the « rea » route of « Reçus »
   python -m src.scheduler restore <backup> [--yes]  # put a nightly backup back (097)
   python -m src.scheduler doctor              # is everything installed? (100)
   python -m src.scheduler web build           # rebuild web/dist (`up` does when stale, 175)
@@ -376,6 +377,19 @@ def _downloader(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- rea-video (« Reçus », 2026-11-25) -------------------------------------
+def _rea(args: argparse.Namespace) -> int:
+    from .studio import rea
+
+    try:
+        result = rea.setup() if args.rea_command == "setup" else rea.status()
+    except rea.ReaError as e:
+        print(f"rea {args.rea_command}: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 # --- restore (097) --------------------------------------------------------
 def _restore(args: argparse.Namespace) -> int:
     from pathlib import Path
@@ -412,7 +426,7 @@ def _style_requests(args: argparse.Namespace) -> int:
     store = CampaignStore(get_settings().database_path)
     try:
         if args.style_command == "mark":
-            result = style_requests.mark(store, args.id, args.status)
+            result = style_requests.mark(store, args.id, args.status, args.style)
         else:
             result = style_requests.list_requests(store, args.status, args.limit)
     except (KeyError, ValueError) as e:
@@ -540,6 +554,10 @@ def main(argv: list[str] | None = None) -> None:
     dl.add_parser("update", help="Move to upstream's latest commit; roll back if the health "
                                  "check fails (stop the worker first)")
     dl.add_parser("status", help="Built?, port, commit and the last health check")
+    rea_cmd = sub.add_parser("rea", help="rea-video, the shot-by-shot breakdown (vendor/)"
+                             ).add_subparsers(dest="rea_command", required=True)
+    rea_cmd.add_parser("setup", help="Clone it and install it in its own venv")
+    rea_cmd.add_parser("status", help="Installed?")
     rs = sub.add_parser("restore", help="Replace the database with a backup (stop the studio"
                                          " first; the current one is kept aside)")
     rs.add_argument("backup", help="A backup file, e.g. data/backups/studio-2026-11-17.db")
@@ -554,6 +572,8 @@ def main(argv: list[str] | None = None) -> None:
     srm = sr.add_parser("mark", help="accepted -> building (step started) -> live (merged)")
     srm.add_argument("id", type=int)
     srm.add_argument("status", choices=("building", "live"))
+    srm.add_argument("--style", help="live: the style id it became (its « Reçus » orders"
+                                     " then ask for that style)")
     sty = sub.add_parser("styles", help="The style gallery (172)").add_subparsers(
         dest="styles_command", required=True)
     fp = sty.add_parser("fetch-previews", help="Download the Lemo-Opuscar style posters once"
@@ -594,6 +614,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_agent(args))
     if args.command == "downloader":
         sys.exit(_downloader(args))
+    if args.command == "rea":
+        sys.exit(_rea(args))
     if args.command == "restore":
         sys.exit(_restore(args))
     if args.command == "doctor":

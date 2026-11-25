@@ -4,7 +4,9 @@ they want, their exact instruction. Four origins:
 
 - trend (134): Reels from the Trending feed (research references), sent from the app;
 - dm (136): every Reel a pinned account sends the brand account by DM (dm_picks.py) is an
-  order (pick_id) in mode `owner`; the DM's note is its instruction;
+  order (pick_id) in mode `owner`; the DM's note is its instruction. It starts `received`
+  (the « Reçus » page, owner 2026-11-25): the owner confirms it with a route (METHODS) and
+  it waits `confirmed` on the Planning page until his « Lancer » (launch) schedules it;
 - create (138): « Créer une vidéo », a topic or instruction and nothing else (mode owner);
 - change (138): « même vidéo, autre style » of one of our videos (from_asset_id, mode
   owner): the same video remade in another style.
@@ -23,7 +25,8 @@ Modes:
 - owner: follow the owner's free-text instruction (a reaction, an inspired video, a recut
   of our own Reel when own_reel, or analyse only); the playbooks say how.
 
-Lifecycle: needs_instruction (a DM order without a note) -> scheduled (set_instruction;
+Lifecycle: received -> confirmed (confirm) -> scheduled (launch: a DM order); older DM
+orders: needs_instruction (no note) -> scheduled (set_instruction;
 an order with an instruction or a mode starts here) -> in_production
 (create_idea(work_order_id=...) links the idea) -> in_feed (submit_asset on an asset of
 that idea, asset_id = the newest one submitted; or the video approved, follow_video) |
@@ -49,10 +52,22 @@ from .assets import InvalidTransition, transition
 from .downloader import _same_post, permalink
 
 MODES = ("inspired", "react", "owner")
-STATUSES = ("needs_instruction", "scheduled", "in_production", "in_feed", "analysed",
-            "skipped")
-OPEN = ("needs_instruction", "scheduled", "in_production")
-NOT_STARTED = ("needs_instruction", "scheduled")
+STATUSES = ("received", "confirmed", "needs_instruction", "scheduled", "in_production",
+            "in_feed", "analysed", "skipped")
+OPEN = ("received", "confirmed", "needs_instruction", "scheduled", "in_production")
+NOT_STARTED = ("received", "confirmed", "needs_instruction", "scheduled")
+OWNER_ONLY = ("received", "confirmed")  # waits for the owner: the agent never sees or skips it
+SQL_OPEN = ",".join(f"'{s}'" for s in OPEN)  # queries here and in dm_picks (downloader:
+# it cannot import this module, it lists the same statuses itself)
+_SQL_NOT_STARTED = ",".join(f"'{s}'" for s in NOT_STARTED)
+# How a confirmed DM order is made (the owner's choice on « Reçus »): style: the same video
+# in one of our styles (None: Auto); new_style: a style built for it (request_style), made
+# in nothing else; rea: broken down shot by shot with rea-video (studio/rea.py), then
+# remade from that breakdown in the style (None: Auto).
+METHODS = ("style", "new_style", "rea")
+METHOD_TEXT = {"style": "Refais la même vidéo dans ce style.",
+               "new_style": "Fais un nouveau style à partir de ce Reel, puis la vidéo.",
+               "rea": "Décompose ce Reel avec rea-video, puis refais-le."}
 ORIGINS = ("trend", "dm", "create", "change")
 SOURCES = ("all", *ORIGINS, "mine")  # mine: what the owner sent himself (all but trend)
 INSTRUCTION_MAX = 500
@@ -63,7 +78,8 @@ CAPTION_LINE = 120
 CANCELLED = "annulée par le propriétaire"  # a cancelled DM order's pick
 _UNMADE = "NOT EXISTS (SELECT 1 FROM assets a WHERE a.idea_id = w.idea_id)"  # nothing made
 TRENDING_PROVIDER = "instagram"  # research.PROVIDER (research imports this module)
-AGENT_KEYS = ("id", "source", "source_id", "pick_id", "mode", "style", "instruction", "status",
+AGENT_KEYS = ("id", "source", "source_id", "pick_id", "mode", "method", "style", "instruction",
+              "status",
               "permalink", "own_reel", "sender_username", "topic", "caption_quote", "likes",
               "comments", "views", "created_at", "skip_reason", "idea_id", "asset_id",
               "from_asset_id")
@@ -177,27 +193,76 @@ def create_orders(store: CampaignStore, items: Sequence[Dict[str, Any]]) -> List
 
 
 def add_for_pick(c: Any, pick_id: int, note: Optional[str], own_reel: bool, now: str) -> None:
-    """In the poll's transaction (connection c): a new DM pick's order, mode owner; its
-    note is the instruction and schedules it, no note waits for one (needs_instruction)."""
+    """In the poll's transaction (connection c): a new DM pick's order, mode owner,
+    `received`: it waits on « Reçus » for the owner (confirm); the note is its draft
+    instruction. Nothing starts from a DM alone."""
     c.execute("INSERT INTO work_orders (origin, pick_id, mode, instruction, own_reel, status,"
-              " scheduled_at, created_at, updated_at) VALUES ('dm',?,'owner',?,?,?,?,?,?)",
-              (pick_id, note, int(own_reel), "scheduled" if note else "needs_instruction",
-               now if note else None, now, now))
+              " created_at, updated_at) VALUES ('dm',?,'owner',?,?,'received',?,?)",
+              (pick_id, note, int(own_reel), now, now))
 
 
 def late_note(c: Any, pick_id: int, note: str, now: str) -> None:
     """In the poll's transaction: a note found on a later poll for a pick stored without
-    one. Only while its order still waits for an instruction (needs_instruction): the pick
-    gets the note and the order is scheduled as add_for_pick would have done. An existing
-    note, an owner's instruction or an order that moved on is never touched."""
+    one. Only while its order still waits for the owner (received; an older one:
+    needs_instruction, then scheduled as before) with no instruction: the pick gets the
+    note, the order its draft instruction. An existing note, an owner's instruction or an
+    order that moved on is never touched."""
     if not c.execute("UPDATE dm_picks SET sender_note=?, updated_at=? WHERE id=?"
                      " AND sender_note IS NULL AND id IN (SELECT pick_id FROM work_orders"
-                     " WHERE status='needs_instruction' AND instruction IS NULL)",
+                     " WHERE status IN ('received','needs_instruction') AND instruction IS NULL)",
                      (note, now, pick_id)).rowcount:
         return
+    c.execute("UPDATE work_orders SET instruction=?, updated_at=? WHERE pick_id=?"
+              " AND status='received' AND instruction IS NULL", (note, now, pick_id))
     c.execute("UPDATE work_orders SET instruction=?, status='scheduled', scheduled_at=?,"
               " updated_at=? WHERE pick_id=? AND status='needs_instruction'"
               " AND instruction IS NULL", (note, now, now, pick_id))
+
+
+def confirm(store: CampaignStore, order_id: int, method: str, style: Optional[str] = None,
+            instruction: Optional[str] = None) -> Dict[str, Any]:
+    """« Reçus »: the owner confirms a received DM order with its route (METHODS), its style
+    (None: Auto; new_style: none, the style is built for it) and his instruction (empty:
+    the route's default text). It goes to the Planning page, `confirmed`: nothing starts
+    until his « Lancer » (launch). Again while confirmed: the choice is rewritten.
+    InvalidTransition once launched; KeyError when there is none."""
+    if method not in METHODS:
+        raise ValueError(f"method must be one of {', '.join(METHODS)}")
+    if method == "new_style" and style is not None:
+        raise ValueError("a new style is built for this Reel: pick no existing style")
+    if lemo.is_lemo(style):  # its film runner gets no Reel and no breakdown to remake
+        raise ValueError("a Lemo-Opuscar film cannot watch the Reel: pick one of our styles"
+                         " (or Auto)")
+    style = _style(store, style, "owner")
+    text = _instruction(instruction)
+    if text in METHOD_TEXT.values():  # a route's default sent back: not the owner's words
+        text = None
+    text = text or METHOD_TEXT[method]
+    order = get_order(store, order_id)
+    with store._tx() as c:
+        moved = c.execute(
+            "UPDATE work_orders SET method=?, style=?, instruction=?, status='confirmed',"
+            " blocked_reason=NULL, updated_at=? WHERE id=? AND origin='dm'"
+            " AND status IN ('received','confirmed')",
+            (method, style, text, to_iso(utcnow()), order_id)).rowcount
+    if not moved:
+        raise InvalidTransition(f"work order {order_id} is {order['status']}: only a received"
+                                " DM Reel is confirmed here")
+    return get_order(store, order_id)
+
+
+def launch(store: CampaignStore, order_id: int) -> Dict[str, Any]:
+    """The owner's « Lancer » on a confirmed order: scheduled now, the light run takes it
+    (confirm never takes a Lemo style). ValueError when it is not confirmed."""
+    now = to_iso(utcnow())
+    with store._tx() as c:
+        moved = c.execute("UPDATE work_orders SET status='scheduled', scheduled_at=?,"
+                          " updated_at=? WHERE id=? AND status='confirmed'",
+                          (now, now, order_id)).rowcount
+    if not moved:
+        raise ValueError(f"Cette commande n'est pas confirmée (statut"
+                         f" {get_order(store, order_id)['status']}).")
+    return get_order(store, order_id)
 
 
 def set_instruction(store: CampaignStore, order_id: int, instruction: str,
@@ -315,7 +380,7 @@ def drop_unmade(store: CampaignStore, order_id: int, reason: str) -> bool:
     `reason` (a newer decision on its video replaced it); True when it was."""
     with store._tx() as c:
         hit = c.execute(f"SELECT 1 FROM work_orders w WHERE w.id=? AND w.status IN"
-                        f" ('needs_instruction','scheduled','in_production') AND {_UNMADE}",
+                        f" ({SQL_OPEN}) AND {_UNMADE}",
                         (order_id,)).fetchone()
     if hit:
         skip_order(store, order_id, reason)
@@ -372,7 +437,7 @@ def remade_idea(store: CampaignStore, order: Dict[str, Any]) -> Optional[int]:
 
 
 def delete_order(store: CampaignStore, order_id: int) -> Dict[str, Any]:
-    """The owner cancels an order not started yet (needs_instruction or scheduled; a DM
+    """The owner cancels an order not started yet (NOT_STARTED, « Écarter » on Reçus; a DM
     order's pick is skipped with it, else for_agent would list it again); KeyError when
     there is none."""
     order = get_order(store, order_id)
@@ -380,8 +445,8 @@ def delete_order(store: CampaignStore, order_id: int) -> Dict[str, Any]:
         raise ValueError(f"work order {order_id} is {order['status']}: only one not started"
                          " can be cancelled")
     with store._tx() as c:
-        if c.execute("DELETE FROM work_orders WHERE id=? AND status IN"
-                     " ('needs_instruction','scheduled')", (order_id,)).rowcount:
+        if c.execute(f"DELETE FROM work_orders WHERE id=? AND status IN ({_SQL_NOT_STARTED})",
+                     (order_id,)).rowcount:
             c.execute("UPDATE dm_picks SET status='skipped', skip_reason=?, updated_at=?"
                       " WHERE id=? AND status <> 'posted'",
                       (CANCELLED, to_iso(utcnow()), order["pick_id"]))
@@ -450,8 +515,13 @@ def _not_a_film(order: Dict[str, Any]) -> None:
 
 
 def skip_for_agent(store: CampaignStore, order_id: int, reason: str) -> Dict[str, Any]:
-    """skip_work_order: skip_order, but never a Lemo-Opuscar order (_not_a_film)."""
-    _not_a_film(get_order(store, order_id))
+    """skip_work_order: skip_order, but never a Lemo-Opuscar order (_not_a_film) nor one
+    still waiting for the owner (OWNER_ONLY: « Reçus », or confirmed but not launched)."""
+    order = get_order(store, order_id)
+    if order["status"] in OWNER_ONLY:
+        raise ValueError(f"work order {order_id} waits for the owner ({order['status']}):"
+                         " leave it, only the owner launches or drops it")
+    _not_a_film(order)
     return skip_order(store, order_id, reason)
 
 
@@ -479,10 +549,25 @@ def check_idea(store: CampaignStore, order_id: int, track: str,
         raise ValueError(f"work order {order_id} is a react: create_idea(track='remix',"
                          f" source_id={reel or '<the source download_reel made of it>'})"
                          " after download_reel")
-    if order["mode"] == "inspired" and reel is not None and source_id == reel:
-        raise ValueError(f"work order {order_id} is inspired: an original video, the Reel"
-                         " itself is not used (no source_id)")
+    # a « Reçus » route reuses nothing of someone else's Reel; our own may be recut
+    remade = order["mode"] == "inspired" or (order["method"] and not order["own_reel"])
+    if remade and reel is not None and source_id == reel:
+        raise ValueError(f"work order {order_id} is {order['method'] or 'inspired'}: an"
+                         " original video, the Reel itself is not used (no source_id)")
+    if order["method"] == "new_style" and not _style_built(store, order_id):
+        raise ValueError(f"work order {order_id} asks for a new style built from its Reel:"
+                         " request_style(kind='reference', ..., unblocks_order_ids="
+                         f"[{order_id}]) and make nothing now (a declined request:"
+                         " skip_work_order)")
     return order
+
+
+def _style_built(store: CampaignStore, order_id: int) -> bool:
+    """A style request made for this order is live (new_style: the idea waits for it)."""
+    from .style_requests import list_requests  # style_requests imports this module
+
+    return any(order_id in ((r["unblocks"] or {}).get("order_ids") or ())
+               for r in list_requests(store, "live"))
 
 
 def start(store: CampaignStore, order_id: int, idea: Dict[str, Any]) -> None:
@@ -569,6 +654,8 @@ def for_agent(store: CampaignStore, status: Optional[str] = "scheduled",
     out = []
     waiting = held_by_style(store)
     for o in list_orders(store, status, limit, newest=False):
+        if o["status"] in OWNER_ONLY:  # status None lists all: never the owner's waiting ones
+            continue
         if lemo.is_lemo(o["style"]) or o["id"] in waiting and not held:
             continue
         row = {k: o[k] for k in AGENT_KEYS}

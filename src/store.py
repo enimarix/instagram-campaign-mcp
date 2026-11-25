@@ -716,6 +716,21 @@ REQUEUES_SCHEMA = """
 ALTER TABLE render_jobs ADD COLUMN requeues INTEGER NOT NULL DEFAULT 0;
 """
 
+# Migration 29: DM Reels wait for the owner (owner 2026-11-25, docs/DECISIONS.md). A DM
+# order starts `received` (the « Reçus » page), the owner confirms it with a route (method:
+# style | new_style | rea) -> `confirmed` (on the Planning page, nothing starts) -> his
+# « Lancer » schedules it. The status CHECK only widens: edited in place, as migration 27.
+# DM orders still waiting for an instruction (needs_instruction) move to « Reçus ».
+RECEIVED_SCHEMA = """
+PRAGMA writable_schema=ON;
+UPDATE sqlite_master SET sql = replace(sql, '''analysed'',''skipped'')',
+    '''analysed'',''skipped'',''received'',''confirmed'')')
+    WHERE type = 'table' AND name = 'work_orders';
+PRAGMA writable_schema=RESET;
+ALTER TABLE work_orders ADD COLUMN method TEXT;
+UPDATE work_orders SET status = 'received' WHERE origin = 'dm' AND status = 'needs_instruction';
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -727,7 +742,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
                          AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA,
                          STYLE_REQUESTS_SCHEMA, LINE_SCHEMA, PLANNED_SCHEMA,
-                         REQUEUES_SCHEMA]
+                         REQUEUES_SCHEMA, RECEIVED_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",

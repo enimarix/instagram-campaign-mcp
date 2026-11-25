@@ -115,18 +115,33 @@ def mark_pick(store: CampaignStore, pick_id: int, status: str,
     if status == "skipped" and not reason:
         raise ValueError("say why the pick is skipped")
     if status == "skipped":
+        from . import work_orders  # here: work_orders imports this module
+
         with store._tx() as c:
             order = c.execute("SELECT id FROM work_orders WHERE pick_id=? AND status IN"
-                              " ('needs_instruction','scheduled','in_production')",
+                              f" ({work_orders.SQL_OPEN})",
                               (pick_id,)).fetchone()
         if order:
-            from . import work_orders  # here: work_orders imports this module
-
             work_orders.skip_order(store, order[0], reason)
             return store._get("dm_picks", pick_id)
     return store._update("dm_picks", ("status", "skip_reason"), pick_id,
                          {"status": status, "skip_reason": reason if status == "skipped"
                           else None})
+
+
+def mark_for_agent(store: CampaignStore, pick_id: int, status: str,
+                   reason: Optional[str] = None) -> Dict[str, Any]:
+    """mark_dm_pick: mark_pick, but never a pick whose order waits for the owner (« Reçus »,
+    or confirmed and not launched): only he decides those."""
+    from . import work_orders  # here: work_orders imports this module
+
+    with store._tx() as c:
+        waits = c.execute("SELECT 1 FROM work_orders WHERE pick_id=? AND status IN"
+                          f" ({','.join(repr(s) for s in work_orders.OWNER_ONLY)})",
+                          (pick_id,)).fetchone()
+    if waits:
+        raise ValueError(f"pick {pick_id} waits for the owner on « Reçus »: leave it")
+    return mark_pick(store, pick_id, status, reason)
 
 
 def mark_posted(store: CampaignStore, asset_id: int) -> int:

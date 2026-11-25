@@ -1,4 +1,4 @@
-"""Step 136: every DM pick is a work order (needs_instruction / scheduled), the owner's
+"""Step 136: every DM pick is a work order (received since 2026-11-25: « Reçus »), the owner's
 instruction from the app, the at-once run (debounce, daily cap, preflight), the analysis-only
 finish, the list of both sources and the backfill of picks made before."""
 
@@ -53,8 +53,8 @@ def clock(monkeypatch):
     return c
 
 
-def _dm_order(store, note=None, url=THEIRS):
-    """A pick as the poll stores it, with its order (scheduled at work_orders' clock)."""
+def _received(store, note=None, url=THEIRS):
+    """A pick as the poll stores it, with its order (received)."""
     now = to_iso(work_orders.utcnow())
     with store._tx() as c:
         cur = c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url,"
@@ -64,6 +64,20 @@ def _dm_order(store, note=None, url=THEIRS):
         work_orders.add_for_pick(c, cur.lastrowid, note, False, now)
         return c.execute("SELECT id FROM work_orders WHERE pick_id=?",
                          (cur.lastrowid,)).fetchone()[0]
+
+
+def _dm_order(store, note=None, url=THEIRS):
+    """A DM order as the owner moves it: with a note, confirmed on « Reçus » and launched
+    from Planning (scheduled at work_orders' clock); without, an older order still waiting
+    for its instruction (needs_instruction, from before « Reçus »)."""
+    oid = _received(store, note, url)
+    if note:
+        work_orders.confirm(store, oid, "style", None, note)
+        work_orders.launch(store, oid)
+    else:
+        with store._tx() as c:
+            c.execute("UPDATE work_orders SET status='needs_instruction' WHERE id=?", (oid,))
+    return oid
 
 
 # --- the poll ---------------------------------------------------------------------------
@@ -80,15 +94,15 @@ async def test_poll_makes_each_pick_a_work_order(client, store):
     by_url = {o["permalink"]: o for o in work_orders.list_orders(store, source="dm")}
     noted, bare = by_url[OURS], by_url[THEIRS]
     assert (noted["status"], noted["mode"], noted["instruction"], noted["own_reel"]) == (
-        "scheduled", "owner", "analyse-la, elle a marché", True)
-    assert noted["scheduled_at"] and noted["sender_username"] == "friend.one"
+        "received", "owner", "analyse-la, elle a marché", True)
+    assert noted["scheduled_at"] is None and noted["sender_username"] == "friend.one"
     assert (bare["status"], bare["instruction"], bare["own_reel"]) == (
-        "needs_instruction", None, False)
+        "received", None, False)
     assert bare["embed_url"] == "https://www.instagram.com/reel/THEIRS1/embed"
     # a second poll stores nothing twice; the agent's dm_picks list stays empty
     assert (await D.poll_dm_picks(client, store, budget_left=lambda: True))["picks"] == 0
     assert len(work_orders.list_orders(store)) == 2 and D.for_agent(store) == []
-    assert [o["id"] for o in work_orders.for_agent(store)] == [noted["id"]]
+    assert work_orders.for_agent(store) == []  # nothing starts from a DM alone (« Reçus »)
 
 
 # --- 141: a DM Reel's text is always its note -------------------------------------------
@@ -110,9 +124,9 @@ async def test_same_second_text_after_the_share_is_its_note(client, store):
     assert await _notes(client, store, [
         _msg("m2", FRIEND, "18:51", "Macrobody being crushed"),
         _msg("m1", FRIEND, "18:51", share=THEIRS)]) == {
-        "m1": ("Macrobody being crushed", "scheduled")}
+        "m1": ("Macrobody being crushed", "received")}
     [order] = work_orders.list_orders(store)
-    assert order["instruction"] == "Macrobody being crushed" and order["scheduled_at"]
+    assert order["instruction"] == "Macrobody being crushed" and not order["scheduled_at"]
 
 
 @respx.mock
@@ -121,7 +135,7 @@ async def test_text_just_before_the_share_is_its_note(client, store):
     assert await _notes(client, store, [
         _msg("m2", FRIEND, "01:00", share=THEIRS),
         _msg("m1", FRIEND, "00:30", "fais-en une réaction")]) == {
-        "m2": ("fais-en une réaction", "scheduled")}
+        "m2": ("fais-en une réaction", "received")}
 
 
 @respx.mock
@@ -133,25 +147,26 @@ async def test_each_share_gets_its_own_text(client, store):
         _msg("s2", FRIEND, "00:20", share=THEIRS + "?2"),
         _msg("t1", FRIEND, "00:10", "first"),
         _msg("s1", FRIEND, "00:00", share=THEIRS)]) == {
-        "s1": ("first", "scheduled"), "s2": ("second", "scheduled"),
-        "s3": (None, "needs_instruction")}
+        "s1": ("first", "received"), "s2": ("second", "received"),
+        "s3": (None, "received")}
 
 
 @respx.mock
-async def test_a_note_on_a_later_poll_schedules_the_waiting_order(client, store, clock):
+async def test_a_note_on_a_later_poll_is_the_waiting_orders_draft(client, store, clock):
     respx.get(f"{API}/1789/media").respond(json={"data": []})
     shares = [_msg("s2", FRIEND, "01:00", share=THEIRS + "?2"),
               _msg("s1", FRIEND, "00:00", share=THEIRS)]
     assert await _notes(client, store, shares) == {
-        "s1": (None, "needs_instruction"), "s2": (None, "needs_instruction")}
+        "s1": (None, "received"), "s2": (None, "received")}
     owner = next(o for o in work_orders.list_orders(store) if o["permalink"] == THEIRS + "?2")
-    work_orders.set_instruction(store, owner["id"], "the owner's own words")
+    work_orders.confirm(store, owner["id"], "rea", None, "the owner's own words")
     texts = [_msg("t2", FRIEND, "01:10", "late for s2"),
              _msg("t1", FRIEND, "00:10", "late for s1")]
     assert await _notes(client, store, [texts[0], shares[0], texts[1], shares[1]]) == {
-        "s1": ("late for s1", "scheduled"), "s2": (None, "scheduled")}
+        "s1": ("late for s1", "received"), "s2": (None, "confirmed")}
     by_url = {o["permalink"]: o for o in work_orders.list_orders(store)}
-    assert by_url[THEIRS]["instruction"] == "late for s1" and by_url[THEIRS]["scheduled_at"]
+    assert by_url[THEIRS]["instruction"] == "late for s1"
+    assert not by_url[THEIRS]["scheduled_at"]
     assert by_url[THEIRS + "?2"]["instruction"] == "the owner's own words"  # untouched
 
 
@@ -436,7 +451,8 @@ def test_migration_backfills_existing_picks(tmp_path, monkeypatch):
     try:
         orders = {o["pick_id"]: o for o in work_orders.list_orders(new, source="dm")}
         assert {k: (o["status"], o["instruction"], o["mode"]) for k, o in orders.items()} == {
-            1: ("needs_instruction", None, "owner"), 2: ("needs_instruction", None, "owner"),
+            # migration 29 (« Reçus ») then moves the waiting ones to received
+            1: ("received", None, "owner"), 2: ("received", None, "owner"),
             3: ("scheduled", "réagis", "owner"), 4: ("skipped", None, "owner")}
         assert orders[3]["scheduled_at"] == "t1" and orders[4]["skip_reason"] == "dupe"
         [trend] = work_orders.list_orders(new, source="trend")

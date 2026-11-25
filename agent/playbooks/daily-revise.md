@@ -53,6 +53,19 @@ script and message, in the order's `style`).
 `create_idea(…, work_order_id=<id>)` stores it and `render_motion` refuses a template of
 another style (its refusal names the right templates); null = Auto: pick the style that
 fits, `create_idea(style=…)`.
+**The route** (`method`, a DM Reel the owner confirmed on « Reçus »; null on older orders):
+- `style`: make **the same video** (same idea, format, beats, ending) in the order's
+  `style` (null = Auto), as an `inspired` video: nothing of the Reel reused.
+- `new_style`: the owner wants a style built from this Reel. Watch it (below), then
+  `request_style(kind="reference", …, reference=<permalink> and what the style must do,
+  unblocks_order_ids=[<id>])` and make nothing now; never make it in an existing style
+  (`create_idea` refuses until that style is live; declined: `skip_work_order`).
+- `rea`: `download_reel(<permalink>)`, then `breakdown_reel(<its source_id>)`: rea-video's
+  shot-by-shot breakdown (what each shot shows, its timing, camera, on-screen text, sound,
+  how it was made). Remake the video from it in the order's `style` (null = Auto): same
+  shot structure, timing and beats, our own picture, words, voice and music (nothing of
+  the Reel reused). A shot no template can make: `request_style` as below. The breakdown
+  failed or rea-video is missing: make it as `style` and say so in the `description`.
 **Watch the Reel first.** An order with a `permalink` the owner did not film (`own_reel`
 false) is a Reel they want you to see: `download_reel(<permalink>)`,
 `get_clip_frames(source_id)` and `set_clip_timeline(source_id, events, summary)` before you

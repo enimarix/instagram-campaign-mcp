@@ -261,7 +261,7 @@ def remove(store: CampaignStore, kind: str, item_id: int) -> Dict[str, Any]:
         raise ValueError(f"kind must be one of {', '.join(REMOVABLE)}")
     if kind != "render":
         status = work_orders.get_order(store, item_id)["status"]
-        if status != "scheduled":
+        if status not in ("scheduled", "confirmed"):  # confirmed: from « Reçus »
             raise ValueError(f"Cette commande ne peut plus être retirée (statut {status}) :"
                              " seule une commande en attente peut l'être.")
         work_orders.skip_order(store, item_id, REMOVED)

@@ -16,7 +16,7 @@ const CATALOG = [
 ]
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
 const order = (id: number, over: Partial<WorkOrder> = {}): WorkOrder => ({
-  id, source: 'create', style: null, from_asset_id: null, source_id: null, pick_id: null, sender_username: null,
+  id, source: 'create', style: null, method: null, from_asset_id: null, source_id: null, pick_id: null, sender_username: null,
   received_at: null, created_at: hoursAgo(2), scheduled_at: hoursAgo(2), permalink: null, embed_url: null,
   own_reel: false, instruction: 'Pourquoi on a faim le soir', mode: 'owner', status: 'scheduled', skip_reason: null,
   blocked_reason: null, analysis: null, idea_id: null, asset_id: null, updated_at: hoursAgo(1), idea_hook: null,

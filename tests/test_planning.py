@@ -77,7 +77,7 @@ def test_chain_follows_the_worker_order_and_each_start_is_the_last_ready(
     queued = _job(store, "CinematicSkit", "queued", created_at=to_iso(NOW - timedelta(hours=1)))
     film = _order(store, monkeypatch, "Un film", "lemo:watercolor")
     mine = _order(store, monkeypatch, "Pourquoi on a faim le soir")
-    with store._tx() as c:  # a DM'd Reel without a note waits for the owner
+    with store._tx() as c:  # a DM'd Reel waits for the owner on « Reçus », not here
         c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url, received_at,"
                   " created_at, updated_at) VALUES ('m1', 'x', 'https://www.instagram.com/"
                   "reel/A/', ?, ?, ?)", (to_iso(NOW),) * 3)
@@ -90,8 +90,13 @@ def test_chain_follows_the_worker_order_and_each_start_is_the_last_ready(
                        ("next", "film", film), ("next", "agent_run", None),
                        ("next", "order_run", None), ("next", "work_order", mine)]
     assert items[3]["title"] == "Analyse de la nuit"  # due at 10:00, not started: after the line
-    assert got[6][1] == "work_order" and items[6]["waits_on"] == "needs_instruction"
-    assert items[6]["est_start"] is None
+    assert not any(i["ids"].get("pick_id") for i in items)  # received: on « Reçus » only
+    dm = work_orders.list_orders(store, "received")[0]["id"]
+    work_orders.confirm(store, dm, "rea")  # confirmed: on Planning, waits for « Lancer »
+    [card] = [i for i in planning.build_planning(store, s, NOW)["items"]
+              if i["ids"].get("order_id") == dm]
+    assert (card["waits_on"], card["est_start"]) == ("launch", None)
+    assert "rea-video" in card["why_here"]
     # the running render: halfway after 60 s -> 60 s left
     assert parse_iso(items[0]["est_ready"]) == NOW + timedelta(seconds=60)
     assert items[0]["stage"] == "rendu" and items[0]["progress"] == 0.5

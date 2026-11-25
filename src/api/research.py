@@ -142,8 +142,8 @@ def create_work_orders(body: WorkOrdersIn, store: CampaignStore = Depends(get_st
     return call(work_orders.create_orders, store, [i.model_dump() for i in body.items])
 
 
-WorkOrderStatus = Literal["needs_instruction", "scheduled", "in_production", "in_feed",
-                          "analysed", "skipped"]
+WorkOrderStatus = Literal["received", "confirmed", "needs_instruction", "scheduled",
+                          "in_production", "in_feed", "analysed", "skipped"]
 
 
 class InstructionIn(BaseModel):
@@ -151,6 +151,13 @@ class InstructionIn(BaseModel):
     instruction: str
     mode: Optional[Literal["inspired", "react", "owner"]] = None
     style: Optional[str] = None  # 138: None = Auto; left out: unchanged
+
+
+class ConfirmIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    method: Literal["style", "new_style", "rea"]
+    style: Optional[str] = None  # None: Auto (new_style: always None)
+    instruction: Optional[str] = None  # empty: the route's default text
 
 
 @router.get("/research/work-orders")
@@ -173,6 +180,14 @@ def set_instruction(order_id: int, body: InstructionIn,
                     store: CampaignStore = Depends(get_store)):
     return call(work_orders.set_instruction, store, order_id, body.instruction, body.mode,
                 **body.model_dump(include={"style"}, exclude_unset=True))
+
+
+@router.post("/work-orders/{order_id}/confirm")
+def confirm_work_order(order_id: int, body: ConfirmIn,
+                       store: CampaignStore = Depends(get_store)):
+    """« Reçus »: a received DM Reel goes to the Planning page with its route."""
+    return call(work_orders.confirm, store, order_id, body.method, body.style,
+                body.instruction)
 
 
 @router.delete("/research/work-orders/{order_id}", status_code=204)

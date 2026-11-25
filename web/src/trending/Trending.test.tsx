@@ -29,7 +29,7 @@ const REFRESH: RefreshResult = {
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
 // a real GET /api/work-orders?source=mine row (136, read from the owner's DB copy)
 const order = (id: number, over: Partial<WorkOrder> = {}): WorkOrder => ({
-  id, source_id: null, pick_id: id, mode: 'owner', instruction: null, own_reel: false, status: 'needs_instruction',
+  id, source_id: null, pick_id: id, mode: 'owner', method: null, instruction: null, own_reel: false, status: 'needs_instruction',
   skip_reason: null, blocked_reason: null, analysis: null, scheduled_at: null, idea_id: null, asset_id: null,
   created_at: hoursAgo(1), permalink: `https://www.instagram.com/reel/D${id}/`, sender_username: 'amine_xenima',
   received_at: hoursAgo(2), source: 'dm', embed_url: `https://www.instagram.com/reel/D${id}/embed`, topic: null,

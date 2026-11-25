@@ -12,6 +12,7 @@ import Learnings from './pages/Learnings'
 import Planning from './pages/Planning'
 import Placeholder from './pages/Placeholder'
 import Posts, { PostPage } from './pages/Posts'
+import Received from './pages/Received'
 import ReportPage from './pages/Report'
 import Settings from './pages/Settings'
 import Trends from './pages/Trends'
@@ -21,7 +22,7 @@ import TrendingPage from './trending/TrendingPage'
 import VoicesPage from './voices/VoicesPage'
 import {
   AgentIcon, BulbIcon, CalendarIcon, ChartIcon, ChevronIcon, CreateIcon, InboxIcon, MegaphoneIcon, MicIcon, MoreIcon, PaletteIcon,
-  PlanningIcon, SettingsIcon, TrendsIcon,
+  PlanningIcon, ReceivedIcon, SettingsIcon, TrendsIcon,
 } from './ui/icons'
 import { PageHeader } from './ui/PageHeader'
 import { card } from './ui/styles'
@@ -30,11 +31,12 @@ import { ToastProvider } from './ui/Toast'
 // `tab`: also in the phone's bottom bar; the rest sit behind "More" there.
 const NAV = [
   { path: '/inbox', label: 'Inbox', Icon: InboxIcon, tab: true },
+  { path: '/recus', label: 'Reçus', Icon: ReceivedIcon, tab: true }, // DM'd Reels to confirm (2026-11-25)
   { path: '/create', label: 'Créer', Icon: CreateIcon, tab: true },
   // 213: Planning took Agent's phone tab (owner's third task; Agent runs are rare), was 185
   { path: '/planning', label: 'Planning', Icon: PlanningIcon, tab: true },
   { path: '/trending', label: 'Trending', Icon: TrendsIcon, tab: true },
-  { path: '/calendar', label: 'Calendrier', Icon: CalendarIcon, tab: true },
+  { path: '/calendar', label: 'Calendrier', Icon: CalendarIcon }, // 2026-11-25: behind « Plus » on the phone, Reçus took its tab
   { path: '/analytics', label: 'Statistiques', Icon: ChartIcon }, // 174: its tab went to Créer
   { path: '/learnings', label: 'Apprentissages', Icon: BulbIcon },
   { path: '/styles', label: 'Styles', Icon: PaletteIcon },
@@ -85,6 +87,7 @@ export default function App() {
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/create" element={<CreatePage />} />
               <Route path="/planning" element={<Planning />} />
+              <Route path="/recus" element={<Received />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/analytics/posts" element={<Posts />} />

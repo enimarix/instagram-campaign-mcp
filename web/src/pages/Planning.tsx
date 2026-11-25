@@ -28,7 +28,7 @@ const WAIT: Record<PlanningWait, string> = {
   gpu_busy: 'attend le GPU', agent_running: 'attend la fin du run', timer: 'attend son minuteur', machine: 'attend la machine', held: 'En pause', order_grace: 'délai après ton envoi',
   check_grace: 'délai après le dernier rendu', recheck: 'nouvelle vérification prévue',
   daily_cap: 'quota du jour atteint', preflight: "l'IA ne peut pas démarrer", next_ai_run: 'attend le prochain run',
-  needs_instruction: 'attend ta consigne', style: 'attend son nouveau style',
+  needs_instruction: 'attend ta consigne', style: 'attend son nouveau style', launch: 'attend ton « Lancer »',
 }
 /** The wait in words; a film's daily cap is the owner's « Lemo films per day » setting (205). */
 const waitLabel = (i: PlanningItem) => i.kind === 'film' && i.waits_on === 'daily_cap'
@@ -56,7 +56,7 @@ function duration(s: number) {
 /** Where the item comes from, linked to its page when it has one. */
 function Origin({ item: i }: { item: PlanningItem }) {
   const what = SOURCE[i.source ?? ''] ?? i.source
-  const to = i.ids.asset_id ? `/assets/${i.ids.asset_id}` : i.ids.order_id ? '/create' : i.ids.run_id ? '/agent' : null
+  const to = i.ids.asset_id ? `/assets/${i.ids.asset_id}` : i.waits_on === 'launch' ? '/recus' : i.ids.order_id ? '/create' : i.ids.run_id ? '/agent' : null
   const label = i.ids.asset_id ? `vidéo ${i.ids.asset_id}` : i.ids.order_id ? `commande ${i.ids.order_id}` : i.ids.run_id ? `run ${i.ids.run_id}` : null
   if (!what && !to) return null
   return (

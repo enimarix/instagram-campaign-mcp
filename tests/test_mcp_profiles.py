@@ -22,7 +22,7 @@ AGENT_ALLOWED = {
     "add_to_watchlist", "list_watchlist", "remove_from_watchlist", "research_trends",
     "get_trend_report", "list_inspirations", "mark_inspiration_used", "download_reel",
     "list_dm_picks", "mark_dm_pick", "list_work_orders", "skip_work_order",
-    "analyse_work_order", "list_sources",
+    "analyse_work_order", "breakdown_reel", "list_sources",
     "render_remix",
     "get_clip_frames", "set_clip_timeline", "search_stock", "add_stock_clip", "find_sfx",
     "trending_music", "fetch_music",

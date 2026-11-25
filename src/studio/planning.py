@@ -231,7 +231,8 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
     why_here, waits_on (gpu_busy | agent_running | timer | machine (197: a render waiting
     to retry after a machine failure) | held | order_grace | check_grace |
-    recheck | daily_cap | preflight | next_ai_run | needs_instruction | style | None), not_before (a
+    recheck | daily_cap | preflight | next_ai_run | needs_instruction | style | launch (a
+    confirmed DM Reel: waits for « Lancer ») | None), not_before (a
     waiting render's or film's timer, UTC ISO), stage and progress (running items), late_s
     (a running item past its usual time, 190; else None), picks_up (the producing run's
     placeholder), idea (a claude_idea's card: planned.cards, section ideas), line_index (a
@@ -492,6 +493,16 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                                " construit pour ta commande : l'IA la fait dès qu'il existe.",
                                waits_on="style", source=o["source"], style=o["style"],
                                order_id=o["id"], pick_id=o["pick_id"]))
+    for o in work_orders.list_orders(store, "confirmed", newest=False):  # from « Reçus »
+        own = o["instruction"] not in work_orders.METHOD_TEXT.values()
+        items.append(_item("next", "work_order", _title(own and o["instruction"] or None,
+                                                        o["caption_quote"],
+                                                        f"Reel de @{o['sender_username']}"),
+                           None, None, f"Confirmée depuis « Reçus »"
+                           f" ({ROUTES.get(o['method'], '?')}) : rien ne part avant ton"
+                           " « Lancer ».", waits_on="launch",
+                           source=o["source"], style=o["style"], order_id=o["id"],
+                           pick_id=o["pick_id"]))
     for o in work_orders.list_orders(store, "needs_instruction", newest=False):
         items.append(_item("next", "work_order", _title(o["caption_quote"], f"Commande {o['id']}"),
                            None, None, "Attend ta consigne : rien ne part sans elle.",
@@ -725,6 +736,9 @@ def _pushed(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
     return {"pushed": pushed}
 
 
+# a confirmed DM order's route (work_orders.METHODS), in its Planning card
+ROUTES = {"style": "même vidéo, style existant", "new_style": "nouveau style",
+          "rea": "rea-video"}
 HEAVY = (*line.KINDS, "claude_idea")  # to the head of the line
 ORDERS = ("work_order", "change_request")  # the light run, on the selection
 LAUNCHES = (*HEAVY, *ORDERS, "agent_run")
@@ -753,6 +767,8 @@ def _order_ids(store: CampaignStore, kind: str, item_id: int, sent_back: Callabl
         o = work_orders.get_order(store, item_id)
         if o["status"] == "needs_instruction":
             raise ValueError("Cette commande attend ta consigne : rien ne part sans elle.")
+        if o["status"] == "confirmed":  # « Reçus » -> Planning -> the owner's « Lancer »
+            o = work_orders.launch(store, item_id)
         if o["status"] != "scheduled" or lemo.is_lemo(o["style"]):
             raise ValueError(f"Cette commande n'attend pas le run léger (statut {o['status']}) :"
                              " seule une commande en attente peut être lancée.")

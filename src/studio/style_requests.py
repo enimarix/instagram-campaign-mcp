@@ -15,7 +15,9 @@ A request that unblocks a work order starts accepted (the owner asked for that v
 2026-11-25) and the order waits for it (work_orders.held_by_style), never made in another
 style. Lifecycle: proposed -> accepted | declined (the owner, Agent page; he may change his mind
 until the build starts) -> building -> live (the lead's dev loop: an accepted request is a
-style step, `ig-campaign style-requests list --status accepted`). Nothing here generates
+style step, `ig-campaign style-requests list --status accepted`; live: `ig-campaign
+style-requests mark <id> live --style <its style id>`, so a « Reçus » order built for it
+asks for that style). Nothing here generates
 code: a request is a brief for a human-led build. When the style goes live its template
 joins the registry, and the registry change re-wakes every waiting video
 (src/agent/schedule.py).
@@ -27,7 +29,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, parse_iso, to_iso, utcnow
-from . import feedback, work_orders
+from . import feedback, styles, work_orders
 
 KINDS = ("reference", "invented")
 STATUSES = ("proposed", "accepted", "declined", "building", "live")
@@ -61,7 +63,8 @@ def _check_unblocks(store: CampaignStore, asset_ids: Sequence[int],
         if store.get_asset(i)["status"] != "revision_requested":
             raise ValueError(f"video {i} is not waiting for changes (revision_requested)")
     for i in order_ids:
-        if work_orders.get_order(store, i)["status"] not in work_orders.OPEN:
+        status = work_orders.get_order(store, i)["status"]
+        if status not in work_orders.OPEN or status in work_orders.OWNER_ONLY:
             raise ValueError(f"work order {i} is not open")
     return {"asset_ids": asset_ids, "order_ids": order_ids}
 
@@ -149,10 +152,23 @@ def decide(store: CampaignStore, request_id: int, decision: str,
                  decided_at=to_iso(utcnow()))
 
 
-def mark(store: CampaignStore, request_id: int, status: str) -> Dict[str, Any]:
+def mark(store: CampaignStore, request_id: int, status: str,
+         style: Optional[str] = None) -> Dict[str, Any]:
     """The lead's dev loop: accepted -> building (the style step started) -> live (merged,
-    the style is in the registry)."""
-    return _move(store, request_id, status, LEAD_MOVES)
+    the style is in the registry). `style` (live): the style id it became; the « Reçus »
+    orders made for it (method new_style, no style yet) then ask for exactly that style."""
+    if style is not None:
+        if status != "live":
+            raise ValueError("a style id is given when the request goes live")
+        styles.get_style(store, style)  # ValueError naming the known ones
+    row = _move(store, request_id, status, LEAD_MOVES)
+    ids = (row["unblocks"] or {}).get("order_ids") or []
+    if style is not None and ids:
+        with store._tx() as c:
+            c.execute(f"UPDATE work_orders SET style=?, updated_at=? WHERE method='new_style'"
+                      f" AND style IS NULL AND id IN ({','.join('?' * len(ids))})",
+                      (style, to_iso(utcnow()), *ids))
+    return row
 
 
 def for_agent(store: CampaignStore, now: Optional[datetime] = None) -> Dict[str, Any]:

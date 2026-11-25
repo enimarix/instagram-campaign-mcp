@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Scheduled work orders, oldest first (studio.work_orders.for_agent): videos the owner sent to make, from the Trending page (source trend), by DM (source dm), Créer une vidéo (source create) or même vidéo, autre style (source change: from_video); style: the style button pressed, null = Auto",
+  "title": "Scheduled work orders, oldest first (studio.work_orders.for_agent): videos the owner sent to make, from the Trending page (source trend), by DM (source dm), Créer une vidéo (source create) or même vidéo, autre style (source change: from_video); style: the style button pressed, null = Auto; method (a DM Reel confirmed on Reçus): style | new_style | rea, null = older orders",
   "type": "object",
   "required": ["untrusted_captions", "orders"],
   "additionalProperties": false,
@@ -21,6 +21,7 @@
           "source_id": {"type": ["integer", "null"]},
           "pick_id": {"type": ["integer", "null"]},
           "mode": {"enum": ["inspired", "react", "owner"]},
+          "method": {"enum": ["style", "new_style", "rea", null]},
           "style": {"type": ["string", "null"]},
           "instruction": {"type": ["string", "null"], "maxLength": 500},
           "status": {"const": "scheduled"},

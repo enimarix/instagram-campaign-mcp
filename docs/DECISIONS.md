@@ -1132,6 +1132,28 @@ with the Reel's music. Run 73 requested « Physique Scan » and left the order o
 it open and made it in Sitcom 3D with library music, without watching the Reel.
 « The AI should literally do what I tell it to do. »
 
+## 2026-11-25: A DM'd Reel waits on « Reçus »; nothing starts before the owner's « Lancer »
+Replaces step 136's « a DM with a note is scheduled at once ». Every Reel a pinned account
+sends by DM is a work order `received`, listed on the new « Reçus » page (its note is the
+draft instruction). The owner picks the route (`work_orders.method`): `style` (the same video
+in an existing style, or Auto), `new_style` (the agent requests a style built from the Reel,
+held for it as above) or `rea` (rea-video breaks the Reel down shot by shot, the agent remakes
+it from that breakdown in the chosen style), then « Confirmer » -> `confirmed`: on the Planning
+page, no time, « attend ton « Lancer » ». His « Lancer » schedules it (the light run on that
+order); « Écarter » / « Retirer » drop it. A DM order still waiting for an instruction
+(needs_instruction) moves to « Reçus »; one already scheduled keeps its old path. A route takes
+our styles only: a Lemo-Opuscar film cannot watch the Reel. The agent never sees, skips,
+marks or holds a received / confirmed order; for `new_style`, the lead marks the request
+live with the style id it became (`style-requests mark <id> live --style <id>`) and the
+order is then made in that style only.
+rea-video (JuneYaooo/rea-video, Apache-2.0) is cloned into vendor/rea-video (git-ignored) with
+its own venv (`ig-campaign rea setup`), runs offline on CPU (no vision model, no key) with the
+downloader's env allow-list, and only reads: the agent gets its VIDEO.md through the
+`breakdown_reel` tool (agent profile: local, publishes and renders nothing).
+Reason: owner 2026-11-25: « When a video is sent in the messenger, it shouldn't go directly
+into the planning. It should go into this new page. Then I confirm it [...] Then I can launch
+the work of this video or not. »
+
 ## 2026-11-25: « Physique Scan », the style built for the owner's DM order 75
 The style requests « Muscle Scan » (4), « Scan 3D Athlète » (5) and « Physique Scan » (19) all
 asked for the same Reel (https://www.instagram.com/reel/DetQ8tOOEkg/): it is 3D kinetic type on
