@@ -75,6 +75,18 @@ async def test_burst_publishes_one_and_moves_the_other_a_gap_later(store, cfg):
     assert parse_dt(moved["publish_at"]) >= T + timedelta(minutes=cfg.min_slot_gap_minutes)
 
 
+async def test_gap_counts_from_the_last_posts_slot_not_its_publish_finish(store, cfg):
+    gap = timedelta(minutes=cfg.min_slot_gap_minutes)
+    first = _due(store, gap.total_seconds() / 60 + 0.5)  # the planner's slot before
+    with store._tx() as c:  # it went out, its publish done 43 s after its slot
+        c.execute("UPDATE scheduled_posts SET status='published', updated_at=? WHERE id=?",
+                  (to_iso(T - gap - timedelta(seconds=30) + timedelta(seconds=43)), first))
+    second = _due(store, 0.5)  # exactly one gap after it, run 30 s later
+    fake = FakeClient()
+    res = await worker.cycle(fake, store, cfg, now=clock)
+    assert res["replanned"] == [] and store.get_scheduled(second)["status"] == "published"
+
+
 @pytest.mark.parametrize("setting, flag, publishes", [
     (True, None, False),   # the setting is the default
     (False, True, False),  # the website's switch wins...

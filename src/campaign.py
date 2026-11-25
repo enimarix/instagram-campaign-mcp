@@ -174,7 +174,9 @@ def hold_queue(store: CampaignStore, settings: InstagramMCPSettings,
     gap = timedelta(minutes=settings.min_slot_gap_minutes)
     max_late = timedelta(minutes=settings.max_late_minutes)
     rows = store.queue_times(since=now - timedelta(days=1))
-    sent = [parse_dt(r["updated_at"]) for r in rows if r["status"] != "pending"]
+    # A sent post counts from its slot, like the planner spaces them (learning/slots.py):
+    # its updated_at is the publish finish, ~1 min later, which would bump the next slot.
+    sent = [parse_dt(r["publish_at"]) for r in rows if r["status"] != "pending"]
     pending = sorted((parse_dt(r["publish_at"]), r["id"]) for r in rows
                      if r["status"] == "pending")
     planned = [at for at, _ in pending if at > now]
