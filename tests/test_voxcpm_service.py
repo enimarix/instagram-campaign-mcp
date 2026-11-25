@@ -308,6 +308,25 @@ def test_a_failed_load_releases_the_gpu(tmp_path):
     assert answer.status_code == 500 and _gpu_free(lock)
 
 
+def test_a_request_nobody_waits_for_is_dropped(monkeypatch):
+    """2026-11-25: the studio timed out (waiting for RAM): no load, no takes for nobody."""
+    from starlette.requests import Request
+
+    gone = []  # one answer per check: before the load, after it
+
+    async def disconnected(self):
+        return gone.pop(0)
+
+    monkeypatch.setattr(Request, "is_disconnected", disconnected)
+    engine = FakeEngine([GOOD])
+    http = TestClient(server.create_app(engine, server.Settings(), server.load_voices()))
+    gone[:] = [True]
+    assert http.post("/tts", json={"text": SCRIPT}).status_code == 503 and engine.loads == 0
+    gone[:] = [False, True]  # gone while it waited for the GPU
+    assert http.post("/tts", json={"text": SCRIPT}).status_code == 503 and engine.loads == 1
+    assert engine.texts == []
+
+
 # --- the engine's worker process (step 146) ---------------------------------------------
 class ChildEngine:
     """Built in the worker process by engine_worker.serve: its audio names that process.
