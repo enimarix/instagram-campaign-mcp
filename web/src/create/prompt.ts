@@ -75,7 +75,6 @@ export const styleName = (catalog: CatalogStyle[] | undefined, id: string | null
 export function stage(o: WorkOrder): [string, Tone] {
   const film = o.style?.startsWith('lemo:')
   switch (o.status) {
-    case 'needs_instruction': return ['En attente de ta consigne', 'warn']
     case 'received': return ['À confirmer dans Reçus', 'warn']
     case 'confirmed': return ['Attend ton « Lancer » (Planning)', 'info']
     case 'scheduled': return o.blocked_reason ? ['En attente (bloqué)', 'warn'] : ['En attente', 'info']

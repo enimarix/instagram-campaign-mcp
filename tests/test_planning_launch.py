@@ -80,7 +80,7 @@ def test_refusals_say_why_and_the_rest_still_goes(store, monkeypatch):
     ok = _job_id(store, _job(store, "FactQuest", "queued"))
     mine = _order(store, monkeypatch, "Ma commande")
     with store._tx() as c:
-        c.execute("UPDATE work_orders SET status = 'needs_instruction' WHERE id = ?", (mine,))
+        c.execute("UPDATE work_orders SET status = 'skipped' WHERE id = ?", (mine,))
     _run(store, "daily-learn", NOW - timedelta(minutes=5))  # still running
     out = _launch(store, s, ("render", running), ("render", done), ("render", 999),
                   ("work_order", mine), ("change_request", _asset(store)),
@@ -90,7 +90,7 @@ def test_refusals_say_why_and_the_rest_still_goes(store, monkeypatch):
     why = {(r["kind"], r["id"]): r["message"] for r in out["refused"]}
     assert "en cours" in why[("render", running)] and "terminé" in why[("render", done)]
     assert why[("render", 999)] == "Introuvable."
-    assert "consigne" in why[("work_order", mine)]
+    assert "statut skipped" in why[("work_order", mine)]
     assert "n'attend pas de changement" in next(m for (k, _), m in why.items()
                                                 if k == "change_request")
     assert why[("agent_run", "daily-learn")] == "Le run « Analyse de la nuit » est déjà en cours."

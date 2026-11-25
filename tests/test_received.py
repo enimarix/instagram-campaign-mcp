@@ -153,6 +153,23 @@ def test_migration_moves_waiting_dm_orders_to_received(tmp_path, monkeypatch):
     new.close()
 
 
+def test_migration_30_moves_what_a_draft_of_29_left(tmp_path, monkeypatch):
+    path = str(tmp_path / "draft.db")
+    monkeypatch.setattr(store_mod, "MIGRATIONS",
+                        MIGRATIONS[:MIGRATIONS.index(store_mod.RECEIVED_AGAIN_SCHEMA)])
+    old = CampaignStore(path)
+    with old._tx() as c:  # as a draft of 29 left it: still needs_instruction
+        c.execute("INSERT INTO dm_picks (message_id, sender_username, reel_url,"
+                  " received_at, created_at, updated_at) VALUES ('m', 'x', 'u', 't', 't', 't')")
+        c.execute("INSERT INTO work_orders (origin, pick_id, mode, status, created_at,"
+                  " updated_at) VALUES ('dm', 1, 'owner', 'needs_instruction', 't', 't')")
+    old.close()
+    monkeypatch.setattr(store_mod, "MIGRATIONS", MIGRATIONS)
+    new = CampaignStore(path)
+    assert [o["status"] for o in work_orders.list_orders(new)] == ["received"]
+    new.close()
+
+
 def test_a_dm_route_refuses_a_lemo_film(store):
     oid = _received(store)
     with pytest.raises(ValueError, match="Lemo"):

@@ -585,8 +585,8 @@ async def download_reel(source_id_or_url: Union[int, str]) -> Dict[str, Any]:
 
 
 # not received / confirmed: those wait for the owner (« Reçus », « Lancer »)
-WorkOrderStatus = Literal["needs_instruction", "scheduled", "in_production", "in_feed",
-                          "analysed", "skipped"]
+WorkOrderStatus = Literal["scheduled", "in_production", "in_feed", "analysed",
+                          "skipped"]
 
 
 @mcp.tool(annotations=LOCAL_READ)

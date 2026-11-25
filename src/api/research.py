@@ -142,7 +142,7 @@ def create_work_orders(body: WorkOrdersIn, store: CampaignStore = Depends(get_st
     return call(work_orders.create_orders, store, [i.model_dump() for i in body.items])
 
 
-WorkOrderStatus = Literal["received", "confirmed", "needs_instruction", "scheduled",
+WorkOrderStatus = Literal["received", "confirmed", "scheduled",
                           "in_production", "in_feed", "analysed", "skipped"]
 
 

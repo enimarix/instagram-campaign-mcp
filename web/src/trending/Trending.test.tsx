@@ -29,7 +29,7 @@ const REFRESH: RefreshResult = {
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
 // a real GET /api/work-orders?source=mine row (136, read from the owner's DB copy)
 const order = (id: number, over: Partial<WorkOrder> = {}): WorkOrder => ({
-  id, source_id: null, pick_id: id, mode: 'owner', method: null, instruction: null, own_reel: false, status: 'needs_instruction',
+  id, source_id: null, pick_id: id, mode: 'owner', method: null, instruction: null, own_reel: false, status: 'received',
   skip_reason: null, blocked_reason: null, analysis: null, scheduled_at: null, idea_id: null, asset_id: null,
   created_at: hoursAgo(1), permalink: `https://www.instagram.com/reel/D${id}/`, sender_username: 'amine_xenima',
   received_at: hoursAgo(2), source: 'dm', embed_url: `https://www.instagram.com/reel/D${id}/embed`, topic: null,
@@ -318,7 +318,7 @@ describe('Mes envois', () => {
 
   it('« Annuler » drops an envoi the AI has not started, after a confirm (183)', async () => {
     const calls = stubApi({
-      'GET /api/work-orders?source=mine': [[200, [order(2), order(1, { status: 'in_production', instruction: 'fais-la' })]], [200, [order(1, { status: 'in_production', instruction: 'fais-la' })]]],
+      'GET /api/work-orders?source=mine': [[200, [order(2, { status: 'scheduled', instruction: 'refais-la' }), order(1, { status: 'in_production', instruction: 'fais-la' })]], [200, [order(1, { status: 'in_production', instruction: 'fais-la' })]]],
       'DELETE /api/research/work-orders/2': [204, null],
     })
     renderPage('/trending?tab=envois')
@@ -366,26 +366,20 @@ describe('Mes envois', () => {
     expect(within(blocked).getByText('Bloqué : téléchargement refusé')).toBeTruthy()
   })
 
-  it('writes the missing instruction, edits a scheduled one, and says when it is too late (409)', async () => {
+  it('a received Reel is confirmed on « Reçus », not here; edits a scheduled one, and says when it is too late (409)', async () => {
     const calls = stubApi({
       'GET /api/work-orders?source=mine': [
         [200, [order(2, { status: 'scheduled', instruction: 'garde ça', mode: 'react', style: 'paper' }), order(1)]],
-        [200, [order(2, { status: 'scheduled', instruction: 'garde ça', mode: 'react', style: 'paper' }), order(1, { status: 'scheduled', instruction: 'refais-la', mode: 'inspired' })]],
-        [200, [order(2, { status: 'in_production', instruction: 'garde ça', mode: 'react' }), order(1, { status: 'scheduled', instruction: 'refais-la', mode: 'inspired' })]],
+        [200, [order(2, { status: 'in_production', instruction: 'garde ça', mode: 'react' }), order(1)]],
       ],
-      'PATCH /api/work-orders/1': [200, order(1, { status: 'scheduled', instruction: 'refais-la' })],
       'PATCH /api/work-orders/2': [409, { error: 'conflict', message: 'work order 2 is in_production' }],
     })
     renderPage('/trending?tab=envois')
     const list = await screen.findByRole('list', { name: 'Mes envois' })
     const waiting = within(list).getByRole('listitem', { name: 'Envoi 1' })
-    expect(within(waiting).getByText("En attente d'instruction")).toBeTruthy()
-    expect(within(waiting).getByRole('button', { name: 'Mon instruction' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.change(within(waiting).getByLabelText("Que doit faire l'IA ?"), { target: { value: 'refais-la' } })
-    fireEvent.click(within(waiting).getByRole('button', { name: 'Envoyer' }))
-    expect(await within(waiting).findByText('Programmé')).toBeTruthy()
-    expect(within(waiting).getByText('refais-la')).toBeTruthy()
-    expect(calls.find((c) => c.key === 'PATCH /api/work-orders/1')?.body).toEqual({ instruction: 'refais-la', mode: 'owner', style: null })
+    expect(within(waiting).getByText('À confirmer dans Reçus')).toBeTruthy()
+    expect(within(waiting).queryByLabelText("Que doit faire l'IA ?")).toBeNull()
+    expect(within(waiting).queryByRole('button', { name: 'Annuler' })).toBeNull()
 
     const scheduled = within(list).getByRole('listitem', { name: 'Envoi 2' })
     fireEvent.click(within(scheduled).getByRole('button', { name: 'Modifier la consigne' }))
@@ -460,8 +454,8 @@ describe('Mes envois', () => {
 
   it('names every status in French', () => {
     const label = (status: WorkOrder['status'], blocked_reason: string | null = null) => orderStatus({ status, blocked_reason })[0]
-    expect(['needs_instruction', 'scheduled', 'in_production', 'in_feed', 'analysed', 'skipped'].map((s) => label(s as WorkOrder['status'])))
-      .toEqual(["En attente d'instruction", 'Programmé', 'En production', 'Dans ton feed', 'Analysé', 'Ignoré'])
+    expect(['received', 'scheduled', 'in_production', 'in_feed', 'analysed', 'skipped'].map((s) => label(s as WorkOrder['status'])))
+      .toEqual(['À confirmer dans Reçus', 'Programmé', 'En production', 'Dans ton feed', 'Analysé', 'Ignoré'])
     expect(label('scheduled', 'x')).toBe('Bloqué')
     expect(label('in_feed', 'x')).toBe('Dans ton feed') // done: the old block no longer matters
     const now = Date.parse('2026-11-18T12:00:00Z')

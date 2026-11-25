@@ -19,7 +19,7 @@ import {
 } from './prompt'
 
 const POLL_MS = 10_000 // while an order is still in the works
-const OPEN: WorkOrder['status'][] = ['received', 'confirmed', 'needs_instruction', 'scheduled', 'in_production']
+const OPEN: WorkOrder['status'][] = ['received', 'confirmed', 'scheduled', 'in_production']
 
 /** A studio video named in the prompt: its thumbnail and id, or « introuvable ». */
 function VideoChip({ id, asset }: { id: number; asset: Asset | null | undefined }) {

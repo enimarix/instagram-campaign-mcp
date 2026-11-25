@@ -68,15 +68,12 @@ def _received(store, note=None, url=THEIRS):
 
 def _dm_order(store, note=None, url=THEIRS):
     """A DM order as the owner moves it: with a note, confirmed on « Reçus » and launched
-    from Planning (scheduled at work_orders' clock); without, an older order still waiting
-    for its instruction (needs_instruction, from before « Reçus »)."""
+    from Planning (scheduled at work_orders' clock); without, still waiting on « Reçus »
+    (received)."""
     oid = _received(store, note, url)
     if note:
         work_orders.confirm(store, oid, "style", None, note)
         work_orders.launch(store, oid)
-    else:
-        with store._tx() as c:
-            c.execute("UPDATE work_orders SET status='needs_instruction' WHERE id=?", (oid,))
     return oid
 
 
@@ -171,8 +168,9 @@ async def test_a_note_on_a_later_poll_is_the_waiting_orders_draft(client, store,
 
 
 # --- the owner's instruction ------------------------------------------------------------
-def test_patch_sets_the_instruction_and_schedules(store, settings):
-    oid = _dm_order(store)
+def test_patch_rewrites_a_launched_order_never_a_received_one(store, settings):
+    waiting = _dm_order(store)
+    oid = _dm_order(store, "première consigne")
     with TestClient(create_app(_settings(), store=store), base_url=LOCAL) as tc:
         def patch(**body):
             return tc.patch(f"/api/work-orders/{oid}", json=body)
@@ -181,6 +179,8 @@ def test_patch_sets_the_instruction_and_schedules(store, settings):
         assert patch(instruction="x" * 501).status_code == 422
         assert patch(instruction="go", mode="copy").status_code == 422
         assert tc.patch("/api/work-orders/999", json={"instruction": "go"}).status_code == 404
+        r = tc.patch(f"/api/work-orders/{waiting}", json={"instruction": "go"})
+        assert r.status_code == 409 and "received" in r.json()["message"]  # « Reçus » first
         r = patch(instruction=" Réagis à la fin ", mode="react")
         assert r.status_code == 200, r.text
         assert (r.json()["status"], r.json()["instruction"], r.json()["mode"]) == (
@@ -209,7 +209,7 @@ def test_list_endpoint_both_sources(store):
 
         assert ids() == [dm, trend]  # newest first
         assert ids("?source=dm") == [dm] and ids("?source=trend") == [trend]
-        assert ids("?source=all&status=needs_instruction") == [dm]
+        assert ids("?source=all&status=received") == [dm]
         assert tc.get("/api/work-orders?source=web").status_code == 422
         [row] = tc.get("/api/work-orders?source=dm").json()
         for key in ("sender_username", "received_at", "permalink", "embed_url",
@@ -241,7 +241,7 @@ def test_debounce_starts_exactly_one_run_for_several_orders(store, clock):
     _dm_order(store, "réagis")
     clock.set(1)
     work_orders.create_orders(store, [{"source_id": _ref(store, "A"), "mode": "react"}])
-    _dm_order(store)  # needs_instruction: never starts a run
+    _dm_order(store)  # received: never starts a run
     run = lambda m: schedule.order_run(store, s, T0 + timedelta(minutes=m),  # noqa: E731
                                        start=f.start, check=f.check)
     assert run(3) is None and f.runs == []  # 2 min after the newest send: debounce
@@ -249,8 +249,7 @@ def test_debounce_starts_exactly_one_run_for_several_orders(store, clock):
     assert run(5) is None and run(30) is None and f.runs == ["daily-revise"]
     # a new instruction after that run: one more run, after its own debounce
     clock.set(31)
-    oid = _dm_order(store)
-    work_orders.set_instruction(store, oid, "garde la fin")
+    oid = _dm_order(store, "garde la fin")  # confirmed on « Reçus », launched now
     assert run(33) is None and run(35) == "daily-revise" and len(f.runs) == 2
     # a run that reads the orders started after the newest one (it has them): no other
     clock.set(40)
@@ -417,7 +416,7 @@ def test_restyle_keeps_a_long_owner_note_whole(store):
 def test_packet_and_brief_carry_dm_orders(store, settings, tmp_path, monkeypatch):
     monkeypatch.setattr(B, "BIBLE_PATH", tmp_path / "BIBLE.md")
     oid = _dm_order(store, "réagis", url=OURS)
-    _dm_order(store)  # needs_instruction: not in the packet
+    _dm_order(store)  # received: not in the packet
     for playbook in ("daily-produce", "daily-revise"):
         out = packet.write_packet(store, settings, playbook, tmp_path / playbook)
         assert out["manifest"]["sections"]["work_orders"]["count"] == 1

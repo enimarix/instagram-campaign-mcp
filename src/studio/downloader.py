@@ -286,7 +286,7 @@ def _mark_picks(store: CampaignStore, url: str, result: Dict[str, Any]) -> None:
         return
     post = _same_post(url)
     held = (" AND id NOT IN (SELECT pick_id FROM work_orders WHERE pick_id IS NOT NULL AND"
-            " status IN ('received','confirmed','needs_instruction','scheduled',"
+            " status IN ('received','confirmed','scheduled',"
             " 'in_production'))"
             if status == "refused" else "")
     with store._tx() as c:

@@ -731,6 +731,13 @@ ALTER TABLE work_orders ADD COLUMN method TEXT;
 UPDATE work_orders SET status = 'received' WHERE origin = 'dm' AND status = 'needs_instruction';
 """
 
+# Migration 30: migration 29's last line again. A database that ran an early draft of 29
+# (without it) kept its waiting DM orders as needs_instruction: on Planning as « Commande
+# N », with nowhere to give them a route. Idempotent: a no-op where 29 already moved them.
+RECEIVED_AGAIN_SCHEMA = """
+UPDATE work_orders SET status = 'received' WHERE origin = 'dm' AND status = 'needs_instruction';
+"""
+
 # Append-only: MIGRATIONS[i] takes the database from user_version i to i+1.
 # Never edit a released entry; add a new one.
 MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA,
@@ -742,7 +749,7 @@ MIGRATIONS: List[str] = [SCHEMA, STUDIO_SCHEMA, LEARNING_SCHEMA, AUDIENCE_SCHEMA
                          AD_TESTS_SCHEMA, TRENDING_SCHEMA, DM_ORDERS_SCHEMA,
                          AGENT_RUN_PID_SCHEMA, STYLES_SCHEMA,
                          STYLE_REQUESTS_SCHEMA, LINE_SCHEMA, PLANNED_SCHEMA,
-                         REQUEUES_SCHEMA, RECEIVED_SCHEMA]
+                         REQUEUES_SCHEMA, RECEIVED_SCHEMA, RECEIVED_AGAIN_SCHEMA]
 
 SOURCE_FIELDS = ("provider", "url", "author", "stats", "rights_basis", "rights_note",
                  "audio_rights", "local_path", "downloaded_at", "downloader_version",

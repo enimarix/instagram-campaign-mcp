@@ -252,10 +252,10 @@ async def _own_reel(client: InstagramClient, store: CampaignStore, url: str,
 async def poll_dm_picks(client: Optional[InstagramClient], store: CampaignStore, *,
                         budget_left: Callable[[], bool]) -> Dict[str, Any]:
     """Record a pick for every Reel a pinned account shared in the brand account's recent
-    DMs (idempotent per message id), each with its work order (136: scheduled at once when
-    the DM has a note, else waiting for the owner's instruction; own_reel when the Reel is
-    ours). A pick stored without a note gets it on a later poll while its order still
-    waits (141). Returns {conversations, picks, stopped}; stopped: null, "request_budget" or
+    DMs (idempotent per message id), each with its work order, `received`: it waits on
+    « Reçus » for the owner, note or not (2026-11-25; own_reel when the Reel is ours). A
+    pick stored without a note gets it as the draft instruction on a later poll while its
+    order still waits (141). Returns {conversations, picks, stopped}; stopped: null, "request_budget" or
     "rate_limited". No client (setup mode) or no pins: no call."""
     from . import work_orders  # here: work_orders imports this module
 

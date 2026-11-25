@@ -191,7 +191,7 @@ describe('CreatePage (174)', () => {
 
   it('names every stage, Lemo films and renders included', () => {
     const label = (over: Partial<WorkOrder>) => stage(order(1, over))[0]
-    expect(label({ status: 'needs_instruction' })).toBe('En attente de ta consigne')
+    expect(label({ status: 'received' })).toBe('À confirmer dans Reçus')
     expect(label({ status: 'scheduled' })).toBe('En attente')
     expect(label({ status: 'in_production', style: 'lemo:watercolor' })).toBe('Le film se fabrique')
     expect(label({ status: 'in_production', video_status: 'rendering' })).toBe('Rendu en cours')

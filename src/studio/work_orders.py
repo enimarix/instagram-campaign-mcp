@@ -25,9 +25,8 @@ Modes:
 - owner: follow the owner's free-text instruction (a reaction, an inspired video, a recut
   of our own Reel when own_reel, or analyse only); the playbooks say how.
 
-Lifecycle: received -> confirmed (confirm) -> scheduled (launch: a DM order); older DM
-orders: needs_instruction (no note) -> scheduled (set_instruction;
-an order with an instruction or a mode starts here) -> in_production
+Lifecycle: received -> confirmed (confirm) -> scheduled (launch: a DM order; any other
+order starts here, and set_instruction may rewrite it) -> in_production
 (create_idea(work_order_id=...) links the idea) -> in_feed (submit_asset on an asset of
 that idea, asset_id = the newest one submitted; or the video approved, follow_video) |
 analysed (analyse only: the agent's analysis, no video) | skipped with a reason (also
@@ -52,10 +51,10 @@ from .assets import InvalidTransition, transition
 from .downloader import _same_post, permalink
 
 MODES = ("inspired", "react", "owner")
-STATUSES = ("received", "confirmed", "needs_instruction", "scheduled", "in_production",
+STATUSES = ("received", "confirmed", "scheduled", "in_production",
             "in_feed", "analysed", "skipped")
-OPEN = ("received", "confirmed", "needs_instruction", "scheduled", "in_production")
-NOT_STARTED = ("received", "confirmed", "needs_instruction", "scheduled")
+OPEN = ("received", "confirmed", "scheduled", "in_production")
+NOT_STARTED = ("received", "confirmed", "scheduled")
 OWNER_ONLY = ("received", "confirmed")  # waits for the owner: the agent never sees or skips it
 SQL_OPEN = ",".join(f"'{s}'" for s in OPEN)  # queries here and in dm_picks (downloader:
 # it cannot import this module, it lists the same statuses itself)
@@ -182,7 +181,7 @@ def create_orders(store: CampaignStore, items: Sequence[Dict[str, Any]]) -> List
     with store._tx() as c:  # one transaction: all or none
         for source_id, *_ in rows:
             if c.execute("SELECT 1 FROM work_orders WHERE source_id=? AND origin='trend'"
-                         " AND status IN ('needs_instruction','scheduled','in_production')",
+                         " AND status IN ('scheduled','in_production')",
                          (source_id,)).fetchone():
                 raise ValueError(f"Reel {source_id} already has an open work order")
         ids = [c.execute("INSERT INTO work_orders (origin, source_id, mode, instruction, style,"
@@ -203,20 +202,16 @@ def add_for_pick(c: Any, pick_id: int, note: Optional[str], own_reel: bool, now:
 
 def late_note(c: Any, pick_id: int, note: str, now: str) -> None:
     """In the poll's transaction: a note found on a later poll for a pick stored without
-    one. Only while its order still waits for the owner (received; an older one:
-    needs_instruction, then scheduled as before) with no instruction: the pick gets the
-    note, the order its draft instruction. An existing note, an owner's instruction or an
-    order that moved on is never touched."""
+    one. Only while its order still waits on « Reçus » (received) with no instruction:
+    the pick gets the note, the order its draft instruction. An existing note, an owner's
+    instruction or an order that moved on is never touched."""
     if not c.execute("UPDATE dm_picks SET sender_note=?, updated_at=? WHERE id=?"
                      " AND sender_note IS NULL AND id IN (SELECT pick_id FROM work_orders"
-                     " WHERE status IN ('received','needs_instruction') AND instruction IS NULL)",
+                     " WHERE status='received' AND instruction IS NULL)",
                      (note, now, pick_id)).rowcount:
         return
     c.execute("UPDATE work_orders SET instruction=?, updated_at=? WHERE pick_id=?"
               " AND status='received' AND instruction IS NULL", (note, now, pick_id))
-    c.execute("UPDATE work_orders SET instruction=?, status='scheduled', scheduled_at=?,"
-              " updated_at=? WHERE pick_id=? AND status='needs_instruction'"
-              " AND instruction IS NULL", (note, now, now, pick_id))
 
 
 def confirm(store: CampaignStore, order_id: int, method: str, style: Optional[str] = None,
@@ -268,8 +263,7 @@ def launch(store: CampaignStore, order_id: int) -> Dict[str, Any]:
 def set_instruction(store: CampaignStore, order_id: int, instruction: str,
                     mode: Optional[str] = None, style: Any = ...) -> Dict[str, Any]:
     """The owner writes (or rewrites) an order's instruction, and its mode and style if
-    given (style None: Auto), while it is needs_instruction or scheduled: the order is
-    scheduled (now). InvalidTransition once the agent started it; KeyError when there is
+    given (style None: Auto), while it is scheduled: its scheduled_at is now. InvalidTransition once the agent started it; KeyError when there is
     none."""
     text = _instruction(instruction)
     if not text:
@@ -288,7 +282,7 @@ def set_instruction(store: CampaignStore, order_id: int, instruction: str,
         moved = c.execute(
             "UPDATE work_orders SET instruction=?, mode=COALESCE(?, mode), style=?,"
             " status='scheduled', scheduled_at=?, blocked_reason=NULL, updated_at=? WHERE id=?"
-            " AND status IN ('needs_instruction','scheduled')",
+            " AND status='scheduled'",
             (text, mode, style, now, now, order_id)).rowcount
     if not moved:
         raise InvalidTransition(f"work order {order_id} is {order['status']}: the instruction"
@@ -627,8 +621,8 @@ def open_by_source(store: CampaignStore, source_ids: Sequence[int]) -> Dict[int,
     with store._tx() as c:
         rows = c.execute(
             "SELECT id, source_id, mode, instruction, status, style FROM work_orders"
-            " WHERE origin='trend' AND status IN ('needs_instruction','scheduled',"
-            f"'in_production') AND source_id IN ({','.join('?' * len(source_ids))})",
+            " WHERE origin='trend' AND status IN ('scheduled','in_production')"
+            f" AND source_id IN ({','.join('?' * len(source_ids))})",
             list(source_ids)).fetchall()
     return {r["source_id"]: {k: r[k] for k in ("id", "mode", "instruction", "status", "style")}
             for r in rows}

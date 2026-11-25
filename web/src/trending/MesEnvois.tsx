@@ -13,8 +13,7 @@ import { useToast } from '../ui/useToast'
 import { ago, embedSrc, modeLabel, MODES, orderStatus } from './format'
 import { Embed, ModePicker } from './shared'
 
-/** The owner's instruction for a DM'd Reel: written here when the DM had none, or changed
- * while the order is still scheduled (136: 409 once the AI started), with its style (138). */
+/** The owner's instruction for a sent Reel, changed while the order is still scheduled (136: 409 once the AI started), with its style (138). */
 function InstructionForm({ order, onSaved, onCancel }: { order: WorkOrder; onSaved: () => void; onCancel?: () => void }) {
   const [mode, setMode] = useState<WorkMode>(order.mode)
   const [style, setStyle] = useState<string | null>(order.style)
@@ -88,7 +87,7 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
   const [editing, setEditing] = useState(false)
   const toast = useToast()
   const [label, tone] = orderStatus(o)
-  const waiting = o.status === 'needs_instruction' || o.status === 'scheduled' // the AI has not started it
+  const waiting = o.status === 'scheduled' // the AI has not started it
 
   // 183: the owner drops an envoi the AI has not started (as in « Créer »'s pile)
   async function cancel() {
@@ -103,7 +102,7 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
   const href = safeUrl(o.permalink)
   const sender = `@${o.sender_username ?? '?'}`
   const embed = embedSrc(o.embed_url)
-  const showForm = o.status === 'needs_instruction' || (editing && o.status === 'scheduled')
+  const showForm = editing && o.status === 'scheduled'
   return (
     <Card as="li" aria-label={`Envoi ${o.id}`} className="space-y-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">

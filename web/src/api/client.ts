@@ -974,7 +974,7 @@ export const createWorkOrders = (items: { source_id: number; mode: TrendMode; in
 export const cancelWorkOrder = (id: number) => request<null>(`/api/research/work-orders/${id}`, { method: 'DELETE' })
 
 /** received: a DM'd Reel on « Reçus »; confirmed: on Planning, waits for « Lancer » (2026-11-25). */
-export type OpenOrderStatus = 'received' | 'confirmed' | 'needs_instruction' | 'scheduled' | 'in_production'
+export type OpenOrderStatus = 'received' | 'confirmed' | 'scheduled' | 'in_production'
 /** The AI's analysis of a Reel (analyse only, 2026-11: an object; older ones are text). */
 export type OrderAnalysis = { why: string; summary?: string | null; timeline?: { t: number; d?: number; e: string }[] | null }
 
@@ -1027,7 +1027,7 @@ export type OrderMethod = 'style' | 'new_style' | 'rea'
 /** « Reçus » -> Planning (confirmed, nothing starts before « Lancer »). style null: Auto. */
 export const confirmWorkOrder = (id: number, body: { method: OrderMethod; style: string | null; instruction?: string }) =>
   post<WorkOrder>(`/api/work-orders/${id}/confirm`, body)
-/** Allowed while needs_instruction or scheduled; 409 once the AI started. style null: Auto. */
+/** Allowed while scheduled; 409 once the AI started. style null: Auto. */
 export const editWorkOrder = (id: number, body: { instruction: string; mode?: WorkMode; style?: string | null }) =>
   send<WorkOrder>('PATCH', `/api/work-orders/${id}`, body)
 
@@ -1208,7 +1208,7 @@ export const decideStyleRequest = (id: number, body: { decision: 'accepted' | 'd
   send<StyleRequest>('PATCH', `/api/style-requests/${id}`, body)
 
 /** GET /api/planning (185): the chain of what the studio makes next, every time estimated. */
-export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'machine' | 'held' | 'order_grace' | 'check_grace' | 'recheck' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'needs_instruction' | 'style' | 'launch'
+export type PlanningWait = 'gpu_busy' | 'agent_running' | 'timer' | 'machine' | 'held' | 'order_grace' | 'check_grace' | 'recheck' | 'daily_cap' | 'preflight' | 'next_ai_run' | 'style' | 'launch'
 export type PlanningItem = {
   section: 'running' | 'next' | 'planned' | 'ideas'
   kind: 'render' | 'film' | 'order_run' | 'check_run' | 'agent_run' | 'work_order' | 'change_request' | 'claude_idea'

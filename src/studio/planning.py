@@ -231,7 +231,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
     why_here, waits_on (gpu_busy | agent_running | timer | machine (197: a render waiting
     to retry after a machine failure) | held | order_grace | check_grace |
-    recheck | daily_cap | preflight | next_ai_run | needs_instruction | style | launch (a
+    recheck | daily_cap | preflight | next_ai_run | style | launch (a
     confirmed DM Reel: waits for « Lancer ») | None), not_before (a
     waiting render's or film's timer, UTC ISO), stage and progress (running items), late_s
     (a running item past its usual time, 190; else None), picks_up (the producing run's
@@ -503,11 +503,6 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                            " « Lancer ».", waits_on="launch",
                            source=o["source"], style=o["style"], order_id=o["id"],
                            pick_id=o["pick_id"]))
-    for o in work_orders.list_orders(store, "needs_instruction", newest=False):
-        items.append(_item("next", "work_order", _title(o["caption_quote"], f"Commande {o['id']}"),
-                           None, None, "Attend ta consigne : rien ne part sans elle.",
-                           waits_on="needs_instruction", source=o["source"], style=o["style"],
-                           order_id=o["id"], pick_id=o["pick_id"]))
 
     planned_at: Optional[datetime] = None
     local = schedule._local(settings, now)
@@ -765,8 +760,6 @@ def _order_ids(store: CampaignStore, kind: str, item_id: int, sent_back: Callabl
     sent_back()) for the light run, or the refusal: KeyError, ValueError."""
     if kind == "work_order":
         o = work_orders.get_order(store, item_id)
-        if o["status"] == "needs_instruction":
-            raise ValueError("Cette commande attend ta consigne : rien ne part sans elle.")
         if o["status"] == "confirmed":  # « Reçus » -> Planning -> the owner's « Lancer »
             o = work_orders.launch(store, item_id)
         if o["status"] != "scheduled" or lemo.is_lemo(o["style"]):

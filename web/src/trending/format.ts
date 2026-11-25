@@ -40,7 +40,6 @@ export function orderStatus(o: Pick<WorkOrder, 'status' | 'blocked_reason'>): [s
 export const ORDER_STATUS: Record<WorkOrder['status'], [string, Tone]> = {
   received: ['À confirmer dans Reçus', 'warn'],
   confirmed: ['Attend ton « Lancer »', 'info'],
-  needs_instruction: ["En attente d'instruction", 'warn'],
   scheduled: ['Programmé', 'info'],
   in_production: ['En production', 'explore'],
   in_feed: ['Dans ton feed', 'success'],

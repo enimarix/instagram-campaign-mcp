@@ -86,10 +86,10 @@ describe('Planning', () => {
   })
 
   it('an order that waits for the owner has no time', async () => {
-    stub([item({ kind: 'work_order', waits_on: 'needs_instruction', est_start: null, est_ready: null, est_duration_s: null })])
+    stub([item({ kind: 'work_order', waits_on: 'launch', est_start: null, est_ready: null, est_duration_s: null })])
     show()
-    expect(await screen.findByText('attend ta consigne')).toBeTruthy()
-    expect(screen.getByText("Pas d'heure : attend ta consigne.")).toBeTruthy()
+    expect(await screen.findByText('attend ton « Lancer »')).toBeTruthy()
+    expect(screen.getByText("Pas d'heure : attend ton « Lancer ».")).toBeTruthy()
   })
 
   it("a film past the daily cap points at the owner's setting (205)", async () => {
@@ -172,16 +172,16 @@ describe('Planning', () => {
       const calls = stubCalls([
         item({ title: 'Le suivant', ids: { job_id: 6 } }),
         item({ kind: 'work_order', title: 'Ma commande', ids: { order_id: 4 } }),
-        item({ kind: 'work_order', title: 'Sans consigne', ids: { order_id: 5 }, waits_on: 'needs_instruction' }),
+        item({ kind: 'change_request', title: 'Vidéo à changer', ids: { asset_id: 5 }, waits_on: 'next_ai_run' }),
       ])
       show()
       const titles = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
       const buttons = await screen.findAllByRole('button', { name: 'Retirer' })
-      expect(buttons).toHaveLength(2) // not on the order that waits for its instruction
+      expect(buttons).toHaveLength(2) // not on a change request: its video is the Inbox's
       fireEvent.click(buttons[0])
       expect(screen.queryByText('Le suivant')).toBeNull() // out at once
       fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
-      expect(titles()).toEqual(['Le suivant', 'Ma commande', 'Sans consigne']) // back in its place
+      expect(titles()).toEqual(['Le suivant', 'Ma commande', 'Vidéo à changer']) // back in its place
       vi.advanceTimersByTime(6000)
       expect(calls.filter((c) => c.url.endsWith('/remove'))).toEqual([])
       fireEvent.click(screen.getAllByRole('button', { name: 'Retirer' })[1])
@@ -597,7 +597,7 @@ describe('Planning', () => {
       item({ title: 'Rendu A', ids: { asset_id: 18, job_id: 6 } }),
       item({ kind: 'work_order', title: 'Ma commande', ids: { order_id: 4 } }),
       item({ kind: 'change_request', title: 'Vidéo 3', ids: { asset_id: 3 }, waits_on: 'next_ai_run' }),
-      item({ kind: 'work_order', title: 'Sans consigne', ids: { order_id: 8 }, waits_on: 'needs_instruction' }),
+      item({ kind: 'work_order', title: 'Son style', ids: { order_id: 8 }, waits_on: 'style' }),
       item({ section: 'planned', kind: 'agent_run', title: 'Analyse de la nuit', source: 'schedule', playbook: 'daily-learn' }),
       idea(),
     ]
@@ -608,7 +608,7 @@ describe('Planning', () => {
         refused: [], busy: 'renders are waiting', paused: null })
       show()
       const boxes = await screen.findAllByRole('checkbox', { name: /^Sélectionner : / })
-      expect(boxes.map((b) => b.getAttribute('aria-label'))).toEqual([ // not the running card, not the order without instruction
+      expect(boxes.map((b) => b.getAttribute('aria-label'))).toEqual([ // not the running card, not the order waiting for its style
         'Sélectionner : Le mythe du jus détox', 'Sélectionner : Rendu A', 'Sélectionner : Ma commande',
         'Sélectionner : Vidéo 3', 'Sélectionner : Analyse de la nuit'])
       const bar = screen.getByRole('region', { name: 'Lancer' })

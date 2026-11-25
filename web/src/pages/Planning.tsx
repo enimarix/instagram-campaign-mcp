@@ -28,7 +28,7 @@ const WAIT: Record<PlanningWait, string> = {
   gpu_busy: 'attend le GPU', agent_running: 'attend la fin du run', timer: 'attend son minuteur', machine: 'attend la machine', held: 'En pause', order_grace: 'délai après ton envoi',
   check_grace: 'délai après le dernier rendu', recheck: 'nouvelle vérification prévue',
   daily_cap: 'quota du jour atteint', preflight: "l'IA ne peut pas démarrer", next_ai_run: 'attend le prochain run',
-  needs_instruction: 'attend ta consigne', style: 'attend son nouveau style', launch: 'attend ton « Lancer »',
+  style: 'attend son nouveau style', launch: 'attend ton « Lancer »',
 }
 /** The wait in words; a film's daily cap is the owner's « Lemo films per day » setting (205). */
 const waitLabel = (i: PlanningItem) => i.kind === 'film' && i.waits_on === 'daily_cap'
@@ -75,7 +75,7 @@ function removal(i: PlanningItem): Removal | null {
   if (i.kind === 'claude_idea') return i.ids.asset_id === undefined ? null : { kind: 'idea', id: i.ids.asset_id }
   if (i.section !== 'next') return null
   if (i.kind === 'render') return i.ids.job_id === undefined ? null : { kind: 'render', id: i.ids.job_id }
-  if (i.ids.order_id === undefined || i.waits_on === 'needs_instruction') return null
+  if (i.ids.order_id === undefined) return null
   if (i.kind === 'film') return { kind: 'film', id: i.ids.order_id }
   return i.kind === 'work_order' || i.kind === 'change_request' ? { kind: 'order', id: i.ids.order_id } : null
 }
@@ -99,7 +99,7 @@ function launchable(i: PlanningItem): LaunchItem | null {
     case 'claude_idea': return asset_id === undefined ? null : { kind: 'claude_idea', id: asset_id }
     case 'work_order':
     case 'change_request':
-      if (i.waits_on === 'needs_instruction' || i.waits_on === 'style') return null // nothing to launch yet
+      if (i.waits_on === 'style') return null // nothing to launch yet
       if (order_id !== undefined) return { kind: 'work_order', id: order_id }
       return asset_id === undefined ? null : { kind: 'change_request', id: asset_id }
     default: return i.playbook ? { kind: 'agent_run', id: i.playbook } : null

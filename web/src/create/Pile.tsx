@@ -54,7 +54,7 @@ function OrderCard({ order: o, catalog, onChanged }: { order: WorkOrder; catalog
   const [noting, setNoting] = useState(false)
   const toast = useToast()
   const [label, tone] = stage(o)
-  const waiting = o.status === 'needs_instruction' || o.status === 'scheduled'
+  const waiting = o.status === 'scheduled'
   // the AI's own words: the idea it wrote (a Lemo film's starts as the instruction), why it waits or skipped
   const hook = o.idea_hook && !o.instruction?.startsWith(o.idea_hook) ? o.idea_hook : null
 
