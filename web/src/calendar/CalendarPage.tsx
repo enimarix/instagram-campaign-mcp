@@ -89,7 +89,9 @@ export default function CalendarPage() {
           <Button size="sm" onClick={() => setWeek(monday(new Date()))}>This week</Button>
           <Button size="sm" onClick={() => setWeek(addDays(week, 7))}>Next week</Button>
         </div>
-      } />
+      }>
+        {cal && `${dayLabel(cal.days[0].date)} – ${dayLabel(cal.days.at(-1)!.date)}`}
+      </PageHeader>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {notice && (
         <p role="status" className="rounded-card border border-line/60 bg-surface-2 p-3 text-sm">
@@ -105,7 +107,7 @@ export default function CalendarPage() {
       )}
       {cal && cal.publish_check.length > 0 && (
         <section aria-labelledby="check-title" className="rounded-card border border-warn/30 bg-warn/12 p-4 text-sm">
-          <h3 id="check-title" className="font-semibold">Did these reach Instagram?</h3>
+          <h2 id="check-title" className="font-semibold">Did these reach Instagram?</h2>
           <p className="mt-1">
             The publish may have gone through. The worker looks for them on the account; if a video is
             not there, release it so it can be queued again.
@@ -127,9 +129,9 @@ export default function CalendarPage() {
         <ol className="grid gap-3 xl:grid-cols-7 xl:gap-2">
           {cal.days.map((d) => (
             <li key={d.date} aria-label={d.date} className={d.posts.length ? '' : 'hidden xl:block'}>
-              <h3 className={`mb-2 text-xs font-semibold tracking-wide uppercase ${d.date === today ? 'text-accent' : 'text-muted'}`}>
+              <h2 className={`mb-2 text-xs font-semibold tracking-wide uppercase ${d.date === today ? 'text-accent' : 'text-muted'}`}>
                 {dayLabel(d.date)}
-              </h3>
+              </h2>
               <ul className="space-y-2">
                 {d.posts.map((p) => <PostCard key={p.id} post={p} page={page} />)}
               </ul>
