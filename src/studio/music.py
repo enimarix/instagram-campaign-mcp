@@ -361,11 +361,14 @@ def load_beats(media_root: Any, audio_id: str) -> Dict[str, Any]:
 def apply(props: Dict[str, Any], media_root: Any, audio_id: str) -> tuple:
     """Props cut on the track's beat with the template's own bed off, and the recipe's
     `ig_audio` (what publish attaches, what the preview mixes). ValueError when the track
-    is not fetched, has no beat, or the video has no voice.
+    is not fetched, is an original sound, has no beat, or the video has no voice.
     ponytail: voiced videos only. The clean master must pass QC on its own (an audio track
     at -14 LUFS): with a voice it does; without one the finish would push the sfx alone to
     -14 under Instagram's track. Music-only videos need QC to judge the mix with the track."""
     meta = load_beats(media_root, audio_id)
+    if meta.get("type") == "original_sound":  # business: the chart hits come only as these
+        raise ValueError(f"track {audio_id} is an original sound (the famous songs in it can "
+                         "get the Reel muted): pick an audio_type music track")
     voice = props.get("voice") or {}
     if not (voice.get("audioSrc") and voice.get("lines")):
         raise ValueError("an Instagram track needs a voiced video (a voice other than none)")

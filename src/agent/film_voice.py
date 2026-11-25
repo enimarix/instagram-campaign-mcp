@@ -11,7 +11,10 @@ process: film_env strips every secret from the film.
   lines never switch voice engines midway (tts.EngineProvider).
 - HTTPServer, not the threading one: one line at a time, as the brief asks.
 - 503 when the machine failed (no answer, no credits, a 5xx: the brief retries once), 422
-  when the engine refused the text, 404 without the token.
+  when the engine refused the text or the voice is not on the Voix page (voices.check_voice,
+  no voice = the default one; with a `store`), 404 without the token.
+- Each take's {voice, engine, fallback} is kept (`takes`) and, with a `takes_path`, written
+  there: lemo.register_film reads it for the video's badge and the fallback alert.
 """
 
 from __future__ import annotations
@@ -23,10 +26,11 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import InstagramMCPSettings
-from ..studio import ffmpeg, tts
+from ..store import CampaignStore
+from ..studio import ffmpeg, tts, voices
 
 USAGE = 'POST JSON {"text": "<one line>", "voice": "<id from voices.json>"}'
 
@@ -41,8 +45,11 @@ def _wav(audio: Path) -> bytes:
 
 class VoiceDoor:
     def __init__(self, settings: InstagramMCPSettings,
-                 provider: Optional[tts.TTSProvider] = None):
+                 provider: Optional[tts.TTSProvider] = None, *,
+                 store: Optional[CampaignStore] = None, takes_path: Optional[Path] = None):
         self.provider = provider or tts.get_provider(settings)
+        self.store, self.takes_path = store, takes_path
+        self.takes: List[Dict[str, Any]] = []
         self.token = secrets.token_urlsafe(16)
         door = self
 
@@ -64,6 +71,8 @@ class VoiceDoor:
         self.url = f"http://127.0.0.1:{self.server.server_port}/{self.token}"
 
     def __enter__(self) -> "VoiceDoor":
+        if self.takes_path is not None:  # a run before this one never lends its takes
+            self.takes_path.unlink(missing_ok=True)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         return self
 
@@ -82,6 +91,11 @@ class VoiceDoor:
             return 400, {"error": USAGE}
         if not text:
             return 400, {"error": USAGE}
+        if self.store is not None:
+            try:
+                voice = voices.check_voice(self.store, voice)
+            except ValueError as e:
+                return 422, {"error": str(e)}
         try:
             synth = self.provider.synthesize(text, voice)
             if synth.audio_path is None:
@@ -91,10 +105,16 @@ class VoiceDoor:
             return (503 if e.machine else 422), {"error": str(e)}
         except (ffmpeg.FFmpegError, ffmpeg.FFmpegNotFound) as e:
             return 503, {"error": f"the take could not be turned into WAV: {e}"}
+        take = {"voice": synth.voice,
+                "engine": "elevenlabs" if synth.provider == "elevenlabs" else "local",
+                "fallback": synth.fallback, "duration_s": synth.duration_s}
+        self.takes.append({k: take[k] for k in ("voice", "engine", "fallback")})
+        if self.takes_path is not None:
+            self.takes_path.parent.mkdir(parents=True, exist_ok=True)
+            self.takes_path.write_text(json.dumps(self.takes, ensure_ascii=False),
+                                       encoding="utf-8")
         return 200, {
             "audio": base64.b64encode(audio).decode("ascii"),
             "words": [{"text": w.text, "start_s": w.start_s, "end_s": w.end_s}
                       for w in synth.words or []],
-            "take": {"voice": synth.voice,
-                     "engine": "elevenlabs" if synth.provider == "elevenlabs" else "local",
-                     "fallback": synth.fallback, "duration_s": synth.duration_s}}
+            "take": take}
