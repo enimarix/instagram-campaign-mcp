@@ -47,13 +47,13 @@ describe('ReactionReelSection', () => {
     const calls = stubApi([[reel({}), reel({ id: 2, active: false, duration_s: 1800, used_pct: 0 })]])
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<ReactionReelSection />)
-    expect(await screen.findByText('12:40 of 45:00 used, 63 pieces')).toBeTruthy()
-    expect(screen.getByRole('progressbar', { name: 'Reel used' }).getAttribute('aria-valuenow')).toBe('28.1')
+    expect(await screen.findByText('12:40 utilisés sur 45:00, 63 morceaux')).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: 'Reel utilisé' }).getAttribute('aria-valuenow')).toBe('28.1')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
-    const others = screen.getByRole('list', { name: 'Other reels' })
-    expect(within(others).getByText('Reel 2 · 30:00 · 0% used')).toBeTruthy()
-    fireEvent.click(within(others).getByRole('button', { name: 'Activate' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Recommencer' }))
+    const others = screen.getByRole('list', { name: 'Autres reels' })
+    expect(within(others).getByText('Reel 2 · 30:00 · 0 % utilisé')).toBeTruthy()
+    fireEvent.click(within(others).getByRole('button', { name: 'Activer' }))
     await vi.waitFor(() => expect(calls).toContain('POST /api/reactions/2/activate'))
     expect(calls).toContain('POST /api/reactions/1/reset')
   })
@@ -61,37 +61,37 @@ describe('ReactionReelSection', () => {
   it('with only inactive reels, it says to activate one', async () => {
     stubApi([[reel({ active: false })]])
     render(<ReactionReelSection />)
-    expect(await screen.findByText('No reel in use: activate one below or upload a new one.')).toBeTruthy()
+    expect(await screen.findByText('Aucun reel utilisé : active-en un plus bas ou envoie-en un nouveau.')).toBeTruthy()
   })
 
   it('uploads the file as the body with progress, then reloads', async () => {
     const calls = stubApi([[], [reel({ cursor_s: 0, pieces_used: 0, used_pct: 0 })]])
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
     render(<ReactionReelSection />)
-    expect(await screen.findByText('No reel yet: upload one.')).toBeTruthy()
+    expect(await screen.findByText('Pas encore de reel : envoies-en un.')).toBeTruthy()
 
     const file = new File(['x'], 'My reel.mov', { type: 'video/quicktime' })
-    fireEvent.change(screen.getByLabelText('Upload a reel'), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText('Envoyer un reel'), { target: { files: [file] } })
     const xhr = FakeXHR.last
     expect(xhr.url).toBe('/api/reactions/upload?name=My%20reel.mov')
     expect(xhr.body).toBe(file)
     xhr.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 })
-    expect(await screen.findByText('Uploading… 50%')).toBeTruthy()
+    expect(await screen.findByText('Envoi… 50 %')).toBeTruthy()
 
     xhr.status = 200
     xhr.responseText = JSON.stringify(reel({}))
     xhr.onload?.()
-    expect(await screen.findByText('0:00 of 45:00 used, 0 pieces')).toBeTruthy()
+    expect(await screen.findByText('0:00 utilisés sur 45:00, 0 morceau')).toBeTruthy()
     expect(calls.filter((c) => c === 'GET /api/reactions')).toHaveLength(2)
-    expect(screen.getByText('Upload a reel')).toBeTruthy()
+    expect(screen.getByText('Envoyer un reel')).toBeTruthy()
   })
 
   it('shows the server message when an upload is refused', async () => {
     stubApi([[]])
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
     render(<ReactionReelSection />)
-    await screen.findByText('No reel yet: upload one.')
-    fireEvent.change(screen.getByLabelText('Upload a reel'), { target: { files: [new File(['x'], 'a.mp4')] } })
+    await screen.findByText('Pas encore de reel : envoies-en un.')
+    fireEvent.change(screen.getByLabelText('Envoyer un reel'), { target: { files: [new File(['x'], 'a.mp4')] } })
     const xhr = FakeXHR.last
     xhr.status = 413
     xhr.responseText = JSON.stringify({ error: 'too_large', message: 'the file is larger than 16000 MB' })

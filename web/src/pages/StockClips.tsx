@@ -40,30 +40,30 @@ export default function StockClips({ onAdded }: { onAdded: () => void }) {
   })
 
   return (
-    <section aria-label="Stock clips" className="mt-4 border-t border-line/60 pt-4 text-sm">
-      <h3 className="font-semibold">Stock clips</h3>
-      <p className="mt-1 text-muted">Pexels videos, free to use under the Pexels License (credited to their author).</p>
+    <section aria-label="Clips de banque" className="mt-4 border-t border-line/60 pt-4 text-sm">
+      <h3 className="font-semibold">Clips de banque</h3>
+      <p className="mt-1 text-muted">Vidéos Pexels, libres d’usage sous la licence Pexels (créditées à leur auteur).</p>
       <form role="search" onSubmit={search} className="mt-2 flex gap-2">
-        <input name="q" type="search" aria-label="Search stock clips" placeholder="e.g. gym, running"
+        <input name="q" type="search" aria-label="Chercher des clips de banque" placeholder="ex. gym, course"
           className={`${field} min-w-0 flex-1`} />
-        <Button type="submit" loading={busy === 'search'}>Search</Button>
+        <Button type="submit" loading={busy === 'search'}>Chercher</Button>
       </form>
       {error && <p role="alert" className="mt-2 text-danger">{error}</p>}
-      {results?.length === 0 && <p className="mt-2">No videos found.</p>}
+      {results?.length === 0 && <p className="mt-2">Aucune vidéo trouvée.</p>}
       {results && results.length > 0 && (
         <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {results.map((r) => (
             <li key={r.id} className="flex flex-col gap-1">
               {safeUrl(r.image) && (
-                <img src={safeUrl(r.image)!} alt={`Pexels video ${r.id}`} loading="lazy"
+                <img src={safeUrl(r.image)!} alt={`Vidéo Pexels ${r.id}`} loading="lazy"
                   className="aspect-[9/16] w-full rounded-control object-cover" />
               )}
               <span className="break-words text-xs text-muted">
-                {r.author ?? 'Unknown'} · {r.duration_s ?? '?'} s
+                {r.author ?? 'Inconnu'} · {r.duration_s ?? '?'} s
               </span>
               <Button size="sm" disabled={added.includes(r.id)} loading={busy === r.id}
-                onClick={() => void add(r.id)} aria-label={`Add Pexels video ${r.id}`}>
-                {added.includes(r.id) ? 'Added' : 'Add'}
+                onClick={() => void add(r.id)} aria-label={`Ajouter la vidéo Pexels ${r.id}`}>
+                {added.includes(r.id) ? 'Ajoutée' : 'Ajouter'}
               </Button>
             </li>
           ))}

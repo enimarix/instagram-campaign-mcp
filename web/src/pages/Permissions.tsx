@@ -16,10 +16,12 @@ import { dateTime } from './load'
 const CHANGED = 'permissions:changed' // the list reloads when a request is saved elsewhere
 const CHANNELS: { id: PermissionChannel; label: string }[] = [
   { id: 'dm', label: 'Instagram DM' },
-  { id: 'email', label: 'Email' },
-  { id: 'other', label: 'Other' },
+  { id: 'email', label: 'E-mail' },
+  { id: 'other', label: 'Autre' },
 ]
-const TONE: Record<PermissionRequest['status'], Tone> = { requested: 'info', granted: 'success', denied: 'neutral' }
+const STATUS: Record<PermissionRequest['status'], [Tone, string]> = {
+  requested: ['info', 'demandée'], granted: ['success', 'accordée'], denied: ['neutral', 'refusée'],
+}
 const ACCEPT = '.mp4,.mov,.m4v,.webm,.mkv' // VIDEO_EXTS in src/studio/sources.py
 
 function AskSheet({ target, onClose }: { target: PermissionTarget; onClose: () => void }) {
@@ -43,9 +45,9 @@ function AskSheet({ target, onClose }: { target: PermissionTarget; onClose: () =
   async function copy() {
     try {
       await navigator.clipboard.writeText(message ?? '')
-      toast({ message: 'Copied: paste it into your message to the creator' })
+      toast({ message: 'Copié : colle-le dans ton message au créateur' })
     } catch {
-      toast({ message: 'Could not copy: select the text and copy it' })
+      toast({ message: 'Copie impossible : sélectionne le texte et copie-le' })
     }
   }
 
@@ -56,7 +58,7 @@ function AskSheet({ target, onClose }: { target: PermissionTarget; onClose: () =
     try {
       await askPermission({ ...where, channel, note: note.trim() || undefined, creator: creator.trim() || undefined })
       window.dispatchEvent(new Event(CHANGED))
-      toast({ message: 'Saved. When the creator answers, mark it in Settings, Permissions.' })
+      toast({ message: 'Enregistrée. Quand le créateur répond, note-le dans Réglages, Autorisations.' })
       onClose()
     } catch (err) {
       setError(errorMessage(err))
@@ -65,14 +67,14 @@ function AskSheet({ target, onClose }: { target: PermissionTarget; onClose: () =
   }
 
   return (
-    <Sheet title="Ask for permission" onClose={onClose}>
+    <Sheet title="Demander l’autorisation" onClose={onClose}>
       <form onSubmit={(e) => void save(e)} className="mt-3 grid gap-3 text-sm">
-        <p className="text-muted">Edit the message, copy it and send it yourself. The studio never sends it.</p>
+        <p className="text-muted">Modifie le message, copie-le et envoie-le toi-même. Le studio ne l’envoie jamais.</p>
         {askName && (
-          <label>Creator
+          <label>Créateur
             <input value={creator} required onChange={(e) => setCreator(e.target.value)}
               onBlur={() => { if (!edited && creator.trim()) void load(creator.trim()) }}
-              placeholder="their Instagram handle" className={`${field} mt-1 block w-full`} />
+              placeholder="son nom Instagram" className={`${field} mt-1 block w-full`} />
           </label>
         )}
         {message === undefined ? !error && <Skeleton className="h-32" /> : (
@@ -81,30 +83,30 @@ function AskSheet({ target, onClose }: { target: PermissionTarget; onClose: () =
               className={`${field} mt-1 block w-full py-2`} />
           </label>
         )}
-        <Button onClick={() => void copy()} disabled={!message} className="md:w-auto md:justify-self-start">Copy message</Button>
-        <label>Sent by
+        <Button onClick={() => void copy()} disabled={!message} className="md:w-auto md:justify-self-start">Copier le message</Button>
+        <label>Envoyé par
           <select value={channel} onChange={(e) => setChannel(e.target.value as PermissionChannel)}
             className={`${field} mt-1 block w-full`}>
             {CHANNELS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
         </label>
-        <label>Note (optional)
+        <label>Note (facultatif)
           <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000}
-            placeholder="sent on 18 Nov from the brand account" className={`${field} mt-1 block w-full`} />
+            placeholder="envoyé le 18 nov. depuis le compte de la marque" className={`${field} mt-1 block w-full`} />
         </label>
         {error && <p role="alert" className="text-danger">{error}</p>}
-        <Button type="submit" variant="primary" loading={busy} disabled={message === undefined}>Save request</Button>
+        <Button type="submit" variant="primary" loading={busy} disabled={message === undefined}>Enregistrer la demande</Button>
       </form>
     </Sheet>
   )
 }
 
-/** "Ask for permission" on a reference, an inspiration or a clip: opens the draft sheet. */
+/** « Demander l’autorisation » on a reference, an inspiration or a clip: opens the draft sheet. */
 export function AskPermissionButton({ target }: { target: PermissionTarget }) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>Ask for permission</Button>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>Demander l’autorisation</Button>
       {open && <AskSheet target={target} onClose={() => setOpen(false)} />}
     </>
   )
@@ -123,49 +125,49 @@ function Row({ r, act }: { r: PermissionRequest; act: (fn: () => Promise<unknown
     <li className="py-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium break-all">@{r.creator}</span>
-        <Chip tone={TONE[r.status]}>{r.status}</Chip>
-        {r.ads_allowed && <Chip tone="accent">ads allowed</Chip>}
+        <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
+        {r.ads_allowed && <Chip tone="accent">pubs autorisées</Chip>}
         <span className="text-muted">
-          {CHANNELS.find((c) => c.id === r.channel)?.label} · asked {dateTime(r.requested_at)}
+          {CHANNELS.find((c) => c.id === r.channel)?.label} · demandée le {dateTime(r.requested_at)}
         </span>
-        {href && <a href={href} target="_blank" rel="noopener noreferrer" className={link}>Open</a>}
+        {href && <a href={href} target="_blank" rel="noopener noreferrer" className={link}>Ouvrir</a>}
       </div>
       {r.proof_note && <p className="mt-1 break-words text-muted">{r.proof_note}</p>}
       {r.status === 'requested' && !granting && (
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => setGranting(true)}>They said yes</Button>
+          <Button size="sm" onClick={() => setGranting(true)}>C’est oui</Button>
           <Button size="sm" variant="ghost" onClick={() => void act(() => answerPermission(r.id, { status: 'denied' }))}>
-            They said no
+            C’est non
           </Button>
         </div>
       )}
       {granting && r.status === 'requested' && (
-        <form aria-label={`Yes from @${r.creator}`} className="mt-2 grid gap-2"
+        <form aria-label={`Oui de @${r.creator}`} className="mt-2 grid gap-2"
           onSubmit={(e) => {
             e.preventDefault()
             void act(() => answerPermission(r.id, { status: 'granted', proof_note: proof.trim(), ads_allowed: ads }))
           }}>
-          <label>Proof
+          <label>Preuve
             <input value={proof} required onChange={(e) => setProof(e.target.value)}
-              placeholder="where and when they said yes" className={`${field} mt-1 block w-full`} />
+              placeholder="où et quand il a répondu oui" className={`${field} mt-1 block w-full`} />
           </label>
           <label className="flex min-h-11 items-center gap-2">
             <input type="checkbox" checked={ads} onChange={(e) => setAds(e.target.checked)} />
-            They agreed in writing to paid ads
+            Accord écrit pour les pubs payantes
           </label>
-          <Button type="submit" variant="primary" className="md:w-auto md:justify-self-start">Save answer</Button>
+          <Button type="submit" variant="primary" className="md:w-auto md:justify-self-start">Enregistrer la réponse</Button>
         </form>
       )}
       {r.status === 'granted' && !attached && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <select aria-label="Is the sound covered?" value={sound} onChange={(e) => setSound(e.target.value as AudioRights)}
+          <select aria-label="Le son est-il couvert ?" value={sound} onChange={(e) => setSound(e.target.value as AudioRights)}
             className={field}>
-            <option value="covered">The sound is covered</option>
-            <option value="not_covered">The sound is not covered (muted)</option>
-            <option value="no_audio">No sound</option>
+            <option value="covered">Le son est couvert</option>
+            <option value="not_covered">Le son n’est pas couvert (coupé)</option>
+            <option value="no_audio">Pas de son</option>
           </select>
           <label className={`${buttonClass('primary', 'sm')} cursor-pointer has-focus-visible:outline-2 has-focus-visible:outline-accent ${uploading ? 'opacity-60' : ''}`}>
-            {uploading ? 'Attaching…' : 'Attach file'}
+            {uploading ? 'Ajout…' : 'Joindre le fichier'}
             <input type="file" accept={ACCEPT} className="sr-only" disabled={uploading}
               onChange={(e) => {
                 const file = e.target.files?.[0]
@@ -177,8 +179,8 @@ function Row({ r, act }: { r: PermissionRequest; act: (fn: () => Promise<unknown
           </label>
         </div>
       )}
-      {attached && <p className="mt-1 text-success">File attached: clip #{r.source_id} can be used with credit.</p>}
-      {r.status === 'denied' && <p className="mt-1 text-muted">The clip stays usable as commentary only.</p>}
+      {attached && <p className="mt-1 text-success">Fichier joint : le clip n°{r.source_id} peut servir avec crédit.</p>}
+      {r.status === 'denied' && <p className="mt-1 text-muted">Le clip reste utilisable en commentaire seulement.</p>}
     </li>
   )
 }
@@ -206,14 +208,14 @@ export default function PermissionsSection() {
   }
 
   return (
-    <Card as="section" id="permissions" aria-label="Permissions" className="scroll-mt-16 lg:scroll-mt-4">
-      <h2 className="font-semibold">Permissions</h2>
+    <Card as="section" id="permissions" aria-label="Autorisations" className="scroll-mt-16 lg:scroll-mt-4">
+      <h2 className="font-semibold">Autorisations</h2>
       <p className="mt-1 text-sm text-muted">
-        Creators you asked to reuse a clip as is. Once they say yes, attach their file.
+        Les créateurs à qui tu as demandé de reprendre un clip tel quel. Quand ils disent oui, joins leur fichier.
       </p>
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       {items === undefined ? !error && <Skeleton className="mt-3 h-12" /> : items.length === 0 ? (
-        <p className="mt-2 text-sm">No requests yet. Use "Ask for permission" on a clip, a trend or an inspiration.</p>
+        <p className="mt-2 text-sm">Pas encore de demande. Utilise « Demander l’autorisation » sur un clip, une tendance ou une inspiration.</p>
       ) : (
         <ul className="mt-2 divide-y divide-line/60">
           {items.map((r) => <Row key={r.id} r={r} act={act} />)}

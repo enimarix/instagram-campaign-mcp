@@ -11,21 +11,21 @@ import StockClips from './StockClips'
 
 // GOAL.md §5.1; `unknown` is never offered: a clip without rights is never stored.
 const BASES: { id: RightsBasis; label: string }[] = [
-  { id: 'own', label: 'Own: I made it' },
-  { id: 'licensed', label: 'Licensed: stock or library' },
-  { id: 'public_domain', label: 'Public domain or CC0' },
-  { id: 'cc', label: 'Creative Commons BY or BY-SA' },
-  { id: 'permission', label: 'Permission from the creator' },
-  { id: 'commentary', label: "Commentary: reacting to another creator's Reel" },
+  { id: 'own', label: 'À moi : je l’ai fait' },
+  { id: 'licensed', label: 'Sous licence : banque d’images ou bibliothèque' },
+  { id: 'public_domain', label: 'Domaine public ou CC0' },
+  { id: 'cc', label: 'Creative Commons BY ou BY-SA' },
+  { id: 'permission', label: 'Autorisation du créateur' },
+  { id: 'commentary', label: 'Commentaire : réaction au Reel d’un autre créateur' },
 ]
 const NEEDS_AUTHOR: RightsBasis[] = ['cc', 'permission', 'commentary']
 const SOUND: { id: AudioRights; label: string }[] = [
-  { id: 'covered', label: 'Yes, the sound is covered' },
-  { id: 'not_covered', label: 'No (the original sound will be muted)' },
-  { id: 'no_audio', label: 'The clip has no sound' },
+  { id: 'covered', label: 'Oui, le son est couvert' },
+  { id: 'not_covered', label: 'Non (le son d’origine sera coupé)' },
+  { id: 'no_audio', label: 'Le clip n’a pas de son' },
 ]
 const field = `${fieldClass} mt-1 block w-full`
-const SHOWN = 5 // clips listed before "Show all": keeps Settings short on a phone
+const SHOWN = 5 // clips listed before "Voir les n clips": keeps Settings short on a phone
 
 /** The Add-clip form of one inbox file: rights basis, note, author, URL, licence, sound. */
 function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void }) {
@@ -57,20 +57,20 @@ function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void })
   }
 
   return (
-    <form aria-label={`Add ${file.name}`} onSubmit={(e) => void submit(e)}
+    <form aria-label={`Ajouter ${file.name}`} onSubmit={(e) => void submit(e)}
       className="mt-3 grid gap-3 rounded-control border border-line bg-surface-2/40 p-4 text-sm">
       <p className="font-medium break-all">{file.name}</p>
-      <label htmlFor={`${id}-basis`}>Rights basis
+      <label htmlFor={`${id}-basis`}>Base des droits
         <select id={`${id}-basis`} value={basis} onChange={(e) => setBasis(e.target.value as RightsBasis)}
           className={field}>
           {BASES.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
         </select>
       </label>
-      <label>Rights note
+      <label>Note sur les droits
         <textarea name="note" required className={`${field} py-1`}
-          placeholder="Where it comes from and why we may use it (licence, date, proof)" />
+          placeholder="D’où il vient et pourquoi on peut l’utiliser (licence, date, preuve)" />
       </label>
-      <label>Author{NEEDS_AUTHOR.includes(basis) ? ' (credited)' : ''}
+      <label>Auteur{NEEDS_AUTHOR.includes(basis) ? ' (crédité)' : ''}
         <input name="author" required={NEEDS_AUTHOR.includes(basis)} className={field} />
       </label>
       <label>URL
@@ -82,7 +82,7 @@ function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void })
         </label>
       )}
       <fieldset>
-        <legend>Is the sound covered?</legend>
+        <legend>Le son est-il couvert ?</legend>
         {SOUND.map((s) => (
           <label key={s.id} className="flex min-h-11 items-center gap-2">
             <input type="radio" name="sound" value={s.id} required /> {s.label}
@@ -91,7 +91,7 @@ function IntakeForm({ file, onAdded }: { file: InboxFile; onAdded: () => void })
       </fieldset>
       {error && <p role="alert" className="text-danger">{error}</p>}
       <Button type="submit" variant="primary" loading={busy} className="md:w-auto md:justify-self-start">
-        Add clip
+        Ajouter le clip
       </Button>
     </form>
   )
@@ -121,22 +121,22 @@ export default function ClipsSection() {
       ) : (
         <>
           <p className="mt-1 text-sm text-muted">
-            Drop videos into the inbox folder; each one needs its rights before the studio can use it.
+            Dépose des vidéos dans le dossier inbox ; chacune a besoin de ses droits avant que le studio puisse s’en servir.
           </p>
-          {inbox.length === 0 && <p className="mt-2 text-sm">No files waiting.</p>}
+          {inbox.length === 0 && <p className="mt-2 text-sm">Aucun fichier en attente.</p>}
           {inbox.map((f) => <IntakeForm key={f.name} file={f} onAdded={reload} />)}
           <ul className="mt-3 divide-y divide-line/60 text-sm">
             {(all ? clips : clips.slice(0, SHOWN)).map((c) => (
               <li key={c.id} className="py-2 break-words">
                 <span className="font-medium">#{c.id} {c.stats.original_name ?? c.provider}</span>
                 {' · '}{BASES.find((b) => b.id === c.rights_basis)?.label ?? c.rights_basis}
-                {' · '}{c.attribution ?? 'no credit needed'}
+                {' · '}{c.attribution ?? 'pas de crédit nécessaire'}
                 {c.rights_basis === 'commentary' && <> <AskPermissionButton target={{ source_id: c.id }} /></>}
               </li>
             ))}
           </ul>
           {!all && clips.length > SHOWN && (
-            <Button className="mt-2 md:w-auto" onClick={() => setAll(true)}>Show all {clips.length} clips</Button>
+            <Button className="mt-2 md:w-auto" onClick={() => setAll(true)}>Voir les {clips.length} clips</Button>
           )}
           <StockClips onAdded={reload} />
         </>

@@ -6,17 +6,13 @@ import { Button } from '../ui/Button'
 import { Card, EmptyState, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
-import { link, type Tone } from '../ui/styles'
-import { dateTime, playbookName } from './load'
+import { link } from '../ui/styles'
+import { dateTime, playbookName, RUN_STATUS } from './load'
 import StyleRequests from './StyleRequests'
 
 const POLL_MS = 10_000
 // The started process needs a moment to write its `running` row: keep polling meanwhile.
 const START_GRACE_MS = 60_000
-
-const STATUS: Record<AgentRun['status'], [Tone, string]> = {
-  running: ['info', 'en cours'], succeeded: ['success', 'réussi'], failed: ['danger', 'échoué'], cancelled: ['neutral', 'annulé'],
-}
 
 function duration(s: number) {
   const m = Math.floor(s / 60)
@@ -40,7 +36,7 @@ function RunCard({ run }: { run: AgentRun }) {
     <Card as="li" className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{playbookName(run.playbook)}</span>
-        <Chip tone={STATUS[run.status][0]}>{STATUS[run.status][1]}</Chip>
+        <Chip tone={RUN_STATUS[run.status][0]}>{RUN_STATUS[run.status][1]}</Chip>
         <span className="text-muted">{dateTime(run.started_at)}</span>
       </div>
       <p className="mt-1 text-muted">
