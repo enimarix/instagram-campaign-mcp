@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Calendar, CalendarPost, HotHours } from '../api/client'
 import CalendarPage from './CalendarPage'
-import { slotLabel } from './when'
+import { dayLabel, slotLabel } from './when'
 
 const POST: CalendarPost = {
   id: 5, kind: 'reel', status: 'pending', attempts: 0, caption: 'pending one',
@@ -92,6 +92,30 @@ describe('CalendarPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
     await waitFor(() => expect(calls.at(-1)?.url).toBe('/api/calendar?from=2026-11-23&to=2026-11-29'))
+  })
+
+  it('names the shown week under the title and follows Previous / This / Next week', async () => {
+    // The server answers the 7 days asked for, all empty: the range is the only week marker.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const from = new Date(`${new URL(url, 'http://x').searchParams.get('from')}T00:00`)
+      const days = [0, 1, 2, 3, 4, 5, 6].map((n) => ({
+        date: new Date(from.getFullYear(), from.getMonth(), from.getDate() + n).toLocaleDateString('sv'),
+        posts: [],
+      }))
+      return new Response(JSON.stringify({ days, publish_check: [] }), { status: 200 })
+    }))
+    render(<CalendarPage />, { wrapper: MemoryRouter })
+    const range = (a: string, b: string) => screen.findByText(`${dayLabel(a)} – ${dayLabel(b)}`)
+    await range('2026-11-16', '2026-11-22')
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
+    await range('2026-11-23', '2026-11-29')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
+    await range('2026-11-09', '2026-11-15')
+    fireEvent.click(screen.getByRole('button', { name: 'This week' }))
+    await range('2026-11-16', '2026-11-22')
+    // Day headings sit right under the page's h1 (axe heading-order).
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(7)
   })
 
   it('cancels after a confirm and reloads', async () => {
