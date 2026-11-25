@@ -138,7 +138,7 @@ function AssetPage({ id }: { id: number }) {
   const restyle = (style: string | null, extra: { note?: string; reasons: string[] }) => withMotive(async () => {
     await restyleAsset(id, { style, ...extra })
     return getAsset(id)
-  }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).")
+  }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).")
 
   const decline = (fb: CommentIn) => withMotive(() => declineAsset(id, fb.reason_codes, fb.text), 'Refusée')
 

@@ -15,7 +15,7 @@ function NoteForm({ order, onDone }: { order: WorkOrder; onDone: (saved: boolean
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toast = useToast()
-  const text = order.instruction ? `${order.instruction}\nNote : ${note.trim()}` : note.trim()
+  const text = order.instruction ? `${order.instruction}\nNote : ${note.trim()}` : note.trim()
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -27,7 +27,7 @@ function NoteForm({ order, onDone }: { order: WorkOrder; onDone: (saved: boolean
     } catch (err) {
       setBusy(false)
       if (err instanceof ApiError && err.status === 409) {
-        toast({ message: "Trop tard : l'IA a déjà commencé, la note n'a pas été ajoutée." })
+        toast({ message: "Trop tard : l'IA a déjà commencé, la note n'a pas été ajoutée." })
         onDone(true) // reload: the card shows where it is now
       } else setError(errorMessage(err))
     }
@@ -37,10 +37,10 @@ function NoteForm({ order, onDone }: { order: WorkOrder; onDone: (saved: boolean
     <form aria-label="Note" onSubmit={(e) => void submit(e)} className="space-y-2">
       <label className="block font-medium">Ta note pour l'IA
         <textarea required value={note} rows={3} onChange={(e) => setNote(e.target.value)}
-          placeholder="Ex. : garde un ton léger, cite une source"
+          placeholder="Ex. : garde un ton léger, cite une source"
           className={`${field} mt-1 block w-full py-2 text-base`} />
       </label>
-      {text.length > INSTRUCTION_MAX && <p className="text-danger">Trop long : {text.length}/{INSTRUCTION_MAX} avec la demande.</p>}
+      {text.length > INSTRUCTION_MAX && <p className="text-danger">Trop long : {text.length}/{INSTRUCTION_MAX} avec la demande.</p>}
       {error && <p role="alert" className="text-danger">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" variant="primary" loading={busy} disabled={!note.trim() || text.length > INSTRUCTION_MAX}>Ajouter</Button>
@@ -59,11 +59,11 @@ function OrderCard({ order: o, catalog, onChanged }: { order: WorkOrder; catalog
   const hook = o.idea_hook && !o.instruction?.startsWith(o.idea_hook) ? o.idea_hook : null
 
   async function cancel() {
-    if (!window.confirm(`Annuler la vidéo ${o.id} ? Elle sort de la pile.`)) return
+    if (!window.confirm(`Annuler la vidéo ${o.id} ? Elle sort de la pile.`)) return
     try {
       await cancelWorkOrder(o.id)
     } catch (e) {
-      toast({ message: `Pas annulée : ${errorMessage(e)}` })
+      toast({ message: `Pas annulée : ${errorMessage(e)}` })
     }
     onChanged()
   }
@@ -76,8 +76,8 @@ function OrderCard({ order: o, catalog, onChanged }: { order: WorkOrder; catalog
         <span className="text-muted" title="Dernier changement d'étape">{ago(o.updated_at)}</span>
       </div>
       {o.instruction && <q className="block break-words whitespace-pre-line">{o.instruction}</q>}
-      {hook && <p className="rounded-control bg-surface-2 p-3 break-words">L'IA : {hook}</p>}
-      {waiting && o.blocked_reason && <p className="text-warn">En attente : {o.blocked_reason}</p>}
+      {hook && <p className="rounded-control bg-surface-2 p-3 break-words">L'IA : {hook}</p>}
+      {waiting && o.blocked_reason && <p className="text-warn">En attente : {o.blocked_reason}</p>}
       {o.status === 'skipped' && o.skip_reason && <p className="text-danger">{o.skip_reason}</p>}
       {noting ? <NoteForm order={o} onDone={(saved) => { setNoting(false); if (saved) onChanged() }} /> : (
         <div className="flex flex-wrap items-center gap-2">

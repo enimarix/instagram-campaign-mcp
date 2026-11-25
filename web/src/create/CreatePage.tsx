@@ -58,7 +58,7 @@ function StylesField({ catalog, value, onChange, onGalleryClosed }: {
   const close = () => { setGallery(false); onGalleryClosed() }
   return (
     <div>
-      <p className="text-sm font-medium">Style <span className="font-normal text-muted">(plusieurs : une vidéo par style, {MAX_STYLES} au plus)</span></p>
+      <p className="text-sm font-medium">Style <span className="font-normal text-muted">(plusieurs : une vidéo par style, {MAX_STYLES} au plus)</span></p>
       <div role="group" aria-label="Style" className="mt-1 flex flex-wrap gap-2">
         <Chip pressed={value.includes(null)} onClick={() => onChange(toggleStyle(value, null))}>Auto (l'IA choisit)</Chip>
         {shown.map((id) => (
@@ -66,7 +66,7 @@ function StylesField({ catalog, value, onChange, onGalleryClosed }: {
         ))}
         <Button onClick={() => setGallery(true)}>Tous les styles</Button>
       </div>
-      {full && <p className="mt-1 text-xs text-muted">{MAX_STYLES} styles au plus : retire-en un pour en choisir un autre.</p>}
+      {full && <p className="mt-1 text-xs text-muted">{MAX_STYLES} styles au plus : retire-en un pour en choisir un autre.</p>}
       {gallery && (
         <Sheet title="Tous les styles" wide onClose={close}>
           <div className="mt-3">
@@ -133,7 +133,7 @@ export default function CreatePage() {
         if (o.kind === 'restyle') await restyleAsset(o.assetId, { style: o.style, ...(o.note && { note: o.note }) })
         else await createVideo({ instruction: o.instruction, style: o.style })
       } catch (err) {
-        failed.push(`${o.kind === 'restyle' ? `#${o.assetId}, ` : ''}${styleName(catalog, o.style)} : ${errorMessage(err)}`)
+        failed.push(`${o.kind === 'restyle' ? `#${o.assetId}, ` : ''}${styleName(catalog, o.style)} : ${errorMessage(err)}`)
         left.add(o.style)
       }
     }
@@ -152,11 +152,11 @@ export default function CreatePage() {
   const reelHref = safeUrl(reel)
   return (
     <>
-      <PageHeader title="Créer">Demande une vidéo : elle rejoint la pile, l'IA l'écrit, le studio la rend, puis elle arrive dans l'Inbox.</PageHeader>
+      <PageHeader title="Créer">Demande une vidéo : elle rejoint la pile, l'IA l'écrit, le studio la rend, puis elle arrive dans l'Inbox.</PageHeader>
       <form lang="fr" onSubmit={(e) => void submit(e)} className={`${card} space-y-4 p-4`}>
-        <label className="block text-sm font-medium">Quelle vidéo ?
+        <label className="block text-sm font-medium">Quelle vidéo ?
           <textarea value={draft.text} rows={4} onChange={(e) => set({ text: e.target.value })}
-            placeholder="Ex. : pourquoi on a faim le soir en sèche. Ou #17 pour refaire une de nos vidéos, ou colle un lien de Reel."
+            placeholder="Ex. : pourquoi on a faim le soir en sèche. Ou #17 pour refaire une de nos vidéos, ou colle un lien de Reel."
             className={`${field} mt-1 block w-full py-2 text-base`} />
         </label>
         {(ids.length > 0 || reelHref) && (
@@ -169,13 +169,13 @@ export default function CreatePage() {
             )}
           </ul>
         )}
-        {plan[0]?.kind === 'restyle' && <p className="text-xs text-muted">Même vidéo, autre style : chaque vidéo citée est refaite dans le style choisi.</p>}
+        {plan[0]?.kind === 'restyle' && <p className="text-xs text-muted">Même vidéo, autre style : chaque vidéo citée est refaite dans le style choisi.</p>}
         <StylesField catalog={catalog} value={draft.styles} onChange={(styles) => set({ styles })} onGalleryClosed={() => void loadCatalog()} />
         <Choice label="Adresse" options={[['tu', 'Tu'], ['vous', 'Vous']] as [Address, string][]} value={draft.address}
           onChange={(address) => set({ address })} />
         <Choice label="Durée" options={Object.entries(LENGTH).map(([id, [text]]) => [id as Length, text])} value={draft.length}
           onChange={(length) => set({ length })} />
-        {tooLong && <p className="text-sm text-danger">Trop long : {length}/{INSTRUCTION_MAX} caractères.</p>}
+        {tooLong && <p className="text-sm text-danger">Trop long : {length}/{INSTRUCTION_MAX} caractères.</p>}
         {missing.length > 0 && <p className="text-sm text-danger">Pas de vidéo {missing.map((i) => `#${i}`).join(', ')} dans le studio.</p>}
         {error && <p role="alert" className="text-sm whitespace-pre-line text-danger">{error}</p>}
         <Button type="submit" variant="primary" size="lg" loading={busy} disabled={blocked} className="w-full">

@@ -49,5 +49,5 @@ export const bestBeforeLabel = (d: string) => `à publier avant le ${dayLabel(d)
 export function changeLabel(req: Asset['change_request'], reasons: Vocabulary['values'] = []) {
   const words = req && (req.text?.trim() ||
     req.reason_codes.map((c) => reasons.find((r) => r.id === c)?.label ?? c).join(', '))
-  return words ? `Changé : « ${words} »` : null
+  return words ? `Changé : « ${words} »` : null
 }

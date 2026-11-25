@@ -32,12 +32,12 @@ function VoiceCard({ voice: v, lastOn, relay, onToggle, onRemove }: {
           {v.enabled ? 'Active' : 'Désactivée'}
         </label>
       </div>
-      {v.use_for && <p className="text-sm"><span className="font-medium">L'IA la choisit pour : </span>{v.use_for}</p>}
+      {v.use_for && <p className="text-sm"><span className="font-medium">L'IA la choisit pour : </span>{v.use_for}</p>}
       {v.description && v.description !== v.use_for && <p className="text-sm text-muted">{v.description}</p>}
-      {relay && <p className="text-sm"><span className="font-medium">{eleven ? 'Relais local : ' : 'Jumelle ElevenLabs : '}</span>{relay}</p>}
+      {relay && <p className="text-sm"><span className="font-medium">{eleven ? 'Relais local : ' : 'Jumelle ElevenLabs : '}</span>{relay}</p>}
       {v.sample ? <Preview eager={eleven} src={v.sample} label={`Écouter ${v.label}`} />
         : <p className="text-sm text-muted">Pas d'échantillon.</p>}
-      {v.sample_text && <p className="text-sm italic text-muted">« {v.sample_text} »</p>}
+      {v.sample_text && <p className="text-sm italic text-muted">« {v.sample_text} »</p>}
       {onRemove && <Button variant="ghost" size="sm" onClick={onRemove} disabled={lastOn}>Retirer cette carte</Button>}
     </Card>
   )
@@ -71,13 +71,13 @@ export default function VoicesPage() {
     flip(!v.enabled) // optimistic; put back if the server refuses
     setVoiceEnabled(v.id, !v.enabled).catch((e: unknown) => {
       flip(v.enabled)
-      toast({ message: `Voix non enregistrée : ${errorMessage(e)}` })
+      toast({ message: `Voix non enregistrée : ${errorMessage(e)}` })
     })
   }
   const remove = (v: Voice) => {
-    if (!window.confirm(`Retirer la carte ${v.label} ? La voix reste dans votre compte ElevenLabs.`)) return
+    if (!window.confirm(`Retirer la carte ${v.label} ? La voix reste dans ton compte ElevenLabs.`)) return
     removeVoice(v.id).then(() => setVoices((list) => list?.filter((x) => x.id !== v.id)),
-      (e: unknown) => toast({ message: `Carte non retirée : ${errorMessage(e)}` }))
+      (e: unknown) => toast({ message: `Carte non retirée : ${errorMessage(e)}` }))
   }
 
   const on = voices?.filter((v) => v.enabled) ?? []
@@ -96,7 +96,7 @@ export default function VoicesPage() {
     <>
       <PageHeader title="Voix">Écoutez les voix du studio. Pour chaque vidéo, l'IA choisit parmi les voix actives celle qui convient à la scène (récit, énergie, voix d'homme ou de femme).</PageHeader>
       <EnginePanel onEngine={setEngine} />
-      {error ? <p role="alert" className="text-sm text-danger">Voix indisponibles : {error}</p>
+      {error ? <p role="alert" className="text-sm text-danger">Voix indisponibles : {error}</p>
         : !voices ? <Skeleton className="h-64" />
           : (
             <>
@@ -108,9 +108,9 @@ export default function VoicesPage() {
                 </div>
                 {cards.length ? <ul className="grid gap-3 md:grid-cols-2">{cards.map(card)}</ul>
                   : <EmptyState title="Aucune voix ElevenLabs">{canAdd
-                    ? 'Cherchez une voix dans la bibliothèque ElevenLabs (langue, genre, âge, accent, usage), écoutez-la, puis ajoutez-la avec sa voix locale de relais.'
-                    : noKey ? 'Branchez ElevenLabs (ELEVENLABS_API_KEY) pour ajouter des voix.'
-                      : 'Les réglages des moteurs ne sont pas chargés : rechargez la page.'}</EmptyState>}
+                    ? 'Cherche une voix dans la bibliothèque ElevenLabs (langue, genre, âge, accent, usage), écoute-la, puis ajoute-la avec sa voix locale de relais.'
+                    : noKey ? 'Branche ElevenLabs (ELEVENLABS_API_KEY) pour ajouter des voix.'
+                      : 'Les réglages des moteurs ne sont pas chargés : recharge la page.'}</EmptyState>}
               </section>
               <section aria-label="Voix locales">
                 <h2 className="mb-3 text-lg font-semibold">Voix locales</h2>

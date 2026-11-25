@@ -13,8 +13,8 @@ describe('wallClock', () => {
 describe('changeLabel', () => {
   const reasons = [{ id: 'weak_hook', label: 'Weak hook' }]
   it("quotes the owner's words, else their reasons; nothing on a first version", () => {
-    expect(changeLabel({ text: ' Plus court ', reason_codes: ['weak_hook'] }, reasons)).toBe('Changé : « Plus court »')
-    expect(changeLabel({ text: null, reason_codes: ['weak_hook', 'odd'] }, reasons)).toBe('Changé : « Weak hook, odd »')
+    expect(changeLabel({ text: ' Plus court ', reason_codes: ['weak_hook'] }, reasons)).toBe('Changé : « Plus court »')
+    expect(changeLabel({ text: null, reason_codes: ['weak_hook', 'odd'] }, reasons)).toBe('Changé : « Weak hook, odd »')
     expect(changeLabel(null, reasons)).toBeNull()
     expect(changeLabel(undefined)).toBeNull()
   })

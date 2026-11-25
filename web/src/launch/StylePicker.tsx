@@ -20,7 +20,7 @@ function StylePreview({ style, small }: { style: Style; small?: boolean }) {
       ) : null}
       <p className="text-xs">
         <span className="font-semibold">{style.label}</span>
-        {style.description && <> : {style.description}</>}
+        {style.description && <> : {style.description}</>}
       </p>
     </div>
   )
@@ -58,11 +58,11 @@ export function StylePicker({ value, onChange, autoLabel = "Auto (l'IA choisit)"
         {outside && <Chip pressed onClick={() => onChange(value)}>{picked?.id === value ? picked.label : (shown?.label ?? value)}</Chip>}
         {all && <Button onClick={() => setGallery(true)}>Tous les styles</Button>}
       </div>
-      {error && <p role="alert" className="mt-1 text-xs text-danger">Styles indisponibles : {error}</p>}
+      {error && <p role="alert" className="mt-1 text-xs text-danger">Styles indisponibles : {error}</p>}
       {shown ? <StylePreview style={shown} small={compact} />
         : lemo ? (
           <p className="mt-2 rounded-control bg-surface-2 p-2 text-xs">
-            <span className="font-semibold">{lemo.label}</span>{lemo.essence && <> : {lemo.essence}</>}
+            <span className="font-semibold">{lemo.label}</span>{lemo.essence && <> : {lemo.essence}</>}
           </p>
         ) : value === null && <p className="mt-1 text-xs text-muted">L'IA choisit le style qui va le mieux à l'idée.</p>}
       {gallery && (

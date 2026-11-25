@@ -31,7 +31,7 @@ export default function CreateVideoSheet({ onClose, onSent }: { onClose: () => v
       <form lang="fr" onSubmit={(e) => void submit(e)} className="mt-3 space-y-3">
         <label className="block text-sm font-medium">Le sujet ou ta consigne
           <textarea required value={text} maxLength={500} rows={5} onChange={(e) => setText(e.target.value)}
-            placeholder="Ex. : pourquoi on a faim le soir en sèche (tu peux dicter)"
+            placeholder="Ex. : pourquoi on a faim le soir en sèche (tu peux dicter)"
             className={`${field} mt-1 block w-full py-2 text-base`} />
         </label>
         <p className="text-right text-xs text-muted tabular-nums">{text.length}/500</p>

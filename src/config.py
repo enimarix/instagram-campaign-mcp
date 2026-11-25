@@ -94,9 +94,9 @@ class AdPreset(BaseModel):
 # ponytail: placeholder audiences until H9 names the market.
 DEFAULT_AD_PRESETS = (
     {"id": "fr_reels", "label": "France, Reels", "countries": ["FR"], "placements": ["reels"]},
-    {"id": "fr_feed_reels", "label": "France, Feed and Reels", "countries": ["FR"],
+    {"id": "fr_feed_reels", "label": "France, fil et Reels", "countries": ["FR"],
      "placements": ["stream", "reels"]},
-    {"id": "francophone_reels", "label": "France, Belgium, Switzerland, Luxembourg, Reels",
+    {"id": "francophone_reels", "label": "France, Belgique, Suisse, Luxembourg, Reels",
      "countries": ["FR", "BE", "CH", "LU"], "placements": ["reels"]},
 )
 

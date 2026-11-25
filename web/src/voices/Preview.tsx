@@ -9,7 +9,7 @@ export function Preview({ src, label, eager }: { src: string; label: string; eag
   if (failed)
     return (
       <p role="alert" className="mt-2 text-sm text-warn">
-        Aperçu impossible à charger. Rechargez la page (Ctrl+F5) ; si cela persiste, l'aperçu n'est plus disponible chez ElevenLabs.
+        Aperçu impossible à charger. Recharge la page (Ctrl+F5) ; si ça persiste, l'aperçu n'est plus disponible chez ElevenLabs.
       </p>
     )
   return <audio controls preload={eager ? 'metadata' : 'none'} src={src} className="mt-2 w-full" aria-label={label} onError={() => setFailed(true)} />

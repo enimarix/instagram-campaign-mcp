@@ -9,9 +9,9 @@ export type Address = 'tu' | 'vous'
 export type Length = 'court' | 'moyen' | 'long'
 export const ADDRESS: Record<Address, string> = { tu: 'Tutoiement (tu).', vous: 'Vouvoiement (vous).' }
 export const LENGTH: Record<Length, [string, string]> = {
-  court: ['Court (~20 s)', 'Durée visée : environ 20 s.'],
-  moyen: ['Moyen (~40 s)', 'Durée visée : environ 40 s.'],
-  long: ['Long (~60 s)', 'Durée visée : environ 60 s.'],
+  court: ['Court (~20 s)', 'Durée visée : environ 20 s.'],
+  moyen: ['Moyen (~40 s)', 'Durée visée : environ 40 s.'],
+  long: ['Long (~60 s)', 'Durée visée : environ 60 s.'],
 }
 
 // #17 or a pasted asset link (…/assets/17); an Instagram Reel or post link
@@ -37,7 +37,7 @@ export function instruction(d: Draft) {
   const { ids, reel } = parsePrompt(d.text)
   return [
     d.text.trim(),
-    ids.length > 0 && `(${ids.map((i) => `#${i}`).join(', ')} : vidéo${ids.length > 1 ? 's' : ''} du studio, id d'asset ; base-toi dessus.)`,
+    ids.length > 0 && `(${ids.map((i) => `#${i}`).join(', ')} : vidéo${ids.length > 1 ? 's' : ''} du studio, id d'asset ; base-toi dessus.)`,
     reel && '(Le lien Instagram est un Reel de référence.)',
     d.address && ADDRESS[d.address],
     d.length && LENGTH[d.length][1],

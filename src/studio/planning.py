@@ -760,7 +760,7 @@ def _playbook(store: CampaignStore, name: Any) -> str:
 
     name = _playbook_file(str(name), schedule.AGENT_DIR).stem
     if store.running_agent_run(name):
-        raise ValueError(f"Le run {name} est déjà en cours.")
+        raise ValueError(f"Le run « {run_title(name)} » est déjà en cours.")
     return name
 
 

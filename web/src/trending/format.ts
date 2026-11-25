@@ -5,12 +5,12 @@ import type { Tone } from '../ui/styles'
 export type ModeOption<M extends WorkMode> = { id: M; label: string; hint: string }
 /** Trending orders: inspired or react only (134's POST refuses owner). */
 export const TREND_MODES: ModeOption<TrendMode>[] = [
-  { id: 'inspired', label: 'Inspiré', hint: "Une vidéo originale sur la même idée : rien du Reel n'est repris." },
+  { id: 'inspired', label: 'Inspiré', hint: "Une vidéo originale sur la même idée : rien du Reel n'est repris." },
   { id: 'react', label: 'Réaction', hint: 'Un remix commenté du Reel, avec le crédit du créateur.' },
 ]
 /** DM orders (Mes envois): the owner's own instruction first, the default. */
 export const MODES: ModeOption<WorkMode>[] = [
-  { id: 'owner', label: 'Mon instruction', hint: "L'IA suit ta consigne : réaction, vidéo inspirée, recoupe ou simple analyse." },
+  { id: 'owner', label: 'Mon instruction', hint: "L'IA suit ta consigne : réaction, vidéo inspirée, recoupe ou simple analyse." },
   ...TREND_MODES,
 ]
 

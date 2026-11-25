@@ -116,7 +116,7 @@ describe('VoicesPage', () => {
     stubApi({ 'GET /api/voices': [200, [voice('souriante', 'Souriante')]] }) // engine: 404
     render(<VoicesPage />)
     expect(await screen.findByText(/Moteurs indisponibles/)).toBeTruthy()
-    expect(screen.getByText(/rechargez la page/)).toBeTruthy()
+    expect(screen.getByText(/recharge la page/)).toBeTruthy()
     expect(screen.queryByText(/ELEVENLABS_API_KEY/)).toBeNull()
   })
 
@@ -125,7 +125,7 @@ describe('VoicesPage', () => {
     const audio = container.querySelector('audio') as HTMLAudioElement
     expect(audio.preload).toBe('metadata')
     fireEvent.error(audio)
-    expect(screen.getByRole('alert').textContent).toMatch(/Rechargez la page/)
+    expect(screen.getByRole('alert').textContent).toMatch(/Recharge la page/)
   })
 })
 

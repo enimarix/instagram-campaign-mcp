@@ -8,7 +8,7 @@ export function VoiceBadge({ by }: { by: By }) {
   const name = by.engine === 'elevenlabs' ? 'ElevenLabs' : by.engine === 'http' ? 'Voix locale' : by.engine
   return (
     <Chip tone={by.fallback ? 'warn' : by.engine === 'elevenlabs' ? 'info' : 'neutral'}
-      title={by.fallback ? `Relais : ${by.fallback}` : undefined}>
+      title={by.fallback ? `Relais : ${by.fallback}` : undefined}>
       {name}{by.fallback ? ' (relais)' : ''}
     </Chip>
   )

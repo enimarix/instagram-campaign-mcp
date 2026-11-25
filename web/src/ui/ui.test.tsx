@@ -68,7 +68,7 @@ describe('Card, Stat, EmptyState, Skeleton', () => {
     expect(screen.getByText('Followers').tagName).toBe('DT')
     expect(screen.getByText('1,200').tagName).toBe('DD')
     expect(screen.getByText('No runs yet')).toBeTruthy()
-    expect(screen.getByText('Loading…')).toBeTruthy()
+    expect(screen.getByText('Chargement…')).toBeTruthy()
   })
 })
 

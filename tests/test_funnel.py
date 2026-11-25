@@ -123,8 +123,8 @@ def test_waste_and_reasons(store, settings):
 
     out = taste(store, settings, days=3, now=NOW)
     assert out["waste"] == {"count": 1, "asset_ids": [wasted], "render_minutes": 1.5}
-    assert out["reasons"] == [{"code": "weak_hook", "label": "Weak hook", "count": 2},
-                              {"code": "too_long", "label": "Too long", "count": 1}]
+    assert out["reasons"] == [{"code": "weak_hook", "label": "Accroche faible", "count": 2},
+                              {"code": "too_long", "label": "Trop long", "count": 1}]
 
 
 def test_routes(store):
@@ -139,4 +139,4 @@ def test_routes(store):
         body = tc.get("/api/analytics/taste?days=7").json()
         assert body["like_rate"][-1] == {"date": today, "reviewed": 1, "liked": 1,
                                          "like_rate": 1.0, "rolling_7d": 1.0}
-        assert body["reasons"] == [{"code": "caption", "label": "Caption", "count": 1}]
+        assert body["reasons"] == [{"code": "caption", "label": "Légende", "count": 1}]

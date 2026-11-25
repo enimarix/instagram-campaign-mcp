@@ -148,7 +148,7 @@ describe('Tendances', () => {
     await screen.findByRole('list', { name: 'Tendances' })
     fireEvent.click(screen.getByRole('button', { name: 'Actualiser' }))
     expect((await screen.findByRole('status')).textContent).toContain(
-      'Trouvé : 4 nouveaux Reels, 1 mis à jour. 1 hashtag(s) en attente : limite de la semaine atteinte. 1 sujet(s) en erreur.')
+      'Trouvé : 4 nouveaux Reels, 1 mis à jour. 1 hashtag(s) en attente : limite de la semaine atteinte. 1 sujet(s) en erreur.')
     expect(screen.getByText('27/30 hashtags restants cette semaine')).toBeTruthy()
     await vi.waitFor(() => expect(calls.filter((c) => c.key === 'GET /api/research/feed?limit=200')).toHaveLength(2))
   })
@@ -394,7 +394,7 @@ describe('Mes envois', () => {
     expect((await within(scheduled).findByRole('button', { name: 'Papier' })).getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(within(scheduled).getByRole('button', { name: '3D 8-bit' }))
     fireEvent.click(within(scheduled).getByRole('button', { name: 'Envoyer' }))
-    expect((await screen.findByRole('status')).textContent).toContain("Trop tard : l'IA a déjà commencé ce Reel")
+    expect((await screen.findByRole('status')).textContent).toContain("Trop tard : l'IA a déjà commencé ce Reel")
     expect(await within(scheduled).findByText('En production')).toBeTruthy()
     expect(within(scheduled).queryByRole('button', { name: 'Modifier la consigne' })).toBeNull()
     expect(calls.find((c) => c.key === 'PATCH /api/work-orders/2')?.body).toEqual({ instruction: 'change ça', mode: 'react', style: 'voxel' })

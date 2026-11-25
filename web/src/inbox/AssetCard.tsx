@@ -85,7 +85,7 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
             {showBestBefore && a.best_before && <Chip tone="warn">{bestBeforeLabel(a.best_before)}</Chip>}
           </div>
           {change && <p className="line-clamp-2 text-sm font-medium">{change}</p>}
-          {a.work_order?.instruction && <p className="line-clamp-2 text-sm">Ta consigne : « {a.work_order.instruction} »</p>}
+          {a.work_order?.instruction && <p className="line-clamp-2 text-sm">Ta consigne : « {a.work_order.instruction} »</p>}
           {/* the agent's note on a new version: what it changed (no self-score since 189) */}
           {change && a.self_score_reason && <p className="truncate text-sm" title={a.self_score_reason}>{a.self_score_reason}</p>}
           {a.description && (

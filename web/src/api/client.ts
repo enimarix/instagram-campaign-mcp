@@ -31,6 +31,8 @@ export class ApiError extends Error {
   }
 }
 
+const OFFLINE = 'Pas de connexion au studio : vérifie le réseau et réessaie.'
+
 let loggedOut: (() => void) | null = null
 /** The Login gate listens here (168): a 401 means the session ended (expired, password changed). */
 export const onLoggedOut = (fn: (() => void) | null) => { loggedOut = fn }
@@ -227,8 +229,11 @@ export const getAssetContext = (id: number) => request<AssetContext>(`/api/asset
 
 /** The server's own words for a refused request (`message`), else the error itself. */
 export function errorMessage(e: unknown): string {
-  if (e instanceof ApiError && e.body && typeof e.body === 'object' && 'message' in e.body)
-    return String(e.body.message)
+  if (e instanceof ApiError)
+    return e.body && typeof e.body === 'object' && 'message' in e.body ? String(e.body.message)
+      : `Le serveur a répondu ${e.status} (${e.code}).`
+  // fetch's own network failure: « Failed to fetch » (Chrome), « NetworkError … » (Firefox), « Load failed » (Safari)
+  if (e instanceof TypeError && /fetch|network|load failed/i.test(e.message)) return OFFLINE
   return e instanceof Error ? e.message : String(e)
 }
 
@@ -450,7 +455,7 @@ const uploadFile = <T>(path: string, file: File, onProgress?: (fraction: number)
       const code = (body as { error?: unknown } | null)?.error
       reject(new ApiError(xhr.status, typeof code === 'string' ? code : 'http_error', body))
     }
-    xhr.onerror = () => reject(new Error('Upload failed: check the connection and try again'))
+    xhr.onerror = () => reject(new Error(OFFLINE))
     xhr.send(file)
   })
 export const uploadReactionReel = (file: File, onProgress?: (fraction: number) => void) =>

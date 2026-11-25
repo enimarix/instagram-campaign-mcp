@@ -104,7 +104,7 @@ function AbView({ campaign }: { campaign: string }) {
             </p>
           )}
           {note && <p className="mt-1 text-sm text-warn">{note}</p>}
-          <ul aria-label="Variants" className="mt-2 space-y-2">
+          <ul aria-label="Variantes" className="mt-2 space-y-2">
             {variants.map((v) => (
               <Card as="li" key={v.variant} className="text-sm">
                 <p className="font-semibold">Variante {v.variant}{v.variant === leader && ' · en tête'}</p>
