@@ -49,7 +49,7 @@ export function TodayReport() {
             <p className="text-muted">{longDay(r.report_date)}</p>
             {r.summary && <Teaser md={r.summary} />}
             <p className="mt-1 text-xs text-muted">
-              {r.analysis.best?.length ?? 0} meilleures · {r.analysis.worst?.length ?? 0} moins bonnes · {r.analysis.experiments?.length ?? 0} idées à tester
+              Meilleures : {r.analysis.best?.length ?? 0} · moins bonnes : {r.analysis.worst?.length ?? 0} · idées à tester : {r.analysis.experiments?.length ?? 0}
             </p>
             <Link to={reportPath(r.report_date)} className={`inline-flex min-h-11 items-center ${link}`}>Lire le rapport</Link>
           </Card>

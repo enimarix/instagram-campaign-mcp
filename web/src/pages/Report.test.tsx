@@ -143,7 +143,7 @@ describe('TodayReport (Analytics card)', () => {
     const card = screen.getByRole('region', { name: 'Rapport du jour' })
     expect(await within(card).findByRole('link', { name: 'Lire le rapport' })).toHaveProperty('href', expect.stringMatching(/\/reports\/2026-11-16$/))
     expect(within(card).getByText(/Good day/)).toBeTruthy()
-    expect(within(card).getByText('1 meilleures · 1 moins bonnes · 1 idées à tester')).toBeTruthy()
+    expect(within(card).getByText('Meilleures : 1 · moins bonnes : 1 · idées à tester : 1')).toBeTruthy()
   })
 
   it('says when the first report will come', async () => {
