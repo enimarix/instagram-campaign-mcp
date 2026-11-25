@@ -148,17 +148,12 @@ _IG_MUSIC = re.compile(r"\b(insta(gram)?|ig)\b.*\b(musi\w*|audio|sound|track|son
 def _check_remake(store: CampaignStore, asset: Dict[str, Any], decision: str,
                   style: Optional[str]) -> None:
     """A remake (remade, restyled) in `style` must be one the owner can get: ValueError when
-    the owner ruled the style (or the video's template, for remade) out, or when he asked
-    for Instagram music and the style is a Lemo film (no film path takes a track)."""
+    he asked for Instagram music and the style is a Lemo film (no film path takes a track).
+    A style he ruled out never gets here: decide_revision swaps it first (swap_banned)."""
     if not style:
         if decision == "restyled":
             raise ValueError("restyled needs the style to remake it in")
         return
-    template = (asset.get("recipe") or {}).get("template") if decision == "remade" else None
-    banned = styles.owner_ban(store, style, template)
-    if banned:
-        raise ValueError(f"{banned}: decide restyled in an enabled style he did not rule"
-                         " out, or request_style")
     if lemo.is_lemo(style) and any(
             fb["wants_changes"] and _IG_MUSIC.search(fb["text"] or "")
             for fb in store.list_feedback(asset_id=asset["id"], limit=1000)):
@@ -181,9 +176,10 @@ def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str
       that video is submitted the old one is archived;
     - waiting: it waits, and `why` says for what (a render pending). A missing style is not
       waiting: request_style.
-    The order of an earlier decision with nothing made yet is skipped (202). A remake is
-    refused in a style (or, remade, a template) the owner ruled out, and in a Lemo style
-    when he asked for Instagram music (_check_remake).
+    The order of an earlier decision with nothing made yet is skipped (202). A remake in a
+    style (or, remade, a template) the owner ruled out becomes restyled in its best
+    alternative (styles.swap_banned); one in a Lemo style is refused when he asked for
+    Instagram music (_check_remake).
     ValueError names the problem; KeyError: no such video."""
     if decision not in AGENT_DECISIONS:
         raise ValueError(f"decision must be one of {', '.join(AGENT_DECISIONS)}"
@@ -196,6 +192,11 @@ def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str
     before = (asset.get("agent_decision") or {}).get("order_id")
     if decision == "remade":
         style = store.get_idea(asset["idea_id"])["style"]
+    if decision != "waiting" and style:  # a style (or template) the owner ruled out: its
+        template = (asset.get("recipe") or {}).get("template") if decision == "remade" else None
+        swapped, note = styles.swap_banned(store, style, template)  # best alternative
+        if note:
+            decision, style, why = "restyled", swapped, f"{note}. {why}"[:WHY_MAX]
     if decision != "waiting":
         _check_remake(store, asset, decision, style)
     if decision == "restyled":

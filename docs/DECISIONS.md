@@ -1105,3 +1105,14 @@ engine), never a switch of voice mid-video. A card's relay must be of its gender
 record their takes, so their fallback shows on the card and rings the bell like a video's.
 Reason: owner 2026-11-25 (« voices follow what is checked and preferred from the UI »);
 video 76 / 78 spoke VoxCPM, and one 429 could turn ElevenLabs off for a whole video.
+
+## 2026-11-25: A style the owner bans is swapped for its closest alternative
+An owner `dont` rule on a style (or a template) no longer refuses the work: the studio
+remakes it in the closest style he keeps (styles.alternative: same address tu / vous, then
+the most words the two descriptions share; a Lemo style first tries its own category).
+Orders and ideas asked in it get the alternative (check_style), a send-back remake in it is
+restyled in it (decide_revision, the decision's why says so), an idea already in it moves
+to it at render (check_template), and the AI's style list leaves it out. A banned template
+alone sends the AI to another template of the same style.
+Reason: owner 2026-11-25 (« If I ban a style, then it should automatically choose the best
+suiting styles alternative that can be used »).

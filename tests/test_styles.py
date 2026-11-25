@@ -178,28 +178,39 @@ def test_render_motion_refuses_a_template_outside_the_style(store, settings, tmp
 
 
 
-def test_an_owner_never_again_on_a_style_or_template_is_enforced(store, settings):
+def test_a_style_the_owner_bans_is_swapped_for_its_closest_alternative(store, settings):
     """Was: « Very bad style never do it again » on pixel videos 84-86 became a rule on one
-    template; pixel stayed in use."""
+    template; pixel stayed in use. Owner 2026-11-25: a banned style is never refused, the
+    studio picks the best other style instead."""
+    from src.learning.brief import agent_styles
     from src.learning.learnings import add_learning
     from src.studio import feedback
 
     idea = _idea(store, settings, "Pixel hook", style="pixel")
     assert styles.check_template(store, idea, "FactQuest") == "pixel"
-    for tag, value in (("template", "QuizChest"), ("style", "pixel")):
-        add_learning(store, "Very bad style never do it again", "dont", "taste",
-                     scope={"tag": tag, "value": value}, actor="owner")
-        with pytest.raises(ValueError, match=f"owner ruled out {tag} '{value}'"):
-            styles.check_template(store, idea, "QuizChest")
-    with pytest.raises(ValueError, match="ruled out style 'pixel'"):
+    add_learning(store, "plus jamais", "dont", "taste",
+                 scope={"tag": "template", "value": "QuizChest"}, actor="owner")
+    with pytest.raises(ValueError, match="ruled out template 'QuizChest'.*use one of.*FactQuest"):
+        styles.check_template(store, idea, "QuizChest")  # one template: another of pixel
+    assert store.get_idea(idea["id"])["style"] == "pixel"
+    add_learning(store, "Very bad style never do it again", "dont", "taste",
+                 scope={"tag": "style", "value": "pixel"}, actor="owner")
+    alt = styles.alternative(store, "pixel")
+    assert alt == "sitcom"  # humour, « tu »: the closest style he keeps
+    with pytest.raises(ValueError, match="now is in style 'sitcom': use one of SitcomSkit"):
         styles.check_template(store, idea, "FactQuest")
+    assert store.get_idea(idea["id"])["style"] == alt
+    assert styles.check_template(store, store.get_idea(idea["id"]), "SitcomSkit") == alt
+    assert styles.check_style(store, "pixel") == alt  # an order or idea asked in pixel
+    assert "pixel" not in {s["id"] for s in agent_styles(store)}
     voxel = _idea(store, settings, "Voxel hook", style="voxel")
     a = store.add_asset(voxel["id"], recipe={"kind": "motion", "template": "VoxelQuest"})
     transition(store, a["id"], "ready", actor="worker")
     feedback.add_comment(store, a["id"], text="pas ça", wants_changes=True)
-    with pytest.raises(ValueError, match="ruled out style 'pixel'"):
-        feedback.decide_revision(store, a["id"], "restyled", "x", style="pixel")
-    assert not work_orders.list_orders(store)
+    out = feedback.decide_revision(store, a["id"], "restyled", "x", style="pixel")
+    assert (out["order"]["style"], out["asset"]["agent_decision"]["style"]) == (alt, alt)
+    assert out["asset"]["agent_decision"]["why"].startswith("style « pixel » écarté")
+
 
 def test_daily_share_limits_a_style(store, settings):
     styles.set_choice(store, "pixel", share=0.2)  # batch 10 -> at most 2

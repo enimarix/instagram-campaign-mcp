@@ -133,7 +133,9 @@ back, with their comments and `earlier_decision`: your last decision on it, or n
 video whose remake is on its way is not listed. An `earlier_decision` of kind `waiting`
 naming an `order_id` is a remake film that failed: decide again (another style, or
 `request_style`), never `waiting` again. A style the owner ruled out (an owner `dont` on
-that style or template) is refused: pick another. **Never leave a request without a decision**: doing
+that style or template) is never used: the studio swaps it for the closest style he keeps
+(the decision comes back restyled in it, and the idea's style moves too); make the video
+in the style it names. **Never leave a request without a decision**: doing
 nothing is not an outcome, and "the same template would only give the same video" means
 you change the style, not that you stop. For each request (newest first):
 1. Read the comments as the owner means them ("more scenes, more people, real
