@@ -31,8 +31,8 @@ import { ToastProvider } from './ui/Toast'
 const NAV = [
   { path: '/inbox', label: 'Inbox', Icon: InboxIcon, tab: true },
   { path: '/create', label: 'Créer', Icon: CreateIcon, tab: true },
-  // 185: behind « More » on the phone: a 7th tab would squeeze every label at 375 px
-  { path: '/planning', label: 'Planning', Icon: PlanningIcon },
+  // 213: Planning took Agent's phone tab (owner's third task; Agent runs are rare), was 185
+  { path: '/planning', label: 'Planning', Icon: PlanningIcon, tab: true },
   { path: '/trending', label: 'Trending', Icon: TrendsIcon, tab: true },
   { path: '/calendar', label: 'Calendar', Icon: CalendarIcon, tab: true },
   { path: '/analytics', label: 'Analytics', Icon: ChartIcon }, // 174: its tab went to Créer
@@ -40,7 +40,7 @@ const NAV = [
   { path: '/styles', label: 'Styles', Icon: PaletteIcon },
   { path: '/voices', label: 'Voix', Icon: MicIcon },
   { path: '/ads', label: 'Ads', Icon: MegaphoneIcon },
-  { path: '/agent', label: 'Agent', Icon: AgentIcon, tab: true },
+  { path: '/agent', label: 'Agent', Icon: AgentIcon }, // 213: behind « More » on the phone
   { path: '/settings', label: 'Settings', Icon: SettingsIcon },
 ]
 const MORE = NAV.filter((n) => !n.tab)

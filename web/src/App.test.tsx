@@ -54,9 +54,20 @@ describe('App', () => {
     expect(links.find((l) => l.textContent === 'Settings')?.getAttribute('aria-current')).toBe('page')
     // phone: five tabs and "More", which is current for the pages behind it
     const tabs = within(screen.getByRole('navigation', { name: 'Tabs' })).getAllByRole('link')
-    expect(tabs.map((l) => l.textContent)).toEqual(['Inbox', 'Créer', 'Trending', 'Calendar', 'Agent', 'More'])
+    expect(tabs.map((l) => l.textContent)).toEqual(['Inbox', 'Créer', 'Planning', 'Trending', 'Calendar', 'More'])
     expect(tabs.filter((l) => l.getAttribute('aria-current')).map((l) => l.textContent)).toEqual(['More'])
     expect(await screen.findByText('Setup mode: add your Instagram token')).toBeTruthy()
+  })
+
+  it.each([['/planning', 'Planning'], ['/agent', 'More']])('marks the current tab on %s', (path, current) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <App />
+      </MemoryRouter>,
+    )
+    const tabs = within(screen.getByRole('navigation', { name: 'Tabs' })).getAllByRole('link')
+    expect(tabs.filter((l) => l.getAttribute('aria-current')).map((l) => l.textContent)).toEqual([current])
   })
 
   it('links Trends from the Analytics page', async () => {
@@ -79,7 +90,7 @@ describe('App', () => {
       </MemoryRouter>,
     )
     const list = within(screen.getByRole('main')).getAllByRole('link')
-    expect(list.map((l) => l.textContent)).toEqual(['Planning', 'Analytics', 'Learnings', 'Styles', 'Voix', 'Ads', 'Settings'])
+    expect(list.map((l) => l.textContent)).toEqual(['Analytics', 'Learnings', 'Styles', 'Voix', 'Ads', 'Agent', 'Settings'])
   })
 
   it('routes /ads to the Ads page', async () => {

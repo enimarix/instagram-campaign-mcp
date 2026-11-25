@@ -112,7 +112,7 @@ export default function ClipsSection() {
   useEffect(reload, [reload])
 
   return (
-    <Card as="section" aria-label="Clips">
+    <Card as="section" id="clips" aria-label="Clips" className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">Clips</h2>
       {error !== undefined ? (
         <p role="alert" className="mt-2 text-sm text-danger">{errorMessage(error)}</p>

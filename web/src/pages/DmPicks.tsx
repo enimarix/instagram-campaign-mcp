@@ -116,7 +116,7 @@ export default function DmPicksSection() {
   }
 
   return (
-    <Card as="section" aria-label="DM picks">
+    <Card as="section" id="dm-picks" aria-label="DM picks" className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">DM picks</h2>
       <p className="mt-1 text-sm text-muted">
         Only Reels these accounts send the brand account by DM become picks: they show on{' '}

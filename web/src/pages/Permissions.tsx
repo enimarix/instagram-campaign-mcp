@@ -206,7 +206,7 @@ export default function PermissionsSection() {
   }
 
   return (
-    <Card as="section" aria-label="Permissions">
+    <Card as="section" id="permissions" aria-label="Permissions" className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">Permissions</h2>
       <p className="mt-1 text-sm text-muted">
         Creators you asked to reuse a clip as is. Once they say yes, attach their file.

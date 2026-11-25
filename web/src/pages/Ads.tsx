@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import {
   ApiError, approveAdTest, cancelAdTest, errorMessage, getAdsAudit, getAdsBudget, getAdTest, killAds, listAdTests,
   listAdPresets, listAdWinners, proposeAdTest, unkillAds, type AdMetric, type AdPreset, type AdReviewIssue,
@@ -112,7 +113,7 @@ function BudgetCard({ b, act }: { b?: AdsBudget; act: Act }) {
     <Card as="section" aria-label="Budget">
       <h2 className="font-semibold">Budget</h2>
       <p className="mt-1 text-sm text-muted">
-        A test spends only once you approve it, within these caps. <a href="/settings" className="text-accent underline">Change them in Settings, Ads</a>.
+        A test spends only once you approve it, within these caps. <Link to="/settings#ads" className="text-accent underline">Change them in Settings, Ads</Link>.
       </p>
       {b.killed && (
         <div role="status" className="mt-2 rounded-control bg-danger/12 p-3 text-sm text-danger">
