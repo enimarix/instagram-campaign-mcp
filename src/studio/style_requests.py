@@ -11,7 +11,9 @@ never parked. Two kinds:
 Each lists the waiting videos (`revision_requested` assets) and open work orders it would
 unblock; those videos show « Nouveau style demandé : <name> » on their Inbox card.
 
-Lifecycle: proposed -> accepted | declined (the owner, Agent page; he may change his mind
+A request that unblocks a work order starts accepted (the owner asked for that video, owner
+2026-11-25) and the order waits for it (work_orders.held_by_style), never made in another
+style. Lifecycle: proposed -> accepted | declined (the owner, Agent page; he may change his mind
 until the build starts) -> building -> live (the lead's dev loop: an accepted request is a
 style step, `ig-campaign style-requests list --status accepted`). Nothing here generates
 code: a request is a brief for a human-led build. When the style goes live its template
@@ -94,8 +96,13 @@ def request_style(store: CampaignStore, kind: str, name: str, why: str,
     if same:
         raise ValueError(f"style request {same[0]} already asks for {name!r}: name that one"
                          " in your summary instead")
+    # The owner's order asked for this video: the style built for it is already accepted
+    # (it goes to the build list at once) and the order waits for it (owner 2026-11-25).
+    decided = {"status": "accepted", "decided_at": to_iso(utcnow()),
+               "owner_note": "pour ta commande"} if unblocks["order_ids"] else {}
     row = store._insert("style_requests", _FIELDS, {"kind": kind, "name": name,
-                                                    "concept": concept, "unblocks": unblocks})
+                                                    "concept": concept, "unblocks": unblocks,
+                                                    **decided})
     for asset_id in unblocks["asset_ids"]:
         feedback.set_decision(store, asset_id, "style_requested", concept["why"],
                               request_id=row["id"], name=name)

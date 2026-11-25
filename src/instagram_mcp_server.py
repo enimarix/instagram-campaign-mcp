@@ -577,7 +577,8 @@ async def download_reel(source_id_or_url: Union[int, str]) -> Dict[str, Any]:
     screen and in the caption. Returns {status: downloaded | exists | refused | failed,
     source, reason}: refused (private, not a video, daily cap) and failed (both
     downloaders down; the owner can drop the file into the inbox) say why. Downloads are
-    capped per day: never download Reels you will not react to."""
+    capped per day: never download Reels you will not react to, except a Reel the owner
+    sent you in a work order (watch it before you make the video: nothing of it reused)."""
     return await _studio(downloader.download_reel, store(), get_settings(), source_id_or_url,
                          now=utcnow())
 
@@ -1064,7 +1065,9 @@ async def request_style(kind: Literal["reference", "invented"], name: str, why: 
     concept, with look, palette, motion_language, typography and sound all given. Both:
     a short name, exactly 3 example scenes, why it would work for macroBody (what
     performs), and the waiting videos (revision_requested) and open work orders it would
-    unblock (their Inbox cards then say « Nouveau style demandé : <name> »)."""
+    unblock (their Inbox cards then say « Nouveau style demandé : <name> »). A request
+    that unblocks a work order is accepted at once (the owner asked for that video) and
+    the order waits for the style: it leaves list_work_orders until the style is live."""
     return await _studio(style_requests.request_style, store(), kind, name, why, scenes,
                          look=look, palette=palette, motion=motion_language,
                          typography=typography,

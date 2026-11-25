@@ -135,6 +135,29 @@ and end card), or null for « Auto (l'IA choisit) ». A style is an order like t
 it) and `render_motion` refuses a template outside it (the refusal names the templates to
 use). Null: you pick the style that fits the idea best, among the brief's `styles`, and
 pass it as `create_idea(style=…)`.
+**Watch the Reel first.** An order with a `permalink` the owner did not film (`own_reel`
+false) is a Reel they want you to see: `download_reel(<permalink>)`,
+`get_clip_frames(source_id)` and `set_clip_timeline(source_id, events, summary)` before you
+write anything (what happens when, the effect, the cuts, the on-screen text, the music and
+its name when Instagram shows one). That is to understand it only: an `inspired` video
+still reuses nothing of it (no clip, frame, audio, caption or line, and no `source_id` on
+its idea). Refused or failed: make it from the instruction alone and say so in the
+video's `description`.
+**Make exactly what the owner asked.** Every part of the instruction is made as written:
+the effect, the music, the people, the texts, the ending. With `style` null, pick the
+style whose templates can make all of it (`list_motion_templates`). When no enabled style
+can make a part of it (an effect, a look, a scene no template has), never make the video
+in another style and never swap that part for something else: `request_style(kind=
+"reference", name=…, why=…, scenes=[3 scenes of this very video], reference=<permalink>
+and what the style must do, unblocks_order_ids=[<id>])`, and make nothing. The request is
+accepted at once (the owner asked for this video), the style is built for it, and the
+order leaves `work_orders.json` until the style is live: then it comes back and you make
+it. "The same music" is the Reel's track when it is in Instagram's library
+(`trending_music`, then `ig_audio` on the render, in a template that takes it); someone's
+original sound cannot be reused (rights rules): the closest library track. Only the
+safety and rights rules ever change what was asked; then the video's `description`
+(render_motion / render_remix `description=`) starts with « Pas fait comme demandé : »,
+what and why, so the owner sees it on the card.
 1. The orders: `work_orders.json` (scheduled ones, oldest first; also the brief's
    `work_orders` and `list_work_orders`). Each has a `mode`, an `instruction` (the owner's
    own words, or null), the Reel's `permalink`, `own_reel` (true: the Reel is from our
@@ -180,7 +203,7 @@ pass it as `create_idea(style=…)`.
    - a topic or a video to make with no Reel (`source: "create"` or `"change"`) → an
      original motion video: `create_idea(track="motion", work_order_id=<id>, …)` in the
      order's style, as `inspired` above;
-   - an instruction you cannot make (impossible with your tools, unclear, unsafe, or
+   - an instruction you cannot make (unclear, unsafe, or
      against the rights rules: a Reel whose rights stay unknown, a recut of someone
      else's Reel) → `skip_work_order(id, "<one-line reason>")`: the owner reads it and
      can send the Reel again.

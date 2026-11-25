@@ -229,7 +229,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     est_start, est_duration_s, est_ready (ISO, None when it waits on the owner), estimated,
     why_here, waits_on (gpu_busy | agent_running | timer | machine (197: a render waiting
     to retry after a machine failure) | held | order_grace | check_grace |
-    recheck | daily_cap | preflight | next_ai_run | needs_instruction | None), not_before (a
+    recheck | daily_cap | preflight | next_ai_run | needs_instruction | style | None), not_before (a
     waiting render's or film's timer, UTC ISO), stage and progress (running items), late_s
     (a running item past its usual time, 190; else None), picks_up (the producing run's
     placeholder), idea (a claude_idea's card: planned.cards, section ideas), line_index (a
@@ -482,6 +482,14 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     for run in later:
         run()
 
+    for o in work_orders.for_agent(store, "scheduled", held=True):
+        if o.get("waits_for_style"):  # held: the AI makes it once its style is built
+            items.append(_item("next", "work_order", _title(o["instruction"],
+                                                            f"Commande {o['id']}"),
+                               None, None, f"Attend le style « {o['waits_for_style']} »,"
+                               " construit pour ta commande : l'IA la fait dès qu'il existe.",
+                               waits_on="style", source=o["source"], style=o["style"],
+                               order_id=o["id"], pick_id=o["pick_id"]))
     for o in work_orders.list_orders(store, "needs_instruction", newest=False):
         items.append(_item("next", "work_order", _title(o["caption_quote"], f"Commande {o['id']}"),
                            None, None, "Attend ta consigne : rien ne part sans elle.",

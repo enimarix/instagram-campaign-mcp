@@ -53,6 +53,29 @@ script and message, in the order's `style`).
 `create_idea(…, work_order_id=<id>)` stores it and `render_motion` refuses a template of
 another style (its refusal names the right templates); null = Auto: pick the style that
 fits, `create_idea(style=…)`.
+**Watch the Reel first.** An order with a `permalink` the owner did not film (`own_reel`
+false) is a Reel they want you to see: `download_reel(<permalink>)`,
+`get_clip_frames(source_id)` and `set_clip_timeline(source_id, events, summary)` before you
+write anything (what happens when, the effect, the cuts, the on-screen text, the music and
+its name when Instagram shows one). That is to understand it only: an `inspired` video
+still reuses nothing of it (no clip, frame, audio, caption or line, and no `source_id` on
+its idea). Refused or failed: make it from the instruction alone and say so in the
+video's `description`.
+**Make exactly what the owner asked.** Every part of the instruction is made as written:
+the effect, the music, the people, the texts, the ending. With `style` null, pick the
+style whose templates can make all of it (`list_motion_templates`). When no enabled style
+can make a part of it (an effect, a look, a scene no template has), never make the video
+in another style and never swap that part for something else: `request_style(kind=
+"reference", name=…, why=…, scenes=[3 scenes of this very video], reference=<permalink>
+and what the style must do, unblocks_order_ids=[<id>])`, and make nothing. The request is
+accepted at once (the owner asked for this video), the style is built for it, and the
+order leaves `work_orders.json` until the style is live: then it comes back and you make
+it. "The same music" is the Reel's track when it is in Instagram's library
+(`trending_music`, then `ig_audio` on the render, in a template that takes it); someone's
+original sound cannot be reused (rights rules): the closest library track. Only the
+safety and rights rules ever change what was asked; then the video's `description`
+(render_motion / render_remix `description=`) starts with « Pas fait comme demandé : »,
+what and why, so the owner sees it on the card.
 1. **Follow the owner's `instruction` literally** ("change that, keep that" means exactly
    that), within the safety rules (never a health promise, never copying, never a plain
    re-upload or an evasion edit; the closest safe version and why, or skip).
@@ -88,7 +111,7 @@ fits, `create_idea(style=…)`.
      evidence=[{"work_order_id": <id>, "reel": <permalink>, "views": …}], …)` for each
      thing it teaches, then `analyse_work_order(id, source_id, why)`: why it worked,
      pointing at moments of the timeline. The order is `analysed`;
-   - an instruction you cannot make (impossible with your tools, unclear, unsafe, or
+   - an instruction you cannot make (unclear, unsafe, or
      against the rights rules) → `skip_work_order(id, "<one-line reason>")`.
 5. `wait_for_renders`, `get_asset_frames`, then `submit_asset` with a
    `note` that starts with "Work order #<id>: " (the order moves

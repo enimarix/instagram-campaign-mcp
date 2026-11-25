@@ -24,7 +24,7 @@ from src.studio.feedback import add_comment
 from .conftest import LOCAL
 from .test_agent_packet import _asset
 from .test_api_assets import _settings
-from .test_dm_work_orders import T0, Clock, Starts, cfg
+from .test_dm_work_orders import T0, Clock, Starts, _dm_order, cfg
 from .test_styles import ALL, _fake_registry
 
 INVENTED = dict(look="néon sur fond nuit", palette="noir, cyan, magenta",
@@ -125,6 +125,31 @@ def test_a_reference_style_unblocks_the_waiting_videos(store):
     d = store.get_asset(aid)["agent_decision"]
     assert (d["kind"], d["text"], d["request_id"]) == (
         "style_requested", "Nouveau style demandé : Danse", row["id"])
+
+
+def test_an_order_waits_for_the_style_built_for_it(store, settings):
+    # owner 2026-11-25: DM order 75 asked for a band rolling over the muscles; no style had
+    # it, the AI asked for one, and the next run made the order in Sitcom 3D anyway
+    from src.studio import planning
+
+    oid = _dm_order(store, "une bande qui roule sur les muscles")
+    row = style_requests.request_style(store, "reference", "Physique Scan", "ta commande",
+                                       SCENES, reference="https://www.instagram.com/reel/X/",
+                                       unblocks_order_ids=[oid])
+    assert (row["status"], row["owner_note"]) == ("accepted", "pour ta commande")
+    assert row["decided_at"]
+    assert work_orders.held_by_style(store) == {oid: "Physique Scan"}
+    assert [o["id"] for o in work_orders.for_agent(store)] == []  # the AI never sees it
+    assert [o["waits_for_style"] for o in work_orders.for_agent(store, held=True)] == [
+        "Physique Scan"]
+    items = planning.build_planning(store, settings, T0)["items"]
+    held = [i for i in items if i["waits_on"] == "style"]
+    assert [i["ids"]["order_id"] for i in held] == [oid] and held[0]["est_start"] is None
+    style_requests.mark(store, row["id"], "building")
+    assert work_orders.for_agent(store) == []
+    style_requests.mark(store, row["id"], "live")  # built: the AI makes it now
+    assert [o["id"] for o in work_orders.for_agent(store)] == [oid]
+    assert _invented(store, "Néon")["status"] == "proposed"  # no order: the owner decides
 
 
 def test_owner_decides_then_the_lead_builds(store):

@@ -1116,3 +1116,18 @@ to it at render (check_template), and the AI's style list leaves it out. A banne
 alone sends the AI to another template of the same style.
 Reason: owner 2026-11-25 (« If I ban a style, then it should automatically choose the best
 suiting styles alternative that can be used »).
+
+## 2026-11-25: An owner's order is made exactly as asked, or waits for the style built for it
+The AI watches the Reel of a work order (`download_reel`, frames, timeline) before it writes
+anything, to understand it only (an inspired video still reuses nothing). It picks the style
+that can make every part of the instruction; when none can, it requests the style
+(`request_style(..., unblocks_order_ids=[id])`) and makes nothing. A style request that
+unblocks a work order starts `accepted` (no « Construire » needed: the order is the owner's
+ask), goes to the build list, and holds the order (`work_orders.held_by_style`): the agent
+does not see it until the style is live or declined; the Planning page shows it « attend son
+nouveau style ». Only the safety and rights rules change what was asked, and the video's
+description then starts « Pas fait comme demandé : ».
+Reason: owner 2026-11-25: DM order 75 asked for a band rolling over a jacked man's muscles
+with the Reel's music. Run 73 requested « Physique Scan » and left the order open; run 74 saw
+it open and made it in Sitcom 3D with library music, without watching the Reel.
+« The AI should literally do what I tell it to do. »

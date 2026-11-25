@@ -549,16 +549,31 @@ def open_by_source(store: CampaignStore, source_ids: Sequence[int]) -> Dict[int,
             for r in rows}
 
 
+def held_by_style(store: CampaignStore) -> Dict[int, str]:
+    """The open orders a style request waits on (proposed, accepted or building): order id
+    -> the style's name. The owner asked for exactly this video: it waits for the style
+    built for it, never made in another one (owner 2026-11-25)."""
+    from .style_requests import OPEN, list_requests  # style_requests imports this module
+
+    return {i: r["name"] for status in OPEN for r in list_requests(store, status)
+            for i in (r["unblocks"] or {}).get("order_ids") or ()}
+
+
 def for_agent(store: CampaignStore, status: Optional[str] = "scheduled",
-              limit: int = 50) -> List[Dict[str, Any]]:
+              limit: int = 50, *, held: bool = False) -> List[Dict[str, Any]]:
     """What the agent sees of the orders (status None: all), oldest first. A change order
     carries from_video: the idea of the video to remake (its hook, script, template).
-    Lemo-Opuscar orders are left out: the film runner makes them (173)."""
+    Lemo-Opuscar orders are left out: the film runner makes them (173), and so are the
+    orders waiting for their style (held_by_style), unless `held` (the Planning page:
+    then with waits_for_style, the style's name)."""
     out = []
+    waiting = held_by_style(store)
     for o in list_orders(store, status, limit, newest=False):
-        if lemo.is_lemo(o["style"]):
+        if lemo.is_lemo(o["style"]) or o["id"] in waiting and not held:
             continue
         row = {k: o[k] for k in AGENT_KEYS}
+        if o["id"] in waiting:
+            row["waits_for_style"] = waiting[o["id"]]
         if o["from_asset_id"]:
             asset = store.get_asset(o["from_asset_id"])
             idea = store.get_idea(asset["idea_id"])
