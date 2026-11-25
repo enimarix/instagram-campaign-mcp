@@ -100,7 +100,7 @@ describe('App', () => {
         <App />
       </MemoryRouter>,
     )
-    expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Ads', level: 1 })).toBeTruthy()
-    expect(await within(screen.getByRole('main')).findByRole('button', { name: 'Propose a test' })).toBeTruthy()
+    expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Pubs', level: 1 })).toBeTruthy()
+    expect(await within(screen.getByRole('main')).findByRole('button', { name: 'Proposer un test' })).toBeTruthy()
   })
 })
