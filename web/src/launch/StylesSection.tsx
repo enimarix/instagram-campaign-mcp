@@ -29,7 +29,7 @@ export default function StylesSection() {
   }
 
   return (
-    <Card as="section" aria-label="Styles">
+    <Card as="section" id="styles" aria-label="Styles" className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">Styles</h2>
       <p className="mt-1 text-sm text-muted">
         One launch button per style that is on; the AI only picks those. Daily share: at most that

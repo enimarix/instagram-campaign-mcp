@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdEvaluation, AdPreset, AdsAudit, AdsBudget, AdTest, AdTestResults } from '../api/client'
 import Ads from './Ads'
@@ -65,7 +66,7 @@ afterEach(() => {
 describe('Ads page', () => {
   it('shows the budget and stops all ads with one tap', async () => {
     const calls = stubApi()
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     const card = await screen.findByRole('region', { name: 'Budget' })
     expect(within(card).getByText('€15.00 left')).toBeTruthy()
     expect(within(card).getByText('€5.00 used of €20.00')).toBeTruthy()
@@ -73,14 +74,14 @@ describe('Ads page', () => {
     expect(within(card).getByText(/Test #4: €5.00 used/)).toBeTruthy()
     expect(screen.queryByText(/A cap at 0/)).toBeNull()
     expect(within(card).getByText(/A test spends only once you approve it, within these caps/)).toBeTruthy()
-    expect(within(card).getByRole('link', { name: 'Change them in Settings, Ads' }).getAttribute('href')).toBe('/settings')
+    expect(within(card).getByRole('link', { name: 'Change them in Settings, Ads' }).getAttribute('href')).toBe('/settings#ads')
     fireEvent.click(within(card).getByRole('button', { name: 'Stop all ads' }))
     await vi.waitFor(() => expect(posts(calls)).toEqual([{ key: 'POST /api/ads/kill', body: undefined }]))
   })
 
   it('says how to allow spend when a cap is 0', async () => {
     stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('0') } })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     expect(await screen.findByText('A cap at 0 allows no spend: raise it in Settings, Ads.')).toBeTruthy()
   })
 
@@ -90,7 +91,7 @@ describe('Ads page', () => {
       { ...TEST, id: 6, status: 'running', launched_by: 'owner', proposed_by: 'owner' },
       TEST,
     ] } })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     const list = await screen.findByRole('region', { name: 'Tests' })
     expect((await within(list).findAllByText('Launched by the AI')).length).toBe(1)
     expect(within(list).getAllByText('Launched by you').length).toBe(1)
@@ -100,7 +101,7 @@ describe('Ads page', () => {
   it('asks the password to allow ads again and maps the password errors', async () => {
     const killed = { ...BUDGET, killed: true, killed_reason: 'too much', killed_at: '2026-11-18T09:00:00+00:00' }
     const calls = stubApi({ 'GET /api/ads/budget': killed, 'POST /api/ads/unkill': [403, { error: 'password_not_set' }] })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     expect(await screen.findByText(/All ads are stopped: too much/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Allow ads again' }))
     const sheet = screen.getByRole('dialog', { name: 'Allow ads again' })
@@ -115,7 +116,7 @@ describe('Ads page', () => {
     [[429, { error: 'locked', retry_after: 300 }], 'Too many wrong passwords: try again in 5 min.'],
   ])('shows %j as a plain message', async (answer, text) => {
     stubApi({ 'GET /api/ads/budget': { ...BUDGET, killed: true }, 'POST /api/ads/unkill': answer })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     fireEvent.click(await screen.findByRole('button', { name: 'Allow ads again' }))
     const sheet = screen.getByRole('dialog')
     fireEvent.change(within(sheet).getByLabelText('Password'), { target: { value: 'x' } })
@@ -125,7 +126,7 @@ describe('Ads page', () => {
 
   it('proposes a test and shows the needed budget and the underpowered reason', async () => {
     const calls = stubApi({ 'POST /api/ads/tests': { ...TEST, underpowered: 'the caps allow less than the test needs' } })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     fireEvent.click(screen.getByRole('button', { name: 'Propose a test' }))
     const sheet = screen.getByRole('dialog', { name: 'Propose a test' })
     const submit = within(sheet).getByRole('button', { name: 'Work out the budget' })
@@ -147,7 +148,7 @@ describe('Ads page', () => {
 
   it('proposes an audience test: one winner, two presets', async () => {
     const calls = stubApi()
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     fireEvent.click(screen.getByRole('button', { name: 'Propose a test' }))
     const sheet = screen.getByRole('dialog')
     fireEvent.click(within(sheet).getByRole('tab', { name: 'Audience' }))
@@ -163,7 +164,7 @@ describe('Ads page', () => {
 
   it('shows one calm note when ads are not configured, and keeps the budget card', async () => {
     stubApi({ 'POST /api/ads/tests': [503, { error: 'ads_not_configured', message: 'ads_not_configured: set it' }] })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     fireEvent.click(screen.getByRole('button', { name: 'Propose a test' }))
     const sheet = screen.getByRole('dialog')
     fireEvent.click(await within(sheet).findByRole('checkbox', { name: /Boss fight/ }))
@@ -176,7 +177,7 @@ describe('Ads page', () => {
 
   it('approves with a budget and no password, the underpowered box only when needed, and shows refusals', async () => {
     const calls = stubApi({ 'POST /api/ads/tests/4/approve': [409, { error: 'daily_cap', message: 'over the daily cap' }] })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
     const sheet = screen.getByRole('dialog', { name: 'Approve and start' })
     const budget = within(sheet).getByLabelText('Budget (EUR)') as HTMLInputElement
@@ -201,7 +202,7 @@ describe('Ads page', () => {
     stubApi({ 'GET /api/ads/tests': { tests: [
       TEST, { ...TEST, id: 6, proposed_by: 'owner' }, { ...TEST, id: 5, status: 'running', launched_by: 'owner' },
     ] } })
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     const list = await screen.findByRole('region', { name: 'Tests' })
     expect((await within(list).findByRole('status')).textContent).toBe('2 proposals wait for you: Approve launches it, Cancel drops it.')
     expect(within(list).getByText('Proposed by the AI, waiting for you')).toBeTruthy()
@@ -218,7 +219,7 @@ describe('Ads page', () => {
 
   it('cancels a test only after the confirm step', async () => {
     const calls = stubApi()
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     expect(posts(calls)).toEqual([])
     expect(screen.getByText('Cancel this test? Its ads stop.')).toBeTruthy()
@@ -228,7 +229,7 @@ describe('Ads page', () => {
 
   it('lists the audit log, paged', async () => {
     const calls = stubApi()
-    render(<Ads />)
+    render(<Ads />, { wrapper: MemoryRouter })
     const log = await screen.findByRole('region', { name: 'Audit log' })
     expect(await within(log).findByText('Kill')).toBeTruthy()
     expect(within(log).getByText('Reason: too much')).toBeTruthy()
@@ -257,7 +258,7 @@ describe('Ads page', () => {
     })
     async function openResults(t: AdTest) {
       const calls = stubApi({ 'GET /api/ads/tests': { tests: [t] }, 'GET /api/ads/tests/4': details(t) })
-      render(<Ads />)
+      render(<Ads />, { wrapper: MemoryRouter })
       fireEvent.click(await screen.findByRole('button', { name: 'Results' }))
       const sheet = screen.getByRole('dialog', { name: 'Test #4 results' })
       await within(sheet).findByText(/€42.50 spent of €84.00/)
@@ -311,14 +312,14 @@ describe('Ads page', () => {
 
     it('shows the declared winner on a finished row', async () => {
       stubApi({ 'GET /api/ads/tests': { tests: [{ ...running({}), status: 'finished', reason: 'winner' }] } })
-      render(<Ads />)
+      render(<Ads />, { wrapper: MemoryRouter })
       expect(await screen.findByText('Winner: B (Post 2)')).toBeTruthy()
     })
 
     it('warns when the server flags a scope near its cap', async () => {
       stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('20', '17'), tests: [{ test_id: 4, ...scope('100', '90') }],
         near_cap: { daily: true, lifetime: false, tests: [4] } } })
-      render(<Ads />)
+      render(<Ads />, { wrapper: MemoryRouter })
       expect(await screen.findByText("Today's ad spend is at 85 % of the daily cap.")).toBeTruthy()
       expect(screen.getByText('Test #4 is at 90 % of its cap.')).toBeTruthy()
       expect(screen.queryByText(/lifetime cap/)).toBeNull()
@@ -326,7 +327,7 @@ describe('Ads page', () => {
 
     it('shows no near-cap banner when the server does not flag one', async () => {
       stubApi({ 'GET /api/ads/budget': { ...BUDGET, daily: scope('20', '19') } })
-      render(<Ads />)
+      render(<Ads />, { wrapper: MemoryRouter })
       await screen.findByRole('region', { name: 'Budget' })
       expect(screen.queryByText(/of the daily cap/)).toBeNull()
     })

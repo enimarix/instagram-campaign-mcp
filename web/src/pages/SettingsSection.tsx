@@ -109,7 +109,7 @@ export default function SettingsSection({ section, title }: { section: string; t
   }
 
   return (
-    <Card as="section" aria-label={title}>
+    <Card as="section" id={section} aria-label={title} className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">{title}</h2>
       <p className="mt-1 text-sm text-muted">
         Saved here, these win over .env.{section === 'ads' && ' Raising a money cap asks your password.'}

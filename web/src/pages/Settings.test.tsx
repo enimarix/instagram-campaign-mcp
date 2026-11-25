@@ -94,6 +94,28 @@ describe('Settings', () => {
     expect(screen.queryByText('Setup mode: add your Instagram token')).toBeNull()
   })
 
+  it('indexes every section: each chip points at an id on the page, in page order', () => {
+    stubApi()
+    const { container } = render(<MemoryRouter><Settings /></MemoryRouter>)
+    const chips = within(screen.getByRole('navigation', { name: 'Sections' })).getAllByRole('link')
+    expect(chips.map((l) => l.textContent)).toEqual(['Apparence', 'Worker', 'Instagram', 'Stockage', 'Sauvegardes',
+      "Planning de l'IA", 'Studio', 'Styles', 'Pubs', 'Clips', 'Autorisations', 'Reel réaction', 'DM', 'Téléchargeur', 'Serveur'])
+    const ids = chips.map((l) => l.getAttribute('href')!.slice(1))
+    const onPage = [...container.querySelectorAll('[id]')].map((el) => el.id).filter((id) => ids.includes(id))
+    expect(onPage).toEqual(ids)
+    for (const id of ids) expect(document.getElementById(id)!.className).toContain('scroll-mt-16 lg:scroll-mt-4')
+    expect(document.getElementById('ads')!.getAttribute('aria-label')).toBe('Ads')
+  })
+
+  it('scrolls to the section of the URL hash', () => {
+    stubApi()
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    render(<MemoryRouter initialEntries={['/settings#ads']}><Settings /></MemoryRouter>)
+    expect(scroll).toHaveBeenCalledWith({ block: 'start' })
+    expect(scroll.mock.contexts[0]).toBe(document.getElementById('ads'))
+  })
+
   it('says so when no agent run is scheduled', async () => {
     stubApi({ 'GET /api/agent/schedule': [200, []] })
     render(<MemoryRouter><Settings /></MemoryRouter>)

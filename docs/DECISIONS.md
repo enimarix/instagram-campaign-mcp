@@ -8,6 +8,12 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-25: Planning has a phone tab; Agent moves behind More (213)
+The phone's bottom bar reads Inbox · Créer · Planning · Trending · Calendar · More; Agent is
+in the More list. This reverses 185 (Planning behind More) and the Agent tab kept since 174.
+Reason: Planning is the owner's third task of the day, while Agent runs are rare, manual and
+each asks for confirmation (UI audit 2026-11-25, Q2, owner « ok »).
+
 ## 2026-11-23: Only a failed or dropped new version gives the old one back; a removed Claude card frees its place (199)
 An unsubmitted version stays out of the check list and the Inbox for good once a newer
 version of it exists, up the chain, archived included (the owner declined it, the worker or a

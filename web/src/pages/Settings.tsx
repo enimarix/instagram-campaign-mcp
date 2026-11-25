@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router'
 import {
   errorMessage, getAccount, getAgentSchedule, getDownloaderStatus, getHealth, getStorage, getToken,
   getWorkerStatus, setPublishingPaused, type AgentScheduleEntry, type DownloaderStatus, type RunResult,
@@ -55,9 +56,9 @@ function runSummary(r: RunResult | null) {
   return counts.join(', ') || 'Nothing due'
 }
 
-function Section({ title, load, children }: { title: string; load: Load<unknown>; children?: ReactNode }) {
+function Section({ id, title, load, children }: { id?: string; title: string; load: Load<unknown>; children?: ReactNode }) {
   return (
-    <Card as="section" aria-label={title}>
+    <Card as="section" id={id} aria-label={title} className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">{title}</h2>
       {load.error !== undefined ? (
         <p role="alert" className="mt-2 text-sm text-danger">{errorMessage(load.error)}</p>
@@ -113,6 +114,14 @@ function DownloaderRows({ d }: { d: DownloaderStatus }) {
   )
 }
 
+// The section index (UI-016): page order, each id on its section's root.
+const SECTIONS = [
+  ['appearance', 'Apparence'], ['worker', 'Worker'], ['instagram', 'Instagram'], ['storage', 'Stockage'],
+  ['backups', 'Sauvegardes'], ['agent-schedule', "Planning de l'IA"], ['studio', 'Studio'], ['styles', 'Styles'],
+  ['ads', 'Pubs'], ['clips', 'Clips'], ['permissions', 'Autorisations'], ['reaction-reel', 'Reel réaction'],
+  ['dm-picks', 'DM'], ['reel-downloader', 'Téléchargeur'], ['server', 'Serveur'],
+] as const
+
 const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : undefined)
 
 export default function Settings() {
@@ -124,6 +133,12 @@ export default function Settings() {
   const [schedule] = useLoad(getAgentSchedule)
   const [downloader] = useLoad(getDownloaderStatus)
   const [toggleError, setToggleError] = useState<string | null>(null)
+  const { hash } = useLocation()
+
+  // React Router does not jump to a #section; every section's root is there from the first render.
+  useEffect(() => {
+    if (hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView?.({ block: 'start' })
+  }, [hash])
 
   const setupMode = health.data?.instagram_configured === false || account.data?.configured === false
 
@@ -149,6 +164,14 @@ export default function Settings() {
   return (
     <section>
       <PageHeader title="Settings" />
+      <nav aria-label="Sections" className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
+        {SECTIONS.map(([id, label]) => (
+          <a key={id} href={`#${id}`}
+            className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-line bg-surface-2 px-4 text-sm font-medium">
+            {label}
+          </a>
+        ))}
+      </nav>
       {setupMode && (
         <p role="status" className="mb-4 rounded-card border border-warn/30 bg-warn/12 p-4 font-medium text-warn">
           Setup mode: add your Instagram token
@@ -156,13 +179,13 @@ export default function Settings() {
       )}
 
       <div className="gap-4 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
-        <Card as="section" aria-label="Appearance">
+        <Card as="section" id="appearance" aria-label="Appearance" className="scroll-mt-16 lg:scroll-mt-4">
           <h2 className="font-semibold">Appearance</h2>
           <p className="mt-1 text-sm text-muted">Dark suits reviewing video; the choice is kept in this browser.</p>
           <div className="mt-3"><ThemeToggle /></div>
         </Card>
 
-        <div>
+        <div id="worker" className="scroll-mt-16 lg:scroll-mt-4">
           <Section title="Worker" load={worker}>
             {w && (
               <>
@@ -188,7 +211,7 @@ export default function Settings() {
           )}
         </div>
 
-        <Section title="Instagram" load={setupMode ? { data: true } : account}>
+        <Section id="instagram" title="Instagram" load={setupMode ? { data: true } : account}>
           <Row label="Configured">{setupMode ? 'No' : 'Yes'}</Row>
           {!setupMode && (
             <>
@@ -204,7 +227,7 @@ export default function Settings() {
           </Row>
         </Section>
 
-        <Section title="Storage" load={storage}>
+        <Section id="storage" title="Storage" load={storage}>
           {s && (
             <>
               <Row label="Media">{formatBytes(s.media_bytes)}</Row>
@@ -219,11 +242,11 @@ export default function Settings() {
           )}
         </Section>
 
-        <Section title="Backups" load={storage}>
+        <Section id="backups" title="Backups" load={storage}>
           <Row label="Last backup">{s?.last_backup ? dateTime(s.last_backup) : 'No backups yet'}</Row>
         </Section>
 
-        <Section title="Agent schedule" load={schedule}>
+        <Section id="agent-schedule" title="Agent schedule" load={schedule}>
           {schedule.data?.length === 0 && <Row label="Runs">None (AGENT_SCHEDULE is empty)</Row>}
           {schedule.data?.map((e) => (
             <Row key={e.playbook} label={`${playbookName(e.playbook)} at ${e.time}`}>{scheduleLine(e)}</Row>
@@ -237,11 +260,11 @@ export default function Settings() {
         <PermissionsSection />
         <ReactionReelSection />
         <DmPicksSection />
-        <Section title="Reel downloader" load={downloader}>
+        <Section id="reel-downloader" title="Reel downloader" load={downloader}>
           {downloader.data && <DownloaderRows d={downloader.data} />}
         </Section>
 
-        <Section title="Server" load={health}>
+        <Section id="server" title="Server" load={health}>
           <Row label="Version">{health.data ? `${health.data.status}, v${health.data.version}` : ''}</Row>
         </Section>
       </div>

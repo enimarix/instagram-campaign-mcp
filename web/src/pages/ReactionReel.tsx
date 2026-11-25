@@ -41,7 +41,7 @@ export default function ReactionReelSection() {
   const others = reels?.filter((r) => !r.active) ?? []
 
   return (
-    <Card as="section" aria-label="Reaction reel">
+    <Card as="section" id="reaction-reel" aria-label="Reaction reel" className="scroll-mt-16 lg:scroll-mt-4">
       <h2 className="font-semibold">Reaction reel</h2>
       <p className="mt-1 text-sm text-muted">
         One long recording of you reacting. Each reaction video uses the next piece of it, in a loop.
