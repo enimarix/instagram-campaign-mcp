@@ -282,6 +282,15 @@ async def test_approve_killed_or_not_configured_refused_before_any_request(store
         await _launch(store, s, t["id"], "abc")
 
 
+async def test_a_budget_under_a_cent_per_variant_is_refused_and_keeps_the_proposal(store, meta):
+    s = _settings()
+    t = await _propose(store, s)
+    with pytest.raises(AdTestRefused) as e:
+        await _launch(store, s, t["id"], "0.01", underpowered_ok=True)  # 2 variants: 0.00 each
+    assert e.value.code == "invalid" and not _posts(meta)
+    assert store._get("ad_tests", t["id"])["status"] == "proposed"
+
+
 async def test_failure_mid_creation_leaves_all_paused_and_cancels(store, meta):
     s = _settings()
     t = await _propose(store, s)
