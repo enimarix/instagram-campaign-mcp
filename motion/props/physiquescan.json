@@ -2,6 +2,7 @@
   "hook": "Ce physique ? Des maths.",
   "scenes": [
     {
+      "subject": "muscle",
       "palette": "lab",
       "label": "+180 G",
       "beats": 4,
@@ -35,6 +36,7 @@
       ]
     },
     {
+      "subject": "dumbbell",
       "palette": "neon",
       "label": "300 G",
       "beats": 4,
@@ -57,6 +59,7 @@
       ]
     },
     {
+      "subject": "heart",
       "palette": "candy",
       "label": "2 800 KCAL",
       "beats": 4,

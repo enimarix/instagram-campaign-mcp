@@ -488,10 +488,12 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    itself: never describe cameras. Narrate with an energetic « tu » voice from `voices.json`
    (`energique_femme` when it is listed, else the closest one listed); the characters' voices
    are picked by the studio.
-   **PhysiqueScan (« Physique Scan »)**: 3D kinetic type on bands round a detailed muscle cut
-   open (its fibres showing), the bands pulling tight, rocking, whooshing up and down it and
-   squeezing it (the owner's reference look). No voice: the words are on the bands, so
-   `voice` is not passed. Write 2-6 `scenes`, one idea each: a `palette` (lab: cream, navy,
+   **PhysiqueScan (« Physique Scan »)**: 3D kinetic type on bands round a detailed object,
+   the bands pulling tight, rocking, whooshing up and down it and squeezing it, under a
+   motion design layer the studio adds by itself (the owner's reference look). No voice: the
+   words are on the bands, so `voice` is not passed. Write 2-6 `scenes`, one idea each: a
+   `subject`, the object the idea is about (muscle: protein, growth; dumbbell or kettlebell:
+   training; heart: cardio, calories burned; bone: calcium, strength; vary them), a `palette` (lab: cream, navy,
    orange, teal; neon: night and acid tones; candy: pink, violet, yellow; vary them), 2-6
    `bands` listed top to bottom (`text`: a macro, a calorie count or a short phrase, under 28
    characters, « Protéines 180 g », « 520 kcal »; `tone` light, dark, accent or pop, mixed;

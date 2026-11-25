@@ -1,13 +1,16 @@
 // PhysiqueScan props and timings (owner order 75, « Physique Scan »): kinetic type on 3D bands
-// round a detailed muscle (its fibres showing where it is cut open), in the spirit of the owner's
-// reference Reel. The AI writes scenes: a palette and 2-6 bands of macro and calorie text that
-// grip the muscle, rock, whoosh up and down it and squeeze it, a measure readout. Every cut falls
+// round a detailed object (a muscle cut open, a dumbbell, a kettlebell, a heart, a femur), in
+// the spirit of the owner's reference Reel, under a motion design layer. The AI writes scenes:
+// an object, a palette, 2-6 bands of macro and calorie text that grip it, rock, whoosh up and
+// down it and squeeze it, a measure readout. Every cut falls
 // on the bed's beat (BEDS); src/studio/physique.py turns the timed shots below into the anatomy
 // engine's shots (cinematic/engine/anatomy.py). No voice: the words are on the bands. Imports
 // only zod and pure modules, so `node --test` runs it.
 import { z } from "zod";
 import { accentSchema, addressSchema, CARD_S, screenText } from "../../endcards/schema.ts";
 
+/** The objects (cinematic/engine/anatomy.py SUBJECTS): muscle (a belly cut open, its fibres inside), dumbbell, kettlebell, heart (it beats), bone (a femur). */
+export const SUBJECTS = ["muscle", "dumbbell", "kettlebell", "heart", "bone"] as const;
 /** The palettes (cinematic/engine/anatomy.py PALETTES): lab (cream, navy, orange, teal), neon (night, acid tones), candy (pink, violet, yellow). */
 export const PALETTES = ["lab", "neon", "candy"] as const;
 /** orbit (round the muscle), push (in on it), top (down into the cut: the fibres inside), glide (along it, close). */
@@ -21,7 +24,8 @@ export const BEDS = {
 } as const;
 type Bed = keyof typeof BEDS;
 const BED_IDS = Object.keys(BEDS) as [Bed, ...Bed[]];
-/** When the bands whoosh, as a share of their shot (cinematic/engine/anatomy.py state: the first band leaves at 0.28). */
+/** The bands whoosh LEGS times a shot (src/studio/physique.py), WHOOSH into each leg (cinematic/engine/anatomy.py W0: the first band leaves at 0.28). */
+export const LEGS = 2;
 export const WHOOSH = 0.3;
 /** A shot lasts this many beats (a scene's last one may be shorter). */
 export const SHOT_BEATS = 2;
@@ -41,9 +45,11 @@ const band = z.strictObject({
 });
 
 const scene = z.strictObject({
+  /** The object the bands grip (SUBJECTS): the one the scene's idea is about. */
+  subject: z.enum(SUBJECTS).default("muscle"),
   /** The scene's colours (PALETTES). */
   palette: z.enum(PALETTES).default("lab"),
-  /** 2-6 bands of text round the muscle, top to bottom: they pull tight, rock, whoosh up and down, squeeze. */
+  /** 2-6 bands of text round the object, top to bottom: they pull tight, rock, whoosh up and down, squeeze. */
   bands: z.array(band).min(2).max(6),
   /** A measure readout that pops in on the scene's first beat (« +180 G », « 2 800 KCAL »). */
   label: screenText(16).optional(),

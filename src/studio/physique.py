@@ -1,13 +1,15 @@
 """
 The `physique` style (« Physique Scan », owner order 75, rebuilt 2026-11-25 after the owner's
-review: no statue, a detailed 3D muscle, many bands, free colours): kinetic type on bands that
-grip a muscle cut open, rock, whoosh up and down it and squeeze it, each stop its own grip.
+review: no statue, detailed 3D objects, many bands, free colours, lots of effects): kinetic type
+on bands that grip an object (a muscle cut open, a dumbbell, a kettlebell, a heart, a femur),
+rock, whoosh up and down it twice a shot and squeeze it, each stop its own grip, under a motion
+design layer (shockwaves, halos, specks, motion blur, punches, bloom, colour fringes).
 
 The Remotion template `PhysiqueScan` (motion/src/templates/PhysiqueScan/schema.ts) cuts the
 scenes on the bed's beat and hands over its shots (`plates`: [{scene, shot, start_s, end_s,
 camera}], end to end from 0 to the end card); this module turns them into the anatomy engine's
-shots (cinematic/engine/anatomy.py): the scene's palette, its bands spaced down the muscle and
-moving between formations shot after shot (never through each other), the shot's camera.
+shots (cinematic/engine/anatomy.py): the scene's object and palette, its bands spaced down it and
+moving between formations, LEGS a shot (never through each other), the shot's camera.
 Blender renders them (cached per shot), the template draws the hook, the readouts and the end
 card over them (src/studio/motion.py).
 """
@@ -34,10 +36,10 @@ SAMPLES = 64
 S_PER_FRAME = 6.0  # Blender timeout budget per frame (measured ~1.5 s)
 # the 720x1280 frames upscaled, a light grain
 GRADE = "scale=1080:1920:flags=lanczos,noise=alls=5:allf=t,format=yuv420p"
-# where the bands stand, shot after shot: (centre, spread) along the belly (0 bottom, 1 top);
-# each shot whooshes them from one formation to the next, so they go up and down together
-FORMATIONS = [(0.5, 0.9), (0.62, 0.62), (0.4, 0.72), (0.55, 1.0), (0.36, 0.6), (0.6, 0.8)]
-LAG = 0.05  # each band leaves this much of the shot after its neighbour (the leading one first)
+# where the bands stand: (centre, spread) along the object's span (0 bottom, 1 top); each leg
+# whooshes them from one formation to the next, so they go up and down together
+FORMATIONS = [(0.5, 0.9), (0.66, 0.6), (0.38, 0.72), (0.58, 1.0), (0.34, 0.6), (0.62, 0.8), (0.45, 0.66)]
+LEGS = 2  # whooshes a shot (motion/src/templates/PhysiqueScan/schema.ts LEGS)
 
 
 def _positions(n: int, formation: tuple) -> List[float]:
@@ -59,20 +61,18 @@ def shot_list(props: Dict[str, Any], plates: Sequence[Dict[str, Any]]) -> Dict[s
         scene = props["scenes"][p["scene"]]
         seed = zlib.crc32(f"{p['scene']}/{p['shot']}".encode()) % 1000
         rng = random.Random(seed)
-        n, k = len(scene["bands"]), p["shot"] + p["scene"]
-        start = _positions(n, FORMATIONS[k % len(FORMATIONS)])
-        end = _positions(n, FORMATIONS[(k + 1) % len(FORMATIONS)])
-        up = sum(end) >= sum(start)  # going up, the top band leads; going down, the bottom one
+        n, k = len(scene["bands"]), LEGS * p["shot"] + p["scene"]
+        stops = [_positions(n, FORMATIONS[(k + leg) % len(FORMATIONS)]) for leg in range(LEGS + 1)]
         bands = []
         for j, b in enumerate(scene["bands"]):
             way = 1 if (j + k) % 2 == 0 else -1
             bands.append({
-                "text": b["text"], "tone": b.get("tone", "light"), "path": [start[j], end[j]],
+                "text": b["text"], "tone": b.get("tone", "light"), "path": [at[j] for at in stops],
                 # a grip of its own at each stop: some parts squeezed hard, some barely
-                "squeeze": [round(min(1.2, b.get("squeeze", 0.8) * rng.uniform(0.5, 1.3)), 2) for _ in range(2)],
-                "turns": 0.4 * way, "tilt": round(way * rng.uniform(6, 12), 1),
-                "lag": round(LAG * (j if up else n - 1 - j), 3), "cinch": p["shot"] == 0})
-        shots.append({"frames": frames, "palette": scene.get("palette", "lab"), "bands": bands,
+                "squeeze": [round(min(1.2, b.get("squeeze", 0.8) * rng.uniform(0.5, 1.3)), 2) for _ in stops],
+                "turns": 0.6 * way, "tilt": round(way * rng.uniform(7, 14), 1), "cinch": p["shot"] == 0})
+        shots.append({"frames": frames, "subject": scene.get("subject", "muscle"),
+                      "palette": scene.get("palette", "lab"), "bands": bands,
                       "camera": {"kind": p["camera"], "start": round(rng.uniform(-45, 45))},
                       "seed": seed})
     return {"shots": shots}

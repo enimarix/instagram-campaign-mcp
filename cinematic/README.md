@@ -77,17 +77,26 @@ for every shot not cached yet). Example: `shotlists/proof.json`.
 `engine/anatomy.py`, standalone (no troupe), fed by `src/studio/physique.py` from the template
 `PhysiqueScan`'s timed shots:
 
-- A muscle belly of 40 fascicles (tubes, each its own shade of wet subsurface red with fine
-  fibres), a flat tendon below, veins winding up it, cut open near the top so the bundles show
-  (a voronoi section). A seamless backdrop and three area lights; colours from a palette
-  (`lab`, `neon`, `candy`), the flat ones lifted to stay true under the exposure.
+- `subject` (`SUBJECTS`): `muscle` (40 fascicles, each its own shade of wet subsurface red with
+  fine fibres, a flat tendon, veins, cut open near the top so the bundles show), `dumbbell`
+  (rubber hex heads, chrome collars, a knurled bar), `kettlebell` (powder-coated), `heart`
+  (ventricles, the aorta and its branches, the pulmonary trunk, the vena cava, coronary
+  vessels; it beats) and `bone` (a femur). Each declares its radius by height (where the bands
+  ride), the span the bands move in, how much it gives under a band and how far to frame it.
+  A seamless backdrop and three area lights; colours from a palette (`lab`, `neon`, `candy`),
+  the flat ones lifted to stay true under the exposure.
 - `bands`: `{text, tone (light, dark, accent, pop), path (stops along the belly), squeeze (one
   per stop), turns, tilt, lag, cinch}`. A band is an open cylinder with rims and tape ticks,
   its type a text mesh wrapped round it; between two stops it holds, grips, lets go, whooshes
   (the leading band first), clamps down at the next stop, rocking and leaning as it flies. A
   Geometry Nodes Set Position pinches the flesh under each band and bulges it between them;
   the band's radius rides that same pinch frame by frame.
-- Cameras: `orbit`, `push`, `top` (down into the cut), `glide` (along it).
+- Cameras: `orbit`, `push`, `top` (down onto it, into the muscle's cut), `glide` (along it).
+- The motion design layer: shockwave rings where a band clamps down, three halo rings orbiting,
+  floating specks, the object turning (and popping in on a scene's first shot), motion blur,
+  camera punches (the lens) and shake (noise) on every whoosh, and a compositor
+  (`compositing_node_group`): bloom on the highlights, a lens whose colour fringes and bulge kick
+  on every whoosh, a vignette.
 
 | Piece | Source | License |
 |---|---|---|

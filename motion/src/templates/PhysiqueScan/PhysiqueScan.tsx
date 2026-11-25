@@ -1,6 +1,7 @@
-// PhysiqueScan (owner order 75): « Physique Scan ». The muscle's shots (a detailed muscle cut
-// open, bands of macro and calorie text gripping it, rocking, whooshing up and down and
-// squeezing it: src/studio/physique.py, cinematic/engine/anatomy.py) cut on the bed's beat, under
+// PhysiqueScan (owner order 75): « Physique Scan ». The object's shots (a muscle, a dumbbell, a
+// kettlebell, a heart or a bone, bands of macro and calorie text gripping it, rocking, whooshing
+// up and down and squeezing it, the motion design layer over it: src/studio/physique.py,
+// cinematic/engine/anatomy.py) cut on the bed's beat, under
 // the hook slammed in one word per beat, a measure readout popping in as each scene opens, a
 // small push on every beat, a whoosh as the bands fly and a swish on each new scene. No voice:
 // the words are on the bands. Ends on the physique end card.
@@ -12,7 +13,7 @@ import { Sfx } from "../../components/Sfx";
 import { EndCard } from "../../endcards/EndCard";
 import { Plate } from "../SitcomSkit/kit";
 import { Hook, PHYSIQUE, Readout } from "./kit";
-import { BEDS, beatAt, layoutOf, WHOOSH, type PhysiqueProps } from "./schema";
+import { BEDS, beatAt, layoutOf, LEGS, WHOOSH, type PhysiqueProps } from "./schema";
 
 export const PhysiqueScan = (props: PhysiqueProps) => {
   const frame = useCurrentFrame();
@@ -46,8 +47,8 @@ export const PhysiqueScan = (props: PhysiqueProps) => {
         </Sequence>
       )}
       {shots.map((s, i) =>
-        // the bands fly about a third into each shot (cinematic/engine/anatomy.py state); a new scene swishes in
-        [<Sfx key={`b${i}`} id="sfx-swish" at={at(s.start_s + WHOOSH * (s.end_s - s.start_s))} db={-5} />,
+        // the bands fly LEGS times a shot, WHOOSH into each leg (cinematic/engine/anatomy.py state); a new scene swishes in
+        [...Array.from({ length: LEGS }, (_, leg) => <Sfx key={`b${i}-${leg}`} id="sfx-swish" at={at(s.start_s + ((leg + WHOOSH) / LEGS) * (s.end_s - s.start_s))} db={-5} />),
          i > 0 && s.shot === 0 ? <Sfx key={`w${i}`} id="sfx-swish" at={at(s.start_s)} db={0} /> : null])}
       <MusicBed id={props.music} />
       <SafeZoneGuide show={!!props.safeZone} />

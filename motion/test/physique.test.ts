@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { CAMEOS, CARD_S, END_CARD_STYLES } from "../src/endcards/schema.ts";
-import { BEDS, beatAt, CAMERAS, coverOf, HOOK_MIN_S, layoutOf, physiqueSchema, SHOT_BEATS } from "../src/templates/PhysiqueScan/schema.ts";
+import { BEDS, beatAt, CAMERAS, coverOf, HOOK_MIN_S, layoutOf, physiqueSchema, SHOT_BEATS, SUBJECTS } from "../src/templates/PhysiqueScan/schema.ts";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../props/${name}.json`, import.meta.url), "utf8"));
 const EXAMPLE = physiqueSchema.parse(read("physiquescan"));
@@ -47,7 +47,7 @@ test("the hook is 5 words at most and stays readable; the cover shows it", () =>
   assert.ok(coverOf(EXAMPLE, 30) / 30 < hookOut);
 });
 
-test("bands: 2-6 a scene, a short text, a palette tone, a squeeze in 0..1; scenes 2-6; known palettes", () => {
+test("bands: 2-6 a scene, a short text, a palette tone, a squeeze in 0..1; scenes 2-6; known objects and palettes", () => {
   const base = read("physiquescan");
   const scene = base.scenes[0];
   const band = { text: "x" };
@@ -58,6 +58,8 @@ test("bands: 2-6 a scene, a short text, a palette tone, a squeeze in 0..1; scene
   assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [band, { text: "x", tone: "orange" }] }, scene] }));
   assert.ok(!ok({ ...base, scenes: [{ ...scene, bands: [band, { text: "x", squeeze: 1.5 }] }, scene] }));
   assert.ok(!ok({ ...base, scenes: [{ ...scene, palette: "sepia" }, scene] }));
+  assert.ok(!ok({ ...base, scenes: [{ ...scene, subject: "toaster" }, scene] }));
+  for (const subject of SUBJECTS) assert.ok(ok({ ...base, scenes: [{ ...scene, subject }, scene] }));
   assert.ok(!ok({ ...base, scenes: [scene] }));
   assert.ok(!ok({ ...base, hero: "hero" }));
 });

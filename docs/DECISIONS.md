@@ -1187,3 +1187,15 @@ its own grip. The template's scenes are now {palette, bands [{text, tone, squeez
 beats, camera (orbit, push, top, glide)}; a whoosh plays as the bands fly. Cached per shot under
 media/physique.
 Reason: owner review in chat 2026-11-25.
+
+## 2026-11-25: « Physique Scan »: five objects and a motion design layer
+The owner on the muscle version: « It needs to be dynamic. It needs to treat all other [...]
+objects, not show only muscles, and [...] there isn't a lot of effects. Maybe we add a layer of
+node of motion design over the render in Blender. » A scene now picks its `subject`: muscle,
+dumbbell, kettlebell, heart (it beats) or bone (a femur), built in cinematic/engine/anatomy.py.
+The bands whoosh twice a shot (three stops, a whoosh sound on each), and the engine adds by
+itself: shockwave rings where a band clamps down, orbiting halo rings, floating specks, the
+object turning and popping in, motion blur, camera punches and shake, and a Blender compositor
+(bloom, colour fringes and lens bulge kicking on every whoosh, a vignette). The owner asked for
+no video render with it: it was checked on one low-res still per object only.
+Reason: owner review in chat 2026-11-25.
