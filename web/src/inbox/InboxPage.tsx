@@ -30,6 +30,7 @@ import { useToast } from '../ui/useToast'
 import { changeLabel, COMMENTARY_CONFIRMATION, localDate, wallClock } from './ui'
 
 const UNDO_MS = 5000 // the Toast's own lifetime
+const SETTLE_MS = 600 // rail taps ignored after a decision (UI-001)
 const VISIBLE = 0.6 // share of a card on screen before it counts as the current one
 type Tab = 'today' | 'bench'
 /** Not the owner's (188c): the AI's check has not submitted it, dropped it, or a newer
@@ -78,6 +79,14 @@ export default function InboxPage() {
   const [trialAsk, setTrialAsk] = useState<{ id: number; on: boolean } | null>(null)
   const trials = useRef(new Set<number>())
   const scroller = useRef<HTMLDivElement>(null)
+  // UI-001: after a decision the next card slides in under the finger, so a double-tap must
+  // not decide it unseen. Rail taps only: the keys stay immediate.
+  const settle = useRef(0)
+  const tap = (f: () => void) => () => {
+    if (Date.now() < settle.current) return
+    settle.current = Date.now() + SETTLE_MS
+    f()
+  }
   const toast = useToast()
   const navigate = useNavigate()
 
@@ -377,11 +386,11 @@ export default function InboxPage() {
               muted={muted}
               showBestBefore={tab === 'bench'}
               onToggleSound={() => setMuted((m) => !m)}
-              onApprove={() => void approve(a)}
+              onApprove={tap(() => void approve(a))}
               change={changeLabel(a.change_request, taxonomy?.feedback_reasons.values)}
-              onDecline={() => setDeclineFor(a)}
-              onChange={() => openChange(a)}
-              onSave={tab === 'today' ? () => save(a) : undefined}
+              onDecline={tap(() => setDeclineFor(a))}
+              onChange={tap(() => openChange(a))}
+              onSave={tab === 'today' ? tap(() => save(a)) : undefined}
             />
           ))}
         </div>

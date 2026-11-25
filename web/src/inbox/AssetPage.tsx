@@ -101,6 +101,8 @@ function AssetPage({ id }: { id: number }) {
   }
 
   async function approve() {
+    // UI-002: a typed caption not saved yet goes first (a scheduled video refuses caption edits).
+    if (caption !== (asset?.caption ?? '') && !(await act(() => editAsset(id, { caption })))) return
     if (await act(() => approveAsset(id))) setScheduling(true) // then the explicit second step
   }
 
