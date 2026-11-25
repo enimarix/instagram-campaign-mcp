@@ -18,7 +18,7 @@ describe('Login', () => {
   })
 
   it('shows a spinner while the session check is slow (UI-005)', async () => {
-    let answer = (_: Response) => {}
+    let answer: (r: Response) => void = () => {}
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((r) => { answer = r })))
     render(<Login><p>studio</p></Login>)
     expect(screen.getByRole('status', { name: 'Chargement' })).toBeTruthy()
