@@ -1,11 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClaudeIdea, Planning as PlanningData, PlanningItem } from '../api/client'
 import { ToastProvider } from '../ui/Toast'
 import Planning from './Planning'
 
-const soon = (min: number) => new Date(Date.now() + min * 60_000).toISOString()
+// One time base per test: reading the clock on each call let the ms tick between two soon(0)s (CI flake).
+let T0 = Date.now()
+beforeEach(() => { T0 = Date.now() })
+const soon = (min: number) => new Date(T0 + min * 60_000).toISOString()
 const item = (over: Partial<PlanningItem>): PlanningItem => ({
   section: 'next', kind: 'render', title: 'Pourquoi on a faim', source: 'create', ids: {}, style: null,
   engine: 'remotion', voice: null, est_start: soon(1), est_duration_s: 600, est_ready: soon(11), estimated: true,
