@@ -54,6 +54,34 @@ def test_run_timeout_kills_the_child():
         guard.run([PY, "-c", "import time; time.sleep(60)"], timeout=0.5)
 
 
+TREE = ("import subprocess, sys, time\n"
+        "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'],"
+        " stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+        "print(g.pid, flush=True)\n"
+        "time.sleep(float(sys.argv[1]))\n")
+
+
+def _gone(pid, within_s=5.0):
+    from src.agent import proc
+
+    end = time.monotonic() + within_s
+    while proc.started(pid) is not None and time.monotonic() < end:
+        time.sleep(0.1)
+    return proc.started(pid) is None
+
+
+def test_run_kills_the_childs_whole_tree():
+    """2026-11-25: Remotion's node starts Chrome, a venv python its interpreter: killing only
+    the child left them on the GPU after the job (and its lock) was gone."""
+    with pytest.raises(subprocess.TimeoutExpired) as e:
+        guard.run([sys.executable, "-c", TREE, "60"], capture_output=True, text=True, timeout=3)
+    assert _gone(int(e.value.output.split()[0]))
+    if sys.platform == "win32":  # the Job Object: what a run leaves behind dies at its end
+        out = guard.run([sys.executable, "-c", TREE, "0"], capture_output=True, text=True,
+                        timeout=60)
+        assert _gone(int(out.stdout.split()[0]))
+
+
 def test_blockers_name_ram_vram_and_a_game(monkeypatch):
     monkeypatch.setattr(guard, "free_ram_gb", lambda: 5.0)
     monkeypatch.setattr(guard, "gpu_status", lambda: {"free_vram_gb": 2.0, "temp_c": 60.0,
@@ -107,6 +135,15 @@ def test_admit_waits_and_says_why(caplog):
     text = caplog.text
     assert "Blender render: waiting for RAM" in text and "waiting for a game" in text
     assert "starting after waiting" in text
+
+
+def test_admit_writes_its_waits_to_guard_log(monkeypatch, tmp_path):
+    """2026-11-25: a voice waiting hours for RAM showed only in a console nobody reads."""
+    log = tmp_path / "guard.log"
+    monkeypatch.setenv("GUARD_LOG_PATH", str(log))  # the voice service's, from the studio
+    answers = [["waiting for RAM: 5.0 GB free, 8 GB needed"], []]
+    guard.admit("voice service", poll_s=0.01, log_every_s=0, check=lambda *a: answers.pop(0))
+    assert "voice service: waiting for RAM: 5.0 GB free" in log.read_text(encoding="utf-8")
 
 
 def test_admit_floor_defaults_to_the_env(monkeypatch):
