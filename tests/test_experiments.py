@@ -181,7 +181,6 @@ def test_evaluate_counts_matured_reels_per_variant(store, settings):
     ((60, 18), 5, "do", "question", "medium"),        # the best is far above typical
     ((22, 2), 5, "dont", "bold_claim", "medium"),     # the worst is far below
     ((20, 21), 5, "hypothesis", None, "low"),         # no clear difference
-    ((60, 2), 2, "hypothesis", "question", "low"),    # a big gap but n under medium
 ])
 def test_finish_writes_the_result_and_its_learning(store, settings, saved, n, kind, value,
                                                    confidence):
@@ -200,6 +199,30 @@ def test_finish_writes_the_result_and_its_learning(store, settings, saved, n, ki
     assert learning["evidence"] == [{"kind": "experiment", "id": exp["id"],
                                      "per_variant": ev["per_variant"]}]
     assert f"experiment {exp['id']}" in learning["statement"]
+
+
+@pytest.mark.parametrize("n", [0, 2])  # nothing posted / a big gap but n under medium
+def test_finish_without_enough_data_writes_no_learning(store, settings, n):
+    exp = _open(store, settings)
+    _baseline(store)
+    _variant_posts(store, exp, (60, 2), n=n)
+    done = X.finish(store, settings, exp, X.evaluate(store, settings, exp, now=NOW))
+    assert done["status"] == "finished" and done["learning_id"] is None
+    assert done["result"]["kind"] == "not_enough_data" and store.list_learnings() == []
+
+
+def test_a_gap_from_noise_is_no_rule():
+    loud = [0.5, 3.0, 0.6, 2.8, 0.7]  # medians 0.7 vs 1.4, but the posts overlap
+    assert X.p_value([[0.6, 3.0, 0.7, 2.8, 1.4], loud]) > X.P_MAX
+    assert X.p_value([[2.0] * 5, [0.5] * 5]) < X.P_MAX  # cleanly apart: 2 of 252 labellings
+
+
+def test_template_experiment_counts_the_template_really_used(store, settings):
+    exp = _open(store, settings, "template", ["FactQuest", "PixelCinema"])
+    _baseline(store)
+    _post(store, "a", 60, X.label(exp["id"], "PixelCinema"))  # labelled Pixel, made FactQuest
+    per = X.evaluate(store, settings, exp, now=NOW)["per_variant"]
+    assert (per["FactQuest"]["n"], per["PixelCinema"]["n"]) == (1, 0)
 
 
 async def test_worker_checks_experiments_once_a_day(store, settings):

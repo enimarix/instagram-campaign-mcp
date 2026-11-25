@@ -24,6 +24,12 @@ def _fb(store, asset_id, text="too slow at the start", **kw):
     return store.add_feedback(asset_id, text=text, **kw)["id"]
 
 
+def _posts(store, *media_ids):
+    """Posts with insights: what an agent's audience evidence may cite."""
+    for m in media_ids:
+        store.add_snapshot(m, {"reach": 100}, "REELS", "VIDEO", "2026-11-17T10:00:00+00:00")
+
+
 @pytest.fixture
 def mcp_store(store, monkeypatch):
     monkeypatch.setattr(srv, "store", lambda: store)
@@ -123,6 +129,11 @@ def test_evidence_is_required_and_must_exist(store):
         L.add_learning(store, "x", "do", "taste", [f, 999])
     with pytest.raises(ValueError, match="evidence dicts"):
         L.add_learning(store, "x", "do", "taste", [f], evidence=[{"post": 1}])
+    with pytest.raises(KeyError, match="no media_id '1'"):  # never measured
+        L.add_learning(store, "x", "hypothesis", "audience", evidence=[{"media_id": "1"}])
+    with pytest.raises(ValueError, match="names its media_id"):
+        L.add_learning(store, "x", "hypothesis", "audience", evidence=[{"views": 9}])
+    _posts(store, "1")
     row = L.add_learning(store, "Evenings win", "hypothesis", "audience",
                          evidence=[{"media_id": "1"}])["learning"]
     assert row["evidence"] == [{"media_id": "1"}]
@@ -144,6 +155,18 @@ def test_owner_instruction_stored_at_owner_confidence(store):
         L.add_learning(store, "x", "dont", "taste", [f, chips], owner_instruction=True)
     with pytest.raises(ValueError, match="exactly one"):
         L.add_learning(store, "x", "hypothesis", "taste", [f], owner_instruction=True)
+
+
+def test_owner_instruction_scope_must_be_the_commented_video(store):
+    f = _fb(store, _asset(store), text="Very bad style never do it again")  # a FactQuest
+    row = L.add_learning(store, "Never FactQuest", "dont", "taste", [f], owner_instruction=True,
+                         scope={"tag": "template", "value": "FactQuest"})["learning"]
+    assert row["confidence"] == "owner"  # like learning 35 (DialogStory, on video 86)
+    for scope in ({"tag": "template", "value": "QuizChest"}, {"tag": "pillar", "value": "myths"},
+                  {"tag": "hour", "value": 9}):
+        with pytest.raises(ValueError, match="must match the commented video"):
+            L.add_learning(store, "Never", "dont", "taste", [f], owner_instruction=True,
+                           scope=scope)
 
 
 def test_agent_cannot_change_or_retire_owner_learning(store):
@@ -179,6 +202,7 @@ def test_update_caps_and_evidence(store):
 
 
 def test_update_adds_audience_evidence(store):
+    _posts(store, "1", "2")
     lid = L.add_learning(store, "Evenings win", "hypothesis", "audience",
                          evidence=[{"media_id": "1"}])["learning"]["id"]
     row = L.update_learning(store, lid, evidence_to_add=[{"media_id": "2", "at_s": 2}],
@@ -193,6 +217,23 @@ def test_update_adds_audience_evidence(store):
     with pytest.raises(ValueError, match="evidence dicts"):
         L.update_learning(store, taste, evidence_to_add=[{"media_id": "1"}])
     assert len(store.get_learning(lid)["evidence"]) == 2
+
+
+def test_duplicated_or_reworded_claims_do_not_gain_confidence(store):
+    _posts(store, "1", "2")
+    one = {"media_id": "1"}
+    added = L.add_learning(store, "x", "do", "audience", evidence=[one, dict(one)],
+                           confidence="medium")
+    assert added["learning"]["evidence"] == [one] and added["learning"]["kind"] == "hypothesis"
+    lid = added["learning"]["id"]
+    with pytest.raises(ValueError, match="at least 2"):  # 2 metrics of one Reel: one Reel
+        L.update_learning(store, lid, evidence_to_add=[one, {"media_id": "1", "at_s": 3}],
+                          confidence="medium")
+    row = L.update_learning(store, lid, evidence_to_add=[{"media_id": "2"}], kind="do",
+                            confidence="medium")
+    store.update_learning(lid, confidence="high")  # as the evidence engine would
+    row = L.update_learning(store, lid, statement="Everything works", scope={})
+    assert row["confidence"] == "low"  # a new claim starts over
 
 
 async def test_mcp_doors(mcp_store):

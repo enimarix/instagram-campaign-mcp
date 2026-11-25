@@ -8,6 +8,30 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-25: Winners and learnings need more than one event (pipeline audit)
+Scoring (`src/scoring.py`): a count signal (shares, saves, follows, ...) is no longer the
+post's rate over the baseline's median rate (+0.0005, capped at 5x). It is observed events
+over the events expected at the baseline's pooled rate (their events / their reach) for
+this post's reach, both plus 3 pseudo-events (`PRIOR_EVENTS`). Watch time and watch ratio
+keep the median. A baseline post read at over 2x (or under half) the scored post's age is
+left out (`MAX_AGE_GAP`). Live, 2026-11-25: the 8 matured 48 h Reels were 0.66–0.81 or
+3.35–3.51 (one share and one save on reach 321 and 468 made 2 "winners"); now they are
+0.79–0.94 and the Reel with 10 shares and 11 saves (reach 1056) stays the winner at 2.43.
+The two 30-day-old Reels are only compared with each other (16 shares: 1.85, 1 share: 0.77).
+Experiments (`src/learning/experiments.py`): a do / dont also needs a seeded permutation
+test over all variants at p < 0.05; with a variant under EVIDENCE_MIN_N_MEDIUM scored
+posts, no learning is written (result `not_enough_data`). Template, hour and duration
+experiments count each post under the value it really has.
+Learnings (agent edits): rewording a learning or changing its kind or scope puts it back to
+`low` (the evidence engine lifts it again when the numbers back it); evidence dicts must
+name a post with insights, an ad test or a work order, duplicates are dropped and sources
+counted once; an owner instruction the agent stores is scoped to what the commented video
+is, or has no predicate.
+Reason: audit 2026-11-25. On an account with reach in the hundreds, one share was a 5x
+signal on a weight-3 metric, and that label fed ad-test candidates, daily facts, breakdowns,
+evidence, the mix and slot weights. The owner: learning comes from real metrics and owner
+feedback, not noise.
+
 ## 2026-11-25: The resource guard no longer pauses or stops running jobs
 Gone: the watchdog's pause on low RAM and its kill after 3 min, the GPU heat pause (83/74 °C),
 the GPU power pause, the CPU throttling pause, the 15-min duty cycle, and the 10-min startup

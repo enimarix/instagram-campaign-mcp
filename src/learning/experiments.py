@@ -6,7 +6,10 @@ rows; the owner or the agent opens them, at most MAX_OPEN_EXPERIMENTS at once.
 - variable: a tag dimension of the evidence engine (src/learning/evidence.py predicate:
   track, pillar, hook_type, strategy, template, hour, duration); variants are values of it.
 - An idea belongs to a variant through ideas.experiment = 'exp:<id>:<variant>'
-  (parse_label); older free-text values are no experiment and stay as they are.
+  (parse_label); older free-text values are no experiment and stay as they are. Its tag
+  is enforced on the idea (track, pillar, hook_type, strategy); template, hour and duration
+  are only known once rendered and posted, so evaluate counts each post of the experiment
+  under the value it really has (POST_TAGS), and leaves it out when that is no variant.
 - explore_plan: the explore ideas of a batch fill the open variants furthest from target.
 - evaluate: per variant, n = matured Reels and their median engagement index; an
   experiment is done when every variant reached the target or ends_on (owner-local) passed.
@@ -14,14 +17,17 @@ rows; the owner or the agent opens them, at most MAX_OPEN_EXPERIMENTS at once.
   group (`group`), the one whose smallest variant is largest (then the most posts, REELS
   on a tie).
 - finish: stores the result and a learning (origin audience): do / dont when the best and
-  worst variants differ by more than EVIDENCE_MIN_EFFECT with at least medium n on both,
-  else a hypothesis "no clear difference"; the worker does this once a day (run_daily).
+  worst variants differ by more than EVIDENCE_MIN_EFFECT and a permutation test (p_value)
+  gives p < P_MAX, else a hypothesis "no clear difference". With a variant under
+  EVIDENCE_MIN_N_MEDIUM scored posts it writes no learning at all (result kind
+  "not_enough_data"). The worker does this once a day (run_daily).
 """
 
 from __future__ import annotations
 
+import random
 from datetime import date, datetime, timedelta
-from statistics import median
+from statistics import mean, median
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
@@ -31,7 +37,7 @@ from ..scoring import REEL_GROUPS, _is_matured
 from ..store import CampaignStore, parse_dt
 from ..studio.seed import local_today
 from .analytics import scored_posts
-from .breakdowns import TAGS
+from .breakdowns import TAGS, _value
 from .evidence import _level, predicate
 
 STATUSES = ("proposed", "open", "finished", "abandoned")
@@ -39,6 +45,8 @@ MAX_VARIANTS = 4
 MAX_TARGET, MAX_DAYS = 100, 90
 QUIET_BATCH_DAYS = 3  # the report warns when an open experiment got no approved video in these
 IDEA_TAGS = ("pillar", "hook_type", "strategy")  # set on the idea itself (track: positional)
+POST_TAGS = ("template", "hour", "duration")  # known once posted: read from the post
+P_MAX = 0.05  # a do / dont needs the variants' spread to be this unlikely by chance
 # Ideas still on their way to a post: no asset yet, or one not failed, archived or disliked.
 _PLANNED = (
     "SELECT i.experiment, COUNT(*) AS n FROM ideas i WHERE i.experiment LIKE 'exp:%'"
@@ -187,39 +195,64 @@ def evaluate(store: CampaignStore, settings: InstagramMCPSettings, experiment: D
         variant_of = {r[0]: parse_label(r[1])[1] for r in c.execute(
             "SELECT a.id, i.experiment FROM assets a JOIN ideas i ON i.id = a.idea_id"
             " WHERE i.experiment LIKE ?", (label(experiment["id"], "%"),))}
-    cfg = scoring_config(settings)
+    cfg, tz = scoring_config(settings), ZoneInfo(settings.timezone)
     by_group = {g: {v: [] for v in experiment["variants"]} for g in REEL_GROUPS}
     for snap, s in scored_posts(store, settings):
         v = variant_of.get((s["label"] or {}).get("asset_id"))
+        if v is not None and experiment["variable"] in POST_TAGS:
+            v = str(_value(store, settings, experiment["variable"], snap, s, tz))
         if s["group"] in by_group and v in by_group[s["group"]] and _is_matured(snap, cfg):
             by_group[s["group"]][v].append(s["engagement_index"])
     group = max(REEL_GROUPS, key=lambda g: (min(map(len, by_group[g].values())),
                                             sum(map(len, by_group[g].values()))))
-    per = {}
+    per, samples = {}, {}
     for v, xs in by_group[group].items():  # xs: the engagement indexes, None when unknown
-        eng = [x for x in xs if x is not None]
+        samples[v] = eng = [x for x in xs if x is not None]
         per[v] = {"n": len(xs), "index": round(median(eng), 2) if eng else None}
     reached = all(p["n"] >= experiment["target_per_variant"] for p in per.values())
     ended = (experiment["ends_on"] is not None
              and local_today(settings.timezone, now) > date.fromisoformat(experiment["ends_on"]))
     why = "target reached" if reached else f"ended {experiment['ends_on']}" if ended else None
-    return {"per_variant": per, "group": group, "done": why is not None, "why": why}
+    return {"per_variant": per, "samples": samples, "group": group, "done": why is not None,
+            "why": why}
+
+
+def p_value(samples: List[List[float]], runs: int = 2000) -> float:
+    """Permutation test: the share of random relabellings of the posts whose spread between
+    the highest and lowest variant mean is at least the observed one (seeded: the same
+    numbers give the same p). Picking best and worst among all variants is part of the test.
+    Means, not medians: with few posts a median jumps between the same few values."""
+    def spread(groups: List[List[float]]) -> float:
+        means = [mean(g) for g in groups]
+        return max(means) - min(means)
+
+    observed, pool, rng = spread(samples), [x for g in samples for x in g], random.Random(0)
+    hits = 0
+    for _ in range(runs):
+        rng.shuffle(pool)
+        it = iter(pool)
+        hits += spread([[next(it) for _ in g] for g in samples]) >= observed - 1e-9
+    return (hits + 1) / (runs + 1)
 
 
 def finish(store: CampaignStore, settings: InstagramMCPSettings, experiment: Dict[str, Any],
            evaluation: Dict[str, Any]) -> Dict[str, Any]:
     """Store the result and its learning (see the module docstring); returns the row."""
-    per, var = evaluation["per_variant"], experiment["variable"]
-    ranked = sorted((v for v in per if per[v]["index"] is not None), key=lambda v: -per[v]["index"])
-    kind, value, confidence = "hypothesis", (ranked or experiment["variants"])[0], "low"
-    if len(ranked) >= 2:
-        best, worst = per[ranked[0]], per[ranked[-1]]
-        level = _level(min(best["n"], worst["n"]), settings)
-        if best["index"] - worst["index"] > settings.evidence_min_effect and level != "low":
-            confidence = level
-            kind, value = (("do", ranked[0]) if best["index"] - 1 >= 1 - worst["index"]
-                           else ("dont", ranked[-1]))
-    numbers = ", ".join(f"{v}: index {p['index']}, n {p['n']}" for v, p in per.items())
+    per, var, samples = evaluation["per_variant"], experiment["variable"], evaluation["samples"]
+    level = _level(min(len(xs) for xs in samples.values()), settings)
+    if level == "low":  # a variant with too few scored posts: no learning from noise
+        return store.update_experiment(experiment["id"], status="finished", result={
+            **evaluation, "kind": "not_enough_data", "value": None})
+    ranked = sorted(per, key=lambda v: -per[v]["index"])
+    best, worst = per[ranked[0]], per[ranked[-1]]
+    p = p_value([samples[v] for v in ranked])
+    kind, value, confidence = "hypothesis", ranked[0], "low"
+    if best["index"] - worst["index"] > settings.evidence_min_effect and p < P_MAX:
+        confidence = level
+        kind, value = (("do", ranked[0]) if best["index"] - 1 >= 1 - worst["index"]
+                       else ("dont", ranked[-1]))
+    numbers = ", ".join(f"{v}: index {r['index']}, n {r['n']}" for v, r in per.items())
+    numbers += f"; p {p:.3f}"
     claim = {"do": f"{var} = {value} works best", "dont": f"avoid {var} = {value}",
              "hypothesis": f"no clear difference between the {var} variants"}[kind]
     learning = store.add_learning(
@@ -227,7 +260,8 @@ def finish(store: CampaignStore, settings: InstagramMCPSettings, experiment: Dic
         scope={"tag": var, "value": value}, confidence=confidence,
         evidence=[{"kind": "experiment", "id": experiment["id"], "per_variant": per}])
     return store.update_experiment(experiment["id"], status="finished",
-                                   result={**evaluation, "kind": kind, "value": value},
+                                   result={**evaluation, "kind": kind, "value": value,
+                                           "p": round(p, 3)},
                                    learning_id=learning["id"])
 
 
