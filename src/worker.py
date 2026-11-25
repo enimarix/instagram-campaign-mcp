@@ -57,6 +57,7 @@ WAKE_LEAD = timedelta(minutes=5)
 AWAKE_BEFORE = WAKE_LEAD + timedelta(minutes=5)  # the worker's hold starts this early
 WAIT_MAX = timedelta(minutes=15)  # run-due --wait-until-next waits at most this long
 REPORTED = ("published", "retrying", "failed", "recovered_stuck", "replanned")
+JOB_ERRORS = "job_errors"  # worker state: {job: {error, since, fails}} (note_job)
 # Publishing keeps priority: data jobs start nothing once this share of the hourly Graph
 # budget (RATE_LIMIT_REQUESTS_PER_HOUR, shared by worker, API and MCP server) is used.
 DATA_SHARE = 0.8
@@ -131,7 +132,26 @@ async def cycle(client: InstagramClient, store: CampaignStore, settings: Instagr
         store.set_state("last_result", result)
     except Exception as e:  # noqa: BLE001 - e.g. database locked for too long
         print(f"worker state not saved: {e!r}", file=sys.stderr, flush=True)
+    note_job(store, "publish", now(), result.get("error"))
     return result
+
+
+def note_job(store: CampaignStore, name: str, now: datetime,
+             error: Optional[str] = None) -> None:
+    """Keep a worker job's run of failures in JOB_ERRORS (studio/alerts.py shows it once it
+    repeats); a success clears it. Never raises."""
+    try:
+        errors = store.get_state(JOB_ERRORS) or {}
+        if error is None and name not in errors:
+            return
+        if error is None:
+            del errors[name]
+        else:
+            run = errors.get(name) or {"since": to_iso(now), "fails": 0}
+            errors[name] = {"error": error, "since": run["since"], "fails": run["fails"] + 1}
+        store.set_state(JOB_ERRORS, errors)
+    except Exception as e:  # noqa: BLE001 - e.g. database locked for too long
+        print(f"worker state not saved: {e!r}", file=sys.stderr, flush=True)
 
 
 def data_budget_left(client: InstagramClient) -> bool:
@@ -173,10 +193,12 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
             return False
         try:
             out[name] = await make()
-            return True
         except Exception as e:  # noqa: BLE001 - one failing job must not stop the others
             out[name] = {"error": repr(e)}
+            note_job(store, name, t, repr(e))
             return False
+        note_job(store, name, t)
+        return True
 
     if _every(store, "reconcile_at", RECONCILE_EVERY, t):
         await job("reconcile", lambda: reconcile_publish_checks(client, store))
@@ -215,8 +237,10 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
         if _every(store, "ads_sync_at", ads_sync.period(store), t):
             try:
                 out["ads_sync"] = await ads_sync.sync(store, settings, t)
+                note_job(store, "ads_sync", t)
             except Exception as e:  # noqa: BLE001
                 out["ads_sync"] = {"error": repr(e)}
+                note_job(store, "ads_sync", t, repr(e))
     return out
 
 
@@ -333,8 +357,10 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
                 done_today = await asyncio.shield(housekeeper)
                 if done_today:
                     print(json.dumps({"housekeeping": done_today}), flush=True)
+                    note_job(store, "housekeeping", utcnow())
             except Exception as e:  # noqa: BLE001 - retried within the hour
                 print(f"housekeeping failed: {e!r}", file=sys.stderr, flush=True)
+                note_job(store, "housekeeping", utcnow(), repr(e))
             claim()
             if running:
                 with keep_awake():

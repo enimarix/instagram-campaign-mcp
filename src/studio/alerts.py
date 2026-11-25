@@ -3,7 +3,8 @@ Alerts (step 098): what needs the owner's attention, for the website's bell.
 
 Computed on every call from state that already exists (no event pipeline): failed
 publishes, publishes waiting for a check, re-planned late slots, the token, the latest run
-of each agent playbook, a QC failure spike in the last batch, a stale worker heartbeat, the
+of each agent playbook, a QC failure spike in the last batch, a stale worker heartbeat, a
+worker job that keeps failing (the publish pass, a data job such as the DM picks), the
 Graph breaker (Meta blocked API access, step 167), the Reel downloader's health and skipped
 DM picks, a failed website build (175), the studio paused by the owner (187). Experiment
 alerts come with 086's facts warning. Jobs whose alert is an event, not a state (the ads sync, 095), keep it with
@@ -24,7 +25,7 @@ from ..agent.packet import SKIPPED
 from ..config import InstagramMCPSettings
 from ..instagram_client import INVALID_TOKEN_CODE, InstagramClient
 from ..store import CampaignStore, parse_dt, to_iso
-from ..worker import ALIVE_WITHIN, graph_breaker
+from ..worker import ALIVE_WITHIN, JOB_ERRORS, graph_breaker
 from . import downloader_service, line, render, token, website
 
 STATE_KEY = "alerts_dismissed"
@@ -34,6 +35,7 @@ RECENT = timedelta(days=1)  # re-plans and skipped DM picks
 CHECK_STUCK = timedelta(minutes=30)  # reconcile runs every 10 min: longer is stuck
 TOKEN_WARN_DAYS = 10
 QC_SPIKE = 0.3  # share of the last batch that failed QC
+JOB_FAILS = 2  # a worker job's failures in a row before it alerts: one blip stays quiet
 FORGET_AFTER = timedelta(days=30)  # dismissals older than this are dropped
 DETAIL_MAX = 300
 
@@ -176,6 +178,17 @@ def _worker(store: CampaignStore, now: datetime) -> List[Dict[str, Any]]:
                    "ig-campaign up; nothing publishes meanwhile.", "/settings", beat)]
 
 
+def _jobs(store: CampaignStore) -> List[Dict[str, Any]]:
+    """A worker job (the publish pass, a data job, the housekeeping) failing JOB_FAILS
+    times in a row (worker.note_job); its next success clears it."""
+    return [_alert("worker_job", name, "error" if name == "publish" else "warn",
+                   f"Le worker échoue à répétition : {name}",
+                   f"{j['fails']} échecs de suite depuis {j['since'][:16].replace('T', ' ')}"
+                   f" UTC. Dernière erreur : {j['error']}", "/settings", j["since"])
+            for name, j in (store.get_state(JOB_ERRORS) or {}).items()
+            if j["fails"] >= JOB_FAILS]
+
+
 def _graph_blocked(store: CampaignStore, settings: InstagramMCPSettings) -> List[Dict[str, Any]]:
     breaker = graph_breaker(store, settings)
     s = breaker.state()
@@ -242,7 +255,7 @@ async def alerts(store: CampaignStore, settings: InstagramMCPSettings, now: date
     without the dismissed ones. Reads only (the token status is cached for an hour)."""
     t = await token.token_status(client, settings)  # a failed check: valid None, no alert
     found = [*_publishes(store, now), *_replanned(store, now), *_token(t),
-             *_agent_runs(store), *_qc_spike(store), *_worker(store, now),
+             *_agent_runs(store), *_qc_spike(store), *_worker(store, now), *_jobs(store),
              *_graph_blocked(store, settings), *_downloader(store), *_dm_skipped(store, now),
              *_website(store), *_paused(store), *_raised(store, now)]
     dismissed = store.get_state(STATE_KEY) or {}

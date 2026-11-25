@@ -132,6 +132,30 @@ async def test_stale_worker_heartbeat(store, cfg):
     assert await _ids(store, cfg) == ["worker"]
 
 
+async def test_a_worker_job_that_keeps_failing(store, cfg, monkeypatch):
+    from src import worker
+
+    outcome = RuntimeError("db gone")
+
+    async def run_due(*a, **kw):
+        if outcome:
+            raise outcome
+        return {}
+
+    monkeypatch.setattr(worker, "run_due", run_due)
+    await worker.cycle(None, store, cfg)
+    assert await _ids(store, cfg, kind="worker_job") == []  # one blip stays quiet
+    await worker.cycle(None, store, cfg)
+    (a,) = [a for a in await alerts.alerts(store, cfg, utcnow()) if a["kind"] == "worker_job"]
+    assert a["id"] == "worker_job:publish" and a["severity"] == "error"
+    assert "2 échecs" in a["detail"] and "db gone" in a["detail"]
+    worker.note_job(store, "dm_picks", utcnow(), "boom")  # a data job: the same state
+    worker.note_job(store, "dm_picks", utcnow(), "boom")
+    outcome = None
+    await worker.cycle(None, store, cfg)  # the publish pass works again
+    assert await _ids(store, cfg, kind="worker_job") == ["worker_job:dm_picks"]
+
+
 @pytest.mark.parametrize("status, ids", [
     ("up", []), ("not_configured", []), ("down", ["downloader"]), ("broken", ["downloader"]),
 ])
