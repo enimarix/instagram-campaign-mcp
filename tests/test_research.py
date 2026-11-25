@@ -1,6 +1,7 @@
 """Steps 051-052: watchlist, reference sources, the hashtag budget, research_trends and
 the trend report."""
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -12,7 +13,13 @@ import src.instagram_mcp_server as srv
 from src.api.app import create_app
 from src.learning.quotas import available_clips
 from src.store import utcnow
-from src.studio.research import HASHTAG_LIMIT, HASHTAG_WINDOW, research_trends, trend_report
+from src.studio.research import (
+    HASHTAG_LIMIT,
+    HASHTAG_WINDOW,
+    LOOKUPS_AT_ONCE,
+    research_trends,
+    trend_report,
+)
 
 from .conftest import API, LOCAL
 from .test_api_assets import _settings
@@ -160,6 +167,29 @@ async def test_account_errors_and_rate_limit_stop(client, store):
     assert out["errors"] == {"account:alpha": "Invalid user"}
     assert out["accounts"] == ["beta"] and out["stored"] == 1
     assert out["stopped"] == "rate_limited" and route.call_count == 3
+
+
+@respx.mock
+async def test_lookups_run_side_by_side(client, store):
+    """« Actualiser » waited ~4 s per hashtag, one after another (~40 s of spinner)."""
+    tags = [f"t{i}" for i in range(6)]
+    for tag in tags:
+        store.add_watch("hashtag", tag)
+    _mock_graph({tag: [_post(tag.upper())] for tag in tags})
+    flying = peak = 0
+
+    async def slow_top(request):
+        nonlocal flying, peak
+        flying += 1
+        peak = max(peak, flying)
+        await asyncio.sleep(0.05)
+        flying -= 1
+        return httpx.Response(200, json={"data": [_post(request.url.path.split("_")[1][:2])]})
+
+    respx.get(url__regex=rf"{API}/h_\w+/top_media").mock(side_effect=slow_top)
+    out = await research_trends(client, store, now=NOW)
+    assert out["hashtags_searched"] == tags and out["stored"] == 6
+    assert peak == LOOKUPS_AT_ONCE
 
 
 @respx.mock

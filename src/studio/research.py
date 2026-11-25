@@ -33,6 +33,7 @@ lifetime for these CDN links (they expire): each research run replaces or drops 
 
 from __future__ import annotations
 
+import asyncio
 import re
 import threading
 from datetime import datetime, timedelta
@@ -55,6 +56,9 @@ HOOK_MAX = 120
 _HASHTAG = re.compile(r"#(\w+)")
 HASHTAG_URLS = ("media_url",)  # the CDN links each lookup asks for (instagram_client)
 ACCOUNT_URLS = ("media_url", "thumbnail_url")
+# A hashtag lookup takes ~4 s at Meta: one at a time, 8 hashtags kept « Actualiser » spinning
+# ~40 s. ponytail: the request-budget check may overshoot by the lookups in flight (2 calls each).
+LOOKUPS_AT_ONCE = 4
 
 
 def _stats(post: Dict[str, Any], urls: Tuple[str, ...] = (), **extra: Any) -> Dict[str, Any]:
@@ -85,20 +89,24 @@ async def research_trends(client: InstagramClient, store: CampaignStore, *,
     """Look up every watchlist hashtag (within the 7-day budget) and account; returns
     {hashtags_searched, hashtags_skipped_budget, accounts, stored, updated, errors,
     stopped}. stopped: null, "request_budget" or "rate_limited". One failing account or
-    hashtag (e.g. not a Business account) lands in errors and the run goes on."""
+    hashtag (e.g. not a Business account) lands in errors and the run goes on. Lookups run
+    LOOKUPS_AT_ONCE at a time; once stopped, the ones not started are skipped."""
     out: Dict[str, Any] = {"hashtags_searched": [], "hashtags_skipped_budget": [],
                            "accounts": [], "stored": 0, "updated": 0, "errors": {},
                            "stopped": None}
-    try:
-        for watch in store.list_watchlist():
-            kind, value = watch["kind"], watch["value"]
+    gate = asyncio.Semaphore(LOOKUPS_AT_ONCE)
+
+    async def look_up(kind: str, value: str) -> None:
+        async with gate:
+            if out["stopped"]:
+                return
             if not data_budget_left(client):
                 out["stopped"] = "request_budget"
-                break
+                return
             if kind == "hashtag" and not store.take_hashtag_search(
                     value, now, HASHTAG_LIMIT, HASHTAG_WINDOW):
                 out["hashtags_skipped_budget"].append(value)
-                continue
+                return
             try:
                 if kind == "hashtag":
                     found = await client.search_hashtag(value, "top_media")
@@ -112,11 +120,13 @@ async def research_trends(client: InstagramClient, store: CampaignStore, *,
                                ACCOUNT_URLS)
                     out["accounts"].append(value)
             except RateLimitExceeded:
-                raise
+                out["stopped"] = "rate_limited"
             except InstagramAPIError as e:
                 out["errors"][f"{kind}:{value}"] = e.message
-    except RateLimitExceeded:
-        out["stopped"] = "rate_limited"
+
+    await asyncio.gather(*(look_up(w["kind"], w["value"]) for w in store.list_watchlist()))
+    for key in ("hashtags_searched", "hashtags_skipped_budget", "accounts"):
+        out[key].sort()  # finished in any order
     return out
 
 
