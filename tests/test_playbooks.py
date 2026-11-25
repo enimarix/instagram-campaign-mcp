@@ -23,6 +23,14 @@ async def _all_tools():
 def test_there_is_a_daily_produce_playbook_and_a_hook_guide():
     assert "daily-produce" in [p.stem for p in PLAYBOOKS]
     assert "hook-guide" in [s.name for s in SKILLS]
+    assert "viral-hooks" in [s.name for s in SKILLS]
+
+
+@pytest.mark.parametrize("name", ["daily-produce", "daily-revise", "check-renders",
+                                  "lemo-film"])
+def test_every_playbook_that_writes_hooks_loads_viral_hooks(name):
+    text = (runner.AGENT_DIR / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
+    assert "`viral-hooks`" in text
 
 
 @pytest.mark.parametrize("path", TEXTS, ids=lambda p: p.parent.name + "/" + p.name)

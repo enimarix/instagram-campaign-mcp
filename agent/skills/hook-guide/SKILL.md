@@ -1,9 +1,14 @@
 ---
 name: hook-guide
-description: How to write the first-second hook of this channel's 8-bit videos (facts, myths, quiz, story, POV humour) and pick its hook_type from brand/taxonomy.json. Use before writing any idea's hook.
+description: This channel's own hook constraints (on-screen length, recent hooks, sources) and how to pick an idea's hook_type from brand/taxonomy.json. Load it after the viral-hooks skill, before writing any idea's hook.
 ---
 
 # Hook guide
+
+**Write every hook with the `viral-hooks` skill first**: its rules, archetypes, formulas,
+checklist and the lock-in lines after the hook. This guide adds what is specific to this
+channel (length on screen, recent hooks, sources, `hook_type`). Where they differ, this
+channel's constraint wins.
 
 The hook is the text on screen in the first second, plus the first spoken line. Most
 viewers decide in that second whether to keep watching, and many watch with the sound

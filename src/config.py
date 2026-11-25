@@ -391,6 +391,12 @@ class InstagramMCPSettings(BaseSettings):
         str(APP_HOME / "data" / "logs" / "agent"), description="One log file per agent run"
     )
     claude_bin: str = Field("claude", description="Claude Code CLI executable")
+    hook_skill_dir: str = Field(
+        str(Path.home() / ".claude" / "skills" / "viral-hooks"),
+        description="The live viral-hooks skill (learned from videos in the video-skills repo),"
+        " copied into every agent and film workspace; missing = the snapshot in"
+        " agent/skills/viral-hooks",
+    )
     agent_max_turns: int = Field(100, ge=1, description="Default --max-turns of a run")
     agent_timeout_minutes: float = Field(
         90.0, gt=0, description="Wall-clock limit of a run; the CLI is killed after it"

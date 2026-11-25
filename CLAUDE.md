@@ -49,6 +49,8 @@ Coming later (GOAL.md §4.2): `src/api/`, `src/studio/`, `src/learning/`, `src/a
 - No detection-evasion edits (mirror / flip, speed or pitch shifts, re-crops to dodge
   duplicate or copyright detection). Never built.
 - Every new MCP tool is deliberately placed in or out of the `agent` profile.
+- Every hook, script or on-screen text (scripts, batches, remakes, reworks) is written with
+  the `viral-hooks` skill; the owner's own words win over it.
 - Where a step says **verify in docs**, check the current official docs for the
   external API before coding and write what they said in the PR.
 - A decision that changes a GOAL.md default goes in [docs/DECISIONS.md](docs/DECISIONS.md)
