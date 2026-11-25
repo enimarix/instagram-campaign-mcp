@@ -177,6 +177,30 @@ def test_render_motion_refuses_a_template_outside_the_style(store, settings, tmp
         motion.queue_motion_render(store, s, template="Editorial", props={}, idea_id=off["id"])
 
 
+
+def test_an_owner_never_again_on_a_style_or_template_is_enforced(store, settings):
+    """Was: « Very bad style never do it again » on pixel videos 84-86 became a rule on one
+    template; pixel stayed in use."""
+    from src.learning.learnings import add_learning
+    from src.studio import feedback
+
+    idea = _idea(store, settings, "Pixel hook", style="pixel")
+    assert styles.check_template(store, idea, "FactQuest") == "pixel"
+    for tag, value in (("template", "QuizChest"), ("style", "pixel")):
+        add_learning(store, "Very bad style never do it again", "dont", "taste",
+                     scope={"tag": tag, "value": value}, actor="owner")
+        with pytest.raises(ValueError, match=f"owner ruled out {tag} '{value}'"):
+            styles.check_template(store, idea, "QuizChest")
+    with pytest.raises(ValueError, match="ruled out style 'pixel'"):
+        styles.check_template(store, idea, "FactQuest")
+    voxel = _idea(store, settings, "Voxel hook", style="voxel")
+    a = store.add_asset(voxel["id"], recipe={"kind": "motion", "template": "VoxelQuest"})
+    transition(store, a["id"], "ready", actor="worker")
+    feedback.add_comment(store, a["id"], text="pas ça", wants_changes=True)
+    with pytest.raises(ValueError, match="ruled out style 'pixel'"):
+        feedback.decide_revision(store, a["id"], "restyled", "x", style="pixel")
+    assert not work_orders.list_orders(store)
+
 def test_daily_share_limits_a_style(store, settings):
     styles.set_choice(store, "pixel", share=0.2)  # batch 10 -> at most 2
     for w in ("apple", "brick"):

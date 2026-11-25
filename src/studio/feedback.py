@@ -9,6 +9,7 @@ result says why. Nothing here ever schedules or publishes.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..store import CampaignStore, to_iso, utcnow
@@ -137,6 +138,36 @@ def set_decision(store: CampaignStore, asset_id: int, kind: str, why: Optional[s
     return store.update_asset(asset_id, agent_decision=decision)
 
 
+# ponytail: a keyword match on the owner's words (French or English); a phrasing it misses
+# reaches the film's brief verbatim, where the film says it can't carry the track.
+_IG_MUSIC = re.compile(r"\b(insta(gram)?|ig)\b.*\b(musi\w*|audio|sound|track|song|chanson)"
+                       r"|\b(musi\w*|audio|sound|track|song|chanson)\b.*\b(insta(gram)?|ig)\b",
+                       re.I | re.S)
+
+
+def _check_remake(store: CampaignStore, asset: Dict[str, Any], decision: str,
+                  style: Optional[str]) -> None:
+    """A remake (remade, restyled) in `style` must be one the owner can get: ValueError when
+    the owner ruled the style (or the video's template, for remade) out, or when he asked
+    for Instagram music and the style is a Lemo film (no film path takes a track)."""
+    if not style:
+        if decision == "restyled":
+            raise ValueError("restyled needs the style to remake it in")
+        return
+    template = (asset.get("recipe") or {}).get("template") if decision == "remade" else None
+    banned = styles.owner_ban(store, style, template)
+    if banned:
+        raise ValueError(f"{banned}: decide restyled in an enabled style he did not rule"
+                         " out, or request_style")
+    if lemo.is_lemo(style) and any(
+            fb["wants_changes"] and _IG_MUSIC.search(fb["text"] or "")
+            for fb in store.list_feedback(asset_id=asset["id"], limit=1000)):
+        raise ValueError(f"the owner asks for Instagram music and a Lemo film ({style}) cannot"
+                         " take an Instagram track: decide restyled in a template style that"
+                         " can (fetch_music, then render_motion(music_audio_id=...); not the"
+                         " Blender ones), and say in why that this is for the music")
+
+
 def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str,
                     style: Optional[str] = None) -> Dict[str, Any]:
     """The agent's decision on a video the owner sent back -> {asset, order}:
@@ -150,7 +181,9 @@ def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str
       that video is submitted the old one is archived;
     - waiting: it waits, and `why` says for what (a render pending). A missing style is not
       waiting: request_style.
-    The order of an earlier decision with nothing made yet is skipped (202).
+    The order of an earlier decision with nothing made yet is skipped (202). A remake is
+    refused in a style (or, remade, a template) the owner ruled out, and in a Lemo style
+    when he asked for Instagram music (_check_remake).
     ValueError names the problem; KeyError: no such video."""
     if decision not in AGENT_DECISIONS:
         raise ValueError(f"decision must be one of {', '.join(AGENT_DECISIONS)}"
@@ -161,14 +194,15 @@ def decide_revision(store: CampaignStore, asset_id: int, decision: str, why: str
                          " changes gets a decision")
     order = None
     before = (asset.get("agent_decision") or {}).get("order_id")
-    if decision == "restyled":
-        if not style:
-            raise ValueError("restyled needs the style to remake it in")
-        order = work_orders.restyle(store, asset_id, style, why)
-    elif decision == "remade":
+    if decision == "remade":
         style = store.get_idea(asset["idea_id"])["style"]
-        if lemo.is_lemo(style):  # 202: a film has no template: the film runner remakes it
-            order = work_orders.refilm(store, asset_id, why)
+    if decision != "waiting":
+        _check_remake(store, asset, decision, style)
+    if decision == "restyled":
+        order = work_orders.restyle(store, asset_id, style, why)
+    elif decision == "remade" and lemo.is_lemo(style):
+        # 202: a film has no template: the film runner remakes it
+        order = work_orders.refilm(store, asset_id, why)
     asset = set_decision(store, asset_id, decision, why, style=style,
                          order_id=order and order["id"])
     if before and before != (order and order["id"]):  # 202: never two remakes of one video

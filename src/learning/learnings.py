@@ -150,12 +150,24 @@ def mark_feedback_digested(store: CampaignStore, ids: Sequence[int]) -> Dict[str
 
 def list_revision_requests(store: CampaignStore) -> List[Dict[str, Any]]:
     """Assets the owner sent back (`revision_requested`) with their wanting-changes
-    comments, newest first: re-render each with render_motion(asset_id=...). A request whose
-    new version is still rendering is being handled: left out."""
+    comments, newest first, with the agent's earlier decision on it (156, None before one):
+    re-render each with render_motion(asset_id=...). A request being handled is left out:
+    its new version is rendering, or the remake its decision ordered (restyle, refilm) is
+    still scheduled or in production, or rendering or ready, unless the owner asked for
+    changes again since that decision (never two remakes of one video)."""
     with store._tx() as c:
         pending = {r[0] for r in c.execute(
             "SELECT parent_asset_id FROM assets WHERE status = 'rendering'"
             " AND parent_asset_id IS NOT NULL")}
+        pending |= {r[0] for r in c.execute(
+            "SELECT a.id FROM assets a JOIN work_orders w"
+            " ON w.id = json_extract(a.agent_decision, '$.order_id')"
+            " WHERE a.status = 'revision_requested'"
+            " AND (w.status IN ('scheduled', 'in_production') OR EXISTS (SELECT 1 FROM assets"
+            " b WHERE b.idea_id = w.idea_id AND b.status IN ('rendering', 'ready')))"
+            " AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.asset_id = a.id"
+            " AND f.wants_changes = 1"
+            " AND f.updated_at > json_extract(a.agent_decision, '$.at'))")}
     labels = _labels()
     out = []
     for asset in store.list_assets(status="revision_requested", limit=MAX_LIST):
@@ -164,7 +176,8 @@ def list_revision_requests(store: CampaignStore) -> List[Dict[str, Any]]:
         comments = [_comment(fb, labels) for fb in store.list_feedback(asset_id=asset["id"],
                                                                        limit=MAX_LIST)
                     if fb["wants_changes"]]
-        out.append({"asset": asset_context(store, asset), "comments": comments[::-1]})
+        out.append({"asset": asset_context(store, asset), "comments": comments[::-1],
+                    "earlier_decision": asset.get("agent_decision")})
     return out
 
 

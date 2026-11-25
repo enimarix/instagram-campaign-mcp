@@ -86,6 +86,24 @@ def test_a_plan_past_the_places_left_is_refused(store, s):
     assert out["job"]["state"] == "queued"
 
 
+
+def test_the_night_run_renders_only_the_owners_items(store, s):
+    """Was: a playbook rule only; render_motion(plan=False) took the AI's own idea."""
+    idea = store.add_idea("motion", hook="Mon idée", batch_date=DAY)
+    order = work_orders.create_video(store, "La commande du jour")
+    ordered = store.add_idea("motion", hook="La commande", batch_date=DAY)
+    work_orders.start(store, order["id"], ordered)
+    run = store.start_agent_run("daily-produce")
+    with pytest.raises(ValueError, match="night run: it only writes ideas"):
+        motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+                                   idea_id=idea["id"])
+    out = motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+                                     idea_id=ordered["id"])  # a work order's idea renders
+    assert out["job"]["state"] == "queued"
+    store.finish_agent_run(run["id"], "succeeded")  # another run (the light one) may
+    assert motion.queue_motion_render(store, s, template="FactQuest", props=FACTQUEST,
+                                      idea_id=idea["id"])["job"]
+
 def test_no_batch_limit_plans_past_the_old_size(store, s):
     s.batch_size = 0
     planned.open_places(store, DAY, None)

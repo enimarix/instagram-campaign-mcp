@@ -44,7 +44,6 @@ from . import film, packet
 from .packet import RUNS
 from .runner import (
     AGENT_DIR,
-    DEAD_RUN,
     PLAYBOOK_NAME,
     REPO,
     AgentError,
@@ -65,14 +64,19 @@ ORDER_READERS = tuple(p for p, (_, s) in RUNS.items()
                       if s and ("work_orders" in s or "revisions" in s))
 # the newest thing the light run is for: a scheduled order, or a wanting-changes comment
 # (written or edited by the owner; the agent's digest doesn't touch updated_at) on an asset
-# still `revision_requested` (147). MAX skips NULLs; both columns are to_iso(). Lemo-Opuscar
-# orders are the film runner's (173), never the light run's.
+# still `revision_requested` (147), or the waiting decision a failed remake film left on
+# one (film._skip: the only waiting decision that names an order). MAX skips NULLs; all
+# three are to_iso(). Lemo-Opuscar orders are the film runner's (173), never the light run's.
 _AGENT_ORDER = "status = 'scheduled' AND substr(COALESCE(style, ''), 1, 5) <> 'lemo:'"
 _NEWEST_WORK = (
     "SELECT MAX(t) FROM (SELECT MAX(scheduled_at) AS t FROM work_orders"
     f" WHERE {_AGENT_ORDER}"
     " UNION ALL SELECT MAX(f.updated_at) FROM feedback f JOIN assets a ON a.id = f.asset_id"
-    " WHERE f.wants_changes = 1 AND a.status = 'revision_requested')")
+    " WHERE f.wants_changes = 1 AND a.status = 'revision_requested'"
+    " UNION ALL SELECT MAX(json_extract(agent_decision, '$.at')) FROM assets"
+    " WHERE status = 'revision_requested'"
+    " AND json_extract(agent_decision, '$.kind') = 'waiting'"
+    " AND json_extract(agent_decision, '$.order_id') IS NOT NULL)")
 # 156: something the light run would look at again when the studio can make more
 _WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_requested')"
             f" OR EXISTS (SELECT 1 FROM work_orders WHERE {_AGENT_ORDER})")
@@ -174,10 +178,12 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
             now: Callable[[], datetime] = utcnow) -> List[Dict[str, Any]]:
     """`agent run-due`: each due playbook in the foreground, one after another. A playbook
     another process started meanwhile is skipped. Nothing while the studio is paused
-    (line.pause, checked before each one): the runs stay due for the catch-up."""
+    (line.pause) or any run runs (one shared workspace; the runner's start is the atomic
+    lock), both checked before each one: the runs stay due for the catch-up."""
     rows = []
     for playbook in due_runs(store, settings, now()):
-        if line.paused(store):
+        close_dead_runs(store)
+        if line.paused(store) or store.running_agent_runs(limit=1):
             break
         try:
             rows.append(run(store, settings, playbook))
@@ -227,9 +233,13 @@ def _gate(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
     scoped = set(store.get_state(packet.SCOPED_RUNS_KEY) or ())
     since = [r for p in readers for r in store.list_agent_runs(p, limit=10)
              if parse_iso(r["started_at"]) >= newest and r["id"] not in scoped]
-    if any(r["summary"] != DEAD_RUN for r in since):
+    # only a run still running, or one that succeeded and left nothing unhandled (runner:
+    # "work packet: N not handled") has them: a crash, a usage limit or a restart (155)
+    # never did
+    if any(r["status"] == "running" or r["status"] == "succeeded"
+           and "\nwork packet: " not in (r["summary"] or "") for r in since):
         return "seen"
-    # a run a restart killed never had them (155), nor the start that made it
+    # a start whose run has no row yet (the run a restart killed never had them, 155)
     started = store.get_state(f"{key}_run_started_at")  # before its own row exists
     if started and parse_iso(started) >= newest and not any(
             parse_iso(r["started_at"]) >= parse_iso(started) for r in since):

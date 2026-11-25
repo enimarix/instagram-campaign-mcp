@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import SecretStr
 
 from ..config import APP_HOME, ENV_FILE, InstagramMCPSettings
-from ..store import CampaignStore, parse_iso, utcnow
+from ..store import CampaignStore, parse_iso, to_iso, utcnow
 from ..studio import guard, voices
 from ..studio.power import keep_awake
 from . import packet
@@ -288,6 +288,27 @@ def check_lock(store: CampaignStore, name: str, timeout_s: float) -> None:
     store.finish_agent_run(held["id"], "failed", summary="stale: the runner died")
 
 
+def _start_run(store: CampaignStore, name: str, timeout_s: float) -> Dict[str, Any]:
+    """The run's row, made only while no other run of the shared workspace runs (any
+    playbook but the TEMPLATES runners, which have their own): check and insert in one
+    write-locked transaction, so two processes starting in the same second can't both pass
+    (each run wipes the workspace's .claude/ and work/). AgentRunRefused otherwise."""
+    check_lock(store, name, timeout_s)  # closes a dead or stale run of `name` first
+    close_dead_runs(store)
+    marks = ",".join("?" * len(TEMPLATES))
+    with store.immediate() as c:
+        held = c.execute("SELECT id, playbook FROM agent_runs WHERE status = 'running'"
+                         f" AND playbook NOT IN ({marks}) ORDER BY id DESC LIMIT 1",
+                         TEMPLATES).fetchone()
+        if held:
+            raise AgentRunRefused(f"run {held[0]} ({held[1]}) is running in the workspace")
+        cur = c.execute("INSERT INTO agent_runs (playbook, pid, pid_started, started_at)"
+                        " VALUES (?, ?, ?, ?)", (name, os.getpid(),
+                                                 process_started(os.getpid()),
+                                                 to_iso(utcnow())))
+    return store._get("agent_runs", cur.lastrowid)
+
+
 def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: str, *,
               timeout_s: Optional[float] = None, max_turns: Optional[int] = None,
               dry_run: bool = False, agent_dir: Path = AGENT_DIR) -> Dict[str, Any]:
@@ -296,11 +317,9 @@ def run_agent(store: CampaignStore, settings: InstagramMCPSettings, playbook: st
     Raises AgentRunRefused while the same playbook runs, AgentError for an unknown playbook."""
     name = _playbook_file(playbook, agent_dir).stem
     timeout_s = timeout_s or settings.agent_timeout_minutes * 60
-    # ponytail: check-then-insert, two starts in the same instant could both pass.
-    check_lock(store, name, timeout_s)
+    run = _start_run(store, name, timeout_s)
     log_dir = Path(settings.agent_log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
-    run = store.start_agent_run(name, os.getpid(), process_started(os.getpid()))
     log = log_dir / f"{run['id']}.log"
     status, summary, usage = "failed", "interrupted", None
     try:
