@@ -70,6 +70,27 @@ def test_revision_request_hidden_while_its_new_version_renders(store, monkeypatc
     assert [r["asset"]["id"] for r in L.list_revision_requests(store)] == [b]
 
 
+def test_revision_request_hidden_while_its_decided_remake_is_open(store):
+    from src.studio import work_orders
+    from src.studio.feedback import set_decision
+
+    a = _asset(store)
+    f = add_comment(store, a, text="new voice", wants_changes=True)["feedback"]["id"]
+    order = work_orders._insert_owner_order(store, "change", "remake it", None, a)
+    set_decision(store, a, "remade", "new voice", order_id=order["id"])
+    assert L.list_revision_requests(store) == []  # its remake is scheduled
+    with store._tx() as c:  # the owner asks again after that decision: decided anew
+        c.execute("UPDATE feedback SET updated_at = '2999-01-01T00:00:00+00:00' WHERE id=?",
+                  (f,))
+    [req] = L.list_revision_requests(store)
+    assert req["earlier_decision"]["order_id"] == order["id"]
+    with store._tx() as c:
+        c.execute("UPDATE feedback SET updated_at = '2000-01-01T00:00:00+00:00' WHERE id=?",
+                  (f,))
+    work_orders.skip_order(store, order["id"], "failed")  # nothing in flight: back
+    assert [r["asset"]["id"] for r in L.list_revision_requests(store)] == [a]
+
+
 def test_one_comment_forces_low_hypothesis(store):
     f = _fb(store, _asset(store))
     out = L.add_learning(store, "Slow starts lose the owner", "dont", "taste", [f, f],

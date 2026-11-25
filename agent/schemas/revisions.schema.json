@@ -89,6 +89,12 @@
               }
             }
           },
+          "earlier_decision": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "comments": {
             "type": "array",
             "maxItems": 50,
