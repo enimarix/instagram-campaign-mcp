@@ -285,7 +285,7 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
     awake while any runs; claim nothing while the studio is paused (line.pause: but a
     running film's own render, line.film_renders) or the media disk is under the floor; run
     daily_housekeeping between batches. Runs until cancelled (a job cut off then is
-    re-queued once its heartbeat is stale)."""
+    re-queued, in its place, when the loop starts again)."""
     run = run or functools.partial(render.run_job, store, settings.media_root)
     running: Dict[int, asyncio.Task] = {}
     disk_warned = float("-inf")
@@ -315,6 +315,12 @@ async def render_loop(store: CampaignStore, settings: InstagramMCPSettings,
         except Exception as e:  # noqa: BLE001 - e.g. database locked: try next tick
             print(f"render queue: {e!r}", file=sys.stderr, flush=True)
 
+    # ponytail: one render loop per machine (`up` or `worker`), so at start every running
+    # job is a dead process's: back in line now, in its place, not after RENDER_STALE.
+    try:
+        store.requeue_stale_render_jobs(utcnow() + timedelta(seconds=1))
+    except Exception as e:  # noqa: BLE001 - e.g. database locked: RENDER_STALE catches it
+        print(f"render queue: {e!r}", file=sys.stderr, flush=True)
     housekeeper: Optional[asyncio.Task] = None
     try:
         while True:
