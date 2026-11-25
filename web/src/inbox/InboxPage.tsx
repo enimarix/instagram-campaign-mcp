@@ -82,7 +82,7 @@ export default function InboxPage() {
   // UI-001: after a decision the next card slides in under the finger, so a double-tap must
   // not decide it unseen. Rail taps only: the keys stay immediate.
   const settle = useRef(0)
-  const tap = (f: () => void) => () => {
+  const tap = (f: () => void) => {
     if (Date.now() < settle.current) return
     settle.current = Date.now() + SETTLE_MS
     f()
@@ -386,11 +386,11 @@ export default function InboxPage() {
               muted={muted}
               showBestBefore={tab === 'bench'}
               onToggleSound={() => setMuted((m) => !m)}
-              onApprove={tap(() => void approve(a))}
+              onApprove={() => tap(() => void approve(a))}
               change={changeLabel(a.change_request, taxonomy?.feedback_reasons.values)}
-              onDecline={tap(() => setDeclineFor(a))}
-              onChange={tap(() => openChange(a))}
-              onSave={tab === 'today' ? tap(() => save(a)) : undefined}
+              onDecline={() => tap(() => setDeclineFor(a))}
+              onChange={() => tap(() => openChange(a))}
+              onSave={tab === 'today' ? () => tap(() => save(a)) : undefined}
             />
           ))}
         </div>
