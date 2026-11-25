@@ -495,3 +495,21 @@ def test_an_order_a_dead_run_left_half_made_comes_back(store, cfg):
     assert "autre décision" in work_orders.get_order(store, replaced)["skip_reason"]
     for oid in (fresh, made, films):
         assert work_orders.get_order(store, oid)["status"] == "in_production"
+
+
+def test_a_films_voice_engine_reaches_its_badge_and_the_bell(store, cfg, tmp_path):
+    from src.studio import alerts
+
+    ws = tmp_path / "w"
+    (ws / lemo.FILM_DIR).mkdir(parents=True)
+    (ws / lemo.FILM_DIR / "final.mp4").write_bytes(SAMPLE.read_bytes())
+    (ws / lemo.VOICE_TAKES).write_text(json.dumps([  # the voice door's takes (film_voice)
+        {"voice": "el_liam", "engine": "elevenlabs", "fallback": None},
+        {"voice": "conteur", "engine": "local", "fallback": "ElevenLabs credits: 0 left"}]))
+    order = _order(store)
+    idea = store.add_idea("motion", hook="h", style=order["style"])
+    asset = lemo.register_film(store, cfg, order, idea, ws)["asset"]
+    assert asset["recipe"]["voiced_by"] == {"engine": "http", "voice": "conteur",
+                                            "fallback": "ElevenLabs credits: 0 left"}
+    raised = store.get_state(alerts.RAISED_KEY).values()
+    assert [a["kind"] for a in raised] == ["tts_fallback"]

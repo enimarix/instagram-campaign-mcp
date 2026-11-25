@@ -108,21 +108,31 @@ def _slug(name: str) -> str:
     return f"el_{s or 'voix'}"
 
 
+def _check_relay(fallback: Optional[str], gender: Optional[str]) -> Dict[str, Dict[str, Any]]:
+    """The local voices by id; ValueError for a fallback that is not one, a bad gender or a
+    relay of the other gender (a woman's card never speaks in a man's voice)."""
+    local = {e["id"]: e for e in _local()}
+    if fallback not in local:
+        raise ValueError(f"the fallback must be a local voice ({', '.join(local)})")
+    if gender not in (None, "male", "female", "neutral"):
+        raise ValueError("gender: male, female or neutral")
+    if {gender, local[fallback].get("gender")} == {"male", "female"}:
+        raise ValueError(f"the fallback {fallback} is not a {gender} voice")
+    return local
+
+
 def add_el_card(*, el_voice_id: str, label: str, fallback: str, gender: Optional[str] = None,
                 use_for: Optional[str] = None, description: Optional[str] = None,
                 language: Optional[str] = None, accent: Optional[str] = None,
                 preview_url: Optional[str] = None,
                 address: Optional[List[str]] = None) -> Dict[str, Any]:
     """Add an ElevenLabs card (its voice already in the account); returns it, on. ValueError
-    for a fallback that is not a local voice, an empty name or a bad gender."""
-    local = {e["id"]: e for e in _local()}
-    if fallback not in local:
-        raise ValueError(f"the fallback must be a local voice ({', '.join(local)})")
+    for a fallback that is not a local voice of its gender (_check_relay), an empty name or a
+    bad gender."""
+    local = _check_relay(fallback, gender)
     label = " ".join((label or "").split())[:60]
     if not label:
         raise ValueError("a card needs a name")
-    if gender not in (None, "male", "female", "neutral"):
-        raise ValueError("gender: male, female or neutral")
     if address and not set(address) <= {"tu", "vous"}:
         raise ValueError("address: tu and / or vous")
     styles = sorted({s for e in local.values() for s in e.get("styles", [])})
@@ -179,7 +189,11 @@ def engine_plan(voice: Optional[str]) -> List[Tuple[str, Optional[str]]]:
         pair = {"elevenlabs": card["id"], "local": card.get("fallback")}
     else:
         if voice is not None and voice.startswith("el_"):
-            voice = None  # a card removed since the video was queued: the default local voice
+            # a card removed since the video was queued: the default local voice.
+            # ponytail: its gender left with its card (the queued todo holds the id only), so
+            # with ElevenLabs first it gets the first card on, any gender; keep the gender in
+            # VoiceTodo if a removed card's videos must keep it
+            voice = None
         # a twin the owner turned off never speaks (set_enabled keeps `enabled` on the card)
         on = [c for c in el_cards() if c.get("enabled", True)]
         twin = next((c["id"] for c in on if voice is not None and c.get("fallback") == voice),
@@ -217,8 +231,7 @@ def add_from_elevenlabs(settings: InstagramMCPSettings, *, voice_id: str,
                         public_owner_id: Optional[str] = None, **card: Any) -> Dict[str, Any]:
     """Add an ElevenLabs voice as a card: a library voice (`public_owner_id`) is first added
     to the account (one of its voice slots), then the card is kept (add_el_card)."""
-    if card.get("fallback") not in {e["id"] for e in _local()}:  # before spending a slot
-        raise ValueError("the fallback must be a local voice")
+    _check_relay(card.get("fallback"), card.get("gender"))  # before spending a slot
     if public_owner_id:
         try:
             voice_id = elevenlabs.add_shared(settings, public_owner_id, voice_id,
@@ -258,8 +271,22 @@ def owner_choices(store: CampaignStore) -> Dict[str, bool]:
 def list_voices(store: CampaignStore) -> List[Dict[str, Any]]:
     """Every voice, voices.json order then the ElevenLabs cards: {id, label, engine,
     description, use_for, styles, address, default, designed, enabled, sample_text, sample
-    (URL or None), gender, fallback (a card's local voice), language, accent}."""
+    (URL or None), gender, fallback (a card's local voice), language, accent, relay_warning
+    (a card whose relay another card shares or is of the other gender, else None)}."""
     own = owner_choices(store)
+    local = {e["id"]: e for e in _local()}
+    cards = el_cards()
+
+    def warn(e: Dict[str, Any]) -> Optional[str]:
+        if e["engine"] != "elevenlabs":
+            return None
+        relay = local.get(e.get("fallback")) or {}
+        if {e.get("gender"), relay.get("gender")} == {"male", "female"}:
+            return f"relais {e.get('fallback')} : voix de l'autre genre"
+        twins = [c["label"] for c in cards if c["id"] != e["id"]
+                 and c.get("fallback") == e.get("fallback")]
+        return f"relais {e.get('fallback')} partagé avec {', '.join(twins)}" if twins else None
+
     return [{
         "id": e["id"], "label": e.get("label") or e["id"], "description": e.get("description"),
         "use_for": e.get("use_for"),
@@ -271,7 +298,7 @@ def list_voices(store: CampaignStore) -> List[Dict[str, Any]]:
         else f"/api/voices/{e['id']}/sample" if (VOICES_DIR / f"{e['id']}.wav").is_file()
         else None,
         "engine": e["engine"], "gender": e.get("gender"), "fallback": e.get("fallback"),
-        "language": e.get("language"), "accent": e.get("accent"),
+        "language": e.get("language"), "accent": e.get("accent"), "relay_warning": warn(e),
     } for e in _entries()]
 
 

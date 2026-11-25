@@ -66,6 +66,30 @@ def test_group_words_follows_letters_not_punctuation():
                                                                                         0.8)
 
 
+def test_a_bracketed_aside_never_shifts_the_captions():
+    # the voice never says « (…) »: counted, it pulled « Non » into the first line
+    words = [WordTiming("Oui", 0.0, 0.3), WordTiming("Non", 1.0, 1.2),
+             WordTiming("merci", 1.2, 1.5), WordTiming("beaucoup", 1.5, 2.0)]
+    lines = ["Oui (un très long aparté entre parenthèses ici)", "Non merci beaucoup"]
+    assert [(t.start_s, t.end_s) for t in tts.group_words_into_lines(words, lines)] == [
+        (0.0, 0.3), (1.0, 2.0)]
+    only = tts.group_words_into_lines(words[1:], ["(rires)", "Non merci beaucoup"])
+    assert (only[0].start_s, only[0].end_s) == (0.0, 0.0)  # brackets only: no spoken span
+
+
+def test_a_replaced_voice_card_is_a_new_cache_key(tmp_path, monkeypatch):
+    from src.studio import voices
+
+    monkeypatch.setattr(voices, "VOICES_DIR", tmp_path)
+    (tmp_path / "voices.json").write_text(json.dumps({"voices": [{"id": "nova"}]}))
+    wav = tmp_path / "nova.wav"
+    wav.write_bytes(b"RIFF1")
+    p = tts.HttpProvider(_settings(tmp_path))
+    before = p.cache_key("Salut.", "nova")
+    wav.write_bytes(b"RIFF22")  # the cloned voice's card replaced under the same id
+    assert p.cache_key("Salut.", "nova") != before
+
+
 def test_template_escapes_quotes_newlines_accents():
     body = tts.render_body('{"text": "{text}", "voice": "{voice}"}', 'Il a dit "été"\nOK\\', "a")
     assert json.loads(body) == {"text": 'Il a dit "été"\nOK\\', "voice": "a"}

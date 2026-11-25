@@ -167,6 +167,11 @@ def test_apply_refuses_a_missing_or_short_track_and_a_silent_video(tmp_path):
     no_voice = {"voice": {"lines": [{"text": "h", "start_s": 0.0, "end_s": 1.0}]}}
     with pytest.raises(ValueError, match="needs a voiced video"):
         music.apply(no_voice, tmp_path, aid)
+    meta = music.music_dir(tmp_path) / f"{aid}.json"  # a chart hit, as an original sound
+    meta.write_text(json.dumps({**json.loads(meta.read_text("utf-8")),
+                                "type": "original_sound"}), "utf-8")
+    with pytest.raises(ValueError, match="original sound"):
+        music.apply(props, tmp_path, aid)
 
 
 def test_a_quiet_break_keeps_the_beat_going():

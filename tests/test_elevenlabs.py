@@ -41,6 +41,7 @@ def folder(tmp_path, monkeypatch):
     monkeypatch.setattr(voices, "VOICES_DIR", d)
     monkeypatch.setattr(tts.ffmpeg, "probe", lambda path, **_: ffmpeg.MediaInfo(
         2.0, None, None, None, None, True, "mp3", 44100, 10))
+    monkeypatch.setattr(tts, "RETRY_WAITS_S", (0.0, 0.0))  # retries without waiting
     return d
 
 
@@ -57,10 +58,13 @@ def _alignment(text):
             "character_end_times_seconds": [i * 0.05 + 0.05 for i in range(len(chars))]}
 
 
-def _el_routes(left=10_000, tts_status=200):
+def _el_routes(left=10_000, tts_status=200, cost=1):
     respx.get(f"{EL}/v1/user/subscription").respond(json={
         "character_count": 10_000 - left, "character_limit": 10_000,
         "next_character_count_reset_unix": 1796005036, "tier": "free"})
+    respx.get(f"{EL}/v1/models").respond(json=[
+        {"model_id": "eleven_v4", "can_do_text_to_speech": True,
+         "model_rates": {"character_cost_multiplier": cost}}])
 
     def speak(request):
         if tts_status != 200:
@@ -130,7 +134,7 @@ def test_an_elevenlabs_error_falls_back_and_stays_skipped(tmp_path, card):
     first = provider.synthesize("Un.", card["id"])
     assert first.provider == "http" and "quota exceeded" in first.fallback
     provider.synthesize("Deux.", card["id"])  # same video: ElevenLabs is not tried again
-    assert respx.calls.call_count == 2 + 2  # subscription + tts once, then two local calls
+    assert respx.calls.call_count == 3 + 2  # credits + models + tts once, then two local
     assert local.call_count == 2
 
 
@@ -476,7 +480,7 @@ def test_elevenlabs_first_casts_the_cards_and_never_leaves_a_local_pick_on_voxcp
         store, card, tmp_path):
     # the owner's bug (2026-11-25): the default « souriante » has no card of its own, so with
     # ElevenLabs first it still spoke VoxCPM; a sitcom dad got the narrator's own card
-    her = voices.add_el_card(el_voice_id="xyz789", label="Koraly", fallback="energique_homme",
+    her = voices.add_el_card(el_voice_id="xyz789", label="Koraly", fallback="souriante",
                             gender="female")
     assert voices.engine_plan("souriante")[0] == ("elevenlabs", her["id"])  # her gender's card
     assert voices.engine_plan(None)[0] == ("elevenlabs", card["id"])  # no voice: a card too
@@ -488,7 +492,7 @@ def test_elevenlabs_first_casts_the_cards_and_never_leaves_a_local_pick_on_voxcp
     cast = voices.say_cast(store)
     assert sitcom.say_voice("dad", card["id"], cast) != card["id"]  # never the narrator's
     voices.set_engine(priority="local")  # local first: the local voices, as before
-    assert voices.engine_plan("souriante") == [("local", "souriante")]
+    assert voices.engine_plan("souriante")[0] == ("local", "souriante")
     assert voices.default_voice(store) == "souriante"
 
 
@@ -496,3 +500,84 @@ def test_a_cast_queued_with_local_ids_never_doubles_the_narrator(card):
     # 089: cast {male: (energique_homme, ...)} queued before the fix, narrator the card
     cast = {"male": ("energique_homme", "souriante"), "female": ("souriante", "energique_homme")}
     assert sitcom.say_voice("dad", card["id"], cast) == "souriante"  # not Liam twice
+
+
+# --- pipeline audit fixes -----------------------------------------------------------------------
+@respx.mock
+def test_a_passing_fault_is_tried_again_and_a_bad_text_fails_the_line_not_the_engine(
+        tmp_path, card):
+    _el_routes()
+    calls = []
+
+    def speak(request):
+        calls.append(request)
+        if len(calls) == 1:  # a rate limit, then the voice
+            return httpx.Response(429, headers={"retry-after": "0"},
+                                  json={"detail": {"message": "too many"}})
+        if json.loads(request.content)["text"] == "Mauvais.":
+            return httpx.Response(422, json={"detail": {"message": "bad text"}})
+        return httpx.Response(200, json={"audio_base64": base64.b64encode(b"ID3").decode(),
+                                         "alignment": None})
+
+    respx.post(url__regex=rf"{EL}/v1/text-to-speech/abc123/with-timestamps.*").mock(
+        side_effect=speak)
+    local = _local_route()
+    provider = tts.get_provider(_settings(tmp_path))
+    assert provider.synthesize("Un.", card["id"]).provider == "elevenlabs" and len(calls) == 2
+    with pytest.raises(tts.TTSError) as e:  # that line's text: the caller rewrites it
+        provider.synthesize("Mauvais.", card["id"])
+    assert not e.value.machine and not local.called
+    assert provider.synthesize("Deux.", card["id"]).provider == "elevenlabs"  # still on
+
+
+@respx.mock
+def test_elevenlabs_failing_mid_video_never_hands_the_rest_to_the_local_voice(tmp_path, card):
+    _el_routes()
+    local = _local_route()
+    provider = tts.get_provider(_settings(tmp_path))
+    provider.synthesize("Un.", card["id"])
+    respx.post(url__regex=rf"{EL}/v1/text-to-speech/abc123/with-timestamps.*").respond(500)
+    for line in ("Deux.", "Trois."):  # one video, one engine: the video waits for the machine
+        with pytest.raises(tts.TTSError) as e:
+            provider.synthesize(line, card["id"])
+        assert e.value.machine and "mid-video" in str(e.value)
+    assert not local.called
+
+
+@respx.mock
+def test_credits_count_at_the_models_rate_and_are_read_once(tmp_path, card):
+    _el_routes(left=12, cost=2)  # 12 credits at x2: 6 characters
+    local = _local_route()
+    provider = tts.get_provider(_settings(tmp_path))
+    assert provider.synthesize("Salut.", card["id"]).provider == "elevenlabs"  # 6 characters
+    with pytest.raises(tts.TTSError) as e:  # none left: the video waits, never goes local
+        provider.synthesize("Encore toi.", card["id"])
+    assert e.value.machine and "credits" in str(e.value) and not local.called
+    assert respx.routes[0].call_count == 1  # the subscription, once per provider
+
+
+def test_a_card_never_relays_to_the_other_gender_and_a_shared_relay_is_shown(store, card):
+    with pytest.raises(ValueError, match="female"):
+        voices.add_el_card(el_voice_id="v1", label="Victoria", fallback="energique_homme",
+                           gender="female")
+    paul = voices.add_el_card(el_voice_id="v2", label="Paul", fallback="energique_homme")
+    by = {v["id"]: v for v in voices.list_voices(store)}
+    assert "Liam FR" in by[paul["id"]]["relay_warning"]
+    assert "Paul" in by[card["id"]]["relay_warning"]
+    assert by["souriante"]["relay_warning"] is None
+
+
+@respx.mock
+def test_the_film_voice_door_keeps_to_the_voix_page_and_writes_its_takes(
+        store, tmp_path, card, monkeypatch):
+    _el_routes()
+    monkeypatch.setattr(film_voice, "_wav", lambda path: b"RIFFwav")
+    takes = tmp_path / "ws" / "voice_takes.json"
+    door = film_voice.VoiceDoor(_settings(tmp_path), store=store, takes_path=takes)
+    door.server.server_close()
+    voices.set_enabled(store, "souriante", False)
+    assert _say(door, "souriante")[0] == 422 and _say(door, "nope")[0] == 422
+    code, out = door.answer(f"/{door.token}", b'{"text": "Salut."}')  # no voice: the default
+    assert code == 200 and out["take"]["voice"] == voices.default_voice(store) == card["id"]
+    assert json.loads(takes.read_text("utf-8")) == [
+        {"voice": card["id"], "engine": "elevenlabs", "fallback": None}]
