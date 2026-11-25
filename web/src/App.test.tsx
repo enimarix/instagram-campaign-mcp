@@ -70,7 +70,7 @@ describe('App', () => {
     expect(tabs.filter((l) => l.getAttribute('aria-current')).map((l) => l.textContent)).toEqual([current])
   })
 
-  it('links Trends from the Analytics page', async () => {
+  it('links Tendances from the Statistiques page', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
       url.startsWith('/api/trends') ? { accounts: [], hashtags: {}, generated_at: '' } : []))))
     render(
@@ -78,8 +78,8 @@ describe('App', () => {
         <App />
       </MemoryRouter>,
     )
-    fireEvent.click(within(screen.getByRole('main')).getByRole('link', { name: /^Trends/ }))
-    expect(await screen.findByRole('heading', { name: 'Trends' })).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('main')).getByRole('link', { name: /^Tendances/ }))
+    expect(await screen.findByRole('heading', { name: 'Tendances' })).toBeTruthy()
   })
 
   it('lists the pages without a tab on the More page', () => {
