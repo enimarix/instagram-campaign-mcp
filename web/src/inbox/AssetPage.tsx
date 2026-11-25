@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import {
+  addFeedback,
   approveAsset,
-  archiveAsset,
+  declineAsset,
   editAsset,
   errorMessage,
   getAsset,
   getAssetContext,
   getTaxonomy,
+  restyleAsset,
   setVerdict,
   unapproveAsset,
   type Asset,
   type AssetContext,
+  type CommentIn,
   type Taxonomy,
 } from '../api/client'
 import CommentThread from './CommentThread'
+import ReasonSheet from './ReasonSheet'
 import ReactionCards from './ReactionCards'
 import ScheduleSheet, { ScheduledSlot } from './ScheduleSheet'
 import { Button } from '../ui/Button'
@@ -22,6 +26,7 @@ import { Card, Skeleton } from '../ui/Card'
 import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { field, link, verdictButton } from '../ui/styles'
+import { useToast } from '../ui/useToast'
 import { AI_LABEL_LINE, safeUrl } from './ui'
 import { VoiceBadge } from '../voices/VoiceBadge'
 
@@ -67,6 +72,10 @@ function AssetPage({ id }: { id: number }) {
   const [bestBefore, setBestBefore] = useState('')
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
   const [scheduling, setScheduling] = useState(false)
+  // The Inbox's sheets (UI-017): Changer keeps the player time, Refuser has no pin.
+  const [sheet, setSheet] = useState<{ at?: number } | null>(null)
+  const [thread, setThread] = useState(0) // a decision's motive is a comment: reload the thread
+  const toast = useToast()
 
   useEffect(() => {
     getTaxonomy().then(setTaxonomy, () => {}) // no labels: ids are shown instead
@@ -105,6 +114,29 @@ function AssetPage({ id }: { id: number }) {
     if (caption !== (asset?.caption ?? '') && !(await act(() => editAsset(id, { caption })))) return
     if (await act(() => approveAsset(id))) setScheduling(true) // then the explicit second step
   }
+
+  // The Inbox's four decisions (UI-017), at once (no undo window): same calls, same toasts.
+  async function decide(fn: () => Promise<Asset>, message: string) {
+    setSheet(null)
+    const ok = await act(fn)
+    setThread((n) => n + 1)
+    if (ok) toast({ message })
+  }
+
+  const change = (fb: CommentIn) => decide(async () => {
+    const r = await addFeedback(id, fb)
+    setAsset(r.asset)
+    if (!r.moved) throw new Error(`Saved, but not sent back: ${r.reason}`)
+    return r.asset
+  }, 'Sent for changes')
+
+  // The server archives the video and opens a work order (181): reload it for the chip.
+  const restyle = (style: string | null, extra: { note?: string; reasons: string[] }) => decide(async () => {
+    await restyleAsset(id, { style, ...extra })
+    return getAsset(id)
+  }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).")
+
+  const decline = (fb: CommentIn) => decide(() => declineAsset(id, fb.reason_codes, fb.text), 'Declined')
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -158,28 +190,35 @@ function AssetPage({ id }: { id: number }) {
               <Chip tone={asset.verdict === 'liked' ? 'success' : 'danger'}>{asset.verdict}</Chip>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button aria-pressed={asset.verdict === 'disliked'} onClick={() => act(() => setVerdict(id, 'disliked'))}
-              className={verdictButton('danger', asset.verdict === 'disliked')}>
-              Dislike
-            </Button>
-            <Button aria-pressed={asset.verdict === 'liked'} onClick={() => act(() => setVerdict(id, 'liked'))}
-              className={verdictButton('success', asset.verdict === 'liked')}>
-              Like
-            </Button>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {asset.status === 'ready' && (
               <>
-                <Button variant="primary" onClick={approve}>Approve</Button>
-                <Button variant="ghost" onClick={() => act(() => archiveAsset(id))}>Archive</Button>
+                <Button variant="primary" onClick={approve}>Approuver</Button>
+                <Button onClick={() => setSheet({ at: video.current?.currentTime ?? 0 })}>Changer</Button>
+                <Button onClick={() => setSheet({})}>Refuser</Button>
+                <Button aria-pressed={asset.verdict === 'liked'} className={verdictButton('success', asset.verdict === 'liked')}
+                  onClick={() => decide(() => setVerdict(id, 'liked'), 'Saved for later')}>
+                  Garder
+                </Button>
               </>
             )}
             {asset.status === 'approved' && (
-              <Button variant="primary" onClick={() => setScheduling(true)}>Schedule</Button>
+              <Button variant="primary" onClick={() => setScheduling(true)}>Programmer</Button>
             )}
             {(asset.status === 'approved' || asset.status === 'scheduled') && (
-              <Button variant="ghost" onClick={() => act(() => unapproveAsset(id))}>Unapprove</Button>
+              <Button variant="ghost" onClick={() => act(() => unapproveAsset(id))}>Retirer l'approbation</Button>
             )}
           </div>
+          {sheet && (
+            <ReasonSheet
+              reasons={taxonomy?.feedback_reasons.values ?? []}
+              at={sheet.at}
+              onClose={() => setSheet(null)}
+              onSave={sheet.at === undefined ? decline : change}
+              onRestyle={restyle /* offered by Changer's sheet only */}
+              style={asset.style}
+            />
+          )}
           {asset.status === 'scheduled' && <ScheduledSlot assetId={id} onUnscheduled={setAsset} />}
           {scheduling && (
             <ScheduleSheet
@@ -203,7 +242,7 @@ function AssetPage({ id }: { id: number }) {
               <input type="date" value={bestBefore} onChange={(e) => setBestBefore(e.target.value)}
                 className={`${field} mt-1 block font-normal`} />
             </label>
-            <Button type="submit" variant="primary">Save</Button>
+            <Button type="submit">Enregistrer</Button>
             {saveMsg && <p role="status" className="text-sm text-muted">{saveMsg}</p>}
           </form>
         </section>
@@ -278,7 +317,7 @@ function AssetPage({ id }: { id: number }) {
               else setCtx((c) => c && { ...c, children: [...c.children, a] })
             }} />
           )}
-          <CommentThread assetId={id} onSeek={seek} currentTime={() => video.current?.currentTime ?? 0}
+          <CommentThread key={thread} assetId={id} onSeek={seek} currentTime={() => video.current?.currentTime ?? 0}
             reasons={taxonomy?.feedback_reasons.values ?? []} onAsset={setAsset} />
         </div>
       </div>

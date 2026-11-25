@@ -1,7 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Asset, AssetContext, ReactionInfo } from '../api/client'
+import { ToastProvider } from '../ui/Toast'
 import AssetPage from './AssetPage'
 
 const ASSET: Asset = {
@@ -46,7 +47,7 @@ function stubApi(routes: Record<string, [number, unknown]> = {}) {
 function show() {
   render(
     <MemoryRouter initialEntries={['/assets/7']}>
-      <Routes><Route path="/assets/:id" element={<AssetPage />} /></Routes>
+      <ToastProvider><Routes><Route path="/assets/:id" element={<AssetPage />} /></Routes></ToastProvider>
     </MemoryRouter>,
   )
   return screen.findByText('first')
@@ -56,6 +57,8 @@ const comment = (body: unknown) => ({
   feedback: { ...COMMENT, id: 2, text: 'new' }, asset: ASSET, moved: false, reason: null, ...(body as object),
 })
 
+// the sheets are modal dialogs (jsdom has none)
+beforeEach(() => { HTMLDialogElement.prototype.showModal = function () { this.open = true } })
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -98,25 +101,112 @@ describe('AssetPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add comment' }))
     expect(await screen.findByText('new')).toBeTruthy()
     expect(calls.find((c) => c.method === 'POST')!.body).toEqual({
-      text: 'too slow here', reason_codes: ['weak_hook'], video_time_s: 3.25, wants_changes: false,
+      text: 'too slow here', reason_codes: ['weak_hook'], video_time_s: 3.25,
     })
+    expect(screen.getByText('Saved.')).toBeTruthy()
   })
 
-  it('says when asking for changes sent the video back, and why not', async () => {
-    stubApi({ 'POST /api/assets/7/feedback': [200, comment({ moved: true, asset: { ...ASSET, status: 'revision_requested' } })] })
-    await show()
-    fireEvent.change(screen.getByLabelText('New comment'), { target: { value: 'redo' } })
-    fireEvent.click(screen.getByRole('switch', { name: 'Ask for changes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }))
-    expect(await screen.findByText('Sent back for a new version.')).toBeTruthy()
-    expect(screen.getByText('revision requested')).toBeTruthy()
+  describe("the Inbox's four decisions (UI-017)", () => {
+    const sent = (calls: Call[]) => calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.url, c.body])
+    const press = async (name: string) => {
+      await show()
+      fireEvent.click(screen.getByRole('button', { name }))
+    }
+
+    it('shows only Approuver, Changer, Refuser and Garder on a ready video', async () => {
+      stubApi()
+      await show()
+      for (const name of ['Approuver', 'Changer', 'Refuser', 'Garder']) expect(screen.getByRole('button', { name })).toBeTruthy()
+      for (const name of ['Dislike', 'Like', 'Archive', 'Approve']) expect(screen.queryByRole('button', { name })).toBeNull()
+      expect(screen.queryByRole('switch')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Garder' }).getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('Changer: the sheet pins the player time, sends the change, the chip and toast follow', async () => {
+      const calls = stubApi({ 'POST /api/assets/7/feedback': [200, comment({ moved: true, asset: { ...ASSET, status: 'revision_requested' } })] })
+      await show()
+      document.querySelector('video')!.currentTime = 4
+      fireEvent.click(screen.getByRole('button', { name: 'Changer' }))
+      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Weak hook' }))
+      fireEvent.click(within(sheet).getByRole('button', { name: 'at 0:04' }))
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Send for changes' }))
+      expect(await screen.findByText('Sent for changes')).toBeTruthy()
+      expect(screen.getByText('revision requested')).toBeTruthy()
+      expect(sent(calls)).toEqual([['POST', '/api/assets/7/feedback',
+        { reason_codes: ['weak_hook'], video_time_s: 4, wants_changes: true }]])
+    })
+
+    it('Changer not sent back says why, with no toast', async () => {
+      stubApi({ 'POST /api/assets/7/feedback': [200, comment({ moved: false, reason: 'already approved' })] })
+      await press('Changer')
+      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      fireEvent.change(within(sheet).getByRole('textbox', { name: 'What to change' }), { target: { value: 'redo' } })
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Send for changes' }))
+      expect((await screen.findByRole('alert')).textContent).toBe('Saved, but not sent back: already approved')
+      expect(screen.queryByText('Sent for changes')).toBeNull()
+    })
+
+    it('« Même vidéo, autre style » restyles and shows the archived video', async () => {
+      const calls = stubApi({
+        'GET /api/styles': [200, [{ id: 'voxel', label: '3D 8-bit', description: null, templates: [], end_card: null,
+          address: null, enabled: true, share: null, preview: { still: null, clip: null } }]],
+        'POST /api/assets/7/restyle': [200, { id: 5 }],
+      })
+      await press('Changer')
+      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      const details = within(sheet).getByText('Même vidéo, autre style').closest('details')!
+      details.open = true
+      fireEvent(details, new Event('toggle'))
+      fireEvent.click(await within(sheet).findByRole('button', { name: '3D 8-bit' }))
+      // the server archived it: the reload after the restyle says so
+      const fetch = vi.mocked(globalThis.fetch)
+      const base = fetch.getMockImplementation()!
+      fetch.mockImplementation(async (url, init) => url === '/api/assets/7' && !init?.method
+        ? new Response(JSON.stringify({ ...ASSET, status: 'archived' }), { status: 200 })
+        : base(url, init))
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Refaire dans ce style' }))
+      expect(await screen.findByText(/la même vidéo dans un autre style/)).toBeTruthy()
+      expect(await screen.findByText('archived')).toBeTruthy()
+      expect(sent(calls)).toEqual([['POST', '/api/assets/7/restyle', { style: 'voxel', reasons: [] }]])
+    })
+
+    it('Refuser needs a motive, then declines', async () => {
+      const calls = stubApi({ 'POST /api/assets/7/decline': [200, { ...ASSET, status: 'archived', verdict: 'disliked' }] })
+      await press('Refuser')
+      const sheet = await screen.findByRole('dialog', { name: 'Why decline?' })
+      const go = within(sheet).getByRole('button', { name: 'Decline' })
+      expect(go).toHaveProperty('disabled', true)
+      expect(within(sheet).queryByRole('button', { name: /^at / })).toBeNull() // no pin
+      fireEvent.change(within(sheet).getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: 'off brand' } })
+      fireEvent.click(go)
+      expect(await screen.findByText('Declined')).toBeTruthy()
+      expect(screen.getByText('archived')).toBeTruthy()
+      expect(screen.getByText('disliked')).toBeTruthy()
+      expect(sent(calls)).toEqual([['POST', '/api/assets/7/decline', { reason_codes: [], text: 'off brand' }]])
+    })
+
+    it('Garder saves it for later and shows pressed', async () => {
+      const calls = stubApi({ 'POST /api/assets/7/verdict': [200, { ...ASSET, verdict: 'liked' }] })
+      await press('Garder')
+      expect(await screen.findByText('Saved for later')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Garder' }).getAttribute('aria-pressed')).toBe('true')
+      expect(sent(calls)).toEqual([['POST', '/api/assets/7/verdict', { verdict: 'liked' }]])
+    })
+
+    it("approved: only Programmer and « Retirer l'approbation »", async () => {
+      stubApi({ 'GET /api/assets/7': [200, { ...ASSET, status: 'approved' }] })
+      await show()
+      for (const name of ['Programmer', "Retirer l'approbation"]) expect(screen.getByRole('button', { name })).toBeTruthy()
+      for (const name of ['Approuver', 'Changer', 'Refuser', 'Garder']) expect(screen.queryByRole('button', { name })).toBeNull()
+    })
   })
 
   it('shows the server error when a caption is refused', async () => {
     const calls = stubApi({ 'PATCH /api/assets/7': [422, { error: 'invalid', message: 'caption has 31 hashtags' }] })
     await show()
     fireEvent.change(screen.getByLabelText('Caption'), { target: { value: '#a #b' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
     expect(await screen.findByText('Not saved: caption has 31 hashtags')).toBeTruthy()
     expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ caption: '#a #b' })
   })
@@ -126,10 +216,8 @@ describe('AssetPage', () => {
     const typeAndApprove = async (text: string) => {
       await show()
       fireEvent.change(screen.getByLabelText('Caption'), { target: { value: text } })
-      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
     }
-    // approving opens the schedule sheet (jsdom has no modal dialogs)
-    beforeEach(() => { HTMLDialogElement.prototype.showModal = function () { this.open = true } })
     const sent = (calls: Call[]) => calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.url, c.body])
 
     it('saves the caption first, then approves', async () => {
@@ -225,7 +313,6 @@ describe('AssetPage', () => {
     })
 
     it('approving a commentary video asks for the rights confirmation', async () => {
-      HTMLDialogElement.prototype.showModal = function () { this.open = true }
       const slot = { publish_at: '2026-11-20T10:00:00Z', local: '2026-11-20T11:00:00+01:00' }
       const calls = routes({
         'POST /api/assets/7/approve': [200, { ...REMIX, status: 'approved' }],
@@ -233,7 +320,7 @@ describe('AssetPage', () => {
         'POST /api/assets/7/schedule': [200, { asset: { ...REMIX, status: 'scheduled' } }],
       })
       await show()
-      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
       const box = await screen.findByRole('checkbox', { name: /my own take is a substantial part/ })
       const accept = screen.getByRole('button', { name: 'Accept' })
       expect(accept).toHaveProperty('disabled', true)

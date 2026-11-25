@@ -29,7 +29,6 @@ export default function CommentThread({ assetId, currentTime, onSeek, reasons, o
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [pin, setPin] = useState<number | null>(null)
-  const [wantsChanges, setWantsChanges] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ id: number; text: string } | null>(null)
 
@@ -50,16 +49,13 @@ export default function CommentThread({ assetId, currentTime, onSeek, reasons, o
         ...(text.trim() && { text }),
         reason_codes: picked,
         ...(pin != null && { video_time_s: pin }),
-        wants_changes: wantsChanges,
       })
       setComments((c) => [...c, r.feedback])
       onAsset(r.asset)
-      setNote(r.moved ? 'Sent back for a new version.'
-        : wantsChanges ? `Saved, but not sent back: ${r.reason}` : 'Saved.')
+      setNote('Saved.') // asking for changes is the page's « Changer » (UI-017)
       setText('')
       setPicked([])
       setPin(null)
-      setWantsChanges(false)
     } catch (err) {
       setNote(`Not saved: ${errorMessage(err)}`)
     }
@@ -135,11 +131,6 @@ export default function CommentThread({ assetId, currentTime, onSeek, reasons, o
           <input type="checkbox" className="size-5" checked={pin != null}
             onChange={(e) => setPin(e.target.checked ? currentTime() : null)} />
           Pin to this moment{pin != null && ` (${clock(pin)})`}
-        </label>
-        <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input type="checkbox" role="switch" className="size-5" checked={wantsChanges}
-            onChange={(e) => setWantsChanges(e.target.checked)} />
-          Ask for changes
         </label>
         <Button type="submit" variant="primary" disabled={!text.trim() && !picked.length}>Add comment</Button>
         {note && <p role="status" className="text-sm text-muted">{note}</p>}
