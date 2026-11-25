@@ -36,7 +36,12 @@ export default function Login({ children }: { children: ReactNode }) {
     }
   }
 
-  if (state === 'checking') return null
+  if (state === 'checking')
+    return (
+      <div role="status" aria-label="Chargement" className="grid min-h-dvh place-items-center">
+        <span aria-hidden className="size-8 animate-spin rounded-full border-2 border-current border-r-transparent text-accent" />
+      </div>
+    )
   if (state === 'in') return <>{children}</>
   return (
     <main className="grid min-h-dvh place-items-center p-4">

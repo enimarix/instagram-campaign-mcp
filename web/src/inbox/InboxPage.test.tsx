@@ -332,6 +332,10 @@ describe('InboxPage feed', () => {
       await closeUndoWindow()
       expect((await screen.findByRole('alert')).textContent).toContain('has not passed QC')
       expect(cards()).toEqual(['Video 1', 'Video 2'])
+      // UI-006: the same « Réessayer » clears the error and refreshes the feed
+      fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }))
+      await screen.findByText('1 of 3 decided')
+      expect(screen.queryByRole('alert')).toBeNull()
     })
 
     it('« Tous les styles » picks a Lemo-Opuscar style for the restyle; the change sheet stays', async () => {
@@ -677,6 +681,24 @@ describe('InboxPage feed', () => {
     expect(screen.getByText('2 of 2 decided')).toBeTruthy()
     expect(screen.getByText('All done')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open the Calendar' }).getAttribute('href')).toBe('/calendar')
+  })
+
+  it('« Réessayer » after a load error clears it and refetches the feed (UI-006)', async () => {
+    const calls = stubApi()
+    const stubbed = fetch
+    let failures = 1
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) =>
+      url.startsWith('/api/assets?batch_date') && failures-- > 0
+        ? new Response(JSON.stringify({ error: 'boom' }), { status: 500 })
+        : stubbed(url, init)))
+    renderPage()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Could not load the batch')
+    fireEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }))
+    await screen.findByText('1 of 3 decided')
+    expect(cards()).toEqual(['Video 1', 'Video 2'])
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(calls.filter((c) => c.url.startsWith('/api/assets?batch_date')).length).toBe(1) // the refetch (the 500 bypassed the stub)
   })
 
   it('an empty day says so', async () => {

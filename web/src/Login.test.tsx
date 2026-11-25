@@ -17,6 +17,17 @@ describe('Login', () => {
     expect(await screen.findByText('studio')).toBeTruthy()
   })
 
+  it('shows a spinner while the session check is slow (UI-005)', async () => {
+    let answer = (_: Response) => {}
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((r) => { answer = r })))
+    render(<Login><p>studio</p></Login>)
+    expect(screen.getByRole('status', { name: 'Chargement' })).toBeTruthy()
+    expect(screen.queryByText('studio')).toBeNull()
+    answer(json(200, { authenticated: false, password_required: false }))
+    expect(await screen.findByText('studio')).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('asks the password, says when it is wrong, then lets the studio through', async () => {
     const fetch = vi.fn()
       .mockResolvedValueOnce(json(200, { authenticated: false, password_required: true }))
