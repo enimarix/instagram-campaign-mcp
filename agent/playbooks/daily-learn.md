@@ -85,12 +85,15 @@ Skip this step in a dry run. `list_learnings` (or the brief's) and compare with 
 - **contradicted**: `update_learning(status="contradicted")`, never on an owner rule.
 - **new**: `add_learning(origin="audience", kind="hypothesis", evidence=[{"media_id": …,
   "metric": …, "value": …, "baseline_median": …, "at_s": …, "event": …}], scope={…tags})`.
-  One Reel is a hypothesis, never a do/dont.
+  One Reel is a hypothesis, never a do/dont. Each item cites the `media_id` of one of
+  our posts (two items on the same Reel count as one Reel); rewording a learning or
+  changing its scope puts it back to `low` until the numbers back it again.
 
 Then the owner's decisions, `brief.json` → `owner_decisions` (listed first: they weigh
 most). Taste learnings follow the same rules as everywhere (origin `taste`, citing
 feedback ids): one → hypothesis; repeated → `do` / `dont`; an explicit "never …" or
-"always …" in the owner's words → `owner_instruction=True`.
+"always …" in the owner's words → `owner_instruction=True`; its `scope` is what the
+commented video is (its template, style, pillar...), or `{}`.
 - `decline_motives`: why the owner turned videos down. A motive that already has a
   learning: add the new feedback id with `update_learning(evidence_feedback_ids_to_add=…)`
   (2 or more motives on different videos: make it a `dont`). A motive with none: add one.
