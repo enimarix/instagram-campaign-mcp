@@ -197,10 +197,11 @@ function AssetPage({ id }: { id: number }) {
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {asset.status === 'ready' && (
               <>
-                <Button variant="primary" onClick={approve}>Approuver</Button>
-                <Button onClick={() => setSheet({ at: video.current?.currentTime ?? 0 })}>Changer</Button>
-                <Button onClick={() => setSheet({})}>Refuser</Button>
-                <Button aria-pressed={asset.verdict === 'liked'} className={verdictButton('success', asset.verdict === 'liked')}
+                {/* sm: the four fit one row in the desktop column (22rem) */}
+                <Button size="sm" variant="primary" onClick={approve}>Approuver</Button>
+                <Button size="sm" onClick={() => setSheet({ at: video.current?.currentTime ?? 0 })}>Changer</Button>
+                <Button size="sm" onClick={() => setSheet({})}>Refuser</Button>
+                <Button size="sm" aria-pressed={asset.verdict === 'liked'} className={verdictButton('success', asset.verdict === 'liked')}
                   onClick={() => decide(() => setVerdict(id, 'liked'), 'Saved for later')}>
                   Garder
                 </Button>
