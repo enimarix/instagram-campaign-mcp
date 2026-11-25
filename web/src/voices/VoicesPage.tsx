@@ -94,7 +94,7 @@ export default function VoicesPage() {
   const noKey = engine && !engine.elevenlabs.configured // not when the status failed to load
   return (
     <>
-      <PageHeader title="Voix">Écoutez les voix du studio. Pour chaque vidéo, l'IA choisit parmi les voix actives celle qui convient à la scène (récit, énergie, voix d'homme ou de femme).</PageHeader>
+      <PageHeader title="Voix">Écoute les voix du studio. Pour chaque vidéo, l'IA choisit parmi les voix actives celle qui convient à la scène (récit, énergie, voix d'homme ou de femme).</PageHeader>
       <EnginePanel onEngine={setEngine} />
       {error ? <p role="alert" className="text-sm text-danger">Voix indisponibles : {error}</p>
         : !voices ? <Skeleton className="h-64" />

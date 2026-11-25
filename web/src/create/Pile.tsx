@@ -75,8 +75,8 @@ function OrderCard({ order: o, catalog, onChanged }: { order: WorkOrder; catalog
         <Chip>{styleName(catalog, o.style)}</Chip>
         <span className="text-muted" title="Dernier changement d'étape">{ago(o.updated_at)}</span>
       </div>
-      {o.instruction && <q className="block break-words whitespace-pre-line">{o.instruction}</q>}
-      {hook && <p className="rounded-control bg-surface-2 p-3 break-words">L'IA : {hook}</p>}
+      {o.instruction && <q className="block whitespace-pre-line wrap-anywhere">{o.instruction}</q>}
+      {hook && <p className="rounded-control bg-surface-2 p-3 wrap-anywhere">L'IA : {hook}</p>}
       {waiting && o.blocked_reason && <p className="text-warn">En attente : {o.blocked_reason}</p>}
       {o.status === 'skipped' && o.skip_reason && <p className="text-danger">{o.skip_reason}</p>}
       {noting ? <NoteForm order={o} onDone={(saved) => { setNoting(false); if (saved) onChanged() }} /> : (

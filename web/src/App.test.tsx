@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, getAccount } from './api/client'
+import { ApiError, errorMessage, getAccount } from './api/client'
 import App from './App'
 
 function stubFetch(status: number, body: unknown) {
@@ -30,6 +30,13 @@ describe('api client', () => {
   it('falls back to http_error when the body has no error code', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('Bad Gateway', { status: 502 })))
     await expect(getAccount()).rejects.toMatchObject({ status: 502, code: 'http_error' })
+  })
+
+  it('says errors in French: the server message, else the status, else no connection', () => {
+    expect(errorMessage(new ApiError(409, 'busy', { error: 'busy', message: 'Déjà en cours.' }))).toBe('Déjà en cours.')
+    expect(errorMessage(new ApiError(502, 'http_error', null))).toBe('Le serveur a répondu 502 (http_error).')
+    expect(errorMessage(new TypeError('Failed to fetch'))).toBe('Pas de connexion au studio : vérifie le réseau et réessaie.')
+    expect(errorMessage(new Error('autre'))).toBe('autre')
   })
 })
 

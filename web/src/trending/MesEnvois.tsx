@@ -67,9 +67,9 @@ function origin(o: WorkOrder) {
 /** The AI's analysis: text (older orders) or {summary, why, timeline} (182: an object
  * rendered as text blanked the whole page). */
 function Analysis({ analysis: a }: { analysis: NonNullable<WorkOrder['analysis']> }) {
-  if (typeof a === 'string') return <p className="rounded-control bg-surface-2 p-3 break-words">Analyse de l'IA : {a}</p>
+  if (typeof a === 'string') return <p className="rounded-control bg-surface-2 p-3 wrap-anywhere">Analyse de l'IA : {a}</p>
   return (
-    <div className="space-y-2 rounded-control bg-surface-2 p-3 break-words">
+    <div className="space-y-2 rounded-control bg-surface-2 p-3 wrap-anywhere">
       <p>Analyse de l'IA : {a.summary || a.why}</p>
       {a.summary && a.why && <p><span className="text-muted">Pourquoi ça marche : </span>{a.why}</p>}
       {!!a.timeline?.length && (
@@ -122,7 +122,7 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
         o.instruction && (
           <div className="rounded-control bg-surface-2 p-3">
             <p className="text-xs text-muted">Ta consigne{o.source === 'dm' && o.mode && ` · ${modeLabel(o.mode)}`}</p>
-            <q className="block break-words">{o.instruction}</q>
+            <q className="block wrap-anywhere">{o.instruction}</q>
           </div>
         )
       )}
