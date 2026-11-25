@@ -68,15 +68,15 @@ describe('AssetPage', () => {
   it('renders the panel, version link, thread and a seekable pinned time', async () => {
     stubApi()
     await show()
-    const panel = screen.getByRole('region', { name: 'About this video' })
-    for (const text of ['HookWait for it', 'Hook typequestion', 'Hypothesisquestions hook better',
-      'TrackremixExplore', 'Pillarmyths', 'Recipefit_vertical', 'Rightslicensed · credit: someone',
-      'Quality checkFailed: too quiet', "Published with Instagram's AI label"])
+    const panel = screen.getByRole('region', { name: 'À propos de cette vidéo' })
+    for (const text of ['AccrocheWait for it', 'Type d’accrochequestion', 'Hypothèsequestions hook better',
+      'PisteremixExploration', 'Piliermyths', 'Recettefit_vertical', 'Droitssous licence · crédit : someone',
+      'Contrôle qualitéÉchoué : too quiet', 'Publiée avec l’étiquette IA d’Instagram'])
       expect(panel.textContent).toContain(text)
-    expect(screen.getByRole('link', { name: 'Older version' }).getAttribute('href')).toBe('/assets/5')
+    expect(screen.getByRole('link', { name: 'Version précédente' }).getAttribute('href')).toBe('/assets/5')
     const video = document.querySelector('video')!
     video.play = vi.fn(async () => {})
-    fireEvent.click(screen.getByRole('button', { name: 'Play from 0:01' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lire depuis 0:01' }))
     expect(video.currentTime).toBe(1.5)
   })
 
@@ -95,15 +95,15 @@ describe('AssetPage', () => {
     const calls = stubApi({ 'POST /api/assets/7/feedback': [200, comment({})] })
     await show()
     document.querySelector('video')!.currentTime = 3.25
-    fireEvent.change(screen.getByLabelText('New comment'), { target: { value: 'too slow here' } })
+    fireEvent.change(screen.getByLabelText('Nouveau commentaire'), { target: { value: 'too slow here' } })
     fireEvent.click(screen.getByRole('button', { name: 'Weak hook' }))
-    fireEvent.click(screen.getByLabelText(/Pin to this moment/))
-    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }))
+    fireEvent.click(screen.getByLabelText(/Épingler à ce moment/))
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter le commentaire' }))
     expect(await screen.findByText('new')).toBeTruthy()
     expect(calls.find((c) => c.method === 'POST')!.body).toEqual({
       text: 'too slow here', reason_codes: ['weak_hook'], video_time_s: 3.25,
     })
-    expect(screen.getByText('Saved.')).toBeTruthy()
+    expect(screen.getByText('Enregistré.')).toBeTruthy()
   })
 
   describe("the Inbox's four decisions (UI-017)", () => {
@@ -127,12 +127,12 @@ describe('AssetPage', () => {
       await show()
       document.querySelector('video')!.currentTime = 4
       fireEvent.click(screen.getByRole('button', { name: 'Changer' }))
-      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      const sheet = await screen.findByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })
       fireEvent.click(within(sheet).getByRole('button', { name: 'Weak hook' }))
-      fireEvent.click(within(sheet).getByRole('button', { name: 'at 0:04' }))
-      fireEvent.click(within(sheet).getByRole('button', { name: 'Send for changes' }))
-      expect(await screen.findByText('Sent for changes')).toBeTruthy()
-      expect(screen.getByText('revision requested')).toBeTruthy()
+      fireEvent.click(within(sheet).getByRole('button', { name: 'à 0:04' }))
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Renvoyer pour changements' }))
+      expect(await screen.findByText('Renvoyée pour changements')).toBeTruthy()
+      expect(screen.getByText('renvoyée pour changements')).toBeTruthy()
       expect(sent(calls)).toEqual([['POST', '/api/assets/7/feedback',
         { reason_codes: ['weak_hook'], video_time_s: 4, wants_changes: true }]])
     })
@@ -140,11 +140,11 @@ describe('AssetPage', () => {
     it('Changer not sent back says why, with no toast', async () => {
       stubApi({ 'POST /api/assets/7/feedback': [200, comment({ moved: false, reason: 'already approved' })] })
       await press('Changer')
-      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
-      fireEvent.change(within(sheet).getByRole('textbox', { name: 'What to change' }), { target: { value: 'redo' } })
-      fireEvent.click(within(sheet).getByRole('button', { name: 'Send for changes' }))
-      expect((await screen.findByRole('alert')).textContent).toBe('Saved, but not sent back: already approved')
-      expect(screen.queryByText('Sent for changes')).toBeNull()
+      const sheet = await screen.findByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })
+      fireEvent.change(within(sheet).getByRole('textbox', { name: 'Ce qui doit changer' }), { target: { value: 'redo' } })
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Renvoyer pour changements' }))
+      expect((await screen.findByRole('alert')).textContent).toBe('Enregistré, mais pas renvoyé : already approved')
+      expect(screen.queryByText('Renvoyée pour changements')).toBeNull()
     })
 
     it('« Même vidéo, autre style » restyles and shows the archived video', async () => {
@@ -154,7 +154,7 @@ describe('AssetPage', () => {
         'POST /api/assets/7/restyle': [200, { id: 5 }],
       })
       await press('Changer')
-      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      const sheet = await screen.findByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })
       const details = within(sheet).getByText('Même vidéo, autre style').closest('details')!
       details.open = true
       fireEvent(details, new Event('toggle'))
@@ -167,37 +167,37 @@ describe('AssetPage', () => {
         : base(url, init))
       fireEvent.click(within(sheet).getByRole('button', { name: 'Refaire dans ce style' }))
       expect(await screen.findByText(/la même vidéo dans un autre style/)).toBeTruthy()
-      expect(await screen.findByText('archived')).toBeTruthy()
+      expect(await screen.findByText('archivée')).toBeTruthy()
       expect(sent(calls)).toEqual([['POST', '/api/assets/7/restyle', { style: 'voxel', reasons: [] }]])
     })
 
     it('Refuser needs a motive, then declines', async () => {
       const calls = stubApi({ 'POST /api/assets/7/decline': [200, { ...ASSET, status: 'archived', verdict: 'disliked' }] })
       await press('Refuser')
-      const sheet = await screen.findByRole('dialog', { name: 'Why decline?' })
-      const go = within(sheet).getByRole('button', { name: 'Decline' })
+      const sheet = await screen.findByRole('dialog', { name: 'Pourquoi refuser ?' })
+      const go = within(sheet).getByRole('button', { name: 'Refuser' })
       expect(go).toHaveProperty('disabled', true)
-      expect(within(sheet).queryByRole('button', { name: /^at / })).toBeNull() // no pin
-      fireEvent.change(within(sheet).getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: 'off brand' } })
+      expect(within(sheet).queryByRole('button', { name: /^à / })).toBeNull() // no pin
+      fireEvent.change(within(sheet).getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: 'off brand' } })
       fireEvent.click(go)
-      expect(await screen.findByText('Declined')).toBeTruthy()
-      expect(screen.getByText('archived')).toBeTruthy()
-      expect(screen.getByText('disliked')).toBeTruthy()
+      expect(await screen.findByText('Refusée')).toBeTruthy()
+      expect(screen.getByText('archivée')).toBeTruthy()
+      expect(screen.getByText('refusée')).toBeTruthy()
       expect(sent(calls)).toEqual([['POST', '/api/assets/7/decline', { reason_codes: [], text: 'off brand' }]])
     })
 
     it('Garder saves it for later and shows pressed', async () => {
       const calls = stubApi({ 'POST /api/assets/7/verdict': [200, { ...ASSET, verdict: 'liked' }] })
       await press('Garder')
-      expect(await screen.findByText('Saved for later')).toBeTruthy()
+      expect(await screen.findByText('Gardée pour plus tard')).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Garder' }).getAttribute('aria-pressed')).toBe('true')
       expect(sent(calls)).toEqual([['POST', '/api/assets/7/verdict', { verdict: 'liked' }]])
     })
 
-    it("approved: only Programmer and « Retirer l'approbation »", async () => {
+    it("approved: only Programmer and « Retirer l’approbation »", async () => {
       stubApi({ 'GET /api/assets/7': [200, { ...ASSET, status: 'approved' }] })
       await show()
-      for (const name of ['Programmer', "Retirer l'approbation"]) expect(screen.getByRole('button', { name })).toBeTruthy()
+      for (const name of ['Programmer', "Retirer l’approbation"]) expect(screen.getByRole('button', { name })).toBeTruthy()
       for (const name of ['Approuver', 'Changer', 'Refuser', 'Garder']) expect(screen.queryByRole('button', { name })).toBeNull()
     })
   })
@@ -205,9 +205,9 @@ describe('AssetPage', () => {
   it('shows the server error when a caption is refused', async () => {
     const calls = stubApi({ 'PATCH /api/assets/7': [422, { error: 'invalid', message: 'caption has 31 hashtags' }] })
     await show()
-    fireEvent.change(screen.getByLabelText('Caption'), { target: { value: '#a #b' } })
+    fireEvent.change(screen.getByLabelText('Légende'), { target: { value: '#a #b' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
-    expect(await screen.findByText('Not saved: caption has 31 hashtags')).toBeTruthy()
+    expect(await screen.findByText('Pas enregistré : caption has 31 hashtags')).toBeTruthy()
     expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ caption: '#a #b' })
   })
 
@@ -215,7 +215,7 @@ describe('AssetPage', () => {
     const APPROVED = { ...ASSET, caption: 'NEW', status: 'approved' }
     const typeAndApprove = async (text: string) => {
       await show()
-      fireEvent.change(screen.getByLabelText('Caption'), { target: { value: text } })
+      fireEvent.change(screen.getByLabelText('Légende'), { target: { value: text } })
       fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
     }
     const sent = (calls: Call[]) => calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.url, c.body])
@@ -267,49 +267,49 @@ describe('AssetPage', () => {
     it('shows the reaction card: the piece, the credit and the rights', async () => {
       routes()
       await show()
-      const card = await screen.findByRole('region', { name: 'Reaction' })
-      for (const text of ['Piece #4 of reel #1, 1:00–1:20', 'Clip used0:10–0:30', '@creator · commentary'])
+      const card = await screen.findByRole('region', { name: 'Réaction' })
+      for (const text of ['Morceau #4 du Reel #1, 1:00–1:20', 'Extrait utilisé0:10–0:30', '@creator · commentaire'])
         expect(card.textContent).toContain(text)
       expect(screen.getByRole('link', { name: '@creator' }).getAttribute('href')).toBe(REACTION.source.url)
-      expect(screen.getByLabelText('Reaction piece').getAttribute('src')).toBe(REACTION.piece.url)
+      expect(screen.getByLabelText('Morceau de réaction').getAttribute('src')).toBe(REACTION.piece.url)
     })
 
     it('uses the next piece after a confirm and links the new version', async () => {
       const calls = routes({ 'POST /api/assets/7/next-piece': [200, { asset: child }] })
       vi.stubGlobal('confirm', vi.fn(() => true))
       await show()
-      fireEvent.click(await screen.findByRole('button', { name: 'Use the next reaction piece' }))
-      expect(await screen.findByRole('link', { name: 'Newer version #9 (rendering)' })).toBeTruthy()
+      fireEvent.click(await screen.findByRole('button', { name: 'Prendre le morceau de réaction suivant' }))
+      expect(await screen.findByRole('link', { name: 'Nouvelle version #9 (en rendu)' })).toBeTruthy()
       expect(calls.filter((c) => c.url === '/api/assets/7/next-piece')).toHaveLength(1)
-      expect(screen.getByText(/New version: #9/)).toBeTruthy()
+      expect(screen.getByText(/Nouvelle version : #9/)).toBeTruthy()
     })
 
     it('does nothing when the confirm is cancelled', async () => {
       const calls = routes()
       vi.stubGlobal('confirm', vi.fn(() => false))
       await show()
-      fireEvent.click(await screen.findByRole('button', { name: 'Use the next reaction piece' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Prendre le morceau de réaction suivant' }))
       expect(calls.some((c) => c.method === 'POST')).toBe(false)
     })
 
     it('saves the corrected clip speech and re-renders the captions', async () => {
       const calls = routes({ 'POST /api/assets/7/transcript': [200, { asset: child }] })
       await show()
-      const speech = await screen.findByRole('region', { name: 'Clip speech' })
+      const speech = await screen.findByRole('region', { name: 'Paroles de l’extrait' })
       fireEvent.change(screen.getByDisplayValue('insdie'), { target: { value: 'inside' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Save and re-render captions' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer et refaire les sous-titres' }))
       await waitFor(() => expect(calls.find((c) => c.url === '/api/assets/7/transcript')?.body)
         .toEqual({ texts: ['across the start', 'inside'] }))
-      expect(await screen.findByRole('link', { name: 'Newer version #9 (rendering)' })).toBeTruthy()
+      expect(await screen.findByRole('link', { name: 'Nouvelle version #9 (en rendu)' })).toBeTruthy()
       expect(speech.textContent).toContain('0:12–0:14')
     })
 
     it('shows the server refusal of a transcript', async () => {
       routes({ 'POST /api/assets/7/transcript': [422, { error: 'invalid', message: 'line 2 is empty' }] })
       await show()
-      await screen.findByRole('region', { name: 'Clip speech' })
-      fireEvent.click(screen.getByRole('button', { name: 'Save and re-render captions' }))
-      expect(await screen.findByText('Not done: line 2 is empty')).toBeTruthy()
+      await screen.findByRole('region', { name: 'Paroles de l’extrait' })
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer et refaire les sous-titres' }))
+      expect(await screen.findByText('Pas fait : line 2 is empty')).toBeTruthy()
     })
 
     it('approving a commentary video asks for the rights confirmation', async () => {
@@ -321,8 +321,8 @@ describe('AssetPage', () => {
       })
       await show()
       fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
-      const box = await screen.findByRole('checkbox', { name: /my own take is a substantial part/ })
-      const accept = screen.getByRole('button', { name: 'Accept' })
+      const box = await screen.findByRole('checkbox', { name: /mon avis en est une vraie part/ })
+      const accept = screen.getByRole('button', { name: 'Accepter' })
       expect(accept).toHaveProperty('disabled', true)
       fireEvent.click(box)
       fireEvent.click(accept)

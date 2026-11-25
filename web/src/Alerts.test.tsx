@@ -49,33 +49,33 @@ describe('Alerts', () => {
   it('shows the count on the bell and lists the alerts in a sheet', async () => {
     stubApi([FAILED, WORKER])
     show()
-    const bell = await screen.findByRole('button', { name: 'Alerts: 2 need attention' })
+    const bell = await screen.findByRole('button', { name: 'Alertes : 2 à regarder' })
     expect(bell.textContent).toBe('2')
     fireEvent.click(bell)
-    const sheet = screen.getByRole('dialog', { name: 'Alerts' })
+    const sheet = screen.getByRole('dialog', { name: 'Alertes' })
     const items = within(sheet).getAllByRole('listitem')
     expect(items.map((li) => within(li).getByText(/^(A post|The publishing)/).textContent))
       .toEqual([FAILED.title, WORKER.title])
-    expect(within(items[0]).getByText('Problem')).toBeTruthy()
+    expect(within(items[0]).getByText('Problème')).toBeTruthy()
     expect(within(items[0]).getByText('Rate limited')).toBeTruthy()
-    expect(within(items[0]).getByRole('link', { name: `Open: ${FAILED.title}` }).getAttribute('href')).toBe('/assets/9')
+    expect(within(items[0]).getByRole('link', { name: `Ouvrir : ${FAILED.title}` }).getAttribute('href')).toBe('/assets/9')
   })
 
   it('dismisses an alert', async () => {
     const calls = stubApi([FAILED])
     show()
-    fireEvent.click(await screen.findByRole('button', { name: 'Alerts: 1 needs attention' }))
-    fireEvent.click(screen.getByRole('button', { name: `Dismiss: ${FAILED.title}` }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Alertes : 1 à regarder' }))
+    fireEvent.click(screen.getByRole('button', { name: `Masquer : ${FAILED.title}` }))
     expect(calls).toContain('POST /api/alerts/publish_failed%3A3/dismiss')
-    expect(screen.getByText('All good')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Alerts' }).textContent).toBe('')
+    expect(screen.getByText('Tout va bien')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Alertes' }).textContent).toBe('')
   })
 
   it('says all good when nothing needs attention', async () => {
     stubApi([])
     show()
-    fireEvent.click(await screen.findByRole('button', { name: 'Alerts' }))
-    expect(within(screen.getByRole('dialog')).getByText('All good')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Alertes' }))
+    expect(within(screen.getByRole('dialog')).getByText('Tout va bien')).toBeTruthy()
   })
 
   it('polls every minute only while the page is visible', async () => {

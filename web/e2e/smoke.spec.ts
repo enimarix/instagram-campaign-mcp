@@ -7,8 +7,8 @@ import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { expect, test, type Locator } from '@playwright/test'
 
-// The owner's main path, end to end (step 099): seed → Inbox feed (save for later, change,
-// approve) → the slot in the Calendar → the publish run against a local Graph API stub →
+// The owner's main path, end to end (step 099): seed → Inbox feed (Garder, Changer,
+// Approuver) → the slot in the Calendar → the publish run against a local Graph API stub →
 // published. No request leaves this machine: the studio's Graph base URL is the stub, and the
 // access token is a fake one.
 
@@ -94,29 +94,29 @@ test.afterAll(async () => {
 
 test('decide in the feed, see the slot, publish against the stub', async ({ page }) => {
   const idOf = async (card: Locator) =>
-    Number((await card.getAttribute('aria-label'))?.replace('Video ', ''))
+    Number((await card.getAttribute('aria-label'))?.replace('Vidéo ', ''))
 
   await page.goto(`${base}/inbox`)
-  const cards = page.getByLabel('Review feed').getByRole('article')
+  const cards = page.getByLabel('Vidéos à décider').getByRole('article')
   await expect(cards).toHaveCount(2)
 
-  // 1. Save for later: the video leaves Today for the Saved tab.
+  // 1. Garder: the video leaves « Aujourd’hui » for the « Gardées » tab.
   const saved = await idOf(cards.first())
-  await cards.first().getByRole('button', { name: 'Save for later' }).click()
-  await expect(page.getByRole('article', { name: `Video ${saved}` })).toHaveCount(0)
+  await cards.first().getByRole('button', { name: 'Garder' }).click()
+  await expect(page.getByRole('article', { name: `Vidéo ${saved}` })).toHaveCount(0)
 
-  // 2. Change, with a reason.
+  // 2. Changer, with a reason.
   const changed = await idOf(cards.first())
-  await cards.first().getByRole('button', { name: 'Change', exact: true }).click()
-  const sheet = page.getByRole('dialog', { name: 'What should change?' })
-  await sheet.getByRole('textbox', { name: 'What to change' }).fill('[e2e] a shorter hook')
-  await sheet.getByRole('button', { name: 'Send for changes' }).click()
-  await expect(page.getByText('All done')).toBeVisible()
+  await cards.first().getByRole('button', { name: 'Changer', exact: true }).click()
+  const sheet = page.getByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })
+  await sheet.getByRole('textbox', { name: 'Ce qui doit changer' }).fill('[e2e] a shorter hook')
+  await sheet.getByRole('button', { name: 'Renvoyer pour changements' }).click()
+  await expect(page.getByText('Tout est décidé')).toBeVisible()
 
-  // 3. Approve the saved video from the Saved tab (switching tabs commits the two decisions).
-  await page.getByRole('tab', { name: /^Saved/ }).click()
+  // 3. Approve the saved video from the « Gardées » tab (switching tabs commits the two decisions).
+  await page.getByRole('tab', { name: /^Gardées/ }).click()
   const queued = page.waitForResponse((r) => r.url().endsWith(`/api/assets/${saved}/approve-and-queue`))
-  await page.getByRole('article', { name: `Video ${saved}` }).getByRole('button', { name: 'Approve' }).click()
+  await page.getByRole('article', { name: `Vidéo ${saved}` }).getByRole('button', { name: 'Approuver' }).click()
   // The feed commits after its 5 s undo window, or at once when the page is hidden: hide it.
   await page.evaluate("window.dispatchEvent(new Event('pagehide'))")
   const response = await queued
@@ -130,7 +130,7 @@ test('decide in the feed, see the slot, publish against the stub', async ({ page
   expect((await page.request.post(`${base}/api/posts/${post.id}/reschedule`, { data: { publish_at: due } })).ok()).toBe(true)
 
   // 4. The slot is in the Calendar.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Calendar' }).click()
+  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Calendrier' }).click()
   const slot = page.getByRole('listitem', { name: `Post ${post.id}` })
   await expect(slot).toContainText('pending')
   await expect(slot.getByRole('link', { name: `Video ${saved}`, exact: true })).toBeVisible()

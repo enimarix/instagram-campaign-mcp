@@ -52,10 +52,10 @@ describe('ScheduleSheet', () => {
   it('shows the proposed local time and accept posts it', async () => {
     const calls = stubApi()
     const onScheduled = sheet()
-    expect((await screen.findByText('2030-11-19 11:00')).tagName).toBe('STRONG')
-    expect(screen.getByText("Published with Instagram's AI label")).toBeTruthy()
+    expect((await screen.findByText('mar. 19 nov. 11:00')).tagName).toBe('STRONG')
+    expect(screen.getByText('Publiée avec l’étiquette IA d’Instagram')).toBeTruthy()
     expect(screen.queryByRole('checkbox')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accepter' }))
     await waitFor(() => expect(onScheduled).toHaveBeenCalledWith({ ...ASSET, status: 'scheduled' }))
     expect(scheduled(calls)).toEqual([{ method: 'POST', url: '/api/assets/3/schedule',
       body: { publish_at: SLOT.publish_at, confirmed: false } }])
@@ -64,9 +64,9 @@ describe('ScheduleSheet', () => {
   it('an eligible (explore) video can be scheduled as a trial Reel', async () => {
     const calls = stubApi({ 'GET /api/assets/3/proposed-slot': [200, { ...SLOT, needs_confirmation: false, ai_label: false, trial_eligible: true }] })
     const onScheduled = sheet()
-    const box = await screen.findByRole('checkbox', { name: 'Trial Reel (non-followers first)' })
+    const box = await screen.findByRole('checkbox', { name: 'Reel d’essai (les non-abonnés d’abord)' })
     fireEvent.click(box)
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accepter' }))
     await waitFor(() => expect(onScheduled).toHaveBeenCalled())
     expect(scheduled(calls)[0].body).toEqual({ publish_at: SLOT.publish_at, confirmed: false, trial: 'SS_PERFORMANCE' })
   })
@@ -74,13 +74,13 @@ describe('ScheduleSheet', () => {
   it('picks another time and sends it as ISO with an offset', async () => {
     const calls = stubApi()
     const onScheduled = sheet()
-    await screen.findByText('2030-11-19 11:00')
-    fireEvent.click(screen.getByRole('button', { name: 'Pick another time' }))
-    const input = screen.getByLabelText('Another time') as HTMLInputElement
+    await screen.findByText('mar. 19 nov. 11:00')
+    fireEvent.click(screen.getByRole('button', { name: 'Choisir une autre heure' }))
+    const input = screen.getByLabelText('Une autre heure') as HTMLInputElement
     expect(input.type).toBe('datetime-local')
     expect(new Date(input.value).toISOString()).toBe('2030-11-19T10:00:00.000Z') // prefilled
     fireEvent.change(input, { target: { value: '2026-11-20T18:30' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Schedule at this time' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Programmer à cette heure' }))
     await waitFor(() => expect(onScheduled).toHaveBeenCalled())
     expect(scheduled(calls)[0].body).toEqual({
       publish_at: new Date('2026-11-20T18:30').toISOString(), confirmed: false })
@@ -89,11 +89,11 @@ describe('ScheduleSheet', () => {
   it("shows the server's refusal and stays open", async () => {
     stubApi({ 'POST /api/assets/3/schedule': [409, { error: 'qc', message: 'asset 3 has not passed QC' }] })
     const onScheduled = sheet()
-    await screen.findByText('2030-11-19 11:00')
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    await screen.findByText('mar. 19 nov. 11:00')
+    fireEvent.click(screen.getByRole('button', { name: 'Accepter' }))
     expect((await screen.findByRole('alert')).textContent).toBe('asset 3 has not passed QC')
     expect(onScheduled).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Accept' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Accepter' })).toHaveProperty('disabled', false)
   })
 
   it('needs the confirmation for a commentary clip', async () => {
@@ -102,7 +102,7 @@ describe('ScheduleSheet', () => {
     sheet()
     const box = await screen.findByRole('checkbox')
     expect(screen.queryByText("Published with Instagram's AI label")).toBeNull()
-    const accept = screen.getByRole('button', { name: 'Accept' })
+    const accept = screen.getByRole('button', { name: 'Accepter' })
     expect(accept).toHaveProperty('disabled', true)
     fireEvent.click(box)
     expect(accept).toHaveProperty('disabled', false)
@@ -120,8 +120,8 @@ describe('ScheduledSlot', () => {
     })
     const onUnscheduled = vi.fn()
     render(<ScheduledSlot assetId={3} onUnscheduled={onUnscheduled} />)
-    expect(await screen.findByText('2030-11-19 11:00')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Unschedule' }))
+    expect(await screen.findByText('mar. 19 nov. 11:00')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Déprogrammer' }))
     await waitFor(() => expect(onUnscheduled).toHaveBeenCalledWith(ASSET))
     expect(scheduled(calls).map((c) => c.url)).toEqual(['/api/assets/3/unschedule'])
   })
