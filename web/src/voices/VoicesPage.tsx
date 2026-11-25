@@ -14,10 +14,10 @@ function VoiceCard({ voice: v, lastOn, relay, onToggle, onRemove }: {
 }) {
   const eleven = v.engine === 'elevenlabs'
   return (
-    <Card as="li" className={`space-y-3 ${v.enabled ? '' : 'opacity-70'}`}>
+    <Card as="li" className={`space-y-3 ${v.enabled ? '' : 'border-dashed'}`}>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold">{v.label}</h2>
+          <h2 className={`font-semibold ${v.enabled ? '' : 'text-muted'}`}>{v.label}</h2>
           <p className="mt-1 flex flex-wrap gap-1">
             <Chip tone={eleven ? 'info' : 'neutral'}>{eleven ? 'ElevenLabs' : 'Locale'}</Chip>
             {v.default && <Chip tone="accent" title="Utilisée seulement si aucune voix ne convient à la vidéo">Secours</Chip>}
