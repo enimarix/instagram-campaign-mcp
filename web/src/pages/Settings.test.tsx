@@ -116,6 +116,20 @@ describe('Settings', () => {
     expect(scroll.mock.contexts[0]).toBe(document.getElementById('ads'))
   })
 
+  it('follows the section while the ones above it load, until the owner scrolls', () => {
+    stubApi()
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    let onResize = () => {}
+    const disconnect = vi.fn()
+    vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { onResize = cb } observe() {} disconnect = disconnect })
+    render(<MemoryRouter initialEntries={['/settings#ads']}><Settings /></MemoryRouter>)
+    onResize()
+    expect(scroll).toHaveBeenCalledTimes(2)
+    fireEvent.wheel(window)
+    expect(disconnect).toHaveBeenCalled()
+  })
+
   it('says so when no agent run is scheduled', async () => {
     stubApi({ 'GET /api/agent/schedule': [200, []] })
     render(<MemoryRouter><Settings /></MemoryRouter>)

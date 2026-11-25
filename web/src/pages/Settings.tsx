@@ -135,9 +135,25 @@ export default function Settings() {
   const [toggleError, setToggleError] = useState<string | null>(null)
   const { hash } = useLocation()
 
-  // React Router does not jump to a #section; every section's root is there from the first render.
+  // React Router does not jump to a #section. Every section's root is there from the first render,
+  // but the ones above it grow as their data comes in: follow it until the owner scrolls (or 5 s).
   useEffect(() => {
-    if (hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView?.({ block: 'start' })
+    const el = hash && document.getElementById(decodeURIComponent(hash.slice(1)))
+    if (!el) return
+    const jump = () => el.scrollIntoView?.({ block: 'start' })
+    jump()
+    if (!window.ResizeObserver) return
+    const ro = new ResizeObserver(jump)
+    for (const s of el.parentElement!.children) ro.observe(s)
+    const stop = () => ro.disconnect()
+    const INPUT = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const
+    for (const e of INPUT) window.addEventListener(e, stop, { once: true, passive: true })
+    const timer = setTimeout(stop, 5000)
+    return () => {
+      stop()
+      clearTimeout(timer)
+      for (const e of INPUT) window.removeEventListener(e, stop)
+    }
   }, [hash])
 
   const setupMode = health.data?.instagram_configured === false || account.data?.configured === false
