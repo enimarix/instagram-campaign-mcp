@@ -1092,3 +1092,16 @@ The brief points the film there with the same request and answer as the local se
 its `voices.json` and may write audio tags. The key stays in the runner process.
 Reason: owner 2026-11-24 (« it should be generating the same video, only with the 11 Labs
 voice »).
+
+## 2026-11-25: The Voix page casts, ElevenLabs is retried, one engine per video (audit)
+Changes 204's "the other engine takes over on any failure". With ElevenLabs first, the
+cards on are the voices the AI, the films and the sitcom cast pick from, and a local voice
+with no card of its own (the default « souriante ») speaks in a card of its gender: the
+local voices are relays only. ElevenLabs' passing faults (no answer, 429, 5xx) are retried
+twice with a short backoff; a bad text (400 / 422) fails that line for a rewrite, not the
+engine. An engine failing before any line spoke hands over as before; one failing after
+lines already spoke stops the video as a machine error (it is voiced again later in one
+engine), never a switch of voice mid-video. A card's relay must be of its gender. Films
+record their takes, so their fallback shows on the card and rings the bell like a video's.
+Reason: owner 2026-11-25 (« voices follow what is checked and preferred from the UI »);
+video 76 / 78 spoke VoxCPM, and one 429 could turn ElevenLabs off for a whole video.
