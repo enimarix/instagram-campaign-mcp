@@ -5,9 +5,12 @@ A post is judged against the account's own recent posts of the same kind
 (feed posts vs Reels vs Stories), never against generic industry numbers:
 a small new account and a big one have very different "normal".
 
-For each signal we compute a per-reach rate (shares/reach, saves/reach, ...),
-divide by the median rate of the baseline posts, and take a weighted average.
-That gives the engagement index: 1.0 = typical post, 2.0 = twice as engaging.
+For each count signal (shares, saves, ...) we compare the post's events with the events
+expected at the baseline posts' pooled rate (their events / their reach) for this post's
+reach, both padded with PRIOR_EVENTS pseudo-events: (events + 3) / (expected + 3). On a
+small account one share or save is noise, not a 5x signal: a ratio only moves far from 1
+with several events. The weighted average of the ratios is the engagement index:
+1.0 = typical post, 2.0 = twice as engaging.
 Reach is indexed the same way. Saves, shares and follows weigh most because
 they predict paid performance better than likes.
 
@@ -44,7 +47,8 @@ DEFAULT_WEIGHTS: Dict[str, float] = {
 ABSOLUTE_SIGNALS = {"ig_reels_avg_watch_time"}
 WATCH_TIME, WATCH_RATIO = "ig_reels_avg_watch_time", "watch_ratio"
 RATIO_CAP = 5.0          # one freak metric can't carry a post
-SMOOTHING = 0.0005       # avoids divide-by-zero when the baseline rate is ~0
+PRIOR_EVENTS = 3.0       # pseudo-events at the baseline rate: 1 share on reach 400 ~ x1.3
+MAX_AGE_GAP = 2.0        # a baseline post read at over 2x (or under 1/2) the age is left out
 STORY_MIN_AGE_HOURS = 20.0
 STORY_LIFETIME = timedelta(hours=24)
 # near_age(media_ids, age_hours, min_age_hours) -> {media_id: snapshot}: per media, the
@@ -173,11 +177,16 @@ def baseline_for(
     others = [b for b in matured.get(group_of(snap), [])
               if b["media_id"] != snap["media_id"]][: cfg.baseline_window]
     age = snap.get("age_hours")
-    if near_age is not None and others and _is_matured(snap, cfg):
+    if not _is_matured(snap, cfg):  # unmatured posts only count their baseline
+        return [_at_age(b, history or {}, age, cfg) for b in others]
+    if near_age is not None and others:
         found = near_age([b["media_id"] for b in others], age, _min_age(group_of(snap), cfg))
-        return [found.get(b["media_id"], b) for b in others]
-    # unmatured posts only count their baseline: no query needed
-    return [_at_age(b, history or {}, age, cfg) for b in others]
+        picked = [found.get(b["media_id"], b) for b in others]
+    else:
+        picked = [_at_age(b, history or {}, age, cfg) for b in others]
+    # a 30-day-old post against 2-day-old baselines measures age, not quality
+    return [b for b in picked if b.get("age_hours") is None or age <= 0
+            or 1 / MAX_AGE_GAP <= b["age_hours"] / age <= MAX_AGE_GAP]
 
 
 def confidence(n: int) -> str:
@@ -254,18 +263,24 @@ def score_posts(
             value = _signal_value(metrics, signal, durations.get(snap["media_id"]))
             if value is None:
                 continue
-            base_vals = [  # watch ratio: only baseline posts with a known length
-                v for v in (_signal_value(b.get("metrics") or {}, signal,
-                                          durations.get(b["media_id"])) for b in baseline)
-                if v is not None
-            ]
-            if not base_vals:
-                continue
-            smooth = 0.0 if signal in ABSOLUTE_SIGNALS else SMOOTHING
-            base = median(base_vals)
-            if base + smooth <= 0:
-                continue
-            ratio = min((value + smooth) / (base + smooth), RATIO_CAP)
+            if signal in ABSOLUTE_SIGNALS or signal == WATCH_RATIO:
+                base_vals = [  # watch ratio: only baseline posts with a known length
+                    v for v in (_signal_value(b.get("metrics") or {}, signal,
+                                              durations.get(b["media_id"])) for b in baseline)
+                    if v is not None
+                ]
+                if not base_vals or median(base_vals) <= 0:
+                    continue
+                ratio = value / median(base_vals)
+            else:  # counts: observed vs expected events, both padded (module docstring)
+                pairs = [(_num(m[signal]), _num(m.get("reach")))
+                         for m in (b.get("metrics") or {} for b in baseline)
+                         if m.get(signal) is not None and _num(m.get("reach")) > 0]
+                if not pairs:
+                    continue
+                rate = sum(c for c, _ in pairs) / sum(r for _, r in pairs)
+                ratio = (_num(metrics[signal]) + PRIOR_EVENTS) / (reach * rate + PRIOR_EVENTS)
+            ratio = min(ratio, RATIO_CAP)
             ratios[signal] = round(ratio, 2)
             weighted += w * ratio
             total_w += w
