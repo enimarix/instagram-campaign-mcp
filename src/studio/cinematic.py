@@ -221,7 +221,7 @@ def find_blender() -> str:
 
 
 def _run(cmd: Sequence[Any], what: str, timeout_s: float) -> None:
-    try:  # low priority (166); guard.Stopped when the resource guard killed it
+    try:  # low priority (166)
         done = guard.run([str(c) for c in cmd], capture_output=True, text=True,
                          encoding="utf-8", errors="replace", timeout=timeout_s,
                          env={**os.environ, "CINEMATIC_TOOLS": str(TOOLS)})

@@ -12,29 +12,21 @@ Step 145's GPU lock (gpu_lock.py) keeps our own heavy jobs one at a time; this a
   once it has it, 175: a waiting job never holds the lock). The job waits (and logs
   "waiting for RAM / VRAM / a game") while free RAM < GUARD_MIN_FREE_RAM_GB (8) and, when
   nvidia-smi answers, while free VRAM < the job's need (VRAM_GB) or the card is busy above
-  GAME_GPU_PCT (a game, a Blender started by hand: nothing of ours runs before admission), or
-  before GUARD_NOT_BEFORE (the voice service's copy of the studio's startup grace).
-- Watchdog (studio side, the worker of `up`): every EVERY_S, free RAM < 3 GB (or the heat
-  below) suspends our heavy children; RAM > 6 GB (and cool) resumes them; RAM still short
-  after 3 min, the newest is killed (its render fails with the reason and is retried; the
-  voice model worker is just unloaded). Only processes under this one, named like a renderer
-  or the voice model worker (its pid from the voice service's /health), and (171) the
-  processes under the GPU lock's holder are ever touched.
+  GAME_GPU_PCT (a game, a Blender started by hand: nothing of ours runs before admission).
 
 Heat budget (step 171, docs/DECISIONS.md 2026-11-21): the laptop powered itself off under ONE
 long Blender render (16 CPU threads + the GPU at its 130 W limit, ~220 W on a 230 W adapter).
+Every heavy child runs on GUARD_CPU_SHARE of the logical CPUs, CPU 1 onward (pin(), inherited
+by its own children; CPU 0 takes most interrupts and driver DPCs, 177: left to Windows) and
+the tools' thread counts match heavy_cpus() (Blender -t, ffmpeg -threads, Remotion
+--concurrency, the voice's torch and Whisper).
 
-- Less heat per job: every heavy child runs on GUARD_CPU_SHARE of the logical CPUs, CPU 1
-  onward (pin(), inherited by its own children; CPU 0 takes most interrupts and driver DPCs,
-  177: left to Windows) and the tools' thread counts match heavy_cpus()
-  (Blender -t, ffmpeg -threads, Remotion --concurrency, the voice's torch and Whisper).
-- The watchdog also guards whoever holds the GPU lock (a dev script, gpu-run.py) and cools:
-  GPU >= GUARD_SUSPEND_TEMP_C (83) until <= GUARD_RESUME_TEMP_C (74); 60 s at >= 95 % of the
-  GPU power limit, or CPU throttling (% Performance Limit < 80) -> a COOL_S pause; after
-  GUARD_MAX_BUSY_MIN of continuous heavy work, the same pause (duty cycle). It writes
-  data/logs/guard.log (GPU heat, power, used VRAM, graphics clock, CPU, RAM, the
-  lock), synced line by line so it survives a power cut. Heat never kills a job (paused, it
-  cools down); only RAM still short after 3 min does. run() timeouts skip paused time.
+2026-11-25 (docs/DECISIONS.md): the watchdog that paused and killed running jobs (low RAM,
+GPU heat and power, CPU throttling, the 15-min duty cycle) and the startup grace are gone:
+the GPU clock cap (1500 MHz) keeps the card cool, and the RAM kill stopped a voice model
+mid-load. The worker of `up` still writes data/logs/guard.log (log_loop: GPU heat, power,
+VRAM, graphics clock, CPU limit, RAM, the lock holder) while the GPU lock is held, synced
+line by line so it survives a power cut.
 
 Stdlib only above the "studio side" line: the voice service (its own venv) loads this file by
 path through gpu_lock.py. GUARD_NVIDIA_SMI overrides the nvidia-smi command (tests: none).
@@ -48,13 +40,11 @@ import csv
 import io
 import logging
 import os
-import re
-import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence
 
 log = logging.getLogger("guard")
 
@@ -168,46 +158,20 @@ def lower_self() -> None:
         pin()
 
 
-class Stopped(RuntimeError):
-    """The watchdog killed this child: the machine was choking (the job is retried later)."""
-
-
-KILLED: Dict[int, str] = {}  # run() child pid -> why the watchdog killed it (or its child)
-_running: Set[int] = set()  # run() children alive in this process
-_paused: List[Any] = [0.0, None]  # [s the watchdog kept jobs paused, monotonic start of a pause]
-
-
-def paused_s() -> float:
-    """Seconds this process's watchdog has kept heavy jobs paused, so far."""
-    total, since = _paused
-    return total + (time.monotonic() - since if since is not None else 0.0)
-
-
 def run(cmd: Sequence[Any], *, input: Any = None, timeout: Optional[float] = None,
         capture_output: bool = False, **kw: Any) -> subprocess.CompletedProcess:
-    """subprocess.run at low priority on heavy_cpus() (same arguments, TimeoutExpired kills
-    the child; time the watchdog kept it paused does not count). Raises Stopped when the
-    watchdog killed the child or one of its children."""
+    """subprocess.run at low priority on heavy_cpus() (same arguments; TimeoutExpired kills
+    the child)."""
     if capture_output:
         kw["stdout"] = kw["stderr"] = subprocess.PIPE
     if input is not None:
         kw["stdin"] = subprocess.PIPE
     with subprocess.Popen(cmd, **low_priority(kw)) as p:
-        _running.add(p.pid)
-        start, paused0, left = time.monotonic(), paused_s(), timeout
         try:
             if sys.platform == "win32":
                 with contextlib.suppress(OSError):  # it may have exited already
                     pin(p.pid)
-            while True:
-                try:
-                    out, err = p.communicate(input, timeout=left)
-                    break
-                except subprocess.TimeoutExpired:  # paused meanwhile: it gets that time back
-                    left = start + timeout + paused_s() - paused0 - time.monotonic()
-                    input = None  # sent already
-                    if left <= 0:
-                        raise
+            out, err = p.communicate(input, timeout=timeout)
         except subprocess.TimeoutExpired:
             p.kill()
             out, err = p.communicate()
@@ -215,11 +179,6 @@ def run(cmd: Sequence[Any], *, input: Any = None, timeout: Optional[float] = Non
         except BaseException:
             p.kill()
             raise
-        finally:
-            _running.discard(p.pid)
-    reason = KILLED.pop(p.pid, None)
-    if reason:
-        raise Stopped(reason)
     return subprocess.CompletedProcess(p.args, p.returncode, out, err)
 
 
@@ -318,9 +277,6 @@ def cpu_perf_limit() -> Optional[float]:
 def blockers(need_vram_gb: float, min_free_ram_gb: float) -> List[str]:
     """Why a heavy job may not start now ([]: it may)."""
     why = []
-    left = float(os.environ.get("GUARD_NOT_BEFORE") or 0) - time.time()
-    if left > 0:
-        why.append(f"waiting for the startup grace: {left / 60:.0f} min left")
     if min_free_ram_gb > 0:
         ram = free_ram_gb()
         if ram is not None and ram < min_free_ram_gb:
@@ -366,20 +322,8 @@ def admit(what: str, need_vram_gb: float = 0.0, min_free_ram_gb: Optional[float]
 
 # --- studio side (the studio package; never reached from the voice service) ---------------
 
-HEAVY_NAMES = {"blender", "ffmpeg", "node", "chrome", "chrome-headless-shell",
-               "headless_shell", "rhubarb"}
-EVERY_S = 10.0
-SUSPEND_RAM_GB, RESUME_RAM_GB = 3.0, 6.0
-KILL_AFTER_S = 180.0  # RAM still short this long while paused: the newest job is killed
-# Heat (171). The temperatures and the duty cycle are settings (GUARD_SUSPEND_TEMP_C, ...).
-POWER_SHARE = 0.95  # GPU draw / its power limit at or above this ...
-CPU_LIMIT_PCT = 80.0  # ... or the CPU's % Performance Limit under this ...
-SUSTAIN_S = 60.0  # ... this long while heavy work runs: cool for COOL_S
-COOL_S = 180.0
-BUSY_UTIL_PCT = 30.0  # GPU utilisation that counts as heavy work for the duty cycle
-STATE_EVERY_S = 30.0  # a guard.log state line this often while heavy work runs
+STATE_EVERY_S = 30.0  # a guard.log state line this often while the GPU lock is held
 LOG_MAX_BYTES = 4 * 2**20  # then guard.log -> guard.log.1
-SKIP_NAMES = {"conhost"}  # a console host under a lock holder: never paused
 
 
 @contextlib.contextmanager
@@ -392,147 +336,6 @@ def gpu(what: str, kind: str) -> Iterator[None]:
     with gpu_lock.hold(what, s.gpu_lock_path, need_vram_gb=VRAM_GB[kind],
                        min_free_ram_gb=s.guard_min_free_ram_gb):
         yield
-
-
-def processes() -> List[Tuple[int, int, str]]:
-    """(pid, parent pid, lower-case name without .exe) of every process; [] when unknown."""
-    if sys.platform == "win32":
-        import ctypes
-        from ctypes import wintypes
-
-        class Entry(ctypes.Structure):
-            _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
-                        ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
-                        ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
-                        ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long),
-                        ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
-
-        k32 = ctypes.WinDLL("kernel32")
-        k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-        k32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
-        for f in (k32.Process32FirstW, k32.Process32NextW):
-            f.argtypes = (wintypes.HANDLE, ctypes.POINTER(Entry))
-        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
-        snap = k32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
-        if not snap or snap == ctypes.c_void_p(-1).value:
-            return []
-        out, e = [], Entry(dwSize=ctypes.sizeof(Entry))
-        try:
-            ok = k32.Process32FirstW(snap, ctypes.byref(e))
-            while ok:
-                name = e.szExeFile.lower()
-                out.append((e.th32ProcessID, e.th32ParentProcessID,
-                            name[:-4] if name.endswith(".exe") else name))
-                ok = k32.Process32NextW(snap, ctypes.byref(e))
-        finally:
-            k32.CloseHandle(snap)
-        return out
-    out = []
-    for stat in os.listdir("/proc") if os.path.isdir("/proc") else ():
-        if stat.isdigit():
-            with contextlib.suppress(OSError, ValueError, IndexError):
-                with open(f"/proc/{stat}/stat", encoding="utf-8", errors="replace") as f:
-                    text = f.read()
-                name, rest = text[text.index("(") + 1:].rsplit(")", 1)
-                out.append((int(stat), int(rest.split()[1]), name.lower()))
-    return out
-
-
-def heavy_children(root: int, voice_pid: Optional[int] = None,
-                   table: Optional[List[Tuple[int, int, str]]] = None,
-                   ours: Optional[Set[int]] = None) -> List[int]:
-    """Our heavy processes under `root`: its own children that run() started (`ours`), the
-    processes named like a renderer (HEAVY_NAMES) deeper down (Remotion's Chrome, an agent
-    run's previews), and the voice model worker `voice_pid` with its children (never the
-    voice service itself, nor the Reel downloader's node). A child must be younger than its
-    parent: Windows keeps a dead parent's pid in its children, and pids get reused."""
-    from ..agent.proc import started
-
-    ours = _running if ours is None else ours
-    kids: Dict[int, List[Tuple[int, str]]] = {}
-    for pid, ppid, name in processes() if table is None else table:
-        if pid != ppid:
-            kids.setdefault(ppid, []).append((pid, name))
-    out, seen = [], {root}
-    todo = [(root, False)]
-    while todo:
-        parent, in_voice = todo.pop()
-        born = started(parent)
-        for pid, name in kids.get(parent, ()):
-            if pid in seen:
-                continue
-            child_born = started(pid)
-            if born and child_born and child_born < born:
-                continue  # the pid's real parent died: not ours
-            seen.add(pid)
-            voice = in_voice or pid == voice_pid
-            if parent == root and pid not in ours and name in HEAVY_NAMES:
-                continue  # a service of ours (the Reel downloader's node), not a job
-            if voice or pid in ours or name in HEAVY_NAMES:
-                out.append(pid)
-            todo.append((pid, voice))
-    return out
-
-
-def _act(pid: int, action: str) -> None:
-    """suspend | resume | kill one process. OSError when it can't."""
-    if action == "kill":
-        os.kill(pid, signal.SIGTERM if sys.platform == "win32" else signal.SIGKILL)
-        return  # Windows: SIGTERM = TerminateProcess, a suspended process included
-    if sys.platform != "win32":
-        os.kill(pid, signal.SIGSTOP if action == "suspend" else signal.SIGCONT)
-        return
-    import ctypes
-    from ctypes import wintypes
-
-    k32, nt = ctypes.WinDLL("kernel32", use_last_error=True), ctypes.WinDLL("ntdll")
-    k32.OpenProcess.restype = wintypes.HANDLE
-    k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    k32.CloseHandle.argtypes = (wintypes.HANDLE,)
-    call = nt.NtSuspendProcess if action == "suspend" else nt.NtResumeProcess
-    call.argtypes = (wintypes.HANDLE,)
-    handle = k32.OpenProcess(0x0800, False, pid)  # PROCESS_SUSPEND_RESUME
-    if not handle:
-        raise OSError(ctypes.get_last_error(), f"cannot open process {pid}")
-    try:
-        status = call(handle)
-    finally:
-        k32.CloseHandle(handle)
-    if status:
-        raise OSError(f"{action} of process {pid}: NTSTATUS {status & 0xFFFFFFFF:#x}")
-
-
-def holder_tree(root: int, table: Optional[List[Tuple[int, int, str]]] = None
-                ) -> Tuple[Optional[str], List[int]]:
-    """(who holds the GPU lock now, None when free; the processes under that holder): a dev
-    script's Blender, gpu-run.py's command, the voice model worker. Never the holder itself
-    (a script, the voice service: it serves, the work is below it), and none when the holder
-    is the studio `root` (heavy_children covers it). Younger than their parent, as there."""
-    from ..agent.proc import started
-    from ..config import get_settings
-    from . import gpu_lock
-
-    by = gpu_lock.held_by(get_settings().gpu_lock_path)
-    m = re.match(r"pid (\d+):", by or "")
-    if not m or int(m[1]) == root:
-        return by, []
-    kids: Dict[int, List[Tuple[int, str]]] = {}
-    for pid, ppid, name in processes() if table is None else table:
-        if pid != ppid:
-            kids.setdefault(ppid, []).append((pid, name))
-    out, seen, todo = [], {int(m[1])}, [int(m[1])]
-    while todo:
-        parent = todo.pop()
-        born = started(parent)
-        for pid, name in kids.get(parent, ()):
-            child_born = started(pid)
-            if pid in seen or (born and child_born and child_born < born):
-                continue
-            seen.add(pid)
-            if name not in SKIP_NAMES:
-                out.append(pid)
-            todo.append(pid)
-    return by, out
 
 
 def write_log(path: Path, text: str) -> None:
@@ -553,187 +356,28 @@ def _n(value: Optional[float], spec: str = ".0f") -> str:
     return "?" if value is None else format(value, spec)
 
 
-class Watchdog:
-    """Pauses our heavy children, and the GPU lock holder's, while the machine chokes or heats
-    (see the module doc). tick() every EVERY_S returns what it did (for an alert);
-    resume_all() when the studio stops."""
-
-    def __init__(self, root: Optional[int] = None,
-                 voice_pid: Callable[[], Optional[int]] = lambda: None, *,
-                 probe: Optional[Callable[[bool], Dict[str, Optional[float]]]] = None,
-                 children: Callable[..., List[int]] = heavy_children,
-                 holder: Callable[[int], Tuple[Optional[str], List[int]]] = holder_tree,
-                 act: Callable[[int, str], None] = _act,
-                 clock: Callable[[], float] = time.monotonic,
-                 log_path: Optional[Path] = None):
-        from ..agent.proc import started
-        from ..config import APP_HOME, get_settings
-
-        s = get_settings()
-        self.root, self.voice_pid, self.children, self.holder, self.act = (
-            root or os.getpid(), voice_pid, children, holder, act)
-        self.probe, self.clock, self.started = probe or self._probe, clock, started
-        self.suspend_temp_c, self.resume_temp_c = s.guard_suspend_temp_c, s.guard_resume_temp_c
-        self.max_busy_s = s.guard_max_busy_min * 60
-        self.log_path = Path(log_path) if log_path else APP_HOME / "data" / "logs" / "guard.log"
-        self.suspended: Dict[int, int] = {}  # pid -> creation time (pid reuse check)
-        self.since: Optional[float] = None  # RAM still short while paused, since
-        self.cool_until: Optional[float] = None  # a cooling pause lasts until then
-        self.busy_since: Optional[float] = None  # the GPU working unpaused since
-        self.idle_since: Optional[float] = None  # ... and resting since
-        self.hot: Dict[str, float] = {}  # "power" | "cpu" -> held since
-        self.next_line: Optional[float] = None  # next guard.log state line
-
-    @staticmethod
-    def _probe(heavy: bool) -> Dict[str, Optional[float]]:
-        g = gpu_status() or {}
-        return {"ram": free_ram_gb(), "temp": g.get("temp_c"), "watts": g.get("power_w"),
-                "limit": g.get("power_limit_w"), "util": g.get("util_pct"),
-                "vram": g.get("used_vram_gb"), "vram_total": g.get("total_vram_gb"),
-                "clock": g.get("clock_mhz"),
-                "perf": cpu_perf_limit() if heavy else None}  # typeperf: only when it matters
-
-    def _ours(self, pid: int) -> bool:
-        born = self.suspended.get(pid)
-        return born is not None and self.started(pid) == born
-
-    def resume_all(self) -> int:
-        n = 0
-        for pid in list(self.suspended):
-            if self._ours(pid):
-                with contextlib.suppress(OSError):
-                    self.act(pid, "resume")
-                    n += 1
-        self.suspended.clear()
-        self.since = None
-        if _paused[1] is not None:  # run() timeouts get this pause back
-            _paused[0] += time.monotonic() - _paused[1]
-            _paused[1] = None
-        return n
-
-    def tick(self) -> List[str]:
-        now = self.clock()
-        by, theirs = self.holder(self.root)
-        targets = list(dict.fromkeys([*self.children(self.root, self.voice_pid()), *theirs]))
-        self.suspended = {p: t for p, t in self.suspended.items() if self._ours(p)}
-        r = self.probe(bool(targets))
-        ram, temp, watts, limit, perf = (r.get(k) for k in ("ram", "temp", "watts", "limit",
-                                                            "perf"))
-        working = bool(targets) and not self.suspended
-        util = r.get("util")
-        if self.suspended:  # paused = cooling: the duty cycle counts afresh after
-            self.busy_since = self.idle_since = None
-        elif working and (util is None or util >= BUSY_UTIL_PCT):  # not an idle voice model
-            self.idle_since = None
-            self.busy_since = now if self.busy_since is None else self.busy_since
-        elif self.busy_since is not None:  # a break as long as a cooling pause resets it
-            self.idle_since = now if self.idle_since is None else self.idle_since
-            if now - self.idle_since >= COOL_S:
-                self.busy_since = self.idle_since = None
-        for key, on in (("power", working and watts is not None and bool(limit)
-                         and watts >= POWER_SHARE * limit),
-                        ("cpu", working and perf is not None and perf < CPU_LIMIT_PCT)):
-            if on:
-                self.hot.setdefault(key, now)
-            else:
-                self.hot.pop(key, None)
-        why = [*([f"free RAM {ram:.1f} GB"] if ram is not None and ram < SUSPEND_RAM_GB else []),
-               *([f"GPU {temp:.0f} °C"] if temp is not None and temp >= self.suspend_temp_c
-                 else [])]
-        cool = []  # these pause for COOL_S
-        if now - self.hot.get("power", now) >= SUSTAIN_S:
-            cool.append(f"GPU at {watts / limit:.0%} of its {limit:.0f} W limit for "
-                        f"{SUSTAIN_S:g} s")
-        if now - self.hot.get("cpu", now) >= SUSTAIN_S:
-            cool.append(f"CPU held back to {perf:.0f} % (heat) for {SUSTAIN_S:g} s")
-        if (working and self.max_busy_s and self.busy_since is not None
-                and now - self.busy_since >= self.max_busy_s):
-            cool.append(f"{self.max_busy_s / 60:g} min of heavy work")
-        if cool:
-            self.cool_until = now + COOL_S
-            why += [*cool, f"cooling {COOL_S / 60:g} min"]
-        cooling = self.cool_until is not None and now < self.cool_until
-        state = ", ".join([*([f"free RAM {ram:.1f} GB"] if ram is not None else []),
-                           *([f"GPU {temp:.0f} °C"] if temp is not None else [])])
-        done = []
-        if why or cooling:
-            paused = 0
-            for pid in targets:
-                born = self.started(pid)
-                if pid in self.suspended or born is None:
-                    continue
-                with contextlib.suppress(OSError):
-                    self.act(pid, "suspend")
-                    self.suspended[pid] = born
-                    paused += 1
-            if paused:
-                if _paused[1] is None:
-                    _paused[1] = time.monotonic()
-                done.append(f"paused {paused} heavy job process(es) ({'; '.join(why) or 'cooling'})"
-                            f": {state}")
-        ram_ok = ram is None or ram > RESUME_RAM_GB
-        if self.suspended and ram_ok and not cooling and (
-                temp is None or temp <= self.resume_temp_c):
-            done.append(f"resumed {self.resume_all()} paused process(es): {state}")
-        elif self.suspended and not ram_ok:  # heat passes while paused; RAM may not
-            self.since = self.since if self.since is not None else now
-            if now - self.since >= KILL_AFTER_S:
-                newest = max(self.suspended, key=self.suspended.__getitem__)
-                why_killed = (f"stopped by the resource guard: {state} for "
-                              f"{KILL_AFTER_S / 60:g} min; retried later")
-                self._mark(newest, why_killed)
-                with contextlib.suppress(OSError):
-                    self.act(newest, "kill")
-                del self.suspended[newest]
-                self.since = now  # the next one gets as long
-                done.append(f"stopped process {newest}: {state} for {KILL_AFTER_S / 60:g} min")
-        else:
-            self.since = None
-        if done or ((targets or self.suspended)
-                    and (self.next_line is None or now >= self.next_line)):
-            self.next_line = now + STATE_EVERY_S
-            line = (f"GPU {_n(temp)} °C {_n(watts)}/{_n(limit)} W {_n(util)} % | "
-                    f"VRAM {_n(r.get('vram'), '.1f')}/{_n(r.get('vram_total'), '.1f')} GB used, "
-                    f"clock {_n(r.get('clock'))} MHz | CPU limit {_n(perf)} % | "
-                    f"RAM {_n(ram, '.1f')} GB free | "
-                    f"lock {by or 'free'} | heavy {len(targets)}, paused {len(self.suspended)}"
-                    + "".join(f" | {d}" for d in done))
-            with contextlib.suppress(OSError):  # a full disk never stops the guarding
-                write_log(self.log_path, line)
-        elif not targets and not self.suspended:
-            self.next_line = None
-        return done
-
-    def _mark(self, pid: int, why: str) -> None:
-        """Tell the run() waiting on `pid`, or on one of its parents, why it ends."""
-        parent = {p: pp for p, pp, _ in processes()}
-        while pid and pid != self.root:
-            if pid in _running:
-                KILLED[pid] = why
-            pid = parent.get(pid, 0)
+def state_line(by: str) -> str:
+    """The machine now, for guard.log: GPU heat, power, use, VRAM, graphics clock (above
+    ~1600 MHz the owner's clock cap is missing, 177), CPU limit, free RAM, the lock holder."""
+    g = gpu_status() or {}
+    return (f"GPU {_n(g.get('temp_c'))} °C {_n(g.get('power_w'))}/{_n(g.get('power_limit_w'))} W "
+            f"{_n(g.get('util_pct'))} % | VRAM {_n(g.get('used_vram_gb'), '.1f')}/"
+            f"{_n(g.get('total_vram_gb'), '.1f')} GB used, clock {_n(g.get('clock_mhz'))} MHz | "
+            f"CPU limit {_n(cpu_perf_limit())} % | RAM {_n(free_ram_gb(), '.1f')} GB free | "
+            f"lock {by}")
 
 
-async def watchdog_loop(store: Any, voice_pid: Callable[[], Optional[int]] = lambda: None,
-                        every_s: float = EVERY_S, dog: Optional[Watchdog] = None) -> None:
-    """The `up` worker's watchdog: a tick (in a thread: nvidia-smi may be slow) every
-    `every_s`, an alert on the website each time it acts; resumes what it paused when it
-    stops."""
-    from ..store import utcnow
-    from .alerts import raise_alert
+async def log_loop(every_s: float = STATE_EVERY_S, log_path: Optional[Path] = None) -> None:
+    """The `up` worker's guard.log: a state line every `every_s` while the GPU lock is held
+    (2026-11-25: it only watches now; nothing pauses or stops a job, docs/DECISIONS.md)."""
+    from ..config import APP_HOME, get_settings
+    from . import gpu_lock
 
-    dog = dog or Watchdog(voice_pid=voice_pid)
-    tick: Optional[asyncio.Future] = None
-    try:
-        while True:
-            tick = asyncio.ensure_future(asyncio.to_thread(dog.tick))
-            done = await asyncio.shield(tick)  # a thread can't be cancelled: awaited below
-            if done:
-                log.warning("resource guard: %s", "; ".join(done))
-                with contextlib.suppress(Exception):  # e.g. database locked: still guarding
-                    raise_alert(store, "guard", None, "warn", "The resource guard stepped in",
-                                "; ".join(done), "/settings", utcnow(), renew=True)
-            await asyncio.sleep(every_s)
-    finally:
-        if tick is not None and not tick.done():
-            await asyncio.wait({tick})
-        dog.resume_all()
+    path = Path(log_path) if log_path else APP_HOME / "data" / "logs" / "guard.log"
+    while True:
+        by = await asyncio.to_thread(gpu_lock.held_by, get_settings().gpu_lock_path)
+        if by:
+            line = await asyncio.to_thread(state_line, by)  # nvidia-smi, typeperf: slow
+            with contextlib.suppress(OSError):  # a full disk never stops the studio
+                write_log(path, line)
+        await asyncio.sleep(every_s)

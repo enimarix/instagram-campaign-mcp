@@ -6,7 +6,7 @@ that decides: a playbook is due once its time today has passed (on its weekday, 
 one), it has no run started today, it isn't running and its file exists. Three callers:
 
 - `ig-campaign agent run-due` (the OS tasks' action): runs each due playbook in turn;
-- the `up` / `worker` process: catch_up() after the startup grace and every CATCH_UP_EVERY,
+- the `up` / `worker` process: catch_up() at start and every CATCH_UP_EVERY,
   starting due runs detached one at a time, each once the last run and its renders are done
   (166) (a run missed while the PC was off starts after the next logon, same day),
   and the light run the owner's scheduled work orders (136) and change requests (147) ask

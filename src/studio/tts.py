@@ -113,7 +113,7 @@ class TTSError(RuntimeError):
     @property
     def machine(self) -> bool:
         """The machine failed, not the text (step 197): no answer, or HTTP 5xx (the voice
-        service answers 503 when its engine died or was stopped by the resource guard)."""
+        service answers 503 when its engine died)."""
         return self.unreachable or (self.status or 0) >= 500
 
 

@@ -29,11 +29,10 @@ os.environ.update({
     "BEATS_PYTHON": str(_TMP / "no-beat-this"),  # 178: never the real beat_this venv
     "LEMO_LIBRARY": str(_TMP / "no-lemo-library"),  # 172: tests build a tiny fake one
     "LEMO_SKILL_DIR": str(_TMP / "no-lemo-skill"),  # 173: never the owner's plugin skill
-    # Step 166: the resource guard never waits on, probes or pauses the real machine in a
-    # test (tests/test_guard.py drives it with fakes).
+    # Step 166: the resource guard never waits on or probes the real machine in a test, and
+    # writes no guard.log (tests/test_guard.py drives it with fakes).
     "GUARD_MIN_FREE_RAM_GB": "0",
-    "GUARD_STARTUP_GRACE_MIN": "0",
-    "GUARD_WATCHDOG": "false",
+    "GUARD_LOG": "false",
     "GUARD_NVIDIA_SMI": str(_TMP / "no-nvidia-smi"),
 })
 _REAL = [Path.home() / ".ig-campaign-agent", Path.home() / ".ig-campaign"]
