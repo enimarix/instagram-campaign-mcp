@@ -80,11 +80,15 @@ export default function InboxPage() {
   const trials = useRef(new Set<number>())
   const scroller = useRef<HTMLDivElement>(null)
   // UI-001: after a decision the next card slides in under the finger, so a double-tap must
-  // not decide it unseen. Rail taps only: the keys stay immediate.
-  const settle = useRef(0)
+  // not decide it unseen. The rail's buttons are disabled for a moment (native, so Playwright
+  // and screen readers see it; no dimming). Rail taps only: the keys stay immediate.
+  const [settling, setSettling] = useState(false)
+  const settleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(settleTimer.current), [])
   const tap = (f: () => void) => {
-    if (Date.now() < settle.current) return
-    settle.current = Date.now() + SETTLE_MS
+    if (settling) return
+    setSettling(true)
+    settleTimer.current = setTimeout(() => setSettling(false), SETTLE_MS)
     f()
   }
   const toast = useToast()
@@ -385,6 +389,7 @@ export default function InboxPage() {
               preload={i === cur + 1}
               muted={muted}
               showBestBefore={tab === 'bench'}
+              settling={settling}
               onToggleSound={() => setMuted((m) => !m)}
               onApprove={() => tap(() => void approve(a))}
               change={changeLabel(a.change_request, taxonomy?.feedback_reasons.values)}

@@ -200,10 +200,14 @@ describe('InboxPage feed', () => {
       press(1, 'Approve')
       await act(() => vi.advanceTimersByTimeAsync(100))
       expect(cards()).toEqual(['Video 2'])
+      const rail = () => ['Approve', 'Change', 'Decline', 'Save for later'].map((name) =>
+        (within(card(2)).getByRole('button', { name }) as HTMLButtonElement).disabled)
+      expect(rail()).toEqual([true, true, true, true]) // natively: Playwright waits, readers say so
       press(2, 'Approve') // the second tap of the double-tap, on the card that slid in
       await act(() => vi.advanceTimersByTimeAsync(0))
       expect(cards()).toEqual(['Video 2'])
       await act(() => vi.advanceTimersByTimeAsync(500)) // 600 ms after the first tap
+      expect(rail()).toEqual([false, false, false, false])
       press(2, 'Approve') // a deliberate tap after the lock
       await act(() => vi.advanceTimersByTimeAsync(0))
       expect(cards()).toEqual([])
