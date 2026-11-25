@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Voice } from '../api/client'
+import { clip } from '../pages/load'
 import VoicesPage from './VoicesPage'
 import { Preview } from './Preview'
 
@@ -33,6 +34,12 @@ describe('VoicesPage', () => {
     })
     const { container } = render(<VoicesPage />)
     const sw = await screen.findByRole('switch', { name: 'Utiliser Ancienne pour les vidéos' })
+    // a switched-off card stays fully opaque (contrast): dashed border, muted title
+    const off = screen.getByRole('heading', { name: 'Ancienne' })
+    expect(off.className).toContain('text-muted')
+    expect(off.closest('li')!.className).toContain('border-dashed')
+    expect(off.closest('li')!.className).not.toContain('opacity')
+    expect(screen.getByRole('heading', { name: 'Souriante' }).className).not.toContain('text-muted')
     expect(container.querySelectorAll('audio')).toHaveLength(2)
     expect(screen.getByText('Secours')).toBeTruthy()
     expect(screen.getByText('Récits et explications')).toBeTruthy()
@@ -119,5 +126,20 @@ describe('VoicesPage', () => {
     expect(audio.preload).toBe('metadata')
     fireEvent.error(audio)
     expect(screen.getByRole('alert').textContent).toMatch(/Rechargez la page/)
+  })
+})
+
+describe('clip', () => {
+  it('cuts on a word and ends with …, short text unchanged', () => {
+    const words = 'Native French speaker, warm and dynamic. Key qualities: clear, dynamic, friendly. '
+    const long = words.repeat(6).slice(0, 411)
+    const out = clip(long, 400)
+    expect(out.length).toBeLessThanOrEqual(400)
+    expect(out.endsWith('…')).toBe(true)
+    const kept = out.slice(0, -1)
+    expect(long.startsWith(kept)).toBe(true)
+    expect(long[kept.length]).toBe(' ') // the cut falls on a space: no half word
+    expect(clip('Hugo', 60)).toBe('Hugo')
+    expect(clip('x'.repeat(70), 60)).toBe('x'.repeat(59) + '…') // no space past n/2: hard cut
   })
 })
