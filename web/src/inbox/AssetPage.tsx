@@ -117,13 +117,17 @@ function AssetPage({ id }: { id: number }) {
 
   // The Inbox's four decisions (UI-017), at once (no undo window): same calls, same toasts.
   async function decide(fn: () => Promise<Asset>, message: string) {
-    setSheet(null)
-    const ok = await act(fn)
-    setThread((n) => n + 1)
-    if (ok) toast({ message })
+    if (await act(fn)) toast({ message })
   }
 
-  const change = (fb: CommentIn) => decide(async () => {
+  // Changer, its restyle and Refuser leave a motive comment (even a change not sent back).
+  async function withMotive(fn: () => Promise<Asset>, message: string) {
+    setSheet(null)
+    await decide(fn, message)
+    setThread((n) => n + 1)
+  }
+
+  const change = (fb: CommentIn) => withMotive(async () => {
     const r = await addFeedback(id, fb)
     setAsset(r.asset)
     if (!r.moved) throw new Error(`Saved, but not sent back: ${r.reason}`)
@@ -131,12 +135,12 @@ function AssetPage({ id }: { id: number }) {
   }, 'Sent for changes')
 
   // The server archives the video and opens a work order (181): reload it for the chip.
-  const restyle = (style: string | null, extra: { note?: string; reasons: string[] }) => decide(async () => {
+  const restyle = (style: string | null, extra: { note?: string; reasons: string[] }) => withMotive(async () => {
     await restyleAsset(id, { style, ...extra })
     return getAsset(id)
   }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).")
 
-  const decline = (fb: CommentIn) => decide(() => declineAsset(id, fb.reason_codes, fb.text), 'Declined')
+  const decline = (fb: CommentIn) => withMotive(() => declineAsset(id, fb.reason_codes, fb.text), 'Declined')
 
   async function save(e: FormEvent) {
     e.preventDefault()
