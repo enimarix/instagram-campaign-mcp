@@ -240,26 +240,7 @@ async def run_due(
             store.mark_published(post["id"], result["media_id"], result.get("permalink"))
             published.append({"id": post["id"], **result})
             _asset_outcome(store, post["asset_id"], "published")
-        except RateLimitExceeded as e:
-            store.mark_failed(post["id"], f"Rate limited: {e.message}",
-                              retry_in_minutes=BACKOFF_MINUTES, count_attempt=False)
-            retrying.append({"id": post["id"], "error": e.message})
-            break  # stop hammering the API this round
-        except AccessBlocked as e:
-            # Meta blocked the API (step 167): the post waits for the breaker's next try,
-            # its attempts unchanged.
-            wait = max(1, math.ceil((e.until - utcnow().timestamp()) / 60))
-            store.mark_failed(post["id"], e.message, retry_in_minutes=wait, count_attempt=False)
-            retrying.append({"id": post["id"], "error": e.message})
-            break
         except InstagramAPIError as e:
-            if e.error_subcode == PUBLISH_QUOTA_SUBCODE and not e.maybe_published:
-                # ~100 API posts per rolling 24h: wait, don't burn attempts.
-                msg = f"Daily publishing quota reached: {e.message}"
-                store.mark_failed(post["id"], msg, retry_in_minutes=BACKOFF_MINUTES,
-                                  count_attempt=False)
-                retrying.append({"id": post["id"], "error": msg})
-                break
             if e.maybe_published:
                 # media_publish may have reached Meta; retrying could double-post.
                 msg = f"{e.message} - check Instagram before retrying (reschedule_post)"
@@ -267,6 +248,23 @@ async def run_due(
                 failed.append({"id": post["id"], "error": msg})
                 _asset_outcome(store, post["asset_id"], "publish_check")
                 continue
+            if isinstance(e, AccessBlocked):
+                # Meta blocked the API (step 167): the post waits for the breaker's next
+                # try, its attempts unchanged.
+                wait = max(1, math.ceil((e.until - utcnow().timestamp()) / 60))
+                store.mark_failed(post["id"], e.message, retry_in_minutes=wait,
+                                  count_attempt=False)
+                retrying.append({"id": post["id"], "error": e.message})
+                break
+            if isinstance(e, RateLimitExceeded) or e.error_subcode == PUBLISH_QUOTA_SUBCODE:
+                # Rate limited, or ~100 API posts per rolling 24h: wait without burning
+                # attempts, and stop hammering the API this round.
+                msg = (f"Rate limited: {e.message}" if isinstance(e, RateLimitExceeded)
+                       else f"Daily publishing quota reached: {e.message}")
+                store.mark_failed(post["id"], msg, retry_in_minutes=BACKOFF_MINUTES,
+                                  count_attempt=False)
+                retrying.append({"id": post["id"], "error": msg})
+                break
             permanent = isinstance(e, InvalidMedia) or e.error_subcode in PERMANENT_SUBCODES
             if not permanent and post["attempts"] < MAX_ATTEMPTS:
                 store.mark_failed(post["id"], e.message, retry_in_minutes=RETRY_MINUTES)
