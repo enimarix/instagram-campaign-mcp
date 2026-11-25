@@ -265,7 +265,7 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
   return (
     <div>
       <div className="flex flex-wrap items-end gap-2 pt-1">
-        <Button size="sm" variant="primary" disabled={busy}
+        <Button size="sm" disabled={busy}
           title={machine ? 'Sans attendre le nouvel essai de la machine (RAM, GPU ou voix)' : undefined}
           onClick={() => void guard({ action: 'start_now', kind, id }, () => startNow(kind, id),
             machine ? 'Passe en tête de la file, sans attendre le nouvel essai de la machine.' : 'Passe en tête de la file.')}>
@@ -370,7 +370,7 @@ function ItemCard({ item: i, grip, ...actions }: { item: PlanningItem; grip?: Re
       )}
       {l && !TO_FRONT.includes(l.kind) && ( // a render's or film's is in LineControls
         <div className="pt-1">
-          <Button size="sm" variant="primary" onClick={() => actions.onLaunch([l])}>Lancer maintenant</Button>
+          <Button size="sm" onClick={() => actions.onLaunch([l])}>Lancer maintenant</Button>
         </div>
       )}
       <LineControls item={i} {...actions} />
@@ -657,7 +657,7 @@ function Strip({ strip }: { strip: PlanningStrip }) {
   return (
     <section aria-label="Les prochaines 24 h" className="mb-6">
       <h2 className="mb-2 font-semibold">Les prochaines 24 h</h2>
-      <div className="overflow-x-auto rounded-card border border-line bg-surface p-2">
+      <div tabIndex={0} className="overflow-x-auto rounded-card border border-line bg-surface p-2">
         <div className="relative min-w-[720px] pb-5">
           {hours.map((t) => (
             <div key={t} aria-hidden className="absolute inset-y-0 border-l border-line" style={{ left: `${x(new Date(t).toISOString())}%` }}>
@@ -666,7 +666,7 @@ function Strip({ strip }: { strip: PlanningStrip }) {
               </span>
             </div>
           ))}
-          <div aria-label="Maintenant" className="absolute inset-y-0 left-0 z-10 w-0.5 bg-danger" />
+          <div role="img" aria-label="Maintenant" className="absolute inset-y-0 left-0 z-10 w-0.5 bg-danger" />
           {LANES.map(([lane, name, color]) => (
             <ul key={lane} aria-label={name} className="relative my-1 h-6">
               {strip.blocks.filter((b) => b.lane === lane).map((b, n) => (
@@ -914,14 +914,15 @@ export default function Planning() {
       )}
       {extras.history && <History rows={extras.history} onDone={() => void load()} />}
       {launchables.length > 0 && (
-        <div role="region" aria-label="Lancer"
-          className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 mt-6 rounded-card border border-line bg-surface/95 p-3 text-sm shadow-overlay backdrop-blur-md lg:bottom-4">
+        <div role="region" aria-label="Lancer" // sticky only once something is picked (UI-003)
+          className={`mt-6 rounded-card border border-line bg-surface/95 p-3 text-sm ${chosen.length
+            ? 'sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 shadow-overlay backdrop-blur-md lg:bottom-4' : ''}`}>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="primary" disabled={launching || chosen.length === 0}
               onClick={() => void launch(chosen, true)}>Lancer la sélection ({chosen.length})</Button>
             <Button size="sm" disabled={launching} onClick={() => void launch(launchables, true)}>Tout lancer</Button>
             {chosen.length > 0 && <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Désélectionner</Button>}
-            <span className="text-muted">Un seul travail lourd à la fois : le reste démarre dès que la machine est libre. Les cartes en pause, minutées ou qui attendent la machine restent à leur place.</span>
+            {!chosen.length && <span className="text-muted">Un seul travail lourd à la fois : le reste démarre dès que la machine est libre. Les cartes en pause, minutées ou qui attendent la machine restent à leur place.</span>}
           </div>
           {box}
         </div>

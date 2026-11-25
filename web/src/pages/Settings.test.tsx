@@ -88,7 +88,7 @@ describe('Settings', () => {
 
     const agent = section('Agent schedule')
     const next = new Date('2026-11-18T03:00:00+01:00').toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-    expect(within(agent).getByText('Daily videos at 03:00')).toBeTruthy()
+    expect(within(agent).getByText('Vidéos du jour at 03:00')).toBeTruthy()
     expect(within(agent).getByText(`Next ${next} · last failed 2 hours ago`)).toBeTruthy()
     expect(within(agent).getByText('Playbook not written yet · never ran')).toBeTruthy()
     expect(screen.queryByText('Setup mode: add your Instagram token')).toBeNull()

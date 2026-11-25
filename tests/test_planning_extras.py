@@ -112,7 +112,7 @@ def test_history_lists_today_newest_first_and_only_failures_can_rerender(store, 
     assert by["failed"]["reason"] == "ffmpeg crashed" and by["failed"]["recipe"]["kind"] == "motion"
     assert by["failed"]["tries"] == 2 and by["done"]["tries"] is None
     assert by["done"]["recipe"] is None and by["dropped"]["reason"] == "image floue"
-    assert by["run"]["status"] == "succeeded" and by["run"]["title"] == "Run daily-produce"
+    assert by["run"]["status"] == "succeeded" and by["run"]["title"] == "Vidéos du jour"
 
 
 def test_history_one_row_per_failed_video_each_can_be_relaunched(store):

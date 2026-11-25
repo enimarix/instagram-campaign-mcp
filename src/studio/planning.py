@@ -78,6 +78,17 @@ SAMPLES = 100  # recent finished jobs / runs the medians look at
 TEMPLATE_ENGINES = {cinematic.TEMPLATE: "blender", sitcom.TEMPLATE: "blender",
                     macro3d.TEMPLATE: "macro3d"}
 STYLE_ENGINES = {cinematic.STYLE: "blender", "sitcom": "blender", "macro3d": "macro3d"}
+# The AI's jobs in the owner's words (UI-015; web/src/pages/load.ts PLAYBOOKS holds the same).
+PLAYBOOK_LABELS = {"daily-learn": "Analyse de la nuit", "daily-produce": "Vidéos du jour",
+                   schedule.ORDER_PLAYBOOK: "Tes changements", checks.PLAYBOOK: "Vérifier les rendus",
+                   "weekly-ads": "Pubs de la semaine"}
+
+
+def run_title(playbook: str) -> str:
+    """A run card's title; an unknown playbook keeps its file name."""
+    return PLAYBOOK_LABELS.get(playbook, playbook)
+
+
 _JOBS = ("SELECT j.id, j.asset_id, j.state, j.progress, j.started_at, j.failure, a.recipe,"
          " a.caption,"
          " i.hook, i.style, w.id AS order_id, w.origin, w.pick_id FROM render_jobs j"
@@ -192,7 +203,7 @@ def _running(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
             usual = _run_s(store, r["playbook"])
             took = max(usual, (now - start).total_seconds())
             item = _item("running", kind,
-                         f"Run {r['playbook']}", start, took,
+                         run_title(r['playbook']), start, took,
                          "Le run de l'IA en cours : rien d'autre ne démarre avant sa fin.",
                          source="agent", playbook=r["playbook"], run_id=r["id"])
         out.append({**item, "stage": "en cours", "late_s": _late(start, usual, now)})
@@ -261,7 +272,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                     checks.PLAYBOOK: "check_run"}.get(name, "agent_run")
             waits = ("agent_running" if agent > max(at, now) else "gpu_busy" if at > now
                      else None)
-            agent = add(_item("next", kind, f"Run {name}", max(agent, at),
+            agent = add(_item("next", kind, run_title(name), max(agent, at),
                               _run_s(store, name, RUN_S / 3 if kind == "check_run" else RUN_S),
                               "Lancé par toi : il passe avant les autres runs de l'IA, dès que"
                               " la machine est libre.", waits_on=waits, source="agent",
@@ -363,7 +374,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         for name in schedule.due_runs(store, settings, now):
             if name in launched:  # listed with the launches
                 continue
-            agent = add(_item("next", "agent_run", f"Run {name}", agent, _run_s(store, name),
+            agent = add(_item("next", "agent_run", run_title(name), agent, _run_s(store, name),
                               "Run prévu pas encore lancé : il passe dès que rien ne tourne.",
                               waits_on=busy, source="agent", playbook=name))
 
@@ -419,7 +430,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
               else None)
 
         def run() -> datetime:
-            ready = add(_item("next", "order_run", f"Run {schedule.ORDER_PLAYBOOK}",
+            ready = add(_item("next", "order_run", run_title(schedule.ORDER_PLAYBOOK),
                               max(agent, at) if at else agent,
                               _run_s(store, schedule.ORDER_PLAYBOOK),
                               "Tes commandes et demandes de changement lancent le run léger.",
@@ -454,7 +465,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                     store, settings, now, "check")[1] >= settings.max_check_runs_per_day:
                 at = midnight
             why = "recheck"
-        ready = add(_item("next", "check_run", f"Run {checks.PLAYBOOK}",
+        ready = add(_item("next", "check_run", run_title(checks.PLAYBOOK),
                           max(agent, at) if at else agent,
                           _run_s(store, checks.PLAYBOOK, RUN_S / 3),
                           "Les rendus finis sont vérifiés (images, contrôle) puis envoyés dans"
@@ -488,7 +499,7 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
                                                                              limit=1))):
             continue  # it starts (or started) today: due_runs skips today's time (200)
         start = max(filter(None, (r["next_at"], planned_at, agent)))  # after the AI's runs
-        item = _item("planned", "agent_run", f"Run {r['playbook']}", start,
+        item = _item("planned", "agent_run", run_title(r['playbook']), start,
                      _run_s(store, r["playbook"]), f"Prévu chaque jour à {r['time']}."
                      if not r["weekly"] else f"Prévu chaque semaine ({r['time']}).",
                      source="schedule", playbook=r["playbook"])
@@ -617,7 +628,7 @@ def history(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
     out.extend(row("removed", o["updated_at"], _title(o["instruction"], f"Commande {o['id']}"),
                    order_id=o["id"]) for o in orders)
     # ponytail: the last 50 runs; more than 50 runs a day is not a real case.
-    out.extend(row("run", r["started_at"], f"Run {r['playbook']}", run_id=r["id"],
+    out.extend(row("run", r["started_at"], run_title(r['playbook']), run_id=r["id"],
                    status=r["status"])
                for r in store.list_agent_runs(limit=50) if r["started_at"] >= since)
     return sorted(out, key=lambda r: r["at"], reverse=True)

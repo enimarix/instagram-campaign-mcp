@@ -51,7 +51,7 @@ describe('Planning', () => {
     stub([
       item({ section: 'running', title: 'Le rendu actuel', ids: { asset_id: 17 }, stage: 'rendu', progress: 0.5 }),
       item({ title: 'Ma commande', kind: 'work_order', ids: { order_id: 4 }, waits_on: 'gpu_busy', style: 'blender', engine: 'blender' }),
-      item({ section: 'planned', kind: 'agent_run', title: 'Run daily-produce', source: 'schedule',
+      item({ section: 'planned', kind: 'agent_run', title: 'Vidéos du jour', source: 'schedule',
         picks_up: { orders: 2, change_requests: 1, dm_picks: 0, ideas_left: 7 } }),
     ])
     show()
@@ -70,7 +70,7 @@ describe('Planning', () => {
   })
 
   it('a run with no batch limit says so (206)', async () => {
-    stub([item({ section: 'planned', kind: 'agent_run', title: 'Run daily-produce', source: 'schedule',
+    stub([item({ section: 'planned', kind: 'agent_run', title: 'Vidéos du jour', source: 'schedule',
       picks_up: { orders: 0, change_requests: 0, dm_picks: 0, ideas_left: null } })])
     show()
     expect((await screen.findByText(/pour les idées de Claude/)).textContent).toContain('sans limite pour les idées de Claude')
@@ -330,7 +330,7 @@ describe('Planning', () => {
           start: soon(0), end: soon(24 * 60), posts: [soon(180)],
           blocks: [
             { lane: 'render', kind: 'render', title: 'Le rendu', section: 'running', start: soon(0), end: soon(60), late: true },
-            { lane: 'run', kind: 'agent_run', title: 'Run daily-produce', section: 'planned', start: soon(600), end: soon(620), late: false },
+            { lane: 'run', kind: 'agent_run', title: 'Vidéos du jour', section: 'planned', start: soon(600), end: soon(620), late: false },
           ],
         },
       }))
@@ -373,7 +373,7 @@ describe('Planning', () => {
           { ...row, kind: 'dropped', at: soon(-20), title: 'Floue', asset_id: 8, reason: 'image floue' },
           { ...row, kind: 'removed', at: soon(-30), title: 'Retirée', order_id: 3 },
           { ...row, kind: 'done', at: soon(-40), title: 'Finie', asset_id: 6 },
-          { ...row, kind: 'run', at: soon(-50), title: 'Run daily-produce', run_id: 2, status: 'succeeded' },
+          { ...row, kind: 'run', at: soon(-50), title: 'Vidéos du jour', run_id: 2, status: 'succeeded' },
         ],
       }))
       show()
@@ -462,7 +462,7 @@ describe('Planning', () => {
       item({ section: 'running', title: 'Le rendu actuel', est_start: soon(-5), progress: 0.5 }),
       item({ title: 'Le suivant', ids: { job_id: 6 } }),
       item({ kind: 'film', title: 'Un film', ids: { order_id: 4 }, waits_on: 'held', est_start: null, est_ready: null, est_duration_s: null }),
-      item({ kind: 'agent_run', title: 'Run daily-learn' }),
+      item({ kind: 'agent_run', title: 'Analyse de la nuit' }),
     ])
     show()
     const [running, next, film, run] = await screen.findAllByRole('article')
@@ -595,7 +595,7 @@ describe('Planning', () => {
       item({ kind: 'work_order', title: 'Ma commande', ids: { order_id: 4 } }),
       item({ kind: 'change_request', title: 'Vidéo 3', ids: { asset_id: 3 }, waits_on: 'next_ai_run' }),
       item({ kind: 'work_order', title: 'Sans consigne', ids: { order_id: 8 }, waits_on: 'needs_instruction' }),
-      item({ section: 'planned', kind: 'agent_run', title: 'Run daily-learn', source: 'schedule', playbook: 'daily-learn' }),
+      item({ section: 'planned', kind: 'agent_run', title: 'Analyse de la nuit', source: 'schedule', playbook: 'daily-learn' }),
       idea(),
     ]
     const launch = (calls: Call[]) => calls.find((c) => c.url === '/api/planning/launch')
@@ -607,7 +607,7 @@ describe('Planning', () => {
       const boxes = await screen.findAllByRole('checkbox', { name: /^Sélectionner : / })
       expect(boxes.map((b) => b.getAttribute('aria-label'))).toEqual([ // not the running card, not the order without instruction
         'Sélectionner : Le mythe du jus détox', 'Sélectionner : Rendu A', 'Sélectionner : Ma commande',
-        'Sélectionner : Vidéo 3', 'Sélectionner : Run daily-learn'])
+        'Sélectionner : Vidéo 3', 'Sélectionner : Analyse de la nuit'])
       const bar = screen.getByRole('region', { name: 'Lancer' })
       expect(within(bar).getByRole('button', { name: 'Lancer la sélection (0)' })).toHaveProperty('disabled', true)
       fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Ma commande' }))
@@ -619,6 +619,21 @@ describe('Planning', () => {
         body: { items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }], bulk: true } })
       expect(launch(calls)?.body).toEqual({ items: [{ kind: 'render', id: 6 }, { kind: 'work_order', id: 4 }], bulk: true })
       await waitFor(() => expect(within(bar).getByRole('button', { name: 'Lancer la sélection (0)' })).toBeTruthy()) // cleared
+    })
+
+    it('the bar sits in the flow with its explanation until a card is ticked, then sticks without it (UI-003)', async () => {
+      const calls = stubLaunch(cards, { front: [], requested: [], refused: [], busy: null, paused: null })
+      show()
+      const bar = await screen.findByRole('region', { name: 'Lancer' })
+      const why = /^Un seul travail lourd à la fois/
+      expect(bar.className).not.toMatch(/\bsticky\b/)
+      expect(within(bar).getByText(why)).toBeTruthy()
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Rendu A' }))
+      expect(bar.className).toMatch(/\bsticky\b/)
+      expect(within(bar).queryByText(why)).toBeNull()
+      fireEvent.click(within(bar).getByRole('button', { name: 'Tout lancer' })) // works ticked too
+      await waitFor(() => expect(launch(calls)).toBeTruthy())
+      expect((launch(calls)?.body as { items: unknown[] }).items).toHaveLength(5)
     })
 
     it('« Tout lancer » sends every waiting card, after the delay warning', async () => {

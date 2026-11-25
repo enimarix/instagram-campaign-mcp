@@ -50,7 +50,7 @@ describe('Agent', () => {
     stubApi()
     render(<Agent />)
     const runs = await screen.findByRole('region', { name: 'Runs' })
-    expect(await within(runs).findByText('Daily videos')).toBeTruthy()
+    expect(await within(runs).findByText('Vidéos du jour')).toBeTruthy()
     expect(within(runs).getByText('succeeded')).toBeTruthy()
     expect(within(runs).getByText('42 min 10 s · 41 turns · $1.23')).toBeTruthy()
     expect(within(runs).getByText('Made 10 ideas, 8 renders ready.')).toBeTruthy()
@@ -65,13 +65,14 @@ describe('Agent', () => {
     expect(await screen.findByText('No runs yet')).toBeTruthy()
   })
 
-  it('confirms before Run now', async () => {
+  it('confirms before Lancer', async () => {
     const calls = stubApi()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     render(<Agent />)
-    const run = await screen.findByRole('button', { name: 'Run daily videos now' })
+    const run = await screen.findByRole('button', { name: 'Lancer\u00a0: Vidéos du jour' })
     fireEvent.click(run)
-    expect(confirm.mock.calls[0][0]).toMatch(/Starts a Claude Code run; it uses your plan's usage/)
+    expect(confirm.mock.calls[0][0]).toBe(
+      'Lancer «\u00a0Vidéos du jour\u00a0» maintenant\u00a0? Ça démarre un run Claude Code, qui utilise le quota de ton abonnement.')
     expect(calls).not.toContain('POST /api/agent/runs')
     fireEvent.click(run)
     await vi.waitFor(() => expect(calls).toContain('POST /api/agent/runs'))
@@ -82,15 +83,15 @@ describe('Agent', () => {
     stubApi({ 'POST /api/agent/runs': [409, { error: 'already_running', message: 'run 8' }] })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<Agent />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Run daily videos now' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('Daily videos is already running')
+    fireEvent.click(await screen.findByRole('button', { name: 'Lancer\u00a0: Vidéos du jour' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Vidéos du jour is already running')
   })
 
   it('disables Run now while that playbook runs', async () => {
     stubApi({ 'GET /api/agent/runs?limit=50': [200, [{ ...RUN, status: 'running', finished_at: null }]] })
     render(<Agent />)
     await screen.findByText('running')
-    expect((screen.getByRole('button', { name: 'Run daily videos now' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Lancer\u00a0: Vidéos du jour' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('lists the style requests and decides one with a note', async () => {

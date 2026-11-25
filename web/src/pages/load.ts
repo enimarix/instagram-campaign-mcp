@@ -29,7 +29,8 @@ export const humanize = (id: string) => {
 }
 /** The agent's playbooks in the owner's words; unknown ones keep their file name. */
 const PLAYBOOKS: Record<string, string> = {
-  'daily-produce': 'Daily videos', 'daily-revise': 'Change requests', 'daily-learn': 'Nightly analysis',
+  'daily-learn': 'Analyse de la nuit', 'daily-produce': 'Vidéos du jour', 'daily-revise': 'Tes changements',
+  'check-renders': 'Vérifier les rendus', 'weekly-ads': 'Pubs de la semaine',
 }
 export const playbookName = (id: string) => PLAYBOOKS[id] ?? id
 
