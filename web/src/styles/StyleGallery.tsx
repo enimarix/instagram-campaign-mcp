@@ -146,14 +146,14 @@ export function StyleGallery({ onSelect, selectedId }: { onSelect?: (id: string,
       <div className="space-y-2">
         <input type="search" aria-label="Chercher un style" placeholder="Chercher : aquarelle, cartoon, carte…"
           value={q} onChange={(e) => setQ(e.target.value)} className={`${field} w-full`} />
-        <div role="group" aria-label="Famille" className="flex gap-2 overflow-x-auto pb-1 [&>*]:shrink-0">
+        <div role="group" aria-label="Famille" className="flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible [&>*]:shrink-0">
           <Chip pressed={family === null} onClick={() => { setFamily(null); setCategory(null) }}>Tous</Chip>
           {(Object.keys(FAMILY) as StyleFamily[]).map((f) => (
             <Chip key={f} pressed={family === f} onClick={() => { setFamily(f); setCategory(null) }}>{FAMILY[f]}</Chip>
           ))}
         </div>
         {categories.length > 0 && (
-          <div role="group" aria-label="Catégorie" className="flex gap-2 overflow-x-auto pb-1 [&>*]:shrink-0">
+          <div role="group" aria-label="Catégorie" className="flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible [&>*]:shrink-0">
             {categories.map((c) => (
               <Chip key={c} pressed={category === c} onClick={() => setCategory(category === c ? null : c)}>{c}</Chip>
             ))}

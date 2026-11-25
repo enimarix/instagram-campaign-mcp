@@ -22,6 +22,12 @@ export const pct = (r: number | null | undefined) => (r == null ? '–' : `${Mat
 
 /** An instant in the browser's time zone, without seconds: "Nov 18, 2026, 2:00 AM". */
 export const dateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+/** At most n characters, cut on a word (when the last space is past n/2), with … when cut. */
+export const clip = (s: string, n: number) => {
+  if (s.length <= n) return s
+  const cut = s.lastIndexOf(' ', n - 1)
+  return s.slice(0, cut > n / 2 ? cut : n - 1).trimEnd() + '…'
+}
 /** A taxonomy or API id in plain words: "hook_type" → "Hook type", "REELS" → "Reels". */
 export const humanize = (id: string) => {
   const s = id.replace(/_/g, ' ').toLowerCase()

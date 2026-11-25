@@ -56,6 +56,8 @@ describe('StyleGallery (172)', () => {
 
     fireEvent.click(within(screen.getByRole('group', { name: 'Famille' })).getByRole('button', { name: 'Lemo' }))
     expect(screen.queryByRole('region', { name: 'Favoris' })).toBeNull()
+    // desktop wraps both chip rows (all categories visible); the phone keeps the swipe row
+    for (const g of ['Famille', 'Catégorie']) expect(screen.getByRole('group', { name: g }).className).toMatch(/overflow-x-auto.*lg:flex-wrap lg:overflow-visible/)
     fireEvent.click(within(screen.getByRole('group', { name: 'Catégorie' })).getByRole('button', { name: 'Cartoons' }))
     expect(names(screen.getByRole('region', { name: 'Tous les styles' }))).toEqual(['Manga Panels'])
 

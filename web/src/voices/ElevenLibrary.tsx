@@ -3,6 +3,7 @@ import { addElevenCard, errorMessage, searchElevenVoices, type ElevenVoice, type
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { Sheet } from '../ui/Sheet'
+import { clip } from '../pages/load'
 import { Preview } from './Preview'
 import { field } from '../ui/styles'
 
@@ -30,8 +31,8 @@ function Select({ name, list, value, onChange }: { name: string; list: [string, 
 /** The card form once a voice is picked: its name, what the AI uses it for, its local relay. */
 function AddForm({ voice: v, locals, onAdded, onCancel }: { voice: ElevenVoice; locals: Voice[]; onAdded: (c: Voice) => void; onCancel: () => void }) {
   const same = locals.find((l) => l.gender && l.gender === v.gender) ?? locals[0]
-  const [name, setName] = useState(v.name.split(' - ')[0].slice(0, 60))
-  const [useFor, setUseFor] = useState(v.description.slice(0, 400))
+  const [name, setName] = useState(clip(v.name.split(' - ')[0], 60))
+  const [useFor, setUseFor] = useState(clip(v.description, 400))
   const [fallback, setFallback] = useState(same?.id ?? '')
   const [address, setAddress] = useState<string[]>(['tu', 'vous'])
   const [busy, setBusy] = useState(false)
@@ -42,7 +43,7 @@ function AddForm({ voice: v, locals, onAdded, onCancel }: { voice: ElevenVoice; 
     setError(null)
     addElevenCard({
       voice_id: v.voice_id, public_owner_id: v.public_owner_id, label: name, fallback, use_for: useFor,
-      description: v.description.slice(0, 400), gender: CARD_GENDERS.includes(v.gender ?? '') ? v.gender : null,
+      description: clip(v.description, 400), gender: CARD_GENDERS.includes(v.gender ?? '') ? v.gender : null,
       language: v.language?.slice(0, 10), accent: v.accent?.slice(0, 40),
       preview_url: v.preview_url, address,
     }).then(onAdded, (e: unknown) => { setError(errorMessage(e)); setBusy(false) })
