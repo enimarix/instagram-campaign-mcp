@@ -74,11 +74,35 @@ def cfg(tmp_path, monkeypatch):
         _env_file=None, instagram_access_token=TOKEN, facebook_app_secret="app-secret-456",
         database_path=":memory:",
         agent_workspace=str(tmp_path / "ws"), agent_log_dir=str(tmp_path / "logs"),
-        claude_bin=_fake_cli(tmp_path), agent_max_turns=40)
+        claude_bin=_fake_cli(tmp_path), agent_max_turns=40,
+        hook_skill_dir=str(tmp_path / "no-live-skill"))
 
 
 def _flag(cmd, name):
     return cmd[cmd.index(name) + 1]
+
+
+# --- viral-hooks: every run writes hooks with the live skill --------------------------
+def test_live_viral_hooks_skill_beats_the_snapshot(cfg, agent_dir, tmp_path):
+    (agent_dir / "skills" / "viral-hooks").mkdir()
+    (agent_dir / "skills" / "viral-hooks" / "SKILL.md").write_text("snapshot")
+    live = tmp_path / "live"
+    (live / "references").mkdir(parents=True)
+    (live / "SKILL.md").write_text("live")
+    (live / "references" / "examples.md").write_text("ex")
+    cfg.hook_skill_dir = str(live)
+    runner.prepare_workspace(cfg, "hello", agent_dir=agent_dir)
+    got = tmp_path / "ws" / ".claude" / "skills" / "viral-hooks"
+    assert (got / "SKILL.md").read_text() == "live"
+    assert (got / "references" / "examples.md").is_file()
+
+
+def test_missing_live_skill_falls_back_to_the_snapshot(cfg, agent_dir, tmp_path):
+    (agent_dir / "skills" / "viral-hooks").mkdir()
+    (agent_dir / "skills" / "viral-hooks" / "SKILL.md").write_text("snapshot")
+    runner.prepare_workspace(cfg, "hello", agent_dir=agent_dir)  # cfg: no live skill
+    got = tmp_path / "ws" / ".claude" / "skills" / "viral-hooks" / "SKILL.md"
+    assert got.read_text() == "snapshot"
 
 
 # --- guard: the run command and workspace never loosen ----------------------------

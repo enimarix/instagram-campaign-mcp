@@ -34,6 +34,9 @@ Before this run the studio wrote your work into `work/` in this workspace.
 - The studio tools are `mcp__studio__<name>`, written below by their short name. If one
   is not loaded yet, find it with ToolSearch.
 - Read, Glob, Grep: this workspace only. You have no shell and cannot write files.
+- Skill: load the `viral-hooks` skill, then `hook-guide`, before you write or change
+  any hook, script or on-screen text (new ideas, remakes, restyles, recuts, reactions).
+  The owner's own words win over both: a hook or line he wrote is used as written.
 
 ## Limits
 

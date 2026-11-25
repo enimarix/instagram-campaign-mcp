@@ -142,7 +142,7 @@ def test_workspace_holds_brief_skill_and_deny_rules(cfg, tmp_path):
     assert ws == (tmp_path / "ws" / "films" / "7").resolve()
     assert (ws / "BRIEF.md").read_text(encoding="utf-8") == "the brief"
     skills = ws / ".claude" / "skills"
-    assert [p.name for p in skills.iterdir()] == ["lemo-opuscar"]
+    assert sorted(p.name for p in skills.iterdir()) == ["lemo-opuscar", "viral-hooks"]
     assert (skills / "lemo-opuscar" / "scripts" / "setup.sh").is_file()
     deny = json.loads((ws / ".claude" / "settings.json").read_text())["permissions"]["deny"]
     assert "Read(//**/.env)" in deny

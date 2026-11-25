@@ -46,8 +46,10 @@ Before this run the studio wrote your work into `work/` in this workspace.
   ToolSearch.
 - WebSearch and WebFetch: to find a source for every fact. Never to download a video:
   Reels come in only through `download_reel`.
-- Read, Glob, Grep: this workspace only. Skill: load the `hook-guide` skill before you
-  write hooks.
+- Read, Glob, Grep: this workspace only.
+- Skill: load the `viral-hooks` skill, then `hook-guide`, before you write or change
+  any hook, script or on-screen text (new ideas, remakes, restyles, recuts, reactions).
+  The owner's own words win over both: a hook or line he wrote is used as written.
 - You have no shell and cannot write files. Do not ask for either.
 
 ## Safety (always, also in a dry run)
@@ -362,7 +364,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
 
 ## Phase 7: write the missing Track B ideas
 
-1. Load the `hook-guide` skill (Skill tool) if you have not yet.
+1. Load the `viral-hooks` and `hook-guide` skills (Skill tool) if you have not yet.
 2. The rest of the batch is Track B: what is left of `places.ideas_left` after your
    viral finds (and never past `limits.ideas` minus every idea of today). Plan the whole
    set before calling anything:

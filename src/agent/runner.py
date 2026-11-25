@@ -53,6 +53,7 @@ ALLOWED_TOOLS = (f"mcp__{SERVER}__*", "WebSearch", "WebFetch")
 DISALLOWED_TOOLS = ("Bash", "PowerShell", "Monitor", "Edit", "Write", "NotebookEdit",
                     "Agent", "Workflow", "Artifact", "CronCreate", "RemoteTrigger",
                     "SendMessage", "SendUserFile", "PushNotification", "EnterWorktree")
+HOOK_SKILL = "viral-hooks"  # the live copy (copy_hook_skill) beats the snapshot in skills/
 MARKER = ".ig-campaign-agent"  # in <ws>/.claude: the runner made it and may replace it
 PLAYBOOK_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 DEAD_RUN = "le studio a redémarré pendant la tâche"  # its runner process is gone (155)
@@ -139,12 +140,23 @@ def prepare_workspace(settings: InstagramMCPSettings, playbook: str, *,
         shutil.copy2(VOICES, ws / VOICES.name)
     skills = agent_dir / "skills"
     for skill in sorted(skills.iterdir()) if skills.is_dir() else ():
-        if skill.is_dir():
+        if skill.is_dir() and skill.name != HOOK_SKILL:
             shutil.copytree(skill, claude / "skills" / skill.name)
+    copy_hook_skill(settings, claude / "skills", agent_dir)
     (claude / "settings.json").write_text(json.dumps(workspace_settings(settings), indent=2))
     config = claude / "mcp.json"
     config.write_text(json.dumps(mcp_config(), indent=2))
     return config
+
+
+def copy_hook_skill(settings: InstagramMCPSettings, skills: Path,
+                    agent_dir: Path = AGENT_DIR) -> None:
+    """Every hook and script is written with the viral-hooks skill: the live one
+    (HOOK_SKILL_DIR, which keeps learning from videos), else the snapshot in agent/skills."""
+    live = Path(settings.hook_skill_dir).expanduser() if settings.hook_skill_dir else None
+    source = live if live and (live / "SKILL.md").is_file() else agent_dir / "skills" / HOOK_SKILL
+    if (source / "SKILL.md").is_file():
+        shutil.copytree(source, skills / HOOK_SKILL)
 
 
 def prompt(playbook: str, *, dry_run: bool = False) -> str:

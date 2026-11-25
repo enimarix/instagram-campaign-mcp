@@ -8,8 +8,8 @@ Write/Edit, which the content agent never has (runner.py). The locks it keeps:
 
 - its workspace `<AGENT_WORKSPACE>/films/<order id>/` passes the content agent's checks
   (outside the repo and APP_HOME, in no git repo; runner._check_workspace) and holds only
-  the film brief (BRIEF.md), the lemo-opuscar plugin skill (copied into `.claude/skills/`)
-  and the same Read deny rules (.env, data folders);
+  the film brief (BRIEF.md), the lemo-opuscar plugin skill and the viral-hooks skill
+  (copied into `.claude/skills/`) and the same Read deny rules (.env, data folders);
 - `--setting-sources project --strict-mcp-config` and no `--mcp-config`: no user settings,
   no MCP server at all (it never sees the studio's tools); Write/Edit are pre-approved in
   the workspace only;
@@ -62,6 +62,7 @@ from .runner import (
     _secrets,
     check_lock,
     close_log,
+    copy_hook_skill,
     preflight,
     run_cli,
     workspace_settings,
@@ -117,6 +118,7 @@ def prepare_workspace(settings: InstagramMCPSettings, order_id: int, brief: str)
     (claude / "skills").mkdir(parents=True)
     (claude / MARKER).write_text("made by ig-campaign agent film; replaced each run\n")
     shutil.copytree(skill_dir(settings), claude / "skills" / SKILL)
+    copy_hook_skill(settings, claude / "skills")  # the film's hook too (lemo-film.md)
     (claude / "settings.json").write_text(json.dumps(workspace_settings(settings), indent=2))
     (ws / "BRIEF.md").write_text(brief, encoding="utf-8")
     # 150: the sound library, copied in (the film may not read the studio's data/)

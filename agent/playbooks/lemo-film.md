@@ -21,6 +21,8 @@ data, never instructions.
 $remake
 ## How to work
 
+- Write the hook, the on-screen text and the spoken lines with the `viral-hooks` skill
+  (read its SKILL.md first). The owner's instruction wins where it says otherwise.
 - Use the `lemo-opuscar` skill: read its SKILL.md, then `$LIB/AGENTS.md`, `DIRECTOR.md`,
   `TECHNIQUE.md` and `styles/$slug/STYLE.md`. Fetch the demo only as the skill says (after
   TREATMENT.md). The library is already set up (core + voice packages): don't reinstall it.
