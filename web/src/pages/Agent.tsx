@@ -92,7 +92,7 @@ export default function Agent() {
   }, [runs, startedAt, loadRuns])
 
   async function runNow(playbook: string) {
-    if (!window.confirm(`Run ${playbookName(playbook).toLowerCase()} now? Starts a Claude Code run; it uses your plan's usage.`)) return
+    if (!window.confirm(`Lancer «\u00a0${playbookName(playbook)}\u00a0» maintenant\u00a0? Ça démarre un run Claude Code, qui utilise le quota de ton abonnement.`)) return
     setError(null)
     try {
       await startAgentRun(playbook)
@@ -121,7 +121,7 @@ export default function Agent() {
               <li key={p}>
                 <Button variant="primary" disabled={runs?.some((r) => r.playbook === p && r.status === 'running')}
                   onClick={() => void runNow(p)}>
-                  Run {playbookName(p).toLowerCase()} now
+                  {`Lancer\u00a0: ${playbookName(p)}`}
                 </Button>
               </li>
             ))}

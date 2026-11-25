@@ -89,7 +89,7 @@ def test_chain_follows_the_worker_order_and_each_start_is_the_last_ready(
     assert got[:6] == [("running", "render", running), ("next", "render", queued),
                        ("next", "film", film), ("next", "agent_run", None),
                        ("next", "order_run", None), ("next", "work_order", mine)]
-    assert items[3]["title"] == "Run daily-learn"  # due at 10:00, not started: after the line
+    assert items[3]["title"] == "Analyse de la nuit"  # due at 10:00, not started: after the line
     assert got[6][1] == "work_order" and items[6]["waits_on"] == "needs_instruction"
     assert items[6]["est_start"] is None
     # the running render: halfway after 60 s -> 60 s left
@@ -103,7 +103,7 @@ def test_chain_follows_the_worker_order_and_each_start_is_the_last_ready(
     assert all(i["estimated"] for i in items)
     # planned: tomorrow 03:00 and 10:00 Paris, the producing run's ETA from its real run
     planned = [i for i in items if i["section"] == "planned"]
-    assert [i["title"] for i in planned] == ["Run daily-produce", "Run daily-learn"]
+    assert [i["title"] for i in planned] == ["Vidéos du jour", "Analyse de la nuit"]
     assert parse_iso(planned[0]["est_start"]) == datetime(2026, 11, 18, 2, tzinfo=UTC)
     assert planned[0]["est_duration_s"] == 1200
 
@@ -324,3 +324,11 @@ def test_a_film_on_a_far_timer_holds_no_run_back(store, agent_dir, monkeypatch):
     items = planning.build_planning(store, cfg(), NOW)["items"]
     check = next(i for i in items if i["kind"] == "check_run")
     assert parse_iso(check["est_start"]) == NOW and check["waits_on"] is None
+
+
+def test_run_titles_name_the_jobs_in_plain_words():  # UI-015
+    assert [planning.run_title(p) for p in ("daily-learn", "daily-produce", "daily-revise",
+                                            "check-renders", "weekly-ads")] == [
+        "Analyse de la nuit", "Vidéos du jour", "Tes changements", "Vérifier les rendus",
+        "Pubs de la semaine"]
+    assert planning.run_title("my-playbook") == "my-playbook"  # unknown: its file name
