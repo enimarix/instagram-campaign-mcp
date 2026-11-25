@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from src.agent import film_voice
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
-from src.studio import elevenlabs, ffmpeg, motion, render, tts, voices
+from src.studio import elevenlabs, ffmpeg, motion, render, sitcom, tts, voices
 
 from .conftest import LOCAL
 
@@ -470,3 +470,29 @@ def test_a_cache_hit_keeps_this_scripts_own_line_text(tmp_path, card):
     again = tts.get_provider(_settings(tmp_path)).synthesize("Rendez-vous à 21 h.", card["id"])
     assert route.call_count == 1  # same words said: one recording
     assert [t.text for t in again.lines] == ["Rendez-vous à 21 h."]
+
+
+def test_elevenlabs_first_casts_the_cards_and_never_leaves_a_local_pick_on_voxcpm(
+        store, card, tmp_path):
+    # the owner's bug (2026-11-25): the default « souriante » has no card of its own, so with
+    # ElevenLabs first it still spoke VoxCPM; a sitcom dad got the narrator's own card
+    her = voices.add_el_card(el_voice_id="xyz789", label="Koraly", fallback="energique_homme",
+                            gender="female")
+    assert voices.engine_plan("souriante")[0] == ("elevenlabs", her["id"])  # her gender's card
+    assert voices.engine_plan(None)[0] == ("elevenlabs", card["id"])  # no voice: a card too
+    assert {v["id"] for v in voices.cast_voices(store)} == {card["id"], her["id"]}
+    assert voices.default_voice(store) == her["id"]  # the default's gender, as a card
+    voices.agent_copy(store, tmp_path / "v.json")
+    listed = json.loads((tmp_path / "v.json").read_text(encoding="utf-8"))["voices"]
+    assert {v["id"] for v in listed} == {card["id"], her["id"]}  # the film picks a card
+    cast = voices.say_cast(store)
+    assert sitcom.say_voice("dad", card["id"], cast) != card["id"]  # never the narrator's
+    voices.set_engine(priority="local")  # local first: the local voices, as before
+    assert voices.engine_plan("souriante") == [("local", "souriante")]
+    assert voices.default_voice(store) == "souriante"
+
+
+def test_a_cast_queued_with_local_ids_never_doubles_the_narrator(card):
+    # 089: cast {male: (energique_homme, ...)} queued before the fix, narrator the card
+    cast = {"male": ("energique_homme", "souriante"), "female": ("souriante", "energique_homme")}
+    assert sitcom.say_voice("dad", card["id"], cast) == "souriante"  # not Liam twice

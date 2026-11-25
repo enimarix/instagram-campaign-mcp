@@ -9,7 +9,9 @@ The voice-over voices the owner keeps on (Voix page, owner's casting 2026-11-22)
 - Only voices that are on reach a video: the agent's copy of voices.json lists them alone
   (agent_copy), render_motion / render_remix refuse another one for a new voice-over
   (check_voice), and the sitcom's characters speak in them (say_cast, by `gender`). No voice
-  asked = the default voice if it is on, else the first one on.
+  asked = the default voice if it is on, else the first one on. With ElevenLabs first (the
+  Voix page's engine choice) the cards on are the cast and the local voices their relays
+  (cast_voices), and any local pick still speaks ElevenLabs first (engine_plan).
 - Step 204: ElevenLabs cards sit beside them, added by the owner from the Voice Library on the
   Voix page and kept in data/voices/elevenlabs.json (runtime data, with the engine choice:
   which engine speaks first and the ElevenLabs model). Each card names a local `fallback`
@@ -165,23 +167,37 @@ def remove_el_card(store: CampaignStore, voice: str) -> Dict[str, Any]:
 def engine_plan(voice: Optional[str]) -> List[Tuple[str, Optional[str]]]:
     """[(engine, voice id)] in the order to try: the owner's priority engine first, each in
     the voice of the pair the picked voice belongs to (an ElevenLabs card and its `fallback`;
-    a local voice and the first card on that falls back to it). A voice with no pair: its
-    own engine only; a card id no longer listed: the default local voice. A card the owner
-    turned off is never a twin; a local relay voice the owner turned off still speaks for
-    its card, as a backup only."""
+    a local voice and the first card on that falls back to it). With ElevenLabs first, a
+    local voice with no card of its own (or no voice) speaks in the first card on of its
+    gender: the owner's engine choice wins over an old or default local pick. A voice still
+    with no pair: its own engine only; a card id no longer listed: the default local voice.
+    A card the owner turned off is never a twin; a local relay voice the owner turned off
+    still speaks for its card, as a backup only."""
     card = el_card(voice)
+    first = engine()["priority"]
     if card:
         pair = {"elevenlabs": card["id"], "local": card.get("fallback")}
     else:
         if voice is not None and voice.startswith("el_"):
             voice = None  # a card removed since the video was queued: the default local voice
         # a twin the owner turned off never speaks (set_enabled keeps `enabled` on the card)
-        twin = next((c["id"] for c in el_cards()
-                     if c.get("fallback") == voice and c.get("enabled", True)), None)
-        pair = {"local": voice, "elevenlabs": twin if voice is not None else None}
-    first = engine()["priority"]
+        on = [c for c in el_cards() if c.get("enabled", True)]
+        twin = next((c["id"] for c in on if voice is not None and c.get("fallback") == voice),
+                    None)
+        if twin is None and first == "elevenlabs":
+            gender = next((e.get("gender") for e in _local() if e["id"] == voice), None)
+            twin = next((c["id"] for c in on if gender is None or c.get("gender") == gender),
+                        None)
+        pair = {"local": voice, "elevenlabs": twin}
     order = (first, "local" if first == "elevenlabs" else "elevenlabs")
     return [(e, pair[e]) for e in order if pair[e] is not None or (e == "local" and not card)]
+
+
+def speaker(voice: Optional[str]) -> Optional[str]:
+    """The voice that speaks `voice`'s lines first (engine_plan): a local pick and its card
+    are one speaker, so a sitcom character never gets the narrator's voice under a new id."""
+    plan = engine_plan(voice)
+    return (plan[0][1] if plan else None) or voice
 
 
 def engine_status(settings: InstagramMCPSettings) -> Dict[str, Any]:
@@ -289,10 +305,27 @@ def enabled_voices(store: CampaignStore) -> List[Dict[str, Any]]:
     return [v for v in list_voices(store) if v["enabled"]]
 
 
-def default_voice(store: CampaignStore) -> Optional[str]:
-    """The JSON's default voice if it is on, else the first voice on (None: no voices)."""
+def cast_voices(store: CampaignStore) -> List[Dict[str, Any]]:
+    """The voices a new voice-over is cast from: the voices on; with ElevenLabs first and a
+    card on, the cards on only (each local voice is then a card's relay, never a pick)."""
     on = enabled_voices(store)
-    return next((v["id"] for v in on if v["default"]), on[0]["id"] if on else None)
+    cards = [v for v in on if v["engine"] == "elevenlabs"]
+    return cards if cards and engine()["priority"] == "elevenlabs" else on
+
+
+def default_voice(store: CampaignStore) -> Optional[str]:
+    """The JSON's default voice if it is on and cast (cast_voices), else its card, else the
+    first cast voice of its gender, else the first cast voice (None: no voices)."""
+    on = cast_voices(store)
+    if not on:
+        return None
+    marked = next((v for v in enabled_voices(store) if v["default"]), None)
+    if marked is None:
+        return on[0]["id"]
+    return next((v["id"] for v in on if v["id"] == marked["id"]),
+                next((v["id"] for v in on if v["fallback"] == marked["id"]),
+                     next((v["id"] for v in on if v["gender"] == marked["gender"]),
+                          on[0]["id"])))
 
 
 def check_voice(store: CampaignStore, voice: Optional[str]) -> Optional[str]:
@@ -310,11 +343,11 @@ def check_voice(store: CampaignStore, voice: Optional[str]) -> Optional[str]:
 
 
 def say_cast(store: CampaignStore) -> Optional[Dict[str, Tuple[str, str]]]:
-    """The sitcom's character voices among the voices on: {gender: (first, other)}, the
+    """The sitcom's character voices among the cast voices (cast_voices): {gender: (first, other)}, the
     gender's own voices first, then the other gender's (sitcom.say_voice takes `other` when
     the narrator already has `first`); voices without a `gender` come after the gender's own.
     None when no voice is on."""
-    on = [e for e in _entries() if e["id"] in {v["id"] for v in enabled_voices(store)}]
+    on = [e for e in _entries() if e["id"] in {v["id"] for v in cast_voices(store)}]
     if not on:
         return None
     by = {g: [e["id"] for e in on if e.get("gender") == g] for g in ("male", "female")}
@@ -329,8 +362,9 @@ def say_cast(store: CampaignStore) -> Optional[Dict[str, Tuple[str, str]]]:
 def agent_copy(store: CampaignStore, dest: Path) -> None:
     """Write the agent's voices.json: the voices on only, the default moved to the voice
     check_voice(None) gives. Recipes stay out (the agent picks a voice, never makes one).
-    A Lemo film gets the same (207: it speaks through the film runner's voice door)."""
-    on = {v["id"] for v in enabled_voices(store)}
+    A Lemo film gets the same (207: it speaks through the film runner's voice door). The
+    voices listed are the cast ones (cast_voices): the ElevenLabs cards when it speaks first."""
+    on = {v["id"] for v in cast_voices(store)}
     if not on:
         return
     default = default_voice(store)
