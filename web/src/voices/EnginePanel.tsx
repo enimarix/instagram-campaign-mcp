@@ -29,7 +29,7 @@ export function EnginePanel({ onEngine }: { onEngine?: (e: EngineStatus) => void
     return () => { live = false }
   }, [onEngine])
 
-  if (error) return <p role="alert" className="mb-4 text-sm text-danger">Moteurs indisponibles : {error}</p>
+  if (error) return <p role="alert" className="mb-4 text-sm text-danger">Moteurs indisponibles : {error}</p>
   if (!engine) return <Skeleton className="mb-4 h-32" />
 
   const save = (change: { priority?: VoiceEngine; model?: string }) => {
@@ -37,7 +37,7 @@ export function EnginePanel({ onEngine }: { onEngine?: (e: EngineStatus) => void
     setState({ ...engine, ...change })
     setEngine(change).then(() => onEngine?.({ ...before, ...change }), (e: unknown) => {
       setState(before)
-      toast({ message: `Réglage non enregistré : ${errorMessage(e)}` })
+      toast({ message: `Réglage non enregistré : ${errorMessage(e)}` })
     })
   }
   const el = engine.elevenlabs
@@ -47,16 +47,16 @@ export function EnginePanel({ onEngine }: { onEngine?: (e: EngineStatus) => void
     <Card as="section" aria-label="Moteurs de voix" className="mb-4 space-y-4">
       <div>
         <h2 className="font-semibold">Moteur prioritaire</h2>
-        <p className="mt-1 text-sm text-muted">Le premier moteur fait la voix ; s'il échoue (crédits épuisés, panne), l'autre prend le relais avec la voix jumelle.</p>
+        <p className="mt-1 text-sm text-muted">Le premier moteur fait la voix ; s'il échoue (crédits épuisés, panne), l'autre prend le relais avec la voix jumelle.</p>
         <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Moteur prioritaire">
           <Chip pressed={engine.priority === 'elevenlabs'} onClick={() => save({ priority: 'elevenlabs' })}>ElevenLabs d'abord</Chip>
           <Chip pressed={engine.priority === 'local'} onClick={() => save({ priority: 'local' })}>Voix locale d'abord</Chip>
         </div>
-        {!engine.local && <p className="mt-2 text-sm text-warn">La voix locale n'est pas configurée (TTS_PROVIDER) : pas de relais local.</p>}
+        {!engine.local && <p className="mt-2 text-sm text-warn">La voix locale n'est pas configurée (TTS_PROVIDER) : pas de relais local.</p>}
       </div>
 
       {!el.configured ? (
-        <p className="text-sm text-muted">ElevenLabs n'est pas branché : ajoutez <code>ELEVENLABS_API_KEY</code> dans <code>.env</code> puis relancez le studio.</p>
+        <p className="text-sm text-muted">ElevenLabs n'est pas branché : ajoute <code>ELEVENLABS_API_KEY</code> dans <code>.env</code> puis relance le studio.</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block text-sm">
@@ -73,7 +73,7 @@ export function EnginePanel({ onEngine }: { onEngine?: (e: EngineStatus) => void
             <span className="mt-1 block text-muted">
               {hearsTags(engine.model)
                 ? 'Ce modèle joue les balises d\'émotion du script ([excited], [laughs], [whispers]…).'
-                : 'Ce modèle ne joue pas les balises d\'émotion : elles sont retirées avant la voix.'}
+                : 'Ce modèle ne joue pas les balises d\'émotion : elles sont retirées avant la voix.'}
             </span>
           </label>
           <div className="text-sm">

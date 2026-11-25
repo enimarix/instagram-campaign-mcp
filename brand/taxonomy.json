@@ -11,23 +11,23 @@
     "placeholder": true,
     "note": "Placeholders until the channel bible (gate H2, step 049) defines the real pillars. Optional shelf_days per pillar: days after the batch date a submitted video stays worth posting (its default best_before; trend-type short, evergreen long). Without it the BEST_BEFORE_DEFAULT_DAYS setting applies. Optional flags (create_idea guards, src/learning/quotas.py): humour (counts toward HUMOUR_SHARE; every other pillar is informative) and needs_citations (facts: an idea needs at least one citation {url, title?}, GOAL.md §5.6).",
     "values": [
-      {"id": "fun_facts", "label": "Fun facts", "description": "Surprising, checkable facts.", "shelf_days": 30, "needs_citations": true},
-      {"id": "myths", "label": "Myths", "description": "Common beliefs that turn out wrong.", "shelf_days": 30, "needs_citations": true},
-      {"id": "stories", "label": "Stories", "description": "A short story that explains one idea.", "shelf_days": 30},
-      {"id": "everyday_humor", "label": "Everyday humor", "description": "Relatable POV moments played for laughs.", "shelf_days": 3, "humour": true}
+      {"id": "fun_facts", "label": "Faits étonnants", "description": "Surprising, checkable facts.", "shelf_days": 30, "needs_citations": true},
+      {"id": "myths", "label": "Idées reçues", "description": "Common beliefs that turn out wrong.", "shelf_days": 30, "needs_citations": true},
+      {"id": "stories", "label": "Histoires", "description": "A short story that explains one idea.", "shelf_days": 30},
+      {"id": "everyday_humor", "label": "Humour du quotidien", "description": "Relatable POV moments played for laughs.", "shelf_days": 3, "humour": true}
     ]
   },
   "hook_types": {
     "note": "How the first second grabs attention. The agent picks one per idea.",
     "values": [
       {"id": "question", "label": "Question", "description": "Opens with a direct question the viewer wants answered."},
-      {"id": "bold_claim", "label": "Bold claim", "description": "States something surprising or strong as fact, then backs it up."},
-      {"id": "curiosity_gap", "label": "Curiosity gap", "description": "Teases an answer or reveal that only comes later in the video."},
+      {"id": "bold_claim", "label": "Affirmation forte", "description": "States something surprising or strong as fact, then backs it up."},
+      {"id": "curiosity_gap", "label": "Suspense", "description": "Teases an answer or reveal that only comes later in the video."},
       {"id": "pov", "label": "POV", "description": "\"POV:\" sets up a relatable situation the viewer is put into."},
-      {"id": "myth_bust", "label": "Myth bust", "description": "Names a common belief and promises to prove it wrong."},
-      {"id": "number_list", "label": "Number list", "description": "Promises a countable list (\"3 things...\", \"5 facts...\")."},
-      {"id": "story", "label": "Story", "description": "Drops the viewer into the middle of a short story."},
-      {"id": "challenge", "label": "Challenge", "description": "Dares the viewer to guess, answer or beat something before the reveal."}
+      {"id": "myth_bust", "label": "Mythe démonté", "description": "Names a common belief and promises to prove it wrong."},
+      {"id": "number_list", "label": "Liste chiffrée", "description": "Promises a countable list (\"3 things...\", \"5 facts...\")."},
+      {"id": "story", "label": "Histoire", "description": "Drops the viewer into the middle of a short story."},
+      {"id": "challenge", "label": "Défi", "description": "Dares the viewer to guess, answer or beat something before the reveal."}
     ]
   },
   "templates": {
@@ -50,19 +50,19 @@
   "feedback_reasons": {
     "note": "Reason chips in the review inbox (GOAL.md §3.2). Labels are what the chip shows.",
     "values": [
-      {"id": "weak_hook", "label": "Weak hook"},
-      {"id": "too_long", "label": "Too long"},
-      {"id": "too_slow", "label": "Too slow"},
-      {"id": "wrong_tone", "label": "Wrong tone"},
-      {"id": "wrong_topic", "label": "Wrong topic"},
-      {"id": "factual_error", "label": "Wrong fact"},
-      {"id": "bad_audio", "label": "Bad audio"},
-      {"id": "ugly_visual", "label": "Ugly"},
-      {"id": "off_brand", "label": "Off-brand"},
-      {"id": "repetitive", "label": "Repetitive"},
-      {"id": "not_funny", "label": "Not funny"},
-      {"id": "caption", "label": "Caption"},
-      {"id": "other", "label": "Other"}
+      {"id": "weak_hook", "label": "Accroche faible"},
+      {"id": "too_long", "label": "Trop long"},
+      {"id": "too_slow", "label": "Trop lent"},
+      {"id": "wrong_tone", "label": "Mauvais ton"},
+      {"id": "wrong_topic", "label": "Hors sujet"},
+      {"id": "factual_error", "label": "Fait faux"},
+      {"id": "bad_audio", "label": "Son raté"},
+      {"id": "ugly_visual", "label": "Moche"},
+      {"id": "off_brand", "label": "Hors charte"},
+      {"id": "repetitive", "label": "Répétitif"},
+      {"id": "not_funny", "label": "Pas drôle"},
+      {"id": "caption", "label": "Légende"},
+      {"id": "other", "label": "Autre"}
     ]
   }
 }

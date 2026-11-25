@@ -26,8 +26,8 @@ const WINNERS = [
 const who = { countries: ['FR'], age_min: 18, age_max: null, placements: ['reels' as const] }
 const PRESETS: AdPreset[] = [
   { ...who, id: 'fr_reels', label: 'France, Reels', varies: ['audience', 'placement'] },
-  { ...who, id: 'fr_feed_reels', label: 'France, Feed and Reels', varies: ['placement'] },
-  { ...who, id: 'francophone_reels', label: 'France, Belgium, Switzerland, Luxembourg, Reels', varies: ['audience'] },
+  { ...who, id: 'fr_feed_reels', label: 'France, fil et Reels', varies: ['placement'] },
+  { ...who, id: 'francophone_reels', label: 'France, Belgique, Suisse, Luxembourg, Reels', varies: ['audience'] },
 ]
 const AUDIT: AdsAudit = {
   total: 25, limit: 20, offset: 0,
@@ -153,9 +153,9 @@ describe('Ads page', () => {
     const sheet = screen.getByRole('dialog')
     fireEvent.click(within(sheet).getByRole('tab', { name: 'Public' }))
     fireEvent.click(await within(sheet).findByRole('radio', { name: /Boss fight/ }))
-    expect(within(sheet).queryByRole('button', { name: 'France, Feed and Reels' })).toBeNull() // placement only
+    expect(within(sheet).queryByRole('button', { name: 'France, fil et Reels' })).toBeNull() // placement only
     fireEvent.click(within(sheet).getByRole('button', { name: 'France, Reels' }))
-    fireEvent.click(within(sheet).getByRole('button', { name: /Belgium/ }))
+    fireEvent.click(within(sheet).getByRole('button', { name: /Belgique/ }))
     fireEvent.change(within(sheet).getByLabelText('Ce que tu attends'), { target: { value: 'h' } })
     fireEvent.click(within(sheet).getByRole('button', { name: 'Calculer le budget' }))
     await vi.waitFor(() => expect(posts(calls)[0]?.body).toMatchObject({ variable: 'audience', variants: [

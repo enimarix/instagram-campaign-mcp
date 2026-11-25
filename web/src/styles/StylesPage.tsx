@@ -6,7 +6,7 @@ import { StyleGallery } from './StyleGallery'
 export default function StylesPage() {
   return (
     <>
-      <PageHeader title="Styles">Les styles du studio et de la bibliothèque Lemo-Opuscar. ★ : vos favoris, en tête de liste.</PageHeader>
+      <PageHeader title="Styles">Les styles du studio et de la bibliothèque Lemo-Opuscar. ★ : tes favoris, en tête de liste.</PageHeader>
       <StyleGallery />
     </>
   )

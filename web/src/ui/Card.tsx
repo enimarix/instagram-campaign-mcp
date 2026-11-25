@@ -32,11 +32,11 @@ export function EmptyState({ title, children, action }: { title: string; childre
   )
 }
 
-/** A pulsing placeholder block while data loads; screen readers hear "Loading…". */
+/** A pulsing placeholder block while data loads; screen readers hear « Chargement… ». */
 export function Skeleton({ className = 'h-16' }: { className?: string }) {
   return (
     <div className={`animate-pulse rounded-card bg-surface-2 ${className}`}>
-      <span className="sr-only">Loading…</span>
+      <span className="sr-only">Chargement…</span>
     </div>
   )
 }

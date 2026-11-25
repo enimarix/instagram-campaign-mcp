@@ -74,11 +74,11 @@ describe('StyleGallery (172)', () => {
       'PATCH /api/style-catalog/paper': [200, { ...CATALOG[1], favourite: true }],
     })
     render(<StyleGallery />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Favori : Papier' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Favori : Papier' }))
     expect(names(screen.getByRole('region', { name: 'Favoris' }))).toEqual(['3D 8-bit', 'Papier'])
     expect(calls.at(-1)).toEqual({ key: 'PATCH /api/style-catalog/paper', body: { favourite: true } })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Favori : Watercolor Brush' }))  // no answer: 404
+    fireEvent.click(screen.getByRole('button', { name: 'Favori : Watercolor Brush' }))  // no answer: 404
     expect(names(screen.getByRole('region', { name: 'Favoris' }))).toContain('Watercolor Brush')
     await vi.waitFor(() =>
       expect(names(screen.getByRole('region', { name: 'Favoris' }))).not.toContain('Watercolor Brush'))

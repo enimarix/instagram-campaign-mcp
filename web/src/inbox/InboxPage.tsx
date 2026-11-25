@@ -252,7 +252,7 @@ export default function InboxPage() {
   // 181: the video leaves the Inbox (archived by the server), with the usual « Annuler ».
   function restyle(a: Asset, style: string | null, extra: { note?: string; reasons: string[] }) {
     setChangeFor(null)
-    decide(a, { status: 'archived' }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).",
+    decide(a, { status: 'archived' }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).",
       async () => { await restyleAsset(a.id, { style, ...extra }) })
   }
 

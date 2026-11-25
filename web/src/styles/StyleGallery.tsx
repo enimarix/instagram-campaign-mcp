@@ -29,7 +29,7 @@ function Poster({ style, className = '' }: { style: CatalogStyle; className?: st
 
 function Star({ style, onToggle }: { style: CatalogStyle; onToggle: () => void }) {
   return (
-    <button type="button" aria-pressed={style.favourite} aria-label={`Favori : ${style.label}`} title="Favori"
+    <button type="button" aria-pressed={style.favourite} aria-label={`Favori : ${style.label}`} title="Favori"
       onClick={(e) => { e.stopPropagation(); onToggle() }}
       className={`grid size-11 shrink-0 place-items-center rounded-full transition hover:bg-surface-2 ${style.favourite ? 'text-warn' : 'text-muted'}`}>
       <StarIcon fill={style.favourite ? 'currentColor' : 'none'} />
@@ -79,7 +79,7 @@ function Detail({ style, onClose, onToggle, onSelect }: {
         {style.why_not && <p className="text-sm text-warn">{style.why_not}</p>}
         {style.credit && (
           <p className="text-xs text-muted">
-            Aperçu : <a className={link} href={style.credit.url} target="_blank" rel="noreferrer">{style.credit.text}</a>,{' '}
+            Aperçu : <a className={link} href={style.credit.url} target="_blank" rel="noreferrer">{style.credit.text}</a>,{' '}
             <a className={link} href={style.credit.licence_url} target="_blank" rel="noreferrer">{style.credit.licence}</a>
           </p>
         )}
@@ -129,7 +129,7 @@ export function StyleGallery({ onSelect, selectedId }: { onSelect?: (id: string,
     flip(!s.favourite) // optimistic; put back if the server refuses
     setStyleFavourite(s.id, !s.favourite).catch((e: unknown) => {
       flip(s.favourite)
-      toast({ message: `Favori non enregistré : ${errorMessage(e)}` })
+      toast({ message: `Favori non enregistré : ${errorMessage(e)}` })
     })
   }
   const grid = (list: CatalogStyle[]) => (
@@ -139,12 +139,12 @@ export function StyleGallery({ onSelect, selectedId }: { onSelect?: (id: string,
     </ul>
   )
 
-  if (error) return <p role="alert" className="text-sm text-danger">Styles indisponibles : {error}</p>
+  if (error) return <p role="alert" className="text-sm text-danger">Styles indisponibles : {error}</p>
   if (!all) return <Skeleton className="h-64" />
   return (
     <div className="@container space-y-4"> {/* columns follow the gallery's own width: a page or a sheet */}
       <div className="space-y-2">
-        <input type="search" aria-label="Chercher un style" placeholder="Chercher : aquarelle, cartoon, carte…"
+        <input type="search" aria-label="Chercher un style" placeholder="Chercher : aquarelle, cartoon, carte…"
           value={q} onChange={(e) => setQ(e.target.value)} className={`${field} w-full`} />
         <div role="group" aria-label="Famille" className="flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible [&>*]:shrink-0">
           <Chip pressed={family === null} onClick={() => { setFamily(null); setCategory(null) }}>Tous</Chip>

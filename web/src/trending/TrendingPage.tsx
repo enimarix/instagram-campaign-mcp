@@ -29,7 +29,7 @@ export default function TrendingPage() {
           <Link to="/trends" className={buttonClass('ghost', 'sm')}>Rapport</Link>
         </>
       }>
-        Ce sur quoi l'IA travaille : les tendances, et les Reels que tu lui envoies.
+        Ce sur quoi l'IA travaille : les tendances, et les Reels que tu lui envoies.
       </PageHeader>
       <Tabs label="Trending" tabs={[...TABS]} value={tab}
         onChange={(id) => setParams(id === 'envois' ? { tab: id } : {}, { replace: true })} />
@@ -41,7 +41,7 @@ export default function TrendingPage() {
           setCreating(false)
           setSent((n) => n + 1)
           setParams({ tab: 'envois' }, { replace: true })
-          toast({ message: "Envoyé à l'IA : la vidéo est dans Mes envois." })
+          toast({ message: "Envoyé à l'IA : la vidéo est dans Mes envois." })
         }} />
       )}
     </section>

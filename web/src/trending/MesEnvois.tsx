@@ -33,7 +33,7 @@ function InstructionForm({ order, onSaved, onCancel }: { order: WorkOrder; onSav
     } catch (err) {
       setBusy(false)
       if (err instanceof ApiError && err.status === 409) {
-        toast({ message: "Trop tard : l'IA a déjà commencé ce Reel, la consigne n'a pas changé." })
+        toast({ message: "Trop tard : l'IA a déjà commencé ce Reel, la consigne n'a pas changé." })
         onSaved() // reload: the card shows where it is now
       } else setError(errorMessage(err))
     }
@@ -41,9 +41,9 @@ function InstructionForm({ order, onSaved, onCancel }: { order: WorkOrder; onSav
 
   return (
     <form aria-label="Consigne" onSubmit={(e) => void submit(e)} className="space-y-2">
-      <label className="block font-medium">Que doit faire l'IA ?
+      <label className="block font-medium">Que doit faire l'IA ?
         <textarea required value={text} maxLength={500} rows={4} onChange={(e) => setText(e.target.value)}
-          placeholder="Ex. : ça a bien marché, analyse-la. Change ça, garde ça… (tu peux dicter)"
+          placeholder="Ex. : ça a bien marché, analyse-la. Change ça, garde ça… (tu peux dicter)"
           className={`${field} mt-1 block w-full py-2 text-base`} />
       </label>
       {order.source === 'dm' && <ModePicker modes={MODES} value={mode} onChange={setMode} />}
@@ -67,11 +67,11 @@ function origin(o: WorkOrder) {
 /** The AI's analysis: text (older orders) or {summary, why, timeline} (182: an object
  * rendered as text blanked the whole page). */
 function Analysis({ analysis: a }: { analysis: NonNullable<WorkOrder['analysis']> }) {
-  if (typeof a === 'string') return <p className="rounded-control bg-surface-2 p-3 break-words">Analyse de l'IA : {a}</p>
+  if (typeof a === 'string') return <p className="rounded-control bg-surface-2 p-3 wrap-anywhere">Analyse de l'IA : {a}</p>
   return (
-    <div className="space-y-2 rounded-control bg-surface-2 p-3 break-words">
-      <p>Analyse de l'IA : {a.summary || a.why}</p>
-      {a.summary && a.why && <p><span className="text-muted">Pourquoi ça marche : </span>{a.why}</p>}
+    <div className="space-y-2 rounded-control bg-surface-2 p-3 wrap-anywhere">
+      <p>Analyse de l'IA : {a.summary || a.why}</p>
+      {a.summary && a.why && <p><span className="text-muted">Pourquoi ça marche : </span>{a.why}</p>}
       {!!a.timeline?.length && (
         <details>
           <summary className="cursor-pointer font-medium">Déroulé seconde par seconde</summary>
@@ -92,11 +92,11 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
 
   // 183: the owner drops an envoi the AI has not started (as in « Créer »'s pile)
   async function cancel() {
-    if (!window.confirm(`Annuler l'envoi ${o.id} ? L'IA ne le fera pas.`)) return
+    if (!window.confirm(`Annuler l'envoi ${o.id} ? L'IA ne le fera pas.`)) return
     try {
       await cancelWorkOrder(o.id)
     } catch (e) {
-      toast({ message: `Pas annulé : ${errorMessage(e)}` })
+      toast({ message: `Pas annulé : ${errorMessage(e)}` })
     }
     onChanged()
   }
@@ -112,8 +112,8 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
         <Chip>{styleName}</Chip>
         <span className="text-muted">{origin(o)}</span>
       </div>
-      {o.blocked_reason && label === 'Bloqué' && <p className="text-danger">Bloqué : {o.blocked_reason}</p>}
-      {o.status === 'skipped' && o.skip_reason && <p className="text-muted">Ignoré : {o.skip_reason}</p>}
+      {o.blocked_reason && label === 'Bloqué' && <p className="text-danger">Bloqué : {o.blocked_reason}</p>}
+      {o.status === 'skipped' && o.skip_reason && <p className="text-muted">Ignoré : {o.skip_reason}</p>}
       {o.analysis && <Analysis analysis={o.analysis} />}
       {showForm ? (
         <InstructionForm order={o} onSaved={() => { setEditing(false); onChanged() }}
@@ -122,7 +122,7 @@ function OrderCard({ order: o, styleName, onChanged }: { order: WorkOrder; style
         o.instruction && (
           <div className="rounded-control bg-surface-2 p-3">
             <p className="text-xs text-muted">Ta consigne{o.source === 'dm' && o.mode && ` · ${modeLabel(o.mode)}`}</p>
-            <q className="block break-words">{o.instruction}</q>
+            <q className="block wrap-anywhere">{o.instruction}</q>
           </div>
         )
       )}
@@ -183,8 +183,8 @@ export default function MesEnvois() {
       ) : orders.length === 0 ? (
         <EmptyState title="Aucun envoi pour l'instant">
           Envoie un Reel en DM à @macrobody.fr depuis ton compte, avec ou sans description.
-          Une description dans le DM vaut consigne : le travail commence tout de suite.
-          Ou touche « Créer une vidéo » pour un sujet à toi.
+          Une description dans le DM vaut consigne : le travail commence tout de suite.
+          Ou touche « Créer une vidéo » pour un sujet à toi.
         </EmptyState>
       ) : (
         <ul aria-label="Mes envois" className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">

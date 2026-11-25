@@ -114,12 +114,12 @@ function summary(r: LaunchResult) {
   const left = r.left ?? []
   const parts = [
     r.front.length > 0 && `${n(r.front.length, 'passe', 'passent')} en tête de la file`,
-    r.requested.length > 0 && `${n(r.requested.length, 'lancement demandé', 'lancements demandés')} : ${
+    r.requested.length > 0 && `${n(r.requested.length, 'lancement demandé', 'lancements demandés')} : ${
       r.requested.length > 1 ? 'démarrent' : 'démarre'} ${r.busy ? 'dès que la machine est libre' : 'dans la minute'}`,
     r.refused.length > 0 && `${n(r.refused.length, 'refusé', 'refusés')} (${r.refused[0].message})`,
-    left.length > 0 && `${n(left.length, 'laissé', 'laissés')} : ${[...new Set(left.map((l) => LEFT[l.why]))].join(' / ')}`,
+    left.length > 0 && `${n(left.length, 'laissé', 'laissés')} : ${[...new Set(left.map((l) => LEFT[l.why]))].join(' / ')}`,
   ].filter(Boolean)
-  const after = r.paused ? 'Studio en pause : rien ne démarre avant la reprise.' : 'La machine fait un seul travail lourd à la fois.'
+  const after = r.paused ? 'Studio en pause : rien ne démarre avant la reprise.' : 'La machine fait un seul travail lourd à la fois.'
   return `${parts.length ? parts.join(' · ') : 'Rien à lancer'}. ${after}`
 }
 
@@ -142,7 +142,7 @@ function useLaunch(onDone: () => void) {
       toast({ message: summary(await launchItems(items, bulk)), duration: 8000 })
       onDone()
     } catch (e) {
-      toast({ message: `Pas fait : ${errorMessage(e)}` })
+      toast({ message: `Pas fait : ${errorMessage(e)}` })
     } finally {
       done()
     }
@@ -183,7 +183,7 @@ function useAct(onDone: () => void) {
       onDone()
       return true
     } catch (e) {
-      toast({ message: `Pas fait : ${errorMessage(e)}` })
+      toast({ message: `Pas fait : ${errorMessage(e)}` })
       return false
     } finally {
       setBusy(false)
@@ -260,7 +260,7 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
   const machine = i.waits_on === 'machine' // « Lancer maintenant » skips the machine's retry wait (200)
   const timer = () => {
     const iso = new Date(when).toISOString() // the owner's local time, sent as UTC
-    return act(() => setTimer(kind, id, iso), `Minuteur réglé : pas avant ${at(iso)}.`)
+    return act(() => setTimer(kind, id, iso), `Minuteur réglé : pas avant ${at(iso)}.`)
   }
   return (
     <div>
@@ -276,7 +276,7 @@ function LineControls({ item: i, onDone, onRemove }: { item: PlanningItem } & Ac
         <Button size="sm" disabled={busy}
           onClick={() => void guard({ action: 'move', kind, id, by: 1 }, () => moveItem(kind, id, 1), 'Descendu d’une place.')}>Descendre</Button>
         <Button size="sm" disabled={busy}
-          onClick={() => void act(() => holdItem(kind, id, !held), held ? 'Repris : il retrouve sa place.' : 'En pause : il ne bloque pas la file.')}>
+          onClick={() => void act(() => holdItem(kind, id, !held), held ? 'Repris : il retrouve sa place.' : 'En pause : il ne bloque pas la file.')}>
           {held ? 'Reprendre' : 'Mettre en pause'}
         </Button>
         <TimerField when={when} setWhen={setWhen} />
@@ -306,8 +306,8 @@ function PickBox({ item: i, picked, onPick }: { item: PlanningItem } & Pick<Acti
   if (!l) return null
   const key = keyOf(l)
   return (
-    <label className="-my-2 grid size-11 place-items-center" title="Sélectionner pour « Lancer la sélection »">
-      <input type="checkbox" aria-label={`Sélectionner : ${i.title}`} className="size-5 accent-accent"
+    <label className="-my-2 grid size-11 place-items-center" title="Sélectionner pour « Lancer la sélection »">
+      <input type="checkbox" aria-label={`Sélectionner : ${i.title}`} className="size-5 accent-accent"
         checked={picked.has(key)} onChange={(e) => onPick(key, e.target.checked)} />
     </label>
   )
@@ -324,9 +324,9 @@ function Slot({ item: i }: { item: PlanningItem }) {
   const when = i.section === 'running' && i.est_start ? `En cours depuis ${at(i.est_start)}`
     : i.waits_on === 'held' ? 'En pause'
       : i.waits_on === 'machine' && i.not_before ? `En attente de la machine — nouvel essai vers ${at(i.not_before)}`
-        : i.not_before ? `Minuteur : ${at(i.not_before)}`
+        : i.not_before ? `Minuteur : ${at(i.not_before)}`
           : timed ? `${MAKES.includes(i.kind) ? 'Génération prévue' : 'Prévu'} vers ${at(i.est_start!)}`
-            : `Pas d'heure : ${i.waits_on ? waitLabel(i) : 'rien ne part sans toi'}.`
+            : `Pas d'heure : ${i.waits_on ? waitLabel(i) : 'rien ne part sans toi'}.`
   return (
     <p className={`tabular-nums ${i.late_s ? 'text-warn' : timed || i.waits_on === 'held' ? '' : 'text-muted'}`}>
       {when}{timed && ` · ${duration(i.est_duration_s!)} · prête ~${at(i.est_ready!)}`}
@@ -359,7 +359,7 @@ function ItemCard({ item: i, grip, ...actions }: { item: PlanningItem; grip?: Re
       )}
       {i.picks_up && (
         <p>
-          Reprend d'abord : {i.picks_up.orders} commande(s), {i.picks_up.change_requests} changement(s),{' '}
+          Reprend d'abord : {i.picks_up.orders} commande(s), {i.picks_up.change_requests} changement(s),{' '}
           {i.picks_up.dm_picks} DM · {i.picks_up.ideas_left === null ? <><strong>sans limite</strong> pour les idées de Claude</>
             : <><strong>{i.picks_up.ideas_left}</strong> place(s) pour les idées de Claude</>}
         </p>
@@ -395,7 +395,7 @@ function IdeaCard({ item: i, onDone, onRemove, picked, onPick }: { item: Plannin
     idea.music && `musique ${idea.music}`].filter(Boolean)
   const timer = () => {
     const iso = new Date(when).toISOString() // the owner's local time, sent as UTC
-    return act(() => releaseIdea(id, { at: iso }), `Validée : son rendu attend jusqu'à ${at(iso)}.`)
+    return act(() => releaseIdea(id, { at: iso }), `Validée : son rendu attend jusqu'à ${at(iso)}.`)
   }
   return (
     <Card as="article" className="space-y-1.5 border-l-4 border-l-idea text-sm">
@@ -413,11 +413,11 @@ function IdeaCard({ item: i, onDone, onRemove, picked, onPick }: { item: Plannin
           )}
         </ol>
       )}
-      {idea.caption && <p className="break-words whitespace-pre-line"><span className="text-muted">Légende : </span>{idea.caption}</p>}
+      {idea.caption && <p className="break-words whitespace-pre-line"><span className="text-muted">Légende : </span>{idea.caption}</p>}
       {idea.description && <p className="text-muted">{idea.description}</p>}
       {idea.sources.length > 0 && (
         <p className="text-muted">
-          Sources :{' '}
+          Sources :{' '}
           {idea.sources.map((src, n) => (
             <span key={src.url}>{n > 0 && ' · '}<a href={src.url} target="_blank" rel="noreferrer" className={link}>{src.title || src.url}</a></span>
           ))}
@@ -426,10 +426,10 @@ function IdeaCard({ item: i, onDone, onRemove, picked, onPick }: { item: Plannin
       <p className="text-muted">{i.why_here}</p>
       <div className="flex flex-wrap items-end gap-2 pt-1">
         <Button size="sm" variant="primary" disabled={busy}
-          onClick={() => void act(() => releaseIdea(id, {}), 'Validée : son rendu entre dans la file.')}>Valider</Button>
+          onClick={() => void act(() => releaseIdea(id, {}), 'Validée : son rendu entre dans la file.')}>Valider</Button>
         <Button size="sm" disabled={busy}
           onClick={() => void guard({ action: 'release', kind: 'idea', id }, () => releaseIdea(id, { now: true }),
-            'Validée : elle passe en tête de la file.')}>Lancer maintenant</Button>
+            'Validée : elle passe en tête de la file.')}>Lancer maintenant</Button>
         <TimerField when={when} setWhen={setWhen} />
         <Button size="sm" disabled={busy || !when} onClick={() => void timer()}>Régler</Button>
         <Button size="sm" disabled={busy} onClick={() => setEditing(true)}>Modifier</Button>
@@ -495,7 +495,7 @@ function IdeaSheet({ idea, onClose, onDone }: { idea: ClaudeIdea; onClose: () =>
           <legend className="font-medium">Ce qui est dit</legend>
           {lines.map((l, n) => (
             <textarea key={n} aria-label={`Ligne ${n + 1}`} value={l} rows={2} disabled={!idea.script[n].editable}
-              title={idea.script[n].editable ? undefined : 'Cette ligne réunit plusieurs textes du modèle : elle ne se modifie pas ici.'}
+              title={idea.script[n].editable ? undefined : 'Cette ligne réunit plusieurs textes du modèle : elle ne se modifie pas ici.'}
               onChange={(e) => setLines(lines.map((x, k) => (k === n ? e.target.value : x)))}
               className={`${field} block w-full py-2`} />
           ))}
@@ -653,7 +653,7 @@ function Strip({ strip }: { strip: PlanningStrip }) {
   const x = (iso: string) => ((Date.parse(iso) - t0) / span) * 100
   const hours: number[] = [] // every 3 h on the hour, owner-local (the browser's)
   for (let t = Math.ceil(t0 / HOUR) * HOUR; t < t0 + span; t += HOUR) if (new Date(t).getHours() % 3 === 0) hours.push(t)
-  const label = (b: PlanningStrip['blocks'][number]) => `${KIND[b.kind]} : ${b.title}, ${at(b.start)} → ${at(b.end)}${b.late ? ', en retard' : ''}`
+  const label = (b: PlanningStrip['blocks'][number]) => `${KIND[b.kind]} : ${b.title}, ${at(b.start)} → ${at(b.end)}${b.late ? ', en retard' : ''}`
   return (
     <section aria-label="Les prochaines 24 h" className="mb-6">
       <h2 className="mb-2 font-semibold">Les prochaines 24 h</h2>
@@ -704,14 +704,14 @@ function SupplyGauge({ supply: s }: { supply: PlanningSupply }) {
   return (
     <div className={`mb-6 space-y-1.5 rounded-card border bg-surface p-3 text-sm ${s.low ? 'border-warn' : 'border-line'}`}>
       <p className={s.low ? 'text-warn' : undefined}>
-        <strong>Réserve : {days}</strong> (jusqu'à {until})
+        <strong>Réserve : {days}</strong> (jusqu'à {until})
       </p>
       <div role="meter" aria-label="Réserve" aria-valuenow={s.days} aria-valuemin={0} aria-valuemax={WEEK_DAYS}
         aria-valuetext={`${days}`} className="h-1.5 overflow-hidden rounded-full bg-surface-2">
         <div className={`h-full ${s.low ? 'bg-warn' : 'bg-success'}`} style={{ width: `${Math.min(100, (s.days / WEEK_DAYS) * 100)}%` }} />
       </div>
       <p className="text-muted">
-        {s.approved} approuvée(s) + {s.bench} sur le banc, {s.per_day} par jour{more.length > 0 && ` · une fois faites : ${more.join(', ')}`}
+        {s.approved} approuvée(s) + {s.bench} sur le banc, {s.per_day} par jour{more.length > 0 && ` · une fois faites : ${more.join(', ')}`}
       </p>
     </div>
   )
@@ -747,7 +747,7 @@ function History({ rows, onDone }: { rows: PlanningHistory[]; onDone: () => void
               {r.kind === 'done' && <Link to="/inbox" className={link}>Inbox</Link>}
               {recipe && id !== null && (
                 <Button size="sm" disabled={busy}
-                  onClick={() => void act(() => rerenderAsset(id, recipe), 'Relancé : le rendu revient dans la file.')}>Relancer</Button>
+                  onClick={() => void act(() => rerenderAsset(id, recipe), 'Relancé : le rendu revient dans la file.')}>Relancer</Button>
               )}
             </li>
           )
@@ -764,9 +764,9 @@ function PauseSwitch({ paused, onChanged }: { paused: string | null; onChanged: 
     setBusy(true)
     try {
       onChanged((await setStudioPaused(on)).paused)
-      toast({ message: on ? 'Studio en pause : rien ne démarre, ce qui tourne finit.' : 'Studio repris : la file repart.' })
+      toast({ message: on ? 'Studio en pause : rien ne démarre, ce qui tourne finit.' : 'Studio repris : la file repart.' })
     } catch (e) {
-      toast({ message: `Pas fait : ${errorMessage(e)}` })
+      toast({ message: `Pas fait : ${errorMessage(e)}` })
     } finally {
       setBusy(false)
     }
@@ -839,7 +839,7 @@ export default function Planning() {
       const call = r.kind === 'idea' ? removeIdea(r.id) : removeItem(r.kind, r.id)
       call.then(() => load(), (e: unknown) => {
         show(key, true)
-        toast({ message: `Pas retiré : ${errorMessage(e)}` })
+        toast({ message: `Pas retiré : ${errorMessage(e)}` })
       })
     }
     const timer = setTimeout(run, UNDO_MS)
@@ -862,7 +862,7 @@ export default function Planning() {
     return placeItem(me.kind, me.id, { ...next, side }).then(() => {
       toast({ message: 'Déplacé dans la file.' })
       return load()
-    }, (e: unknown) => toast({ message: `Pas fait : ${errorMessage(e)}` }))
+    }, (e: unknown) => toast({ message: `Pas fait : ${errorMessage(e)}` }))
   }
   const visible = items?.filter((i) => {
     const r = removal(i)
@@ -891,7 +891,7 @@ export default function Planning() {
       </PageHeader>
       {paused && (
         <p role="status" className="mb-3 rounded-card border border-line bg-surface-2 p-3 text-sm">
-          Studio en pause depuis {at(paused)} : rien ne démarre (rendus, films, runs de l'IA). Ce qui tournait finit.
+          Studio en pause depuis {at(paused)} : rien ne démarre (rendus, films, runs de l'IA). Ce qui tournait finit.
         </p>
       )}
       {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}
@@ -922,7 +922,7 @@ export default function Planning() {
               onClick={() => void launch(chosen, true)}>Lancer la sélection ({chosen.length})</Button>
             <Button size="sm" disabled={launching} onClick={() => void launch(launchables, true)}>Tout lancer</Button>
             {chosen.length > 0 && <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Désélectionner</Button>}
-            {!chosen.length && <span className="text-muted">Un seul travail lourd à la fois : le reste démarre dès que la machine est libre. Les cartes en pause, minutées ou qui attendent la machine restent à leur place.</span>}
+            {!chosen.length && <span className="text-muted">Un seul travail lourd à la fois : le reste démarre dès que la machine est libre. Les cartes en pause, minutées ou qui attendent la machine restent à leur place.</span>}
           </div>
           {box}
         </div>

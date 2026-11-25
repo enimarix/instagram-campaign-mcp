@@ -93,7 +93,7 @@ def test_refusals_say_why_and_the_rest_still_goes(store, monkeypatch):
     assert "consigne" in why[("work_order", mine)]
     assert "n'attend pas de changement" in next(m for (k, _), m in why.items()
                                                 if k == "change_request")
-    assert "déjà en cours" in why[("agent_run", "daily-learn")]
+    assert why[("agent_run", "daily-learn")] == "Le run « Analyse de la nuit » est déjà en cours."
     assert "unknown playbook" in why[("agent_run", "nope")]
     assert "ne se lance pas" in why[("party", 1)] and "nombre" in why[("render", "6")]
     assert len(out["refused"]) == 9 and schedule.launch_requests(store) == []

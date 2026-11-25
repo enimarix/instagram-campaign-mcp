@@ -54,7 +54,7 @@ function AddForm({ voice: v, locals, onAdded, onCancel }: { voice: ElevenVoice; 
         <input className={`${field} mt-1 block w-full`} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></label>
       <label className="block text-sm"><span className="font-medium">L'IA la choisit pour</span>
         <textarea className={`${field} mt-1 block w-full py-2`} rows={3} maxLength={400} value={useFor}
-          placeholder="Énergie et accroches : astuces rapides, défis, humour…" onChange={(e) => setUseFor(e.target.value)} /></label>
+          placeholder="Énergie et accroches : astuces rapides, défis, humour…" onChange={(e) => setUseFor(e.target.value)} /></label>
       <label className="block text-sm"><span className="font-medium">Voix locale de relais</span>
         <select aria-label="Voix locale de relais" className={`${field} mt-1 block w-full`} value={fallback} onChange={(e) => setFallback(e.target.value)}>
           {locals.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
@@ -63,7 +63,7 @@ function AddForm({ voice: v, locals, onAdded, onCancel }: { voice: ElevenVoice; 
       </label>
       <div className="flex flex-wrap items-center gap-2 text-sm"><span className="font-medium">Tutoiement</span>
         {['tu', 'vous'].map((a) => <Chip key={a} pressed={address.includes(a)} onClick={() => flip(a)}>{a}</Chip>)}</div>
-      {v.public_owner_id && <p className="text-sm text-muted">Une voix de la bibliothèque prend un emplacement de voix sur votre compte ElevenLabs (3 sur l'offre gratuite).</p>}
+      {v.public_owner_id && <p className="text-sm text-muted">Une voix de la bibliothèque prend un emplacement de voix sur ton compte ElevenLabs (3 sur l'offre gratuite).</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
         <Button variant="primary" loading={busy} disabled={!name.trim() || !fallback} onClick={add}>Ajouter la carte</Button>
@@ -118,7 +118,7 @@ export function ElevenLibrary({ locals, onAdded, onClose }: { locals: Voice[]; o
         <Chip pressed={!library} onClick={() => setQ({ ...q, source: 'account', page: undefined })}>Mes voix</Chip>
       </div>
       <form className="mt-3 flex gap-2" role="search" onSubmit={(e) => { e.preventDefault(); setQ({ ...q, search: text.trim() }) }}>
-        <input aria-label="Rechercher une voix" className={`${field} min-w-0 flex-1`} placeholder="Nom, style, « coach », « narrateur »…" value={text} onChange={(e) => setText(e.target.value)} />
+        <input aria-label="Rechercher une voix" className={`${field} min-w-0 flex-1`} placeholder="Nom, style, « coach », « narrateur »…" value={text} onChange={(e) => setText(e.target.value)} />
         <Button type="submit">Chercher</Button>
       </form>
       <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -134,7 +134,7 @@ export function ElevenLibrary({ locals, onAdded, onClose }: { locals: Voice[]; o
       </div>
 
       <div className="mt-4 max-h-[55dvh] overflow-y-auto pr-1">
-        {error ? <p role="alert" className="text-sm text-danger">Recherche impossible : {error}</p>
+        {error ? <p role="alert" className="text-sm text-danger">Recherche impossible : {error}</p>
           : !found ? <p className="text-sm text-muted" role="status">Recherche…</p>
             : !found.length ? <p className="text-sm text-muted">Aucune voix avec ces filtres.</p>
               : (

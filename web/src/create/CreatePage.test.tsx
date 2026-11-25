@@ -42,7 +42,7 @@ const sent = (calls: { key: string; body?: unknown }[], prefix: string) => calls
 function renderPage() {
   render(<MemoryRouter><CreatePage /></MemoryRouter>)
 }
-const prompt = () => screen.getByRole('textbox', { name: 'Quelle vidéo ?' })
+const prompt = () => screen.getByRole('textbox', { name: 'Quelle vidéo ?' })
 const styleGroup = () => screen.getByRole('group', { name: 'Style' })
 
 beforeAll(() => {
@@ -61,8 +61,8 @@ afterEach(() => {
 describe('prompt (174)', () => {
   it('plans one order per style; video IDs alone are restyles, with words a new video naming them', () => {
     expect(planOrders({ text: 'Le petit-déj', styles: ['voxel', null], address: 'tu', length: 'court' })).toEqual([
-      { kind: 'create', style: 'voxel', instruction: 'Le petit-déj Tutoiement (tu). Durée visée : environ 20 s.' },
-      { kind: 'create', style: null, instruction: 'Le petit-déj Tutoiement (tu). Durée visée : environ 20 s.' },
+      { kind: 'create', style: 'voxel', instruction: 'Le petit-déj Tutoiement (tu). Durée visée : environ 20 s.' },
+      { kind: 'create', style: null, instruction: 'Le petit-déj Tutoiement (tu). Durée visée : environ 20 s.' },
     ])
     expect(planOrders({ text: '#17 http://studio.local/assets/18', styles: ['paper'], address: null, length: null })).toEqual([
       { kind: 'restyle', assetId: 17, style: 'paper', note: undefined },
@@ -70,7 +70,7 @@ describe('prompt (174)', () => {
     ])
     const [one] = planOrders({ text: 'comme #17 mais plus drôle', styles: [null], address: null, length: null })
     expect(one).toMatchObject({ kind: 'create', style: null })
-    expect(one.kind === 'create' && one.instruction).toContain("#17 : vidéo du studio, id d'asset")
+    expect(one.kind === 'create' && one.instruction).toContain("#17 : vidéo du studio, id d'asset")
     // a hashtag is not a video id
     expect(planOrders({ text: '#musculation', styles: [null], address: null, length: null })[0].kind).toBe('create')
   })
@@ -146,7 +146,7 @@ describe('CreatePage (174)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Choisir ce style' }))
     await screen.findByText('Les protéines du matin')
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer (2 vidéos)' }))
-    expect((await screen.findByRole('alert')).textContent).toBe("#17, Papier : video 17 is already in style 'paper'")
+    expect((await screen.findByRole('alert')).textContent).toBe("#17, Papier : video 17 is already in style 'paper'")
     expect(sent(calls, 'POST').map((c) => c.body)).toEqual([{ style: 'voxel' }, { style: 'paper' }])
     expect(within(styleGroup()).getByRole('button', { name: '3D 8-bit' }).getAttribute('aria-pressed')).toBe('false')
     expect(within(styleGroup()).getByRole('button', { name: 'Papier' }).getAttribute('aria-pressed')).toBe('true')
@@ -183,7 +183,7 @@ describe('CreatePage (174)', () => {
     fireEvent.change(within(card(6)).getByRole('textbox', { name: "Ta note pour l'IA" }), { target: { value: 'cite une source' } })
     fireEvent.click(within(card(6)).getByRole('button', { name: 'Ajouter' }))
     await waitFor(() => expect(sent(calls, 'PATCH')).toHaveLength(1))
-    expect(sent(calls, 'PATCH')[0].body).toEqual({ instruction: 'Pourquoi on a faim le soir\nNote : cite une source' })
+    expect(sent(calls, 'PATCH')[0].body).toEqual({ instruction: 'Pourquoi on a faim le soir\nNote : cite une source' })
 
     fireEvent.click(await within(card(6)).findByRole('button', { name: 'Annuler' }))
     await waitFor(() => expect(sent(calls, 'DELETE /api/research/work-orders/6')).toHaveLength(1))

@@ -36,8 +36,8 @@ def test_get_feedback_has_labels_context_and_digest_round_trip(store):
     f2 = _fb(store, a, text="nice")
     rows = L.get_feedback(store)
     assert [r["id"] for r in rows] == [f1, f2]
-    assert rows[0]["reasons"] == [{"code": "weak_hook", "label": "Weak hook"},
-                                  {"code": "too_slow", "label": "Too slow"}]
+    assert rows[0]["reasons"] == [{"code": "weak_hook", "label": "Accroche faible"},
+                                  {"code": "too_slow", "label": "Trop lent"}]
     assert rows[0]["video_time_s"] == 1.5 and rows[0]["wants_changes"] is False
     ctx = rows[0]["asset"]
     assert ctx["template"] == "FactQuest" and ctx["hook"] == "Did you know?"
@@ -59,7 +59,7 @@ def test_revision_requests_listed_with_comments_newest_first(store):
     [req] = L.list_revision_requests(store)
     assert req["asset"]["id"] == a and req["asset"]["status"] == "revision_requested"
     assert [c["text"] for c in req["comments"]] == [None, "louder please"]
-    assert req["comments"][0]["reasons"][0]["label"] == "Bad audio"
+    assert req["comments"][0]["reasons"][0]["label"] == "Son raté"
 
 
 def test_revision_request_hidden_while_its_new_version_renders(store, monkeypatch):
@@ -224,7 +224,7 @@ def test_approved_change_comes_back_with_its_outcome(store):
     [row] = L.get_feedback(store)  # undigested again, now with the outcome
     assert row["id"] == ask and row["change"] == {
         "before_asset_id": before, "after_asset_id": after,
-        "asked": [{"feedback_id": ask, "text": "Shorter hook", "reasons": ["Weak hook"]}],
+        "asked": [{"feedback_id": ask, "text": "Shorter hook", "reasons": ["Accroche faible"]}],
         "changed": "Changed: hook cut to 2 s", "outcome": "approved", "decline_motives": [],
         "asked_again": []}
     assert L.owner_decisions(store)["approved_changes"] == [row["change"]]

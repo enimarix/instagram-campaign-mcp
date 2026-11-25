@@ -343,7 +343,7 @@ describe('Planning', () => {
       const renders = within(within(strip).getByRole('list', { name: 'Rendus' })).getAllByRole('listitem')
       expect(renders).toHaveLength(1)
       expect(renders[0].className).toContain('bg-warn')
-      expect(renders[0].getAttribute('aria-label')).toMatch(/^Rendu : Le rendu, .* en retard$/)
+      expect(renders[0].getAttribute('aria-label')).toMatch(/^Rendu : Le rendu, .* en retard$/)
       expect(renders[0].style.left).toBe('0%')
       const run = within(within(strip).getByRole('list', { name: "Runs de l'IA" })).getByRole('listitem')
       expect(run.className).toContain('bg-accent')
@@ -607,14 +607,14 @@ describe('Planning', () => {
       const calls = stubLaunch(cards, { front: [{ kind: 'render', id: 6 }], requested: [{ kind: 'work_order', id: 4 }],
         refused: [], busy: 'renders are waiting', paused: null })
       show()
-      const boxes = await screen.findAllByRole('checkbox', { name: /^Sélectionner : / })
+      const boxes = await screen.findAllByRole('checkbox', { name: /^Sélectionner : / })
       expect(boxes.map((b) => b.getAttribute('aria-label'))).toEqual([ // not the running card, not the order without instruction
-        'Sélectionner : Le mythe du jus détox', 'Sélectionner : Rendu A', 'Sélectionner : Ma commande',
-        'Sélectionner : Vidéo 3', 'Sélectionner : Analyse de la nuit'])
+        'Sélectionner : Le mythe du jus détox', 'Sélectionner : Rendu A', 'Sélectionner : Ma commande',
+        'Sélectionner : Vidéo 3', 'Sélectionner : Analyse de la nuit'])
       const bar = screen.getByRole('region', { name: 'Lancer' })
       expect(within(bar).getByRole('button', { name: 'Lancer la sélection (0)' })).toHaveProperty('disabled', true)
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Ma commande' }))
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Rendu A' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Ma commande' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Rendu A' }))
       fireEvent.click(within(bar).getByRole('button', { name: 'Lancer la sélection (2)' }))
       expect(await screen.findByText(/1 passe en tête de la file · 1 lancement demandé : démarre dès que la machine est libre/)).toBeTruthy()
       expect(screen.getByText(/un seul travail lourd à la fois/)).toBeTruthy()
@@ -631,7 +631,7 @@ describe('Planning', () => {
       const why = /^Un seul travail lourd à la fois/
       expect(bar.className).not.toMatch(/\bsticky\b/)
       expect(within(bar).getByText(why)).toBeTruthy()
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Rendu A' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner : Rendu A' }))
       expect(bar.className).toMatch(/\bsticky\b/)
       expect(within(bar).queryByText(why)).toBeNull()
       fireEvent.click(within(bar).getByRole('button', { name: 'Tout lancer' })) // works ticked too

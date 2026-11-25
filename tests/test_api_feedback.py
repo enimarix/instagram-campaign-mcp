@@ -95,7 +95,7 @@ def test_taxonomy(tc):
     r = tc.get("/api/taxonomy")
     assert r.status_code == 200
     reasons = r.json()["feedback_reasons"]["values"]
-    assert {"id": "weak_hook", "label": "Weak hook"} in reasons
+    assert {"id": "weak_hook", "label": "Accroche faible"} in reasons
 
 
 def test_decline_is_one_call(tc, store):

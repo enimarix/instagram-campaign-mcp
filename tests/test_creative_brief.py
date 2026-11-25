@@ -158,7 +158,7 @@ def test_decline_motives_and_approved_changes_come_first(store, settings):
     assert list(b)[:2] == ["work_orders", "owner_decisions"]
     [motive] = b["owner_decisions"]["decline_motives"]
     assert (motive["text"], motive["reasons"]) == (
-        "On s'ennuie", [{"code": "weak_hook", "label": "Weak hook"}])
+        "On s'ennuie", [{"code": "weak_hook", "label": "Accroche faible"}])
     assert motive["asset"]["id"] == declined and motive["asset"]["hook"] == "boring one"
     assert b["owner_decisions"]["approved_changes"] == [{
         "before_asset_id": before, "after_asset_id": after["id"],

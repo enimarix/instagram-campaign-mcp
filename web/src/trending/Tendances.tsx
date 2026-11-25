@@ -27,12 +27,12 @@ const CARDS_MAX = 50
 
 /** What a refresh found, in one toast line. */
 function refreshMessage(r: RefreshResult) {
-  const parts = [`Trouvé : ${r.stored} nouveau${r.stored > 1 ? 'x' : ''} Reel${r.stored > 1 ? 's' : ''}, ${r.updated} mis à jour.`]
+  const parts = [`Trouvé : ${r.stored} nouveau${r.stored > 1 ? 'x' : ''} Reel${r.stored > 1 ? 's' : ''}, ${r.updated} mis à jour.`]
   if (r.hashtags_skipped_budget.length)
-    parts.push(`${r.hashtags_skipped_budget.length} hashtag(s) en attente : limite de la semaine atteinte.`)
+    parts.push(`${r.hashtags_skipped_budget.length} hashtag(s) en attente : limite de la semaine atteinte.`)
   const errors = Object.keys(r.errors).length
   if (errors) parts.push(`${errors} sujet(s) en erreur.`)
-  if (r.stopped) parts.push('Arrêté avant la fin : limite de requêtes Instagram.')
+  if (r.stopped) parts.push('Arrêté avant la fin : limite de requêtes Instagram.')
   return parts.join(' ')
 }
 
@@ -172,7 +172,7 @@ function InstructionSheet({ item, onClose, onSent }: { item: FeedItem; onClose: 
         <StylePicker value={style} onChange={setStyle} />
         <label className="block text-sm font-medium">Ta consigne
           <textarea required value={text} maxLength={500} rows={6} onChange={(e) => setText(e.target.value)}
-            placeholder="Ex. : garde le format, fais-en une version sans sucre (tu peux dicter)"
+            placeholder="Ex. : garde le format, fais-en une version sans sucre (tu peux dicter)"
             className={`${field} mt-1 block w-full py-2 text-base`} />
         </label>
         <p className="text-right text-xs text-muted tabular-nums">{text.length}/500</p>
@@ -218,7 +218,7 @@ function TopicsEditor({ watch, suggested, onChanged, kind, setKind, inputRef }: 
   return (
     <div className="mt-3 space-y-3 text-sm">
       {watch.length === 0 ? (
-        <p className="text-muted">Aucun sujet pour l'instant : choisis-en un ci-dessous.</p>
+        <p className="text-muted">Aucun sujet pour l'instant : choisis-en un ci-dessous.</p>
       ) : (
         <ul aria-label="Sujets suivis" className="flex flex-wrap gap-2">
           {watch.map((w) => (
@@ -264,7 +264,7 @@ function TopicsEditor({ watch, suggested, onChanged, kind, setKind, inputRef }: 
       {budget && (
         <p className="text-xs text-muted">
           Chaque nouveau hashtag utilise 1 des {budget.limit} recherches que Meta autorise par 7 jours
-          (il en reste {budget.left}) ; le même hashtag relu dans la semaine est gratuit. Ajoute-les un par un.
+          (il en reste {budget.left}) ; le même hashtag relu dans la semaine est gratuit. Ajoute-les un par un.
         </p>
       )}
     </div>
@@ -330,9 +330,9 @@ export default function Tendances() {
     } catch (e) {
       const status = e instanceof ApiError ? e.status : 0
       toast({
-        message: status === 409 ? 'Une actualisation est déjà en cours : réessaie dans un instant.'
-          : status === 503 ? "Instagram n'est pas encore connecté : rien à actualiser."
-            : `Actualisation impossible : ${errorMessage(e)}`,
+        message: status === 409 ? 'Une actualisation est déjà en cours : réessaie dans un instant.'
+          : status === 503 ? "Instagram n'est pas encore connecté : rien à actualiser."
+            : `Actualisation impossible : ${errorMessage(e)}`,
       })
     } finally {
       setRefreshing(false)
@@ -347,7 +347,7 @@ export default function Tendances() {
       await setFeedReaction(item.id, reaction)
     } catch (e) {
       set(before)
-      toast({ message: `Non enregistré : ${errorMessage(e)}` })
+      toast({ message: `Non enregistré : ${errorMessage(e)}` })
     }
   }
 
@@ -360,7 +360,7 @@ export default function Tendances() {
       setSelecting(false)
       reloadFeed()
     } catch (e) {
-      toast({ message: `Non envoyé : ${errorMessage(e)}` })
+      toast({ message: `Non envoyé : ${errorMessage(e)}` })
     } finally {
       setSending(false)
     }
@@ -371,7 +371,7 @@ export default function Tendances() {
       await cancelWorkOrder(item.work_order!.id)
       reloadFeed()
     } catch (e) {
-      toast({ message: `Non annulé : ${errorMessage(e)}` })
+      toast({ message: `Non annulé : ${errorMessage(e)}` })
     }
   }
 
@@ -433,15 +433,15 @@ export default function Tendances() {
         !feedError && <Skeleton className="mt-4 h-96" />
       ) : shown.length === 0 && feed.length > 0 ? (
         <div className="mt-4">
-          <EmptyState title="Pas encore de Reels : ajoute des comptes à suivre"
+          <EmptyState title="Pas encore de Reels : ajoute des comptes à suivre"
             action={<Button variant="primary" onClick={addAccount}>Ajouter un compte</Button>}>
-            Les hashtags renvoient surtout des carrousels et des photos ; les Reels viennent des comptes suivis.
+            Les hashtags renvoient surtout des carrousels et des photos ; les Reels viennent des comptes suivis.
           </EmptyState>
         </div>
       ) : feed.length === 0 ? (
         <div className="mt-4">
           <EmptyState title="Aucune tendance pour l'instant">
-            Ajoute des sujets, puis touche Actualiser : les Reels trouvés arrivent ici.
+            Ajoute des sujets, puis touche Actualiser : les Reels trouvés arrivent ici.
           </EmptyState>
         </div>
       ) : (
