@@ -633,7 +633,7 @@ describe('Planning', () => {
       expect(within(bar).queryByText(why)).toBeNull()
       fireEvent.click(within(bar).getByRole('button', { name: 'Tout lancer' })) // works ticked too
       await waitFor(() => expect(launch(calls)).toBeTruthy())
-      expect((launch(calls)?.body as { items: unknown[] }).items).toHaveLength(5)
+      expect((launch(calls)!.body as { items: unknown[] }).items).toHaveLength(5)
     })
 
     it('« Tout lancer » sends every waiting card, after the delay warning', async () => {
