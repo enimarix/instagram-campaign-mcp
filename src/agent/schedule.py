@@ -44,7 +44,6 @@ from . import film, packet
 from .packet import RUNS
 from .runner import (
     AGENT_DIR,
-    DEAD_RUN,
     PLAYBOOK_NAME,
     REPO,
     AgentError,
@@ -174,10 +173,12 @@ def run_due(store: CampaignStore, settings: InstagramMCPSettings, *,
             now: Callable[[], datetime] = utcnow) -> List[Dict[str, Any]]:
     """`agent run-due`: each due playbook in the foreground, one after another. A playbook
     another process started meanwhile is skipped. Nothing while the studio is paused
-    (line.pause, checked before each one): the runs stay due for the catch-up."""
+    (line.pause) or any run runs (one shared workspace; the runner's start is the atomic
+    lock), both checked before each one: the runs stay due for the catch-up."""
     rows = []
     for playbook in due_runs(store, settings, now()):
-        if line.paused(store):
+        close_dead_runs(store)
+        if line.paused(store) or store.running_agent_runs(limit=1):
             break
         try:
             rows.append(run(store, settings, playbook))
@@ -227,9 +228,12 @@ def _gate(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
     scoped = set(store.get_state(packet.SCOPED_RUNS_KEY) or ())
     since = [r for p in readers for r in store.list_agent_runs(p, limit=10)
              if parse_iso(r["started_at"]) >= newest and r["id"] not in scoped]
-    if any(r["summary"] != DEAD_RUN for r in since):
+    # only a run that succeeded and left nothing unhandled (runner: "work packet: N not
+    # handled") has them: a crash, a usage limit or a restart (155) never did
+    if any(r["status"] == "succeeded" and "\nwork packet: " not in (r["summary"] or "")
+           for r in since):
         return "seen"
-    # a run a restart killed never had them (155), nor the start that made it
+    # a start whose run has no row yet (the run a restart killed never had them, 155)
     started = store.get_state(f"{key}_run_started_at")  # before its own row exists
     if started and parse_iso(started) >= newest and not any(
             parse_iso(r["started_at"]) >= parse_iso(started) for r in since):

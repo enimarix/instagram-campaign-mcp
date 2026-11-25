@@ -118,10 +118,16 @@ def test_a_run_killed_after_the_request_does_not_have_it(store, clock, probe):
     assert _run(store, 9, s, f) is None and len(f.runs) == 2  # today's 2 at-once runs used
 
 
-def test_a_run_that_failed_otherwise_still_had_the_request(store, clock, probe):
-    _ask(store)
-    clock.set(3)
-    probe[4242] = 111
+def test_only_a_run_that_handled_everything_saw_the_request(store, clock, probe):
+    _ask(store)  # a failed run (usage limit, crash) or one that left work unhandled: not seen
+    for at, status, summary in ((3, "failed", "error_max_turns"),
+                                (11, "succeeded", "done\nwork packet: 1 of 1 revisions not"
+                                 " handled: #1")):
+        clock.set(at)
+        run = store.start_agent_run("daily-revise", 4242, 111)
+        store.finish_agent_run(run["id"], status, summary=summary)
+        assert _run(store, at + 7) == "daily-revise"
+    clock.set(20)
     run = store.start_agent_run("daily-revise", 4242, 111)
-    store.finish_agent_run(run["id"], "failed", summary="error_max_turns")
-    assert _run(store, 10) is None
+    store.finish_agent_run(run["id"], "succeeded", summary="done")
+    assert _run(store, 27) is None
