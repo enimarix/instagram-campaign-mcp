@@ -64,14 +64,19 @@ ORDER_READERS = tuple(p for p, (_, s) in RUNS.items()
                       if s and ("work_orders" in s or "revisions" in s))
 # the newest thing the light run is for: a scheduled order, or a wanting-changes comment
 # (written or edited by the owner; the agent's digest doesn't touch updated_at) on an asset
-# still `revision_requested` (147). MAX skips NULLs; both columns are to_iso(). Lemo-Opuscar
-# orders are the film runner's (173), never the light run's.
+# still `revision_requested` (147), or the waiting decision a failed remake film left on
+# one (film._skip: the only waiting decision that names an order). MAX skips NULLs; all
+# three are to_iso(). Lemo-Opuscar orders are the film runner's (173), never the light run's.
 _AGENT_ORDER = "status = 'scheduled' AND substr(COALESCE(style, ''), 1, 5) <> 'lemo:'"
 _NEWEST_WORK = (
     "SELECT MAX(t) FROM (SELECT MAX(scheduled_at) AS t FROM work_orders"
     f" WHERE {_AGENT_ORDER}"
     " UNION ALL SELECT MAX(f.updated_at) FROM feedback f JOIN assets a ON a.id = f.asset_id"
-    " WHERE f.wants_changes = 1 AND a.status = 'revision_requested')")
+    " WHERE f.wants_changes = 1 AND a.status = 'revision_requested'"
+    " UNION ALL SELECT MAX(json_extract(agent_decision, '$.at')) FROM assets"
+    " WHERE status = 'revision_requested'"
+    " AND json_extract(agent_decision, '$.kind') = 'waiting'"
+    " AND json_extract(agent_decision, '$.order_id') IS NOT NULL)")
 # 156: something the light run would look at again when the studio can make more
 _WAITING = ("SELECT EXISTS (SELECT 1 FROM assets WHERE status = 'revision_requested')"
             f" OR EXISTS (SELECT 1 FROM work_orders WHERE {_AGENT_ORDER})")
@@ -228,10 +233,11 @@ def _gate(store: CampaignStore, settings: InstagramMCPSettings, now: datetime,
     scoped = set(store.get_state(packet.SCOPED_RUNS_KEY) or ())
     since = [r for p in readers for r in store.list_agent_runs(p, limit=10)
              if parse_iso(r["started_at"]) >= newest and r["id"] not in scoped]
-    # only a run that succeeded and left nothing unhandled (runner: "work packet: N not
-    # handled") has them: a crash, a usage limit or a restart (155) never did
-    if any(r["status"] == "succeeded" and "\nwork packet: " not in (r["summary"] or "")
-           for r in since):
+    # only a run still running, or one that succeeded and left nothing unhandled (runner:
+    # "work packet: N not handled") has them: a crash, a usage limit or a restart (155)
+    # never did
+    if any(r["status"] == "running" or r["status"] == "succeeded"
+           and "\nwork packet: " not in (r["summary"] or "") for r in since):
         return "seen"
     # a start whose run has no row yet (the run a restart killed never had them, 155)
     started = store.get_state(f"{key}_run_started_at")  # before its own row exists

@@ -137,14 +137,37 @@ def capabilities(store: CampaignStore) -> Optional[Dict[str, List[str]]]:
         return None
 
 
+def owner_ban(store: CampaignStore, style: Optional[str],
+              template: Optional[str] = None) -> Optional[str]:
+    """Why the owner ruled this style or template out: an active owner `dont` learning
+    scoped to it ({"tag": "style" | "template", "value": …}); None when none is."""
+    from ..learning.evidence import predicate  # here: learning imports the studio
+
+    for row in store.list_learnings(kind="dont", status="active", limit=100_000):
+        if row["confidence"] != "owner":
+            continue
+        try:
+            pred = predicate(row["scope"])
+        except ValueError:  # a stored scope that no longer validates: not a rule
+            continue
+        if pred and pred in (("style", style), ("template", template)):
+            return (f"the owner ruled out {pred[0]} {pred[1]!r} (learning {row['id']}:"
+                    f" « {row['statement']} »): use another style")
+    return None
+
+
 def check_template(store: CampaignStore, idea: Dict[str, Any], template: str) -> str:
-    """Before render_motion: the template must be in the idea's style. An idea without a
-    style (Auto, older ideas) takes the template's, if that style is on; it is recorded on
-    the idea. Returns the style; ValueError says what to use instead."""
+    """Before render_motion: the template must be in the idea's style, and neither may be
+    ruled out by the owner (owner_ban). An idea without a style (Auto, older ideas) takes
+    the template's, if that style is on; it is recorded on the idea. Returns the style;
+    ValueError says what to use instead."""
     reg = registry()
     style = next((s for s, r in reg.items() if template in r["templates"]), None)
     if style is None:
         return idea.get("style")  # an unknown template: validate_props says so
+    banned = owner_ban(store, style, template)
+    if banned:
+        raise ValueError(banned)
     want = idea.get("style")
     if want is None:
         check_style(store, style)

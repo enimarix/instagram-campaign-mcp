@@ -495,3 +495,42 @@ def test_an_order_a_dead_run_left_half_made_comes_back(store, cfg):
     assert "autre décision" in work_orders.get_order(store, replaced)["skip_reason"]
     for oid in (fresh, made, films):
         assert work_orders.get_order(store, oid)["status"] == "in_production"
+
+
+def test_a_refilm_brief_quotes_the_owners_words(store, cfg, judged, tmp_path):
+    """Was: video 76, only the AI's one-line paraphrase reached the film."""
+    aid = _sent_back_film(store, cfg)
+    order = feedback.decide_revision(store, aid, "remade", "un hook")["order"]
+    film.run_film(store, cfg, order["id"])
+    brief = json.loads((tmp_path / "seen.json").read_text())["brief"]
+    assert "his own words" in brief and "> trop lent, pas de hook" in brief
+
+
+def test_instagram_music_is_never_promised_by_a_film(store, cfg):
+    """Was: remake 78 of video 76 had no music: a film can't take an Instagram track."""
+    aid = _sent_back_film(store, cfg)
+    add_comment(store, aid, text="do again with new voice and music from instagram",
+                wants_changes=True)
+    for decision, style in (("remade", None), ("restyled", "lemo:watercolor")):
+        other = aid if decision == "remade" else add_comment(
+            store, _asset(store), text="musique Instagram stp", wants_changes=True
+        )["asset"]["id"]
+        with pytest.raises(ValueError, match="cannot take an Instagram track"):
+            feedback.decide_revision(store, other, decision, "x", style=style)
+    assert not work_orders.list_orders(store)
+
+
+def test_a_failed_refilm_leaves_the_video_waiting_and_wakes_the_light_run(
+        store, cfg, judged, monkeypatch):
+    """Was: the card kept « Refaite en … » and nothing woke the AI to decide again."""
+    monkeypatch.setenv("FAKE_CLAUDE", "fail")
+    aid = _sent_back_film(store, cfg)
+    order = feedback.decide_revision(store, aid, "remade", "un hook")["order"]
+    with store._tx() as c:  # the run that decided is long past: it saw the comment
+        c.execute("UPDATE feedback SET updated_at='2000-01-01T00:00:00+00:00'")
+    film.run_film(store, cfg, order["id"])
+    d = store.get_asset(aid)["agent_decision"]
+    assert (d["kind"], d["order_id"]) == ("waiting", order["id"])
+    assert "le film n'a pas abouti" in d["text"]
+    with store._tx() as c:
+        assert c.execute(schedule._NEWEST_WORK).fetchone()[0] == d["at"]

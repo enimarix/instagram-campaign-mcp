@@ -32,6 +32,7 @@ with the reason (156: never silent). tests/test_lemo_film.py fails if the comman
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -46,7 +47,7 @@ from dotenv import dotenv_values
 
 from ..config import ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from ..studio import lemo, render, sfx, voices, work_orders
+from ..studio import feedback, lemo, render, sfx, voices, work_orders
 from ..studio.production import qc_summary
 from ..studio.seed import local_today
 from .film_voice import VoiceDoor
@@ -194,8 +195,22 @@ def close_orphans(store: CampaignStore) -> int:
     orphans = [o for o in work_orders.list_orders(store, "in_production")
                if lemo.is_lemo(o["style"])]
     for o in orphans:
-        work_orders.skip_order(store, o["id"], INTERRUPTED)
+        _skip(store, o, INTERRUPTED)
     return len(orphans)
+
+
+def _skip(store: CampaignStore, order: Dict[str, Any], reason: str) -> None:
+    """Skip a film order with the reason. When it remade a video still sent back for
+    changes on the AI's decision (refilm, restyle), that video's card no longer says
+    « Refaite en … »: its decision is waiting, naming the failed film (order_id kept, which
+    wakes the light run, schedule._NEWEST_WORK), so the AI decides again (never parked)."""
+    work_orders.skip_order(store, order["id"], reason)
+    asset = store.get_asset(order["from_asset_id"]) if order.get("from_asset_id") else {}
+    if (asset.get("agent_decision") or {}).get("order_id") == order["id"]:
+        with contextlib.suppress(ValueError):  # the owner moved the video meanwhile
+            feedback.set_decision(store, asset["id"], "waiting",
+                                  f"{reason} (film {order['id']}) : l'IA décide à nouveau",
+                                  order_id=order["id"])
 
 
 def _wait_render(store: CampaignStore, asset_id: int, wait_s: float, poll_s: float
@@ -245,7 +260,8 @@ def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
         # order) at the voice door this process serves while the film runs: no key in the film
         with VoiceDoor(settings) as door:
             ws = prepare_workspace(settings, order_id, lemo.film_brief(
-                settings, order, style, _from_video(store, order), tts_url=door.url))
+                settings, order, style, _from_video(store, order), tts_url=door.url,
+                store=store))
             voices.agent_copy(store, ws / "voices.json")  # the voices the owner keeps on
             idea = store.add_idea("motion", hook=(order["instruction"] or style["label"])[:200],
                                   style=order["style"], batch_date=local_today(settings.timezone))
@@ -279,8 +295,7 @@ def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
         summary = close_log(settings, log, status, summary, usage)
         row = store.finish_agent_run(run["id"], status, summary=summary, usage=usage,
                                      log_path=str(log))
-        if status != "succeeded" and work_orders.get_order(store, order_id)["status"] \
-                in work_orders.OPEN:
-            work_orders.skip_order(store, order_id,
-                                   f"le film n'a pas abouti : {(summary.splitlines() or ['?'])[0]}")
+        order = work_orders.get_order(store, order_id)
+        if status != "succeeded" and order["status"] in work_orders.OPEN:
+            _skip(store, order, f"le film n'a pas abouti : {(summary.splitlines() or ['?'])[0]}")
     return row
