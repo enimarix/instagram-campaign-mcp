@@ -64,6 +64,7 @@ export default function InboxPage() {
   const [date, setDate] = useState(() => localDate(new Date()))
   const [assets, setAssets] = useState<Asset[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0) // « Réessayer » bumps it: the feed effect refetches (UI-006)
   const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null)
   const [current, setCurrent] = useState(0)
   const [muted, setMuted] = useState(true)
@@ -119,7 +120,7 @@ export default function InboxPage() {
     return () => {
       live = false
     }
-  }, [date, tab])
+  }, [date, tab, attempt])
 
   const flush = () => pending.current.forEach((p) => p.run())
   useEffect(() => {
@@ -360,7 +361,16 @@ export default function InboxPage() {
           </div>
         )}
         {error && (
-          <p role="alert" className="mx-auto max-w-md rounded-card bg-danger/12 p-3 text-sm text-danger">{error}</p>
+          <p role="alert" className="mx-auto max-w-md rounded-card bg-danger/12 p-3 text-sm text-danger">
+            {error}
+            <button type="button" className="ml-1 min-h-11 font-semibold underline underline-offset-2"
+              onClick={() => {
+                reload()
+                setAttempt((n) => n + 1)
+              }}>
+              Réessayer
+            </button>
+          </p>
         )}
       </header>
 

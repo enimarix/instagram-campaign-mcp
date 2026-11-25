@@ -31,7 +31,7 @@ function RailButton({ label, icon, onClick, primary, disabled }: { label: string
     <button type="button" onClick={onClick} disabled={disabled}
       className="group flex min-w-14 flex-col items-center gap-1 text-xs font-medium text-white lg:text-fg">
       <span aria-hidden className={`grid size-12 place-items-center rounded-full shadow-overlay transition group-active:scale-95 ${
-        primary ? 'bg-accent text-on-accent' : 'bg-black/55 backdrop-blur group-hover:bg-black/70 lg:bg-surface-2 lg:text-fg lg:group-hover:bg-line'}`}>
+        primary ? 'bg-accent text-on-accent' : 'bg-black/55 ring-1 ring-white/25 ring-inset backdrop-blur group-hover:bg-black/70 lg:bg-surface-2 lg:text-fg lg:ring-0 lg:group-hover:bg-line'}`}>
         {icon}
       </span>
       {label}
