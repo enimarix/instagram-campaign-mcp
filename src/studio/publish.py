@@ -18,7 +18,7 @@ from ..instagram_client import InstagramClient, caption_problem
 from ..store import CampaignStore, parse_dt, utcnow
 from . import media, sfx
 from .assets import InvalidTransition, transition
-from .rights import can_publish, caption_credit_problem
+from .rights import attribution, can_publish, caption_credit_problem
 
 
 class QueueRefused(ValueError):
@@ -52,6 +52,20 @@ def ai_generated(asset: Dict[str, Any], idea: Dict[str, Any]) -> bool:
     return bool((idea.get("script") or "").strip())
 
 
+def fallback_caption(idea: Dict[str, Any], source: Optional[Dict[str, Any]],
+                     recipe: Any) -> Optional[str]:
+    """The caption of a video approved before the AI wrote one (the check run waits for the
+    render line; the Inbox shows a video after its grace): the idea's hook, with the
+    creator's @handle a commentary post needs and the CC BY sounds' credits. None without
+    a hook. ponytail: the hook alone; the AI's caption replaces it when it comes first."""
+    hook = (idea.get("hook") or "").strip()
+    if not hook:
+        return None
+    if caption_credit_problem(source, hook):
+        hook = f"{hook} {attribution(source)}"
+    return sfx.with_credits(hook, recipe)
+
+
 def queue_asset(
     store: CampaignStore,
     settings: InstagramMCPSettings,
@@ -77,13 +91,16 @@ def queue_asset(
     decision = can_publish(source, confirmed)
     if not decision:
         raise QueueRefused("rights", decision.reason)
-    if not (asset["caption"] or "").strip():  # Instagram takes one; the reconcile needs it
-        raise QueueRefused("caption", f"asset {asset_id} has no caption: write one first")
+    caption = asset["caption"]
+    if not (caption or "").strip():  # Instagram takes one; the reconcile needs it
+        caption = fallback_caption(idea, source, asset["recipe"])
+        if not caption:
+            raise QueueRefused("caption", f"asset {asset_id} has no caption: write one first")
     # Also checked at submit_asset; here because the owner can edit the caption afterwards.
-    problem = caption_credit_problem(source, asset["caption"])
+    problem = caption_credit_problem(source, caption)
     if problem:
         raise QueueRefused("caption", problem)
-    missing = sfx.missing_credits(asset["recipe"], asset["caption"])  # CC BY sounds (150)
+    missing = sfx.missing_credits(asset["recipe"], caption)  # CC BY sounds (150)
     if missing:
         raise QueueRefused("caption", "the caption must credit the sounds: add "
                            + " / ".join(missing))
@@ -97,12 +114,14 @@ def queue_asset(
     qc = asset["qc"]
     if not (isinstance(qc, dict) and qc.get("passed") is True):
         raise QueueRefused("qc", f"asset {asset_id} has not passed QC")
-    problem = caption_problem(asset["caption"], settings.max_hashtags)
+    problem = caption_problem(caption, settings.max_hashtags)
     if problem:
         raise QueueRefused("caption", problem)
+    if caption != asset["caption"]:  # the fallback, stored only once every check passed
+        store.update_asset(asset_id, caption=caption)
 
     ig_audio = (asset["recipe"] or {}).get("ig_audio")  # the track Instagram plays (178)
-    payload = {"video_path": asset["file_path"], "caption": asset["caption"] or "",
+    payload = {"video_path": asset["file_path"], "caption": caption,
                "audio_name": None if ig_audio else asset["audio_name"],
                "audio_configuration": ig_audio and {k: ig_audio[k] for k in (
                    "audio_id", "audio_volume", "video_volume")},

@@ -151,6 +151,29 @@ def test_no_api_route_can_queue(store, cfg):  # DoD (4)
         assert "queue_asset" not in text and ".schedule(" not in text, f
 
 
+def _hook(store, asset, hook):
+    with store._tx() as c:  # no store method edits an idea's hook
+        c.execute("UPDATE ideas SET hook = ? WHERE id = ?", (hook, asset["idea_id"]))
+
+
+def test_a_blank_caption_takes_the_hook_with_its_credits(store, cfg):
+    # The owner approved before the check run wrote the caption (the render line held it)
+    refused = _asset(store, cfg, caption=None, qc=None)  # a refusal stores no fallback
+    _hook(store, refused, "Hook")
+    _refused("qc", store, cfg, refused["id"])
+    assert store.get_asset(refused["id"])["caption"] is None
+    a = _asset(store, cfg, caption=None)
+    _hook(store, a, "Personne ne mange avant ma photo")
+    post = queue_asset(store, cfg, a["id"], utcnow() + LATER)
+    assert post["payload"]["caption"] == "Personne ne mange avant ma photo"
+    assert store.get_asset(a["id"])["caption"] == "Personne ne mange avant ma photo"
+    comm = _asset(store, cfg, track="remix", caption="",
+                  source={"rights_basis": "commentary", "author": "@creator"})
+    _hook(store, comm, "Regarde ça")
+    post = queue_asset(store, cfg, comm["id"], utcnow() + LATER, confirmed=True)
+    assert post["payload"]["caption"] == "Regarde ça @creator"
+
+
 def test_caption_edit_refused_once_queued(store, cfg):  # DoD (6)
     for status in ("scheduled", "publish_check", "published"):
         a = _asset(store, cfg, status=status)

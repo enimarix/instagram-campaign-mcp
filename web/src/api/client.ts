@@ -40,6 +40,10 @@ export const onLoggedOut = (fn: (() => void) | null) => { loggedOut = fn }
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: 'same-origin', // session cookie (step 008)
+    // The Inbox commits a decision when the page is left or reloaded (pagehide): without
+    // keepalive the browser cancels it and the video is back. Browsers cap keepalive bodies
+    // at 64 KB, so not for uploads or long bodies.
+    keepalive: typeof init?.body === 'string' ? init.body.length < 60_000 : init?.body == null,
     ...init,
     headers: { Accept: 'application/json', ...init?.headers },
   })
