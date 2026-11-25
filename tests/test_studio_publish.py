@@ -120,6 +120,8 @@ def test_file_qc_caption_refusals(store, cfg):
     _refused("qc", store, cfg, _asset(store, cfg, qc=None)["id"])
     _refused("qc", store, cfg, _asset(store, cfg, qc={"passed": False})["id"])
     _refused("caption", store, cfg, _asset(store, cfg, caption="#x " * 31)["id"])
+    for blank in (None, "", " \n"):  # asset 62 went out with an empty caption
+        _refused("caption", store, cfg, _asset(store, cfg, caption=blank)["id"])
     with pytest.raises(ValueError, match="future"):
         queue_asset(store, cfg, _asset(store, cfg)["id"], utcnow())
 

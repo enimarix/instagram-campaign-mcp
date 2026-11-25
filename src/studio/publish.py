@@ -77,6 +77,8 @@ def queue_asset(
     decision = can_publish(source, confirmed)
     if not decision:
         raise QueueRefused("rights", decision.reason)
+    if not (asset["caption"] or "").strip():  # Instagram takes one; the reconcile needs it
+        raise QueueRefused("caption", f"asset {asset_id} has no caption: write one first")
     # Also checked at submit_asset; here because the owner can edit the caption afterwards.
     problem = caption_credit_problem(source, asset["caption"])
     if problem:

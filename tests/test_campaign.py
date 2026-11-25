@@ -120,6 +120,21 @@ async def test_network_error_is_not_auto_retried(client, store):
 
 
 @respx.mock
+async def test_rate_limited_publish_that_went_out_is_not_retried(client, store):
+    respx.post(f"{API}/1789/media").respond(json={"id": "C1"})
+    respx.get(f"{API}/C1").mock(side_effect=[
+        httpx.Response(200, json={"status_code": "FINISHED"}),
+        httpx.Response(200, json={"status_code": "PUBLISHED"})])  # Meta posted it anyway
+    respx.post(f"{API}/1789/media_publish").respond(
+        400, json={"error": {"message": "limit", "code": 4}})
+    p = store.schedule("image", {"image_url": "https://x/1.jpg"}, utcnow() - timedelta(seconds=5))
+    res = await camp.run_due(client, store)
+    post = store.get_scheduled(p["id"])
+    assert res["failed"] and not res["retrying"] and post["status"] == "failed"
+    assert "check Instagram" in post["error"]
+
+
+@respx.mock
 async def test_rate_limit_leaves_other_posts_pending(client, store):
     respx.post(f"{API}/1789/media").respond(
         400, json={"error": {"message": "limit", "code": 4}})

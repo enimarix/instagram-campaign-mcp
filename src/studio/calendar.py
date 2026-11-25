@@ -110,7 +110,8 @@ def replan(
         new = store.reschedule(post_id, _next_free_slot(store, settings, _taken(store, now), now))
     else:
         at = parse_dt(propose_slot(store, settings, post["asset_id"], now)["publish_at"])
-        new = schedule_asset(store, settings, post["asset_id"], at, confirmed)["post"]
+        new = schedule_asset(store, settings, post["asset_id"], at, confirmed,  # a trial stays one
+                             trial=post["payload"].get("trial_graduation"))["post"]
         cancel_post(store, post_id)
     return {**new, "local": _local(new["publish_at"], ZoneInfo(settings.timezone))}
 

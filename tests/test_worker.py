@@ -5,6 +5,7 @@ import asyncio
 import ctypes
 import sys
 import threading
+from contextlib import nullcontext, suppress
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -15,7 +16,7 @@ from src.api.app import create_app
 from src.campaign import run_due
 from src.config import InstagramMCPSettings
 from src.store import CampaignStore, parse_dt, to_iso, utcnow
-from src.studio import power
+from src.studio import housekeeping, power
 
 from .conftest import LOCAL
 
@@ -73,6 +74,18 @@ async def test_burst_publishes_one_and_moves_the_other_a_gap_later(store, cfg):
     moved = store.get_scheduled(second)
     assert moved["status"] == "pending"
     assert parse_dt(moved["publish_at"]) >= T + timedelta(minutes=cfg.min_slot_gap_minutes)
+
+
+async def test_gap_counts_from_the_last_posts_slot_not_its_publish_finish(store, cfg):
+    gap = timedelta(minutes=cfg.min_slot_gap_minutes)
+    first = _due(store, gap.total_seconds() / 60 + 0.5)  # the planner's slot before
+    with store._tx() as c:  # it went out, its publish done 43 s after its slot
+        c.execute("UPDATE scheduled_posts SET status='published', updated_at=? WHERE id=?",
+                  (to_iso(T - gap - timedelta(seconds=30) + timedelta(seconds=43)), first))
+    second = _due(store, 0.5)  # exactly one gap after it, run 30 s later
+    fake = FakeClient()
+    res = await worker.cycle(fake, store, cfg, now=clock)
+    assert res["replanned"] == [] and store.get_scheduled(second)["status"] == "published"
 
 
 @pytest.mark.parametrize("setting, flag, publishes", [
@@ -294,3 +307,31 @@ def test_cli_run_due_wait_until_next(settings, tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         scheduler.main(["run-due", "--wait-until-next"])
     assert e.value.code == 0 and '"waited_s": 7' in capsys.readouterr().out
+
+
+async def test_render_loop_start_requeues_a_dead_processs_job_first(store, tmp_path,
+                                                                    monkeypatch):
+    monkeypatch.setattr(worker, "keep_awake", nullcontext)
+    monkeypatch.setattr(housekeeping, "disk_ok", lambda settings: True)
+    jobs = []
+    for n in range(2):
+        idea = store.add_idea("motion", hook="Une vidéo", batch_date="2026-11-17")
+        asset = store.add_asset(idea["id"], batch_date="2026-11-17",
+                                recipe={"kind": "motion", "template": "FactQuest", "props": {}})
+        jobs.append(store.add_render_job(asset["id"], f"k{n}")["id"])
+    store.claim_render_jobs(1, utcnow() - timedelta(days=1), ids=[jobs[0]])  # then `up` died
+    s = InstagramMCPSettings(_env_file=None, database_path=":memory:", agent_schedule="",
+                             instagram_access_token=None, media_root=str(tmp_path),
+                             render_concurrency=1)
+    ran = []
+    loop = asyncio.create_task(worker.render_loop(store, s, run=ran.append, interval=0.02))
+    try:
+        for _ in range(250):
+            if ran:
+                break
+            await asyncio.sleep(0.02)
+    finally:
+        loop.cancel()
+        with suppress(asyncio.CancelledError):
+            await loop
+    assert ran[0]["id"] == jobs[0]  # now, not after the next one (RENDER_STALE)
