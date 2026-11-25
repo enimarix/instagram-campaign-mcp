@@ -26,7 +26,7 @@ export default function SentBack() {
       <summary className="cursor-pointer font-medium">
         {assets.length} {assets.length === 1 ? 'vidéo renvoyée' : 'vidéos renvoyées'} pour changements
       </summary>
-      <ul aria-label="Sent back" className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+      <ul aria-label="Renvoyées" className="mt-2 max-h-48 space-y-2 overflow-y-auto">
         {assets.map((a) => (
           <li key={a.id} className="flex items-start gap-2">
             {a.thumbnail_url && <img src={a.thumbnail_url} alt="" className="h-12 w-7 shrink-0 rounded object-cover" />}

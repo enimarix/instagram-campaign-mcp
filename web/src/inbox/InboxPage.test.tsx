@@ -47,18 +47,18 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   <MemoryRouter><ToastProvider>{children}</ToastProvider></MemoryRouter>
 )
 const renderPage = () => render(<InboxPage />, { wrapper })
-const card = (id: number) => screen.getByRole('article', { name: `Video ${id}` })
+const card = (id: number) => screen.getByRole('article', { name: `Vidéo ${id}` })
 const cards = () => screen.queryAllByRole('article').map((a) => a.getAttribute('aria-label'))
 const posts = (calls: Call[]) => calls.filter((c) => c.method === 'POST').map((c) => [c.url, c.body])
 const press = (id: number, name: string) => fireEvent.click(within(card(id)).getByRole('button', { name }))
-const declineSheet = () => screen.getByRole('dialog', { name: 'Why decline?' })
+const declineSheet = () => screen.getByRole('dialog', { name: 'Pourquoi refuser ?' })
 /** Decline (button or key `d`) opens the motive sheet; this fills its text and confirms. */
 function declineWith(id: number | null, text = 'Trop lent') {
   if (id === null) fireEvent.keyDown(window, { key: 'd' })
-  else press(id, 'Decline')
+  else press(id, 'Refuser')
   const sheet = within(declineSheet())
-  fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: text } })
-  fireEvent.click(sheet.getByRole('button', { name: 'Decline' }))
+  fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: text } })
+  fireEvent.click(sheet.getByRole('button', { name: 'Refuser' }))
 }
 
 /** Let the 5 s undo window close (fake timers), then wait on real ones. */
@@ -115,16 +115,16 @@ describe('InboxPage feed', () => {
     stubApi({ 'GET /api/assets': [200, [asset(1), asset(2, {
       track: 'remix', recipe: { inputs: { source: 's.mp4', reaction: 'reactions/1/pieces/3.mp4' } } })]] })
     renderPage()
-    await screen.findByText('0 of 2 decided')
-    expect(within(card(2)).getByText('reaction')).toBeTruthy()
-    expect(within(card(1)).queryByText('reaction')).toBeNull()
+    await screen.findByText('0 sur 2 décidées')
+    expect(within(card(2)).getByText('réaction')).toBeTruthy()
+    expect(within(card(1)).queryByText('réaction')).toBeNull()
   })
 
   it('shows only the videos to decide, with the counter and the overlay', async () => {
     const calls = stubApi()
     renderPage()
-    expect(await screen.findByText('1 of 3 decided')).toBeTruthy()
-    expect(cards()).toEqual(['Video 1', 'Video 2'])
+    expect(await screen.findByText('1 sur 3 décidées')).toBeTruthy()
+    expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
     expect(calls.map((c) => c.url)).toContain(`/api/assets?batch_date=${new Date().toLocaleDateString('sv')}`)
     const video = card(1).querySelector('video')!
     expect(video.getAttribute('src')).toBe('/api/media/1.mp4')
@@ -133,25 +133,25 @@ describe('InboxPage feed', () => {
     expect(card(2).querySelector('video')!.getAttribute('preload')).toBe('auto') // the next one
     const c1 = within(card(1))
     expect(c1.queryByText('strong hook')).toBeNull() // a legacy self-score reason: not shown (189)
-    expect(c1.getByText('Explore')).toBeTruthy()
+    expect(c1.getByText('Exploration')).toBeTruthy()
     const desc = c1.getByRole('button', { name: 'A knight jumps over three facts.' })
     fireEvent.click(desc)
     expect(desc.getAttribute('aria-expanded')).toBe('true')
-    expect(within(card(2)).queryByText('Explore')).toBeNull()
-    expect(c1.getByRole('link', { name: 'Details' }).getAttribute('href')).toBe('/assets/1')
+    expect(within(card(2)).queryByText('Exploration')).toBeNull()
+    expect(c1.getByRole('link', { name: 'Détails' }).getAttribute('href')).toBe('/assets/1')
   })
 
   it('only the next video preloads', async () => {
     stubApi({ 'GET /api/assets': [200, [asset(1), asset(2), asset(3)]] })
     renderPage()
-    await screen.findByText('0 of 3 decided')
+    await screen.findByText('0 sur 3 décidées')
     expect(card(3).querySelector('video')!.getAttribute('preload')).toBe('none')
   })
 
   it('plays only the card on screen', async () => {
     stubApi()
     renderPage()
-    await screen.findByText('1 of 3 decided')
+    await screen.findByText('1 sur 3 décidées')
     const [v1, v2] = [card(1).querySelector('video')!, card(2).querySelector('video')!]
     await waitFor(() => expect(v1.paused).toBe(false))
     expect(v2.paused).not.toBe(false)
@@ -163,11 +163,11 @@ describe('InboxPage feed', () => {
   it('a tap on the video toggles the sound for the feed', async () => {
     stubApi()
     renderPage()
-    await screen.findByText('1 of 3 decided')
+    await screen.findByText('1 sur 3 décidées')
     fireEvent.click(card(1).querySelector('video')!)
     expect(card(1).querySelector('video')!.muted).toBe(false)
     expect(card(2).querySelector('video')!.muted).toBe(false)
-    expect(within(card(1)).getByRole('button', { name: 'Mute' })).toBeTruthy()
+    expect(within(card(1)).getByRole('button', { name: 'Couper le son' })).toBeTruthy()
   })
 
   describe('approve', () => {
@@ -176,13 +176,13 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/approve-and-queue': [200, { asset: asset(1, { status: 'scheduled' }), slot: SLOT }],
       })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(1, 'Approve')
+      press(1, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0)) // the proposed-slot check
-      expect(cards()).toEqual(['Video 2'])
-      expect(screen.getByText('2 of 3 decided')).toBeTruthy()
-      expect(screen.getByText('Approved')).toBeTruthy()
+      expect(cards()).toEqual(['Vidéo 2'])
+      expect(screen.getByText('2 sur 3 décidées')).toBeTruthy()
+      expect(screen.getByText('Approuvée')).toBeTruthy()
       expect(posts(calls)).toEqual([])
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([
@@ -195,20 +195,20 @@ describe('InboxPage feed', () => {
         'POST /api/assets/2/approve-and-queue': [200, { asset: asset(2, { status: 'scheduled' }), slot: SLOT }],
       })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers() // fakes Date.now too
-      press(1, 'Approve')
+      press(1, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(100))
-      expect(cards()).toEqual(['Video 2'])
-      const rail = () => ['Approve', 'Change', 'Decline', 'Save for later'].map((name) =>
+      expect(cards()).toEqual(['Vidéo 2'])
+      const rail = () => ['Approuver', 'Changer', 'Refuser', 'Garder'].map((name) =>
         (within(card(2)).getByRole('button', { name }) as HTMLButtonElement).disabled)
       expect(rail()).toEqual([true, true, true, true]) // natively: Playwright waits, readers say so
-      press(2, 'Approve') // the second tap of the double-tap, on the card that slid in
+      press(2, 'Approuver') // the second tap of the double-tap, on the card that slid in
       await act(() => vi.advanceTimersByTimeAsync(0))
-      expect(cards()).toEqual(['Video 2'])
+      expect(cards()).toEqual(['Vidéo 2'])
       await act(() => vi.advanceTimersByTimeAsync(500)) // 600 ms after the first tap
       expect(rail()).toEqual([false, false, false, false])
-      press(2, 'Approve') // a deliberate tap after the lock
+      press(2, 'Approuver') // a deliberate tap after the lock
       await act(() => vi.advanceTimersByTimeAsync(0))
       expect(cards()).toEqual([])
       await closeUndoWindow()
@@ -219,9 +219,9 @@ describe('InboxPage feed', () => {
     it('the keys are not held back after a tap (UI-001)', async () => {
       stubApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(1, 'Approve')
+      press(1, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0))
       fireEvent.keyDown(window, { key: 'a' })
       await act(() => vi.advanceTimersByTimeAsync(0))
@@ -233,13 +233,13 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/approve-and-queue': [200, { asset: asset(1, { status: 'approved' }), slot: null }],
       })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(1, 'Approve')
+      press(1, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0))
       await closeUndoWindow()
-      expect(await screen.findByText('Approved, no free slot: set one in Calendar')).toBeTruthy()
-      expect(cards()).toEqual(['Video 2'])
+      expect(await screen.findByText('Approuvée, aucun créneau libre : choisis-en un dans le Calendrier')).toBeTruthy()
+      expect(cards()).toEqual(['Vidéo 2'])
     })
 
     it('a commentary video asks for the rights confirmation first', async () => {
@@ -248,17 +248,17 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/approve-and-queue': [200, { asset: asset(1, { status: 'scheduled' }), slot: SLOT }],
       })
       renderPage()
-      await screen.findByText('1 of 3 decided')
-      press(1, 'Approve')
-      const sheet = await screen.findByRole('dialog', { name: 'Approve this reaction video?' })
-      expect(cards()).toEqual(['Video 1', 'Video 2']) // nothing decided yet
-      const ok = within(sheet).getByRole('button', { name: 'Approve' }) as HTMLButtonElement
+      await screen.findByText('1 sur 3 décidées')
+      press(1, 'Approuver')
+      const sheet = await screen.findByRole('dialog', { name: 'Approuver cette vidéo de réaction ?' })
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2']) // nothing decided yet
+      const ok = within(sheet).getByRole('button', { name: 'Approuver' }) as HTMLButtonElement
       expect(ok.disabled).toBe(true)
       fireEvent.click(within(sheet).getByRole('checkbox'))
       vi.useFakeTimers()
       fireEvent.click(ok)
       expect(screen.queryByRole('dialog')).toBeNull()
-      expect(cards()).toEqual(['Video 2'])
+      expect(cards()).toEqual(['Vidéo 2'])
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([
         ['/api/assets/1/approve-and-queue', { confirmed: true }]]))
@@ -269,19 +269,19 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/approve-and-queue': [200, { asset: asset(1, { status: 'scheduled' }), slot: SLOT }],
       })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(1, 'Approve')
+      press(1, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0))
-      const group = screen.getByRole('group', { name: 'Publish as a trial Reel? (optional)' })
-      const toggle = within(group).getByRole('button', { name: 'Approve as trial Reel' })
+      const group = screen.getByRole('group', { name: 'Publier en Reel d’essai ? (facultatif)' })
+      const toggle = within(group).getByRole('button', { name: 'Approuver en Reel d’essai' })
       expect(toggle.getAttribute('aria-pressed')).toBe('false')
       fireEvent.click(toggle)
       expect(toggle.getAttribute('aria-pressed')).toBe('true')
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([
         ['/api/assets/1/approve-and-queue', { confirmed: false, trial: 'SS_PERFORMANCE' }]]))
-      expect(screen.queryByRole('group', { name: 'Publish as a trial Reel? (optional)' })).toBeNull()
+      expect(screen.queryByRole('group', { name: 'Publier en Reel d’essai ? (facultatif)' })).toBeNull()
     })
 
     it('an experiment video (exploit) can be approved as a trial Reel too', async () => {
@@ -290,34 +290,34 @@ describe('InboxPage feed', () => {
         'POST /api/assets/2/approve-and-queue': [200, { asset: asset(2, { status: 'scheduled' }), slot: SLOT }],
       })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(2, 'Approve')
+      press(2, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0))
-      const group = screen.getByRole('group', { name: 'Publish as a trial Reel? (optional)' })
-      expect(within(group).getByRole('button', { name: 'Approve as trial Reel' })).toBeTruthy()
+      const group = screen.getByRole('group', { name: 'Publier en Reel d’essai ? (facultatif)' })
+      expect(within(group).getByRole('button', { name: 'Approuver en Reel d’essai' })).toBeTruthy()
     })
 
     it('a normal (exploit) video offers no trial Reel', async () => {
       stubApi({ 'POST /api/assets/2/approve-and-queue': [200, { asset: asset(2, { status: 'scheduled' }), slot: SLOT }] })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(2, 'Approve')
+      press(2, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0))
-      expect(screen.getByText('Approved')).toBeTruthy()
-      expect(screen.queryByRole('group', { name: 'Publish as a trial Reel? (optional)' })).toBeNull()
+      expect(screen.getByText('Approuvée')).toBeTruthy()
+      expect(screen.queryByRole('group', { name: 'Publier en Reel d’essai ? (facultatif)' })).toBeNull()
     })
 
     it('undo brings the card back and sends nothing', async () => {
       const calls = stubApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(1, 'Approve')
+      press(1, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0))
-      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
       await closeUndoWindow()
       expect(posts(calls)).toEqual([])
     })
@@ -325,16 +325,16 @@ describe('InboxPage feed', () => {
     it('a refusal puts the card back with the reason', async () => {
       stubApi({ 'POST /api/assets/1/approve-and-queue': [409, { error: 'qc', message: 'has not passed QC' }] })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
-      press(1, 'Approve')
+      press(1, 'Approuver')
       await act(() => vi.advanceTimersByTimeAsync(0))
       await closeUndoWindow()
       expect((await screen.findByRole('alert')).textContent).toContain('has not passed QC')
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
       // UI-006: the same « Réessayer » clears the error and refreshes the feed
       fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }))
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       expect(screen.queryByRole('alert')).toBeNull()
     })
 
@@ -349,9 +349,9 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/restyle': [200, { id: 5 }],
       })
       renderPage()
-      await screen.findByText('0 of 1 decided')
-      press(1, 'Change')
-      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      await screen.findByText('0 sur 1 décidées')
+      press(1, 'Changer')
+      const sheet = await screen.findByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })
       const details = within(sheet).getByText('Même vidéo, autre style').closest('details')!
       details.open = true
       fireEvent(details, new Event('toggle'))
@@ -359,13 +359,13 @@ describe('InboxPage feed', () => {
       const gallery = await screen.findByRole('dialog', { name: 'Tous les styles' })
       fireEvent.keyDown(gallery, { key: 'Escape' }) // Esc closes only the gallery
       expect(screen.queryByRole('dialog', { name: 'Tous les styles' })).toBeNull()
-      expect(screen.getByRole('dialog', { name: 'What should change?' })).toBeTruthy()
+      expect(screen.getByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })).toBeTruthy()
       fireEvent.click(within(sheet).getByRole('button', { name: 'Tous les styles' }))
       const again = await screen.findByRole('dialog', { name: 'Tous les styles' })
       fireEvent.click(await within(again).findByRole('button', { name: 'Watercolor Brush' }))
       fireEvent.click(within(screen.getByRole('dialog', { name: 'Watercolor Brush' })).getByRole('button', { name: 'Choisir ce style' }))
       expect(screen.queryByRole('dialog', { name: 'Tous les styles' })).toBeNull()
-      expect(screen.getByRole('dialog', { name: 'What should change?' })).toBeTruthy()
+      expect(screen.getByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })).toBeTruthy()
       expect(within(sheet).getByRole('button', { name: 'Watercolor Brush' }).getAttribute('aria-pressed')).toBe('true')
       expect(within(sheet).getByText('Soft washes.', { exact: false })).toBeTruthy()
       expect(within(sheet).queryByText(/L'IA choisit le style/)).toBeNull()
@@ -385,22 +385,22 @@ describe('InboxPage feed', () => {
     it('opens the motive sheet; Confirm waits for a reason or words; commits after 5 s', async () => {
       const calls = declineApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
-      press(1, 'Decline')
+      await screen.findByText('1 sur 3 décidées')
+      press(1, 'Refuser')
       const sheet = within(declineSheet())
-      expect(cards()).toEqual(['Video 1', 'Video 2']) // nothing decided before Confirm
-      const confirm = sheet.getByRole('button', { name: 'Decline' }) as HTMLButtonElement
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2']) // nothing decided before Confirm
+      const confirm = sheet.getByRole('button', { name: 'Refuser' }) as HTMLButtonElement
       expect(confirm.disabled).toBe(true)
-      fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: '   ' } })
+      fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: '   ' } })
       expect(confirm.disabled).toBe(true) // blanks are no motive
       fireEvent.click(await sheet.findByRole('button', { name: 'Too long' }))
       expect(confirm.disabled).toBe(false)
-      fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: ' On décroche ' } })
+      fireEvent.change(sheet.getByRole('textbox', { name: 'Pourquoi ?' }), { target: { value: ' On décroche ' } })
       vi.useFakeTimers()
       fireEvent.click(confirm)
       expect(screen.queryByRole('dialog')).toBeNull()
-      expect(cards()).toEqual(['Video 2'])
-      expect(screen.getByText('Declined')).toBeTruthy()
+      expect(cards()).toEqual(['Vidéo 2'])
+      expect(screen.getByText('Refusée')).toBeTruthy()
       await act(() => vi.advanceTimersByTimeAsync(4900))
       expect(posts(calls)).toEqual([])
       await closeUndoWindow()
@@ -412,7 +412,7 @@ describe('InboxPage feed', () => {
     it('words alone are a motive; sent with keepalive (it may be flushed on tab close)', async () => {
       const calls = declineApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
       declineWith(1, 'Trop lent')
       await closeUndoWindow()
@@ -425,11 +425,11 @@ describe('InboxPage feed', () => {
     it('the key d opens it too; Cancel decides nothing', async () => {
       const calls = declineApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       fireEvent.keyDown(window, { key: 'd' })
-      fireEvent.click(within(declineSheet()).getByRole('button', { name: 'Cancel' }))
+      fireEvent.click(within(declineSheet()).getByRole('button', { name: 'Annuler' }))
       expect(screen.queryByRole('dialog')).toBeNull()
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
       vi.useFakeTimers()
       await closeUndoWindow()
       expect(posts(calls)).toEqual([])
@@ -438,11 +438,11 @@ describe('InboxPage feed', () => {
     it('undo cancels it', async () => {
       const calls = declineApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
       declineWith(1)
-      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
       await closeUndoWindow()
       expect(posts(calls)).toEqual([])
     })
@@ -450,7 +450,7 @@ describe('InboxPage feed', () => {
     it('commits at once when the page is hidden', async () => {
       const calls = declineApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       declineWith(1)
       Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
       try {
@@ -465,7 +465,7 @@ describe('InboxPage feed', () => {
     it('commits at once when the Inbox is left', async () => {
       const calls = declineApi()
       const { unmount } = renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       declineWith(1)
       unmount()
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
@@ -478,7 +478,7 @@ describe('InboxPage feed', () => {
       asset(1, { change_request: { text: 'Plus court', reason_codes: [] }, self_score_reason: 'Changed: hook cut to 2 s' }),
       asset(2, { change_request: { text: null, reason_codes: ['weak_hook'] } }), asset(3)]] })
     renderPage()
-    await screen.findByText('0 of 3 decided')
+    await screen.findByText('0 sur 3 décidées')
     expect(within(card(1)).getByText('Changé : « Plus court »')).toBeTruthy()
     expect(within(card(1)).getByText('Changed: hook cut to 2 s')).toBeTruthy() // the agent's note, no score (189)
     expect(await within(card(2)).findByText('Changé : « Weak hook »')).toBeTruthy()
@@ -488,10 +488,10 @@ describe('InboxPage feed', () => {
   it('shows the DM pick sender and the commentary chip a row carries', async () => {
     stubApi({ 'GET /api/assets': [200, [asset(1, { dm_pick_sender: 'pal', rights_basis: 'commentary' }), asset(2)]] })
     renderPage()
-    await screen.findByText('0 of 2 decided')
-    expect(within(card(1)).getByText('DM pick from @pal')).toBeTruthy()
-    expect(within(card(1)).getByText('commentary')).toBeTruthy()
-    expect(within(card(2)).queryByText(/DM pick/)).toBeNull()
+    await screen.findByText('0 sur 2 décidées')
+    expect(within(card(1)).getByText('Choix DM de @pal')).toBeTruthy()
+    expect(within(card(1)).getByText('commentaire')).toBeTruthy()
+    expect(within(card(2)).queryByText(/Choix DM/)).toBeNull()
   })
 
   it('badges a video made from a work order with its instruction', async () => {
@@ -501,7 +501,7 @@ describe('InboxPage feed', () => {
       // a DM order the owner switched to inspired: the badge follows the source, not the mode (140)
       asset(3, { work_order: { ...order, source: 'dm' } }), asset(4)]] })
     renderPage()
-    await screen.findByText('0 of 4 decided')
+    await screen.findByText('0 sur 4 décidées')
     expect(within(card(1)).getByText('Tendance')).toBeTruthy()
     expect(within(card(1)).getByText('Ta consigne : « version sans sucre »')).toBeTruthy()
     expect(within(card(2)).getByText('Mes envois')).toBeTruthy()
@@ -517,12 +517,12 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/verdict': [200, asset(1, { verdict: 'liked' })],
       })
       renderPage()
-      await screen.findByText('2 of 4 decided')
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      await screen.findByText('2 sur 4 décidées')
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
       vi.useFakeTimers()
-      press(1, 'Save for later')
-      expect(cards()).toEqual(['Video 2'])
-      expect(screen.getByText('Saved for later')).toBeTruthy()
+      press(1, 'Garder')
+      expect(cards()).toEqual(['Vidéo 2'])
+      expect(screen.getByText('Gardée pour plus tard')).toBeTruthy()
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([['/api/assets/1/verdict', { verdict: 'liked' }]]))
     })
@@ -540,11 +540,11 @@ describe('InboxPage feed', () => {
         return stubbed(url, init)
       }))
       renderPage()
-      await screen.findByText('1 of 3 decided')
-      press(1, 'Save for later')
+      await screen.findByText('1 sur 3 décidées')
+      press(1, 'Garder')
       const benchGets = () => calls.filter((c) => c.url === '/api/bench').length
       const before = benchGets()
-      fireEvent.click(screen.getByRole('tab', { name: /Saved/ }))
+      fireEvent.click(screen.getByRole('tab', { name: /Gardées/ }))
       await act(() => new Promise((r) => setTimeout(r, 20)))
       expect(benchGets()).toBe(before)
       release()
@@ -554,12 +554,12 @@ describe('InboxPage feed', () => {
     it('key s saves; undo sends nothing', async () => {
       const calls = stubApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       vi.useFakeTimers()
       fireEvent.keyDown(window, { key: 's' })
-      expect(cards()).toEqual(['Video 2'])
-      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      expect(cards()).toEqual(['Vidéo 2'])
+      fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
       await closeUndoWindow()
       expect(posts(calls)).toEqual([])
     })
@@ -574,20 +574,20 @@ describe('InboxPage feed', () => {
     it('sends wants_changes with the reasons, the text and the pinned moment', async () => {
       const calls = changeApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       Object.defineProperty(card(1).querySelector('video')!, 'currentTime', { value: 7.4 })
-      press(1, 'Change')
-      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
-      const send = within(sheet).getByRole('button', { name: 'Send for changes' }) as HTMLButtonElement
+      press(1, 'Changer')
+      const sheet = await screen.findByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })
+      const send = within(sheet).getByRole('button', { name: 'Renvoyer pour changements' }) as HTMLButtonElement
       expect(send.disabled).toBe(true)
       fireEvent.click(await within(sheet).findByRole('button', { name: 'Weak hook' }))
-      fireEvent.click(within(sheet).getByRole('button', { name: 'at 0:07' }))
-      fireEvent.change(within(sheet).getByLabelText('What to change'), { target: { value: ' shorter hook ' } })
+      fireEvent.click(within(sheet).getByRole('button', { name: 'à 0:07' }))
+      fireEvent.change(within(sheet).getByLabelText('Ce qui doit changer'), { target: { value: ' shorter hook ' } })
       vi.useFakeTimers()
       fireEvent.click(send)
       expect(screen.queryByRole('dialog')).toBeNull()
-      expect(cards()).toEqual(['Video 2'])
-      expect(screen.getByText('Sent for changes')).toBeTruthy()
+      expect(cards()).toEqual(['Vidéo 2'])
+      expect(screen.getByText('Renvoyée pour changements')).toBeTruthy()
       expect(posts(calls)).toEqual([])
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([['/api/assets/1/feedback', {
@@ -597,14 +597,14 @@ describe('InboxPage feed', () => {
     it('undo cancels it', async () => {
       const calls = changeApi()
       renderPage()
-      await screen.findByText('1 of 3 decided')
-      press(1, 'Change')
+      await screen.findByText('1 sur 3 décidées')
+      press(1, 'Changer')
       const sheet = await screen.findByRole('dialog')
       fireEvent.click(await within(sheet).findByRole('button', { name: 'Too long' }))
       vi.useFakeTimers()
-      fireEvent.click(within(sheet).getByRole('button', { name: 'Send for changes' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
-      expect(cards()).toEqual(['Video 1', 'Video 2'])
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Renvoyer pour changements' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+      expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
       await closeUndoWindow()
       expect(posts(calls)).toEqual([])
     })
@@ -618,9 +618,9 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/restyle': [200, { id: 5 }],
       })
       renderPage()
-      await screen.findByText('0 of 2 decided')
-      press(1, 'Change')
-      const sheet = await screen.findByRole('dialog', { name: 'What should change?' })
+      await screen.findByText('0 sur 2 décidées')
+      press(1, 'Changer')
+      const sheet = await screen.findByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })
       expect(calls.some((c) => c.url === '/api/styles')).toBe(false) // loads when opened
       const details = within(sheet).getByText('Même vidéo, autre style').closest('details')!
       details.open = true
@@ -628,10 +628,10 @@ describe('InboxPage feed', () => {
       fireEvent.click(await within(sheet).findByRole('button', { name: '3D 8-bit' }))
       expect(within(sheet).queryByRole('button', { name: 'Papier' })).toBeNull() // its own style
       fireEvent.click(within(sheet).getByRole('button', { name: 'Too long' }))
-      fireEvent.change(within(sheet).getByRole('textbox', { name: 'What to change' }), { target: { value: ' hook plus court ' } })
+      fireEvent.change(within(sheet).getByRole('textbox', { name: 'Ce qui doit changer' }), { target: { value: ' hook plus court ' } })
       vi.useFakeTimers()
       fireEvent.click(within(sheet).getByRole('button', { name: 'Refaire dans ce style' }))
-      expect(cards()).toEqual(['Video 2']) // out of the feed at once (Undo for 5 s)
+      expect(cards()).toEqual(['Vidéo 2']) // out of the feed at once (Undo for 5 s)
       expect(screen.getByText(/la même vidéo dans un autre style/)).toBeTruthy()
       await closeUndoWindow()
       await waitFor(() => expect(posts(calls)).toEqual([
@@ -642,27 +642,27 @@ describe('InboxPage feed', () => {
   it('keys: d declines, j / k move, c opens the change sheet, m mutes; ignored while typing', async () => {
     const calls = stubApi({ 'GET /api/assets': [200, [asset(1), asset(2), asset(3)]] })
     renderPage()
-    await screen.findByText('0 of 3 decided')
-    fireEvent.keyDown(screen.getByLabelText('Batch date'), { key: 'd' })
-    expect(cards()).toEqual(['Video 1', 'Video 2', 'Video 3'])
+    await screen.findByText('0 sur 3 décidées')
+    fireEvent.keyDown(screen.getByLabelText('Jour des vidéos'), { key: 'd' })
+    expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2', 'Vidéo 3'])
     fireEvent.keyDown(window, { key: 'j' })
     fireEvent.keyDown(window, { key: 'ArrowDown' })
     fireEvent.keyDown(window, { key: 'k' })
     declineWith(null) // on video 2: d opens the motive sheet
-    expect(cards()).toEqual(['Video 1', 'Video 3'])
+    expect(cards()).toEqual(['Vidéo 1', 'Vidéo 3'])
     fireEvent.keyDown(window, { key: 'm' })
     expect(card(3).querySelector('video')!.muted).toBe(false)
     fireEvent.keyDown(window, { key: 'c' }) // video 3 took video 2's place
-    expect(await screen.findByRole('dialog', { name: 'What should change?' })).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: 'Qu’est-ce qui doit changer ?' })).toBeTruthy()
     fireEvent.keyDown(window, { key: 'd' }) // a sheet is open: no decision
-    expect(cards()).toEqual(['Video 1', 'Video 3'])
+    expect(cards()).toEqual(['Vidéo 1', 'Vidéo 3'])
     expect(posts(calls)).toEqual([])
   })
 
   it('keys: a approves, space pauses and plays', async () => {
     stubApi()
     renderPage()
-    await screen.findByText('1 of 3 decided')
+    await screen.findByText('1 sur 3 décidées')
     const v = card(1).querySelector('video')!
     await waitFor(() => expect(v.paused).toBe(false))
     fireEvent.keyDown(window, { key: ' ' })
@@ -670,17 +670,17 @@ describe('InboxPage feed', () => {
     fireEvent.keyDown(window, { key: ' ' })
     expect(v.paused).toBe(false)
     fireEvent.keyDown(window, { key: 'a' })
-    await waitFor(() => expect(cards()).toEqual(['Video 2']))
+    await waitFor(() => expect(cards()).toEqual(['Vidéo 2']))
   })
 
   it('all done: the last decision shows the end screen with the Calendar link', async () => {
     stubApi({ 'GET /api/assets': [200, [asset(1), asset(3, { status: 'scheduled' })]] })
     renderPage()
-    await screen.findByText('1 of 2 decided')
+    await screen.findByText('1 sur 2 décidées')
     declineWith(1)
-    expect(screen.getByText('2 of 2 decided')).toBeTruthy()
-    expect(screen.getByText('All done')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open the Calendar' }).getAttribute('href')).toBe('/calendar')
+    expect(screen.getByText('2 sur 2 décidées')).toBeTruthy()
+    expect(screen.getByText('Tout est décidé')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Ouvrir le Calendrier' }).getAttribute('href')).toBe('/calendar')
   })
 
   it('« Réessayer » after a load error clears it and refetches the feed (UI-006)', async () => {
@@ -693,10 +693,10 @@ describe('InboxPage feed', () => {
         : stubbed(url, init)))
     renderPage()
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('Could not load the batch')
+    expect(alert.textContent).toContain('Impossible de charger les vidéos de ce jour')
     fireEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }))
-    await screen.findByText('1 of 3 decided')
-    expect(cards()).toEqual(['Video 1', 'Video 2'])
+    await screen.findByText('1 sur 3 décidées')
+    expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
     expect(screen.queryByRole('alert')).toBeNull()
     expect(calls.filter((c) => c.url.startsWith('/api/assets?batch_date')).length).toBe(1) // the refetch (the 500 bypassed the stub)
   })
@@ -704,7 +704,7 @@ describe('InboxPage feed', () => {
   it('an empty day says so', async () => {
     stubApi({ 'GET /api/assets': [200, []] })
     renderPage()
-    expect(await screen.findByText('No videos for this day.')).toBeTruthy()
+    expect(await screen.findByText('Aucune vidéo ce jour-là.')).toBeTruthy()
   })
 
   describe('bench', () => {
@@ -723,22 +723,22 @@ describe('InboxPage feed', () => {
     it('the Saved tab (bench) is a feed of liked videos with the supply line and best-before', async () => {
       benchApi()
       renderPage()
-      fireEvent.click(await screen.findByRole('tab', { name: 'Saved (4)' }))
-      expect(await screen.findByText('4 saved videos = 2 days at 3 a day')).toBeTruthy()
-      expect(cards()).toEqual(['Video 7', 'Video 8', 'Video 9', 'Video 10'])
-      expect(within(card(7)).getByText('best before 2026-11-20')).toBeTruthy()
-      expect(within(card(8)).queryByText(/best before/)).toBeNull()
-      expect(within(card(7)).queryByRole('button', { name: 'Save for later' })).toBeNull()
-      expect(screen.queryByLabelText('Batch date')).toBeNull()
-      fireEvent.click(screen.getByRole('tab', { name: 'Today' }))
-      expect(await screen.findByText('1 of 3 decided')).toBeTruthy()
+      fireEvent.click(await screen.findByRole('tab', { name: 'Gardées (4)' }))
+      expect(await screen.findByText('4 vidéos gardées = 2 jours à 3 par jour')).toBeTruthy()
+      expect(cards()).toEqual(['Vidéo 7', 'Vidéo 8', 'Vidéo 9', 'Vidéo 10'])
+      expect(within(card(7)).getByText('à publier avant le ven. 20 nov.')).toBeTruthy()
+      expect(within(card(8)).queryByText(/à publier avant/)).toBeNull()
+      expect(within(card(7)).queryByRole('button', { name: 'Garder' })).toBeNull()
+      expect(screen.queryByLabelText('Jour des vidéos')).toBeNull()
+      fireEvent.click(screen.getByRole('tab', { name: 'Aujourd’hui' }))
+      expect(await screen.findByText('1 sur 3 décidées')).toBeTruthy()
     })
 
     it('one saved video reads in the singular', async () => {
       stubApi({ 'GET /api/bench': [200, { ...BENCH, assets: [BENCH.assets[0]], supply_days: 1 }] })
       renderPage()
-      fireEvent.click(await screen.findByRole('tab', { name: 'Saved (1)' }))
-      expect(await screen.findByText('1 saved video = 1 day at 3 a day')).toBeTruthy()
+      fireEvent.click(await screen.findByRole('tab', { name: 'Gardées (1)' }))
+      expect(await screen.findByText('1 vidéo gardée = 1 jour à 3 par jour')).toBeTruthy()
     })
 
     it('switching tabs commits a waiting decision first', async () => {
@@ -746,9 +746,9 @@ describe('InboxPage feed', () => {
         'POST /api/assets/1/decline': [200, asset(1, { status: 'archived', verdict: 'disliked' })],
       })
       renderPage()
-      await screen.findByText('1 of 3 decided')
+      await screen.findByText('1 sur 3 décidées')
       declineWith(1)
-      fireEvent.click(screen.getByRole('tab', { name: 'Saved (4)' }))
+      fireEvent.click(screen.getByRole('tab', { name: 'Gardées (4)' }))
       await waitFor(() => expect(posts(calls).map(([u]) => u)).toEqual(
         ['/api/assets/1/decline']))
     })
@@ -756,31 +756,31 @@ describe('InboxPage feed', () => {
     it('the banner suggests the freshest video; Review it opens the bench', async () => {
       const calls = benchApi()
       renderPage()
-      const banner = await screen.findByRole('region', { name: 'Saved video suggestion' })
-      expect(banner.textContent).toMatch(/Free slot (today|tomorrow|2026-11-18) 11:00/)
-      fireEvent.click(within(banner).getByRole('button', { name: 'Review it' }))
-      expect(await screen.findByRole('article', { name: 'Video 7' })).toBeTruthy()
-      expect(screen.getByRole('tab', { name: 'Saved (4)' }).getAttribute('aria-selected')).toBe('true')
+      const banner = await screen.findByRole('region', { name: 'Suggestion de vidéo gardée' })
+      expect(banner.textContent).toMatch(/Créneau libre (aujourd’hui|demain|mer\. 18 nov\.) 11:00/)
+      fireEvent.click(within(banner).getByRole('button', { name: 'La voir' }))
+      expect(await screen.findByRole('article', { name: 'Vidéo 7' })).toBeTruthy()
+      expect(screen.getByRole('tab', { name: 'Gardées (4)' }).getAttribute('aria-selected')).toBe('true')
       expect(posts(calls)).toEqual([]) // nothing approved by itself
     })
 
     it('the banner can be dismissed for the session', async () => {
       benchApi()
       const { unmount } = renderPage()
-      const banner = await screen.findByRole('region', { name: 'Saved video suggestion' })
-      fireEvent.click(within(banner).getByRole('button', { name: 'Dismiss' }))
-      expect(screen.queryByRole('region', { name: 'Saved video suggestion' })).toBeNull()
+      const banner = await screen.findByRole('region', { name: 'Suggestion de vidéo gardée' })
+      fireEvent.click(within(banner).getByRole('button', { name: 'Masquer' }))
+      expect(screen.queryByRole('region', { name: 'Suggestion de vidéo gardée' })).toBeNull()
       unmount()
       renderPage()
-      await screen.findByRole('tab', { name: 'Saved (4)' })
-      expect(screen.queryByRole('region', { name: 'Saved video suggestion' })).toBeNull()
+      await screen.findByRole('tab', { name: 'Gardées (4)' })
+      expect(screen.queryByRole('region', { name: 'Suggestion de vidéo gardée' })).toBeNull()
     })
 
     it('no banner without a suggestion', async () => {
       stubApi({ 'GET /api/bench': [200, { ...BENCH, suggestion: null }] })
       renderPage()
-      await screen.findByRole('tab', { name: 'Saved (4)' })
-      expect(screen.queryByRole('region', { name: 'Saved video suggestion' })).toBeNull()
+      await screen.findByRole('tab', { name: 'Gardées (4)' })
+      expect(screen.queryByRole('region', { name: 'Suggestion de vidéo gardée' })).toBeNull()
     })
   })
 })
@@ -796,21 +796,21 @@ describe('Sent back for changes (156)', () => {
       ]],
     })
     renderPage()
-    const list = await screen.findByRole('list', { name: 'Sent back' })
+    const list = await screen.findByRole('list', { name: 'Renvoyées' })
     expect(screen.getByText('3 vidéos renvoyées pour changements')).toBeTruthy()
     expect(within(list).getByText('Refaite en Macro 3D')).toBeTruthy()
     expect(within(list).getByText('plusieurs décors')).toBeTruthy()
     expect(within(list).getByText('En attente : rendu de nuit')).toBeTruthy()
     expect(within(list).getByText("Pas encore vue par l'IA")).toBeTruthy()
     expect(within(list).getByRole('link', { name: 'Vidéo 12' }).getAttribute('href')).toBe('/assets/12')
-    expect(screen.queryByRole('article', { name: 'Video 12' })).toBeNull() // not in the feed
+    expect(screen.queryByRole('article', { name: 'Vidéo 12' })).toBeNull() // not in the feed
   })
 
   it('shows nothing when no video waits', async () => {
     stubApi()
     renderPage()
-    await screen.findByRole('article', { name: 'Video 1' })
-    expect(screen.queryByRole('list', { name: 'Sent back' })).toBeNull()
+    await screen.findByRole('article', { name: 'Vidéo 1' })
+    expect(screen.queryByRole('list', { name: 'Renvoyées' })).toBeNull()
   })
 })
 
@@ -825,10 +825,10 @@ describe("The AI's check (188c)", () => {
       ]],
     })
     renderPage()
-    expect(await screen.findByText('1 of 3 decided')).toBeTruthy() // neither counts
-    expect(cards()).toEqual(['Video 1', 'Video 2'])
+    expect(await screen.findByText('1 sur 3 décidées')).toBeTruthy() // neither counts
+    expect(cards()).toEqual(['Vidéo 1', 'Vidéo 2'])
     expect(screen.getByText("1 vidéo en vérification par l'IA")).toBeTruthy()
-    const dropped = screen.getByRole('list', { name: 'Dropped by the AI' })
+    const dropped = screen.getByRole('list', { name: 'Écartées par l’IA' })
     expect(within(dropped).getByText("Écartée par l'IA : texte coupé")).toBeTruthy()
     expect(within(dropped).getByRole('link', { name: 'Vidéo 21' }).getAttribute('href')).toBe('/assets/21')
   })
@@ -836,8 +836,8 @@ describe("The AI's check (188c)", () => {
   it('shows nothing when no video waits for its check', async () => {
     stubApi()
     renderPage()
-    await screen.findByRole('article', { name: 'Video 1' })
+    await screen.findByRole('article', { name: 'Vidéo 1' })
     expect(screen.queryByText(/en vérification/)).toBeNull()
-    expect(screen.queryByRole('list', { name: 'Dropped by the AI' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Écartées par l’IA' })).toBeNull()
   })
 })

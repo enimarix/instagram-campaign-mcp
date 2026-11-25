@@ -13,13 +13,13 @@ export default function TokenBanner() {
   const days = t.days_left
   if (t.valid && (days === null || days > WARN_DAYS)) return null
   const what = !t.valid || (days !== null && days < 0)
-    ? 'has expired or is invalid: publishing is stopped.'
-    : `expires ${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}: publishing stops then.`
+    ? 'a expiré ou n’est pas valide : la publication est arrêtée.'
+    : `expire ${days === 0 ? 'aujourd’hui' : `dans ${days} jour${days === 1 ? '' : 's'}`} : la publication s’arrêtera alors.`
   return (
     <p role="alert"
       className="border-b border-warn/30 bg-warn/12 px-4 py-2 text-sm font-medium text-warn lg:px-8">
-      Instagram token {what}{' '}
-      {t.can_refresh && t.valid ? 'Run ig-campaign token refresh.' : 'Paste a new token in .env (see README, Token).'}
+      Le token Instagram {what}{' '}
+      {t.can_refresh && t.valid ? 'Lance ig-campaign token refresh.' : 'Colle un nouveau token dans .env (voir README, Token).'}
     </p>
   )
 }

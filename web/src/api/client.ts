@@ -190,7 +190,6 @@ export const editAsset = (
 ) =>
   send<Asset>('PATCH', `/api/assets/${id}`, fields)
 export const unapproveAsset = (id: number) => post<Asset>(`/api/assets/${id}/unapprove`)
-export const archiveAsset = (id: number) => post<Asset>(`/api/assets/${id}/archive`)
 /** The feed's Decline in one call: disliked + archived + the motive (reasons and/or text,
  * at least one: 422 otherwise). keepalive: it still lands when the feed flushes it as the
  * tab closes. */

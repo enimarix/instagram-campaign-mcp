@@ -132,10 +132,10 @@ describe('Toast', () => {
 describe('ThemeToggle', () => {
   it('starts dark and stores the light choice', () => {
     render(<ThemeToggle />)
-    expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'Light' }))
+    expect(screen.getByRole('button', { name: 'Sombre' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Clair' }))
     expect(document.documentElement.dataset.theme).toBe('light')
     expect(localStorage.getItem('studio.theme')).toBe('light')
-    expect(screen.getByRole('button', { name: 'Light' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Clair' }).getAttribute('aria-pressed')).toBe('true')
   })
 })

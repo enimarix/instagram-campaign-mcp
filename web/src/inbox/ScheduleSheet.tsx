@@ -35,7 +35,7 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
         setSlot(s)
         setWhen(inputValue(new Date(s.publish_at)))
       },
-      (e: unknown) => setError(`No slot proposed (${errorMessage(e)}). Pick a time.`),
+      (e: unknown) => setError(`Aucun créneau proposé (${errorMessage(e)}). Choisis une heure.`),
     )
   }, [assetId])
 
@@ -53,9 +53,9 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
   const blocked = busy || (slot?.needs_confirmation === true && !confirmed)
 
   return (
-    <Sheet title="Schedule this video" onClose={onClose}>
+    <Sheet title="Programmer cette vidéo" onClose={onClose}>
       <p className="mt-2 text-sm text-muted">
-        {slot ? <>Proposed time: <strong className="text-fg">{wallClock(slot.local)}</strong></> : !error && 'Finding a slot…'}
+        {slot ? <>Heure proposée : <strong className="text-fg">{wallClock(slot.local)}</strong></> : !error && 'Recherche d’un créneau…'}
       </p>
       {slot?.ai_label && <p className="mt-1 text-sm text-muted">{AI_LABEL_LINE}</p>}
       {slot?.needs_confirmation && (
@@ -69,30 +69,30 @@ export default function ScheduleSheet({ assetId, onScheduled, onClose }: Props) 
         <label className="mt-3 flex items-start gap-2 text-sm">
           <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)}
             className="mt-0.5 size-5" />
-          Trial Reel (non-followers first)
+          Reel d’essai (les non-abonnés d’abord)
         </label>
       )}
       {picking && (
         <label className="mt-3 block text-sm font-medium">
-          Another time
+          Une autre heure
           <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
             className={`${field} mt-1 block w-full font-normal`} />
         </label>
       )}
       {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <Button onClick={onClose}>Later</Button>
+        <Button onClick={onClose}>Plus tard</Button>
         {picking ? (
           <Button variant="primary" disabled={blocked || !when} onClick={() => schedule(new Date(when).toISOString())}>
-            Schedule at this time
+            Programmer à cette heure
           </Button>
         ) : (
           <>
             <Button variant="primary" disabled={blocked || !slot} onClick={() => slot && schedule(slot.publish_at)}>
-              Accept
+              Accepter
             </Button>
             <Button variant="ghost" className="col-span-2" onClick={() => setPicking(true)}>
-              Pick another time
+              Choisir une autre heure
             </Button>
           </>
         )}
@@ -122,8 +122,8 @@ export function ScheduledSlot({ assetId, onUnscheduled }: { assetId: number; onU
   return (
     <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted">Scheduled{local && <> for <strong className="text-fg">{wallClock(local)}</strong></>}</span>
-        <Button size="sm" onClick={unschedule}>Unschedule</Button>
+        <span className="text-muted">Programmée{local && <> pour <strong className="text-fg">{wallClock(local)}</strong></>}</span>
+        <Button size="sm" onClick={unschedule}>Déprogrammer</Button>
       </div>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>

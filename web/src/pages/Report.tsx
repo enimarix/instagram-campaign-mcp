@@ -16,9 +16,9 @@ const QUIET = 'Quiet day: nothing was published and no post was old enough to ju
 const PENDING = 'Not analysed yet: the nightly analysis writes this day at 02:00.'
 const reportPath = (date: string) => `/reports/${date}`
 const postPath = (id: string) => `/analytics/posts/${encodeURIComponent(id)}`
-/** "2026-11-16" → "Monday, November 16" (an owner-local day, shown as is). */
+/** "2026-11-16" → "lundi 16 novembre" (an owner-local day, shown as is). */
 const longDay = (d: string) =>
-  new Date(`${d}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+  new Date(`${d}T12:00`).toLocaleDateString('fr-FR', { weekday: 'long', month: 'long', day: 'numeric' })
 /** Markdown as one line of plain text, for the Analytics card. */
 const plain = (md: string) => md.replace(/^\s*([#>]+|[-*+]|\d+[.)])\s+/gm, '').replace(/[*`]/g, '').replace(/\s+/g, ' ').trim()
 /** The report of `date` (default: the newest with a summary); null when there is none. */
