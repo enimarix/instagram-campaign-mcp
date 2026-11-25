@@ -17,7 +17,7 @@ export default function Checks({ assets }: { assets: Asset[] }) {
         </p>
       )}
       {dropped.length > 0 && (
-        <ul aria-label="Dropped by the AI" className="space-y-1">
+        <ul aria-label="Écartées par l’IA" className="space-y-1">
           {dropped.map((a) => (
             <li key={a.id}>
               <Link to={`/assets/${a.id}`} className={link}>Vidéo {a.id}</Link>{' '}

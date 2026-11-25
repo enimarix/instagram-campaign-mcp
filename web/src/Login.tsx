@@ -3,8 +3,8 @@ import { ApiError, getSession, login, onLoggedOut } from './api/client'
 import { buttonClass, card, field } from './ui/styles'
 
 const ERRORS: Record<string, string> = {
-  bad_password: 'Wrong password.',
-  locked: 'Too many wrong passwords: wait a few minutes.',
+  bad_password: 'Mot de passe incorrect.',
+  locked: 'Trop d’essais ratés : attends quelques minutes.',
 }
 
 /** Shows the sign-in form while UI_PASSWORD is set and this browser has no session (step 008). */
@@ -32,7 +32,7 @@ export default function Login({ children }: { children: ReactNode }) {
       await login(password)
       setState('in')
     } catch (err) {
-      setError(ERRORS[err instanceof ApiError ? err.code : ''] ?? 'Could not sign in.')
+      setError(ERRORS[err instanceof ApiError ? err.code : ''] ?? 'Connexion impossible.')
     }
   }
 
@@ -47,12 +47,12 @@ export default function Login({ children }: { children: ReactNode }) {
     <main className="grid min-h-dvh place-items-center p-4">
       <form onSubmit={submit} className={`${card} flex w-full max-w-sm flex-col gap-4 p-6`}>
         <h1 className="text-lg font-bold">Growth Studio</h1>
-        <label className="text-sm">Password
+        <label className="text-sm">Mot de passe
           <input type="password" value={password} required autoFocus autoComplete="current-password"
             onChange={(e) => setPassword(e.target.value)} className={`${field} mt-1 block w-full`} />
         </label>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <button type="submit" className={buttonClass('primary')}>Sign in</button>
+        <button type="submit" className={buttonClass('primary')}>Se connecter</button>
       </form>
     </main>
   )

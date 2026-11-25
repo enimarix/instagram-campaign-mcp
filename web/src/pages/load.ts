@@ -21,7 +21,7 @@ export const num = (n: number | null | undefined) => (n == null ? '–' : n.toLo
 export const pct = (r: number | null | undefined) => (r == null ? '–' : `${Math.round(r * 100)} %`)
 
 /** An instant in the browser's time zone, without seconds: "Nov 18, 2026, 2:00 AM". */
-export const dateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+export const dateTime = (iso: string) => new Date(iso).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
 /** At most n characters, cut on a word (when the last space is past n/2), with … when cut. */
 export const clip = (s: string, n: number) => {
   if (s.length <= n) return s

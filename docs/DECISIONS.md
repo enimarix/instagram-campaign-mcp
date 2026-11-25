@@ -8,6 +8,16 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-25: The website is in French (215)
+Every page, nav label, sheet, toast and error of the website is written in French, with
+« tu » and the French typography rule above (no-break space before ? ! : ; » and after «);
+dates render fr-FR (« lun. 30 nov. »). Nav: Inbox, Créer, Planning, Trending, Calendrier,
+Statistiques, Apprentissages, Styles, Voix, Pubs, Agent, Réglages, Plus. Technical words
+stay English: Worker, token, `.env`, command names, ElevenLabs, Reel, DM. Done in steps
+215–219 (shell and Inbox first).
+Reason: the owner and the content are French, and the newer pages already were (UI audit
+2026-11-25, Q1, owner « french »; Q5 for the technical words).
+
 ## 2026-11-25: Planning has a phone tab; Agent moves behind More (213)
 The phone's bottom bar reads Inbox · Créer · Planning · Trending · Calendar · More; Agent is
 in the More list. This reverses 185 (Planning behind More) and the Agent tab kept since 174.

@@ -87,7 +87,7 @@ describe('Settings', () => {
     expect(within(section('Backups')).getByText('No backups yet')).toBeTruthy()
 
     const agent = section('Agent schedule')
-    const next = new Date('2026-11-18T03:00:00+01:00').toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    const next = new Date('2026-11-18T03:00:00+01:00').toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
     expect(within(agent).getByText('Vidéos du jour at 03:00')).toBeTruthy()
     expect(within(agent).getByText(`Next ${next} · last failed 2 hours ago`)).toBeTruthy()
     expect(within(agent).getByText('Playbook not written yet · never ran')).toBeTruthy()

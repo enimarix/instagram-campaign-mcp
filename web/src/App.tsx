@@ -34,14 +34,14 @@ const NAV = [
   // 213: Planning took Agent's phone tab (owner's third task; Agent runs are rare), was 185
   { path: '/planning', label: 'Planning', Icon: PlanningIcon, tab: true },
   { path: '/trending', label: 'Trending', Icon: TrendsIcon, tab: true },
-  { path: '/calendar', label: 'Calendar', Icon: CalendarIcon, tab: true },
-  { path: '/analytics', label: 'Analytics', Icon: ChartIcon }, // 174: its tab went to Créer
-  { path: '/learnings', label: 'Learnings', Icon: BulbIcon },
+  { path: '/calendar', label: 'Calendrier', Icon: CalendarIcon, tab: true },
+  { path: '/analytics', label: 'Statistiques', Icon: ChartIcon }, // 174: its tab went to Créer
+  { path: '/learnings', label: 'Apprentissages', Icon: BulbIcon },
   { path: '/styles', label: 'Styles', Icon: PaletteIcon },
   { path: '/voices', label: 'Voix', Icon: MicIcon },
-  { path: '/ads', label: 'Ads', Icon: MegaphoneIcon },
+  { path: '/ads', label: 'Pubs', Icon: MegaphoneIcon },
   { path: '/agent', label: 'Agent', Icon: AgentIcon }, // 213: behind « More » on the phone
-  { path: '/settings', label: 'Settings', Icon: SettingsIcon },
+  { path: '/settings', label: 'Réglages', Icon: SettingsIcon },
 ]
 const MORE = NAV.filter((n) => !n.tab)
 
@@ -65,7 +65,7 @@ export default function App() {
       <div className="min-h-dvh lg:flex">
         <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-6 lg:flex">
           <Brand className="px-3" />
-          <nav aria-label="Main" className="mt-6 flex flex-col gap-1">
+          <nav aria-label="Principal" className="mt-6 flex flex-col gap-1">
             {NAV.map(({ path, label, Icon }) => (
               <NavLink key={path} to={path} className={sideLink}><Icon />{label}</NavLink>
             ))}
@@ -102,12 +102,12 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/more" element={<More />} />
               <Route path="/assets/:id" element={<AssetPage />} />
-              <Route path="*" element={<Placeholder title="Not found">There is no page at this address.</Placeholder>} />
+              <Route path="*" element={<Placeholder title="Page introuvable">Il n’y a pas de page à cette adresse.</Placeholder>} />
             </Routes>
           </main>
         </div>
 
-        <nav aria-label="Tabs"
+        <nav aria-label="Onglets"
           className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-surface/90 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur-md lg:hidden">
           {NAV.filter((n) => n.tab).map(({ path, label, Icon }) => (
             <NavLink key={path} to={path} className={({ isActive }) => tabLink(isActive)}>
@@ -115,7 +115,7 @@ export default function App() {
             </NavLink>
           ))}
           <Link to="/more" aria-current={inMore ? 'page' : undefined} className={tabLink(inMore)}>
-            {tabIcon(MoreIcon, inMore)}More
+            {tabIcon(MoreIcon, inMore)}Plus
           </Link>
         </nav>
       </div>
@@ -136,7 +136,7 @@ function Brand({ className = '' }: { className?: string }) {
 function More() {
   return (
     <>
-      <PageHeader title="More" />
+      <PageHeader title="Plus" />
       <ul className={`${card} divide-y divide-line/60 overflow-hidden`}>
         {MORE.map(({ path, label, Icon }) => (
           <li key={path}>

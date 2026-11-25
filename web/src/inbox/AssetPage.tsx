@@ -27,7 +27,7 @@ import { Chip } from '../ui/Chip'
 import { PageHeader } from '../ui/PageHeader'
 import { field, link, verdictButton } from '../ui/styles'
 import { useToast } from '../ui/useToast'
-import { AI_LABEL_LINE, safeUrl } from './ui'
+import { AI_LABEL_LINE, rightsLabel, safeUrl, statusLabel, verdictLabel } from './ui'
 import { VoiceBadge } from '../voices/VoiceBadge'
 
 function ExternalLink({ url, children }: { url?: string | null; children: ReactNode }) {
@@ -91,7 +91,7 @@ function AssetPage({ id }: { id: number }) {
         setCaption(a.caption ?? '')
         setBestBefore(a.best_before ?? '')
       },
-      (e: unknown) => live && setError(`Could not load this video (${errorMessage(e)})`),
+      (e: unknown) => live && setError(`Impossible de charger cette vidéo (${errorMessage(e)})`),
     )
     return () => {
       live = false
@@ -130,9 +130,9 @@ function AssetPage({ id }: { id: number }) {
   const change = (fb: CommentIn) => withMotive(async () => {
     const r = await addFeedback(id, fb)
     setAsset(r.asset)
-    if (!r.moved) throw new Error(`Saved, but not sent back: ${r.reason}`)
+    if (!r.moved) throw new Error(`Enregistré, mais pas renvoyé : ${r.reason}`)
     return r.asset
-  }, 'Sent for changes')
+  }, 'Renvoyée pour changements')
 
   // The server archives the video and opens a work order (181): reload it for the chip.
   const restyle = (style: string | null, extra: { note?: string; reasons: string[] }) => withMotive(async () => {
@@ -140,7 +140,7 @@ function AssetPage({ id }: { id: number }) {
     return getAsset(id)
   }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).")
 
-  const decline = (fb: CommentIn) => withMotive(() => declineAsset(id, fb.reason_codes, fb.text), 'Declined')
+  const decline = (fb: CommentIn) => withMotive(() => declineAsset(id, fb.reason_codes, fb.text), 'Refusée')
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -152,9 +152,9 @@ function AssetPage({ id }: { id: number }) {
         ...(bestBefore !== (asset?.best_before ?? '') && { best_before: bestBefore || null }),
       }
       if (Object.keys(fields).length) setAsset(await editAsset(id, fields))
-      setSaveMsg('Saved.')
+      setSaveMsg('Enregistré.')
     } catch (err) {
-      setSaveMsg(`Not saved: ${errorMessage(err)}`)
+      setSaveMsg(`Pas enregistré : ${errorMessage(err)}`)
     }
   }
 
@@ -176,7 +176,7 @@ function AssetPage({ id }: { id: number }) {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title={`Video ${id}`} back={{ to: '/inbox', label: 'Inbox' }} />
+      <PageHeader title={`Vidéo ${id}`} back={{ to: '/inbox', label: 'Inbox' }} />
       <div className="grid gap-6 md:grid-cols-[minmax(0,22rem)_1fr]">
         <section className="space-y-4">
           <video
@@ -189,9 +189,9 @@ function AssetPage({ id }: { id: number }) {
             className="aspect-[9/16] max-h-[70dvh] w-full rounded-card bg-black object-contain shadow-card"
           />
           <div className="flex flex-wrap gap-1.5">
-            <Chip>{asset.status.replace('_', ' ')}</Chip>
+            <Chip>{statusLabel(asset.status)}</Chip>
             {asset.verdict !== 'none' && (
-              <Chip tone={asset.verdict === 'liked' ? 'success' : 'danger'}>{asset.verdict}</Chip>
+              <Chip tone={asset.verdict === 'liked' ? 'success' : 'danger'}>{verdictLabel(asset.verdict)}</Chip>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
@@ -202,7 +202,7 @@ function AssetPage({ id }: { id: number }) {
                 <Button size="sm" onClick={() => setSheet({ at: video.current?.currentTime ?? 0 })}>Changer</Button>
                 <Button size="sm" onClick={() => setSheet({})}>Refuser</Button>
                 <Button size="sm" aria-pressed={asset.verdict === 'liked'} className={verdictButton('success', asset.verdict === 'liked')}
-                  onClick={() => decide(() => setVerdict(id, 'liked'), 'Saved for later')}>
+                  onClick={() => decide(() => setVerdict(id, 'liked'), 'Gardée pour plus tard')}>
                   Garder
                 </Button>
               </>
@@ -211,7 +211,7 @@ function AssetPage({ id }: { id: number }) {
               <Button variant="primary" onClick={() => setScheduling(true)}>Programmer</Button>
             )}
             {(asset.status === 'approved' || asset.status === 'scheduled') && (
-              <Button variant="ghost" onClick={() => act(() => unapproveAsset(id))}>Retirer l'approbation</Button>
+              <Button variant="ghost" onClick={() => act(() => unapproveAsset(id))}>Retirer l’approbation</Button>
             )}
           </div>
           {sheet && (
@@ -238,12 +238,12 @@ function AssetPage({ id }: { id: number }) {
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <form onSubmit={save} className="space-y-3">
             <label className="block text-sm font-medium">
-              Caption
+              Légende
               <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={4}
                 className={`${field} mt-1 block w-full py-2 font-normal`} />
             </label>
             <label className="block text-sm font-medium">
-              Best before
+              À publier avant le
               <input type="date" value={bestBefore} onChange={(e) => setBestBefore(e.target.value)}
                 className={`${field} mt-1 block font-normal`} />
             </label>
@@ -253,38 +253,38 @@ function AssetPage({ id }: { id: number }) {
         </section>
 
         <div className="space-y-4">
-          <Card as="section" aria-label="About this video">
+          <Card as="section" aria-label="À propos de cette vidéo">
             <dl className="space-y-3">
-              <Row label="Hook">{idea.hook}</Row>
-              <Row label="Hook type">{label('hook_types', idea.hook_type)}</Row>
-              <Row label="Hypothesis">{idea.hypothesis}</Row>
-              <Row label="Track">
+              <Row label="Accroche">{idea.hook}</Row>
+              <Row label="Type d’accroche">{label('hook_types', idea.hook_type)}</Row>
+              <Row label="Hypothèse">{idea.hypothesis}</Row>
+              <Row label="Piste">
                 {label('tracks', idea.track)}
                 {idea.strategy === 'explore' && (
-                  <Chip tone="explore" className="ml-2">Explore</Chip>
+                  <Chip tone="explore" className="ml-2">Exploration</Chip>
                 )}
               </Row>
-              <Row label="Pillar">{label('pillars', idea.pillar)}</Row>
-              <Row label="Recipe">{recipeSummary(asset.recipe)}</Row>
+              <Row label="Pilier">{label('pillars', idea.pillar)}</Row>
+              <Row label="Recette">{recipeSummary(asset.recipe)}</Row>
               {asset.recipe?.voiced_by && (
-                <Row label="Voice">
+                <Row label="Voix">
                   <VoiceBadge by={asset.recipe.voiced_by} />
                   {asset.recipe.voiced_by.voice && <span className="ml-2">{asset.recipe.voiced_by.voice}</span>}
                   {asset.recipe.voiced_by.fallback && (
-                    <span className="mt-1 block text-warn">Fallback: {asset.recipe.voiced_by.fallback}</span>
+                    <span className="mt-1 block text-warn">Voix de secours : {asset.recipe.voiced_by.fallback}</span>
                   )}
                 </Row>
               )}
               {source && (
-                <Row label="Rights">
-                  {source.rights_basis.replace('_', ' ')}
+                <Row label="Droits">
+                  {rightsLabel(source.rights_basis)}
                   {source.author && (
-                    <> · credit: <ExternalLink url={source.url}>{source.author}</ExternalLink></>
+                    <> · crédit : <ExternalLink url={source.url}>{source.author}</ExternalLink></>
                   )}
                 </Row>
               )}
               {idea.citations.length > 0 && (
-                <Row label="Sources (check before approving)">
+                <Row label="Sources (à vérifier avant d’approuver)">
                   <ul className="list-disc pl-5">
                     {idea.citations.map((c, i) => (
                       <li key={i}><ExternalLink url={c.url}>{c.title || c.url}</ExternalLink></li>
@@ -293,11 +293,11 @@ function AssetPage({ id }: { id: number }) {
                 </Row>
               )}
               {asset.qc && (
-                <Row label="Quality check">
-                  {asset.qc.passed ? 'Passed' : 'Failed'}
-                  {qcReasons.length > 0 && `: ${qcReasons.join('; ')}`}
+                <Row label="Contrôle qualité">
+                  {asset.qc.passed ? 'Réussi' : 'Échoué'}
+                  {qcReasons.length > 0 && ` : ${qcReasons.join(' ; ')}`}
                   {asset.qc.warnings && asset.qc.warnings.length > 0 && (
-                    <p className="text-warn">Check the wording: {asset.qc.warnings.join('; ')}</p>
+                    <p className="text-warn">Vérifie la formulation : {asset.qc.warnings.join(' ; ')}</p>
                   )}
                 </Row>
               )}
@@ -306,11 +306,11 @@ function AssetPage({ id }: { id: number }) {
             {(ctx.parent || ctx.children.length > 0) && (
               <nav aria-label="Versions" className="mt-3 flex flex-wrap gap-3 text-sm">
                 {ctx.parent && (
-                  <Link to={`/assets/${ctx.parent.id}`} className={link}>Older version</Link>
+                  <Link to={`/assets/${ctx.parent.id}`} className={link}>Version précédente</Link>
                 )}
                 {ctx.children.map((c) => (
                   <Link key={c.id} to={`/assets/${c.id}`} className={link}>
-                    Newer version #{c.id} ({c.status.replace('_', ' ')})
+                    Nouvelle version #{c.id} ({statusLabel(c.status)})
                   </Link>
                 ))}
               </nav>

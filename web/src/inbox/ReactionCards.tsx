@@ -10,7 +10,7 @@ import {
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { field, link } from '../ui/styles'
-import { clock, safeUrl } from './ui'
+import { clock, rightsLabel, safeUrl } from './ui'
 
 const span = (a: number, b: number) => `${clock(a)}–${clock(b)}`
 
@@ -29,7 +29,7 @@ export default function ReactionCards({ assetId, onRendered }: { assetId: number
         setInfo(r)
         setTexts(r.transcript.map((l) => l.text))
       },
-      (e: unknown) => setMsg(`Could not load the reaction (${errorMessage(e)})`),
+      (e: unknown) => setMsg(`Impossible de charger la réaction (${errorMessage(e)})`),
     )
   }, [assetId, version])
 
@@ -39,23 +39,23 @@ export default function ReactionCards({ assetId, onRendered }: { assetId: number
     try {
       const { asset } = await run()
       onRendered(asset)
-      setMsg(asset.id === assetId ? done : `${done} New version: #${asset.id}.`)
+      setMsg(asset.id === assetId ? done : `${done} Nouvelle version : #${asset.id}.`)
       if (asset.id === assetId) setVersion((v) => v + 1)
     } catch (e) {
-      setMsg(`Not done: ${errorMessage(e)}`)
+      setMsg(`Pas fait : ${errorMessage(e)}`)
     } finally {
       setBusy(false)
     }
   }
 
   function nextPiece() {
-    if (!window.confirm('Render this video again with the next piece of your reaction reel?')) return
-    rerender(() => nextReactionPiece(assetId), 'Rendering with the next reaction piece.')
+    if (!window.confirm('Refaire cette vidéo avec le morceau suivant de ton Reel de réaction ?')) return
+    rerender(() => nextReactionPiece(assetId), 'Rendu en cours avec le morceau de réaction suivant.')
   }
 
   function save(e: FormEvent) {
     e.preventDefault()
-    rerender(() => fixTranscript(assetId, texts), 'Saved. Rendering with the new captions.')
+    rerender(() => fixTranscript(assetId, texts), 'Enregistré. Rendu en cours avec les nouveaux sous-titres.')
   }
 
   if (!info) return msg ? <p role="alert" className="text-sm text-danger">{msg}</p> : null
@@ -65,40 +65,40 @@ export default function ReactionCards({ assetId, onRendered }: { assetId: number
 
   return (
     <>
-      <Card as="section" aria-label="Reaction" className="space-y-3">
-        <h2 className="font-semibold">Reaction</h2>
+      <Card as="section" aria-label="Réaction" className="space-y-3">
+        <h2 className="font-semibold">Réaction</h2>
         <div className="flex gap-3">
           {piece.url && (
             <video src={piece.url} controls muted playsInline preload="metadata"
-              aria-label="Reaction piece" className="aspect-[9/16] w-24 rounded-card bg-black object-contain" />
+              aria-label="Morceau de réaction" className="aspect-[9/16] w-24 rounded-card bg-black object-contain" />
           )}
           <dl className="space-y-2 text-sm">
             <div>
-              <dt className="text-xs font-medium text-muted">Piece used</dt>
-              <dd>Piece #{piece.id} of reel #{info.reel.id}, {span(piece.start_s, piece.end_s)}</dd>
+              <dt className="text-xs font-medium text-muted">Morceau utilisé</dt>
+              <dd>Morceau #{piece.id} du Reel #{info.reel.id}, {span(piece.start_s, piece.end_s)}</dd>
             </div>
             <div>
-              <dt className="text-xs font-medium text-muted">Clip used</dt>
+              <dt className="text-xs font-medium text-muted">Extrait utilisé</dt>
               <dd>{span(info.trim.start_s, info.trim.end_s)}</dd>
             </div>
             <div>
-              <dt className="text-xs font-medium text-muted">Credit</dt>
+              <dt className="text-xs font-medium text-muted">Crédit</dt>
               <dd>
                 {href ? (
                   <a href={href} target="_blank" rel="noopener noreferrer" className={link}>{credit ?? href}</a>
                 ) : credit}
-                {' · '}{source.rights_basis.replace('_', ' ')}
+                {' · '}{rightsLabel(source.rights_basis)}
               </dd>
             </div>
           </dl>
         </div>
-        <Button onClick={nextPiece} loading={busy}>Use the next reaction piece</Button>
+        <Button onClick={nextPiece} loading={busy}>Prendre le morceau de réaction suivant</Button>
       </Card>
       {info.transcript.length > 0 && (
-        <Card as="section" aria-label="Clip speech">
+        <Card as="section" aria-label="Paroles de l’extrait">
           <form onSubmit={save} className="space-y-2">
-            <h2 className="font-semibold">Clip speech</h2>
-            <p className="text-sm text-muted">What the clip says, shown as captions. Fix a word, then save.</p>
+            <h2 className="font-semibold">Paroles de l’extrait</h2>
+            <p className="text-sm text-muted">Ce que dit l’extrait, affiché en sous-titres. Corrige un mot, puis enregistre.</p>
             {info.transcript.map((line, i) => (
               <label key={line.index} className="block text-xs font-medium text-muted">
                 {span(line.start_s, line.end_s)}
@@ -107,7 +107,7 @@ export default function ReactionCards({ assetId, onRendered }: { assetId: number
                   className={`${field} mt-1 block w-full text-sm font-normal text-fg`} />
               </label>
             ))}
-            <Button type="submit" variant="primary" loading={busy}>Save and re-render captions</Button>
+            <Button type="submit" variant="primary" loading={busy}>Enregistrer et refaire les sous-titres</Button>
           </form>
         </Card>
       )}

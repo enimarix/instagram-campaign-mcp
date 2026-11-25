@@ -10,7 +10,7 @@ import { link } from './ui/styles'
 
 const POLL_MS = 60_000
 const TONE = { info: 'info', warn: 'warn', error: 'danger' } as const
-const LABEL = { info: 'Info', warn: 'Warning', error: 'Problem' } as const
+const LABEL = { info: 'Info', warn: 'Attention', error: 'Problème' } as const
 
 /** The header bell (step 098): what needs attention, polled every minute while the page is visible. */
 export default function Alerts() {
@@ -44,7 +44,7 @@ export default function Alerts() {
   return (
     <>
       <IconButton variant="ghost" className="relative" onClick={() => setOpen(true)}
-        label={n ? `Alerts: ${n} need${n === 1 ? 's' : ''} attention` : 'Alerts'}
+        label={n ? `Alertes : ${n} à regarder` : 'Alertes'}
         icon={<>
           <BellIcon />
           {n > 0 && (
@@ -55,9 +55,9 @@ export default function Alerts() {
           )}
         </>} />
       {open && (
-        <Sheet title="Alerts" onClose={() => setOpen(false)}>
+        <Sheet title="Alertes" onClose={() => setOpen(false)}>
           {n === 0 ? (
-            <div className="mt-4"><EmptyState title="All good">Nothing needs your attention.</EmptyState></div>
+            <div className="mt-4"><EmptyState title="Tout va bien">Rien à regarder.</EmptyState></div>
           ) : (
             <ul className="mt-3 max-h-[65dvh] divide-y divide-line/60 overflow-y-auto">
               {alerts.map((a) => (
@@ -68,12 +68,12 @@ export default function Alerts() {
                       <p className="font-medium">{a.title}</p>
                       <p className="mt-0.5 text-sm break-words text-muted">{a.detail}</p>
                       <div className="mt-1 flex items-center gap-3">
-                        <Link to={a.link} aria-label={`Open: ${a.title}`} className={`${link} text-sm`} onClick={() => setOpen(false)}>Open</Link>
-                        {a.since && <span className="text-xs text-muted">{new Date(a.since).toLocaleString()}</span>}
+                        <Link to={a.link} aria-label={`Ouvrir : ${a.title}`} className={`${link} text-sm`} onClick={() => setOpen(false)}>Ouvrir</Link>
+                        {a.since && <span className="text-xs text-muted">{new Date(a.since).toLocaleString('fr-FR')}</span>}
                       </div>
                     </div>
                     <Button size="sm" variant="ghost" onClick={() => dismiss(a.id)}
-                      aria-label={`Dismiss: ${a.title}`}>Dismiss</Button>
+                      aria-label={`Masquer : ${a.title}`}>Masquer</Button>
                   </div>
                 </li>
               ))}

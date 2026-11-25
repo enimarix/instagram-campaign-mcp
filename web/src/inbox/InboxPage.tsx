@@ -43,10 +43,10 @@ const open = (a: Asset, tab: Tab) =>
   a.status === 'ready' && a.verdict === (tab === 'bench' ? 'liked' : 'none') && !heldBack(a)
 const NOT_YET = new Set(['rendering', 'failed', 'needs_reaction']) // nothing to decide yet
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-/** "9 saved videos = 3 days at 3 a day" */
+const plural = (n: number, one: string, many: string) => `${n} ${n < 2 ? one : many}`
+/** "9 vidéos gardées = 3 jours à 3 par jour" */
 const supply = (b: Bench) =>
-  `${plural(b.assets.length, 'saved video')} = ${plural(b.supply_days, 'day')} at ${b.max_posts_per_day} a day`
+  `${plural(b.assets.length, 'vidéo gardée', 'vidéos gardées')} = ${plural(b.supply_days, 'jour', 'jours')} à ${b.max_posts_per_day} par jour`
 // The banner stays dismissed for the browser session, per suggested video and slot.
 const DISMISSED = 'inbox.benchBannerDismissed'
 const bannerKey = (s: NonNullable<Bench['suggestion']>) => `${s.asset_id}@${s.publish_at}`
@@ -103,7 +103,7 @@ export default function InboxPage() {
   useEffect(() => {
     let live = true
     const failed = (what: string) => (e: unknown) =>
-      live && setError(`Could not load the ${what} (${errorMessage(e)})`)
+      live && setError(`Impossible de charger ${what} (${errorMessage(e)})`)
     // After the decisions still saving (a tab or day switch flushes them): a video saved
     // for later a moment ago is then on the bench.
     const settled = inflight.current
@@ -113,10 +113,10 @@ export default function InboxPage() {
         setBench(b)
         if (tab === 'bench') setAssets(b.assets)
       },
-      tab === 'bench' ? failed('saved videos') : () => {}, // Today still works without the banner
+      tab === 'bench' ? failed('les vidéos gardées') : () => {}, // Today still works without the banner
     )
     if (tab === 'today')
-      settled.then(() => listAssets({ batch_date: date })).then((list) => live && setAssets(list), failed('batch'))
+      settled.then(() => listAssets({ batch_date: date })).then((list) => live && setAssets(list), failed('les vidéos de ce jour'))
     return () => {
       live = false
     }
@@ -176,7 +176,7 @@ export default function InboxPage() {
       const saving = commit()
         .catch((e: unknown) => {
           patch(a.id, a) // back in the feed
-          setError(`Could not save video ${a.id} (${errorMessage(e)})`)
+          setError(`Impossible d’enregistrer la vidéo ${a.id} (${errorMessage(e)})`)
         })
         .finally(() => getBench().then(setBench, () => {}))
       inflight.current = Promise.all([inflight.current, saving])
@@ -184,7 +184,7 @@ export default function InboxPage() {
     }
     const timer = setTimeout(run, UNDO_MS)
     pending.current.set(a.id, { timer, run })
-    toast({ message, action: { label: 'Undo', onClick: () => undo(a) } })
+    toast({ message, action: { label: 'Annuler', onClick: () => undo(a) } })
   }
 
   function undo(a: Asset) {
@@ -204,14 +204,14 @@ export default function InboxPage() {
   }
 
   function approveNow(a: Asset, confirmed: boolean) {
-    decide(a, { status: 'approved' }, 'Approved', async () => {
+    decide(a, { status: 'approved' }, 'Approuvée', async () => {
       // read now: forget() clears the choice right after commit() starts
       const r = await approveAndQueue(a.id, confirmed, trials.current.has(a.id) ? 'SS_PERFORMANCE' : undefined)
       patch(a.id, r.asset)
       if (!r.slot)
         toast({
-          message: 'Approved, no free slot: set one in Calendar',
-          action: { label: 'Calendar', onClick: () => navigate('/calendar') },
+          message: 'Approuvée, aucun créneau libre : choisis-en un dans le Calendrier',
+          action: { label: 'Calendrier', onClick: () => navigate('/calendar') },
         })
     })
     // an explore (or experiment) video may go out as a trial Reel instead: one tap during the undo
@@ -221,7 +221,7 @@ export default function InboxPage() {
   // Every decline has a motive (chips and/or words): the agent learns from it.
   function decline(a: Asset, fb: CommentIn) {
     setDeclineFor(null)
-    decide(a, { status: 'archived', verdict: 'disliked' }, 'Declined', async () => {
+    decide(a, { status: 'archived', verdict: 'disliked' }, 'Refusée', async () => {
       patch(a.id, await declineAsset(a.id, fb.reason_codes, fb.text))
     })
     setTrialAsk(null)
@@ -236,20 +236,20 @@ export default function InboxPage() {
 
   // Not now, but good: onto the bench ("Saved"), for a free slot later.
   function save(a: Asset) {
-    decide(a, { verdict: 'liked' }, 'Saved for later', async () => patch(a.id, await setVerdict(a.id, 'liked')))
+    decide(a, { verdict: 'liked' }, 'Gardée pour plus tard', async () => patch(a.id, await setVerdict(a.id, 'liked')))
   }
 
   function change(a: Asset, fb: CommentIn) {
     setChangeFor(null)
-    decide(a, { status: 'revision_requested' }, 'Sent for changes', async () => {
+    decide(a, { status: 'revision_requested' }, 'Renvoyée pour changements', async () => {
       const r = await addFeedback(a.id, fb)
       patch(a.id, r.asset)
-      if (!r.moved) throw new Error(`saved, but not sent back: ${r.reason}`)
+      if (!r.moved) throw new Error(`enregistré, mais pas renvoyé : ${r.reason}`)
     })
   }
 
   // « Même vidéo, autre style » (138): a new work order with the sheet's text and reasons;
-  // 181: the video leaves the Inbox (archived by the server), with the usual Undo.
+  // 181: the video leaves the Inbox (archived by the server), with the usual « Annuler ».
   function restyle(a: Asset, style: string | null, extra: { note?: string; reasons: string[] }) {
     setChangeFor(null)
     decide(a, { status: 'archived' }, "Envoyé à l'IA : la même vidéo dans un autre style (Mes envois).",
@@ -326,13 +326,13 @@ export default function InboxPage() {
         <h1 id="inbox-title" className="sr-only">Inbox</h1>
         <div className="mx-auto flex max-w-md items-center gap-2">
           <div className="flex-1">
-            <Tabs label="Inbox view" value={tab} onChange={showTab} tabs={[
-              { id: 'today', label: 'Today' },
-              { id: 'bench', label: `Saved${bench ? ` (${bench.assets.length})` : ''}` },
+            <Tabs label="Vue de l’Inbox" value={tab} onChange={showTab} tabs={[
+              { id: 'today', label: 'Aujourd’hui' },
+              { id: 'bench', label: `Gardées${bench ? ` (${bench.assets.length})` : ''}` },
             ]} />
           </div>
           {tab === 'today' && (
-            <input type="date" aria-label="Batch date" value={date} className={`${field} w-36`}
+            <input type="date" aria-label="Jour des vidéos" value={date} className={`${field} w-36`}
               onChange={(e) => {
                 if (!e.target.value) return
                 reload()
@@ -341,22 +341,22 @@ export default function InboxPage() {
           )}
         </div>
         <p role="status" className="mx-auto max-w-md text-sm text-muted tabular-nums">
-          {tab === 'bench' ? bench && supply(bench) : assets && `${decided} of ${decided + feed.length} decided`}
+          {tab === 'bench' ? bench && supply(bench) : assets && `${decided} sur ${decided + feed.length} décidées`}
         </p>
         {tab === 'today' && <SentBack />}
         {tab === 'today' && assets && <Checks assets={assets} />}
         {banner && (
-          <div role="region" aria-label="Saved video suggestion"
+          <div role="region" aria-label="Suggestion de vidéo gardée"
             className="mx-auto flex max-w-md flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn/12 p-3 text-sm">
             <p className="flex-1">
-              Free slot <strong>{wallClock(banner.local)}</strong>: your freshest saved video could take it.
+              Créneau libre <strong>{wallClock(banner.local)}</strong> : ta dernière vidéo gardée peut le prendre.
             </p>
-            <Button size="sm" variant="primary" onClick={() => review(banner.asset_id)}>Review it</Button>
+            <Button size="sm" variant="primary" onClick={() => review(banner.asset_id)}>La voir</Button>
             <Button size="sm" variant="ghost" onClick={() => {
               sessionStorage.setItem(DISMISSED, bannerKey(banner))
               setDismissed(bannerKey(banner))
             }}>
-              Dismiss
+              Masquer
             </Button>
           </div>
         )}
@@ -378,17 +378,17 @@ export default function InboxPage() {
       {assets && !feed.length && (
         <div className="px-4 pt-4">
           {assets.length ? (
-            <EmptyState title="All done" action={
-              <Link to="/calendar" className={buttonClass('primary')}>Open the Calendar</Link>}>
-              Every video {tab === 'bench' ? 'you saved' : 'of this batch'} has a decision.
+            <EmptyState title="Tout est décidé" action={
+              <Link to="/calendar" className={buttonClass('primary')}>Ouvrir le Calendrier</Link>}>
+              Chaque vidéo {tab === 'bench' ? 'gardée' : 'de ce jour'} a sa décision.
             </EmptyState>
           ) : (
-            <EmptyState title={tab === 'bench' ? 'Nothing saved for later.' : 'No videos for this day.'} />
+            <EmptyState title={tab === 'bench' ? 'Rien de gardé pour plus tard.' : 'Aucune vidéo ce jour-là.'} />
           )}
         </div>
       )}
       {feed.length > 0 && (
-        <div ref={scroller} aria-label="Review feed"
+        <div ref={scroller} aria-label="Vidéos à décider"
           className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth">
           {feed.map((a, i) => (
             <AssetCard
@@ -411,17 +411,17 @@ export default function InboxPage() {
         </div>
       )}
       <p className="mt-2 hidden text-center text-xs text-muted lg:block">
-        Keys: a approve, d decline, c change{tab === 'today' && ', s save for later'}, j / k next / previous, space play / pause, m sound
+        Touches : a approuver, d refuser, c changer{tab === 'today' && ', s garder'}, j / k suivante / précédente, espace lecture / pause, m son
       </p>
 
       {trialAsk && (
-        <div role="group" aria-label="Publish as a trial Reel? (optional)"
+        <div role="group" aria-label="Publier en Reel d’essai ? (facultatif)"
           className="fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 lg:bottom-24">
           <div className="flex w-full max-w-sm items-center gap-2 rounded-card border border-line bg-surface-2 p-2 shadow-overlay">
             <Chip tone="explore" pressed={trialAsk.on} onClick={toggleTrial} className="shrink-0">
-              Approve as trial Reel
+              Approuver en Reel d’essai
             </Chip>
-            <span className="text-xs text-muted">Non-followers see it first</span>
+            <span className="text-xs text-muted">Les non-abonnés la voient d’abord</span>
           </div>
         </div>
       )}
@@ -459,15 +459,15 @@ export default function InboxPage() {
 function ConfirmSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
   const [checked, setChecked] = useState(false)
   return (
-    <Sheet title="Approve this reaction video?" onClose={onClose}>
+    <Sheet title="Approuver cette vidéo de réaction ?" onClose={onClose}>
       <label className="mt-3 flex items-start gap-2 text-sm">
         <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)}
           className="mt-0.5 size-5" />
         {COMMENTARY_CONFIRMATION}
       </label>
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" disabled={!checked} onClick={onConfirm}>Approve</Button>
+        <Button onClick={onClose}>Annuler</Button>
+        <Button variant="primary" disabled={!checked} onClick={onConfirm}>Approuver</Button>
       </div>
     </Sheet>
   )

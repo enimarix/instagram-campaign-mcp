@@ -45,21 +45,21 @@ export default function ReasonSheet({ reasons, at, onSave, onClose, onRestyle, s
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
 
   return (
-    <Sheet title={decline ? 'Why decline?' : 'What should change?'} onClose={onClose}>
-      <div role="group" aria-label="Reasons" className="mt-4 flex flex-wrap gap-2">
+    <Sheet title={decline ? 'Pourquoi refuser ?' : 'Qu’est-ce qui doit changer ?'} onClose={onClose}>
+      <div role="group" aria-label="Raisons" className="mt-4 flex flex-wrap gap-2">
         {reasons.map((r) => (
           <Chip key={r.id} tone="danger" pressed={picked.includes(r.id)} onClick={() => toggle(r.id)}>
             {r.label}
           </Chip>
         ))}
-        {!decline && <Chip tone="accent" pressed={pin} onClick={() => setPin((p) => !p)}>at {clock(at)}</Chip>}
+        {!decline && <Chip tone="accent" pressed={pin} onClick={() => setPin((p) => !p)}>à {clock(at)}</Chip>}
       </div>
-      <textarea ref={input} aria-label={decline ? 'Pourquoi ?' : 'What to change'} value={text}
+      <textarea ref={input} aria-label={decline ? 'Pourquoi ?' : 'Ce qui doit changer'} value={text}
         onChange={(e) => setText(e.target.value)} rows={decline ? 4 : 2}
-        placeholder={decline ? 'Pourquoi ?' : 'Same video, shorter hook…'}
+        placeholder={decline ? 'Pourquoi ?' : 'Même vidéo, accroche plus courte…'}
         className={`${field} mt-3 block w-full py-2 ${decline ? 'min-h-32 md:min-h-0' : ''}`} />
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>Annuler</Button>
         <Button variant={decline ? 'danger' : 'primary'} disabled={!picked.length && !text.trim()}
           onClick={() => onSave({
             reason_codes: picked,
@@ -67,11 +67,11 @@ export default function ReasonSheet({ reasons, at, onSave, onClose, onRestyle, s
             ...(pin && !decline && { video_time_s: at }),
             ...(!decline && { wants_changes: true }),
           })}>
-          {decline ? 'Decline' : 'Send for changes'}
+          {decline ? 'Refuser' : 'Renvoyer pour changements'}
         </Button>
       </div>
       {!decline && onRestyle && (
-        <details lang="fr" onToggle={(e) => setRestyling(e.currentTarget.open)}
+        <details onToggle={(e) => setRestyling(e.currentTarget.open)}
           className="mt-5 rounded-control border border-line p-3">
           <summary className="min-h-6 cursor-pointer font-medium">Même vidéo, autre style</summary>
           {restyling && (

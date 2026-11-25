@@ -7,7 +7,7 @@ export default function Placeholder({ title, children }: { title: string; childr
   return (
     <section>
       <PageHeader title={title} />
-      <EmptyState title="Coming soon.">{children ?? 'This part of the studio is not built yet.'}</EmptyState>
+      <EmptyState title="Rien ici.">{children ?? 'Cette partie du studio n’existe pas encore.'}</EmptyState>
     </section>
   )
 }

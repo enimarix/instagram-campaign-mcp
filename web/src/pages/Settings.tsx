@@ -83,7 +83,7 @@ function tokenExpiry(t: TokenStatus) {
   if (t.valid === null) return 'Unknown'
   if (!t.valid) return 'Expired or invalid'
   if (!t.expires_at) return 'Never (system-user token)'
-  return `${new Date(t.expires_at).toLocaleDateString()} (${t.days_left} days left)`
+  return `${new Date(t.expires_at).toLocaleDateString('fr-FR')} (${t.days_left} days left)`
 }
 
 function scheduleLine(e: AgentScheduleEntry) {
