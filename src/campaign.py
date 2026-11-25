@@ -422,7 +422,8 @@ async def collect_due_insights(
 async def snapshot_account(client: InstagramClient, store: CampaignStore,
                            day: date) -> Dict[str, Any]:
     """Save the account row of owner-local `day`: followers now, reach and views over the
-    24 h before (Meta's default range), and reach by follow_type when Meta answers it."""
+    24 h before (Meta's default range), and reach by follow_type when Meta answers it. The
+    worker runs it after local midnight with `day` the day those 24 h covered."""
     profile = await client.get_profile_info()
     insights = await client.get_account_insights(["reach", "views"])
     totals = {i.get("name"): (i.get("total_value") or {}).get("value") for i in insights}

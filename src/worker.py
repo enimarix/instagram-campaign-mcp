@@ -197,7 +197,9 @@ async def data_jobs(client: InstagramClient, store: CampaignStore,
     async def check_experiments() -> Dict[str, Any]:  # after the facts showed their progress
         return experiments.run_daily(store, settings, t)
 
-    for key, make in (("account_day", lambda: snapshot_account(client, store, today)),
+    # The account row runs from local midnight: its 24 h are the day that just ended.
+    yesterday = today - timedelta(days=1)
+    for key, make in (("account_day", lambda: snapshot_account(client, store, yesterday)),
                       ("online_followers_day",
                        lambda: collect_online_followers(client, store, today)),
                       ("facts_day", daily_facts), ("learnings_day", refresh_learnings),
