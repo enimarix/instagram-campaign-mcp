@@ -243,6 +243,21 @@ def test_a_machine_failure_waits_in_line_without_counting_against_the_video(
     assert waiting["id"] == asset["id"] and waiting["rerenders"] == 0  # budget untouched
 
 
+def test_a_voice_that_waited_for_ram_is_no_machine_retry(store, s, fake, monkeypatch):
+    """2026-11-25: the voice service waits for RAM (the owner plays), the TTS call times out:
+    the video keeps its retries, however long the wait."""
+    monkeypatch.setattr(render.guard, "free_ram_gb", lambda: 3.0)
+    s.guard_min_free_ram_gb = 8.0
+    _queue(store, s)
+    fake.fail = TTSError("the TTS service did not answer within 1200 s", unreachable=True)
+    for _ in range(render.MACHINE_RETRIES + 2):
+        job, _ = _run(store, s)
+        assert job["state"] == "queued" and job["failure"].startswith(
+            "machine 1/6: waiting for RAM (not counted): TTSError")
+    monkeypatch.setattr(render.guard, "free_ram_gb", lambda: 20.0)  # RAM back: it counts
+    assert _run(store, s)[0]["failure"].startswith("machine 2/6: TTSError")
+
+
 def _machine_failed(store, s, fake):
     """A queued voiced video whose job failed for the machine (past MACHINE_RETRIES)."""
     asset = _queue(store, s)["asset"]

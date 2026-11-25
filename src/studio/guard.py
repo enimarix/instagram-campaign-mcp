@@ -37,9 +37,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import csv
+import ctypes
 import io
 import logging
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -158,27 +160,91 @@ def lower_self() -> None:
         pin()
 
 
+class _JobLimits(ctypes.Structure):  # JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", ctypes.c_uint32), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", ctypes.c_uint32),
+                ("Affinity", ctypes.c_size_t), ("PriorityClass", ctypes.c_uint32),
+                ("SchedulingClass", ctypes.c_uint32), ("IoInfo", ctypes.c_uint64 * 6),
+                ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+
+def _k32() -> Any:
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
+    k32.SetInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                                            wintypes.DWORD)
+    k32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+    k32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
+    k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    return k32
+
+
+def _job(p: subprocess.Popen) -> Optional[int]:
+    """Windows: a Job Object holding child `p` and every process it starts, all killed when the
+    job is closed: by run() at the end, or by the OS when this process dies, even killed (the
+    GPU lock, an OS lock, is free then: no Blender or Remotion Chrome may run on, 2026-11-25).
+    None elsewhere or when Windows refuses (a kill then falls back to taskkill /T).
+    ponytail: a grandchild started in the child's first instant, before the assignment,
+    escapes; CREATE_SUSPENDED + resume closes that gap if it ever bites."""
+    if sys.platform != "win32":
+        return None
+    k32 = _k32()
+    job = k32.CreateJobObjectW(None, None)
+    if not job:
+        return None
+    info = _JobLimits(LimitFlags=0x2000)  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if (k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))  # extended
+            and k32.AssignProcessToJobObject(job, int(p._handle))):  # Popen's process handle
+        return job
+    k32.CloseHandle(job)
+    return None
+
+
+def _kill_tree(p: subprocess.Popen, job: Optional[int]) -> None:
+    """Kill the child and everything it started (Remotion's node starts Chrome)."""
+    if job:
+        _k32().TerminateJobObject(job, 1)
+    elif sys.platform == "win32":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True, **_QUIET)
+    else:
+        with contextlib.suppress(OSError):  # it may have exited already
+            os.killpg(p.pid, signal.SIGKILL)
+    p.kill()
+
+
 def run(cmd: Sequence[Any], *, input: Any = None, timeout: Optional[float] = None,
         capture_output: bool = False, **kw: Any) -> subprocess.CompletedProcess:
     """subprocess.run at low priority on heavy_cpus() (same arguments; TimeoutExpired kills
-    the child)."""
+    the child). The child's whole process tree is killed with it, and on Windows (_job) dies
+    when the run ends or this process dies."""
     if capture_output:
         kw["stdout"] = kw["stderr"] = subprocess.PIPE
     if input is not None:
         kw["stdin"] = subprocess.PIPE
+    if sys.platform != "win32":
+        kw.setdefault("start_new_session", True)  # its own process group: killpg
     with subprocess.Popen(cmd, **low_priority(kw)) as p:
+        job = _job(p)
         try:
             if sys.platform == "win32":
                 with contextlib.suppress(OSError):  # it may have exited already
                     pin(p.pid)
             out, err = p.communicate(input, timeout=timeout)
         except subprocess.TimeoutExpired:
-            p.kill()
+            _kill_tree(p, job)
             out, err = p.communicate()
             raise subprocess.TimeoutExpired(p.args, timeout, out, err) from None
         except BaseException:
-            p.kill()
+            _kill_tree(p, job)
             raise
+        finally:
+            if job:
+                _k32().CloseHandle(job)  # kills what it left running
     return subprocess.CompletedProcess(p.args, p.returncode, out, err)
 
 
@@ -317,7 +383,23 @@ def admit(what: str, need_vram_gb: float = 0.0, min_free_ram_gb: Optional[float]
         if next_log is None or waited >= next_log:
             next_log = waited + log_every_s
             log.warning("%s: %s", what, "; ".join(why))
+            path = wait_log_path()
+            if path:  # where the owner looks (2026-11-25: a wait for RAM showed nowhere)
+                with contextlib.suppress(OSError):
+                    write_log(path, f"{what}: {'; '.join(why)}")
         time.sleep(poll_s)
+
+
+def wait_log_path() -> Optional[Path]:
+    """guard.log for admission waits (None: none written): GUARD_LOG_PATH (the voice service
+    gets it from the studio), else the studio's own when its guard_log setting is on."""
+    if os.environ.get("GUARD_LOG_PATH"):
+        return Path(os.environ["GUARD_LOG_PATH"])
+    if __package__:  # the studio package
+        from ..config import APP_HOME, get_settings
+        if get_settings().guard_log:
+            return APP_HOME / "data" / "logs" / "guard.log"
+    return None
 
 
 # --- studio side (the studio package; never reached from the voice service) ---------------

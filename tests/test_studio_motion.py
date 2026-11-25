@@ -3,6 +3,8 @@
 import json
 import os
 import shutil
+import subprocess
+import sys
 from functools import partial
 from pathlib import Path
 
@@ -405,6 +407,18 @@ def test_schema_events_end_on_the_pixel_end_card(template):
     assert total - card["t"] >= 4.0  # CARD_S.pixel (the loop fade comes on top)
 
 
+def test_bundles_of_dead_processes_are_deleted(tmp_path):
+    """2026-11-25: bundles of killed studios piled up in %TEMP% (atexit never ran)."""
+    dead = subprocess.Popen([sys.executable, "-c", ""])
+    dead.wait()
+    for pid in (dead.pid, os.getpid()):
+        (tmp_path / f"growth-studio-motion-{pid}").mkdir()
+    (tmp_path / "growth-studio-motion-x").mkdir()  # not ours to judge
+    motion.prune_bundles(tmp_path)
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        f"growth-studio-motion-{os.getpid()}", "growth-studio-motion-x"]
+
+
 def test_render_end_card_is_cached_and_stages_the_backdrop(tmp_path, monkeypatch):
     rendered = []
 
@@ -429,6 +443,10 @@ def test_render_end_card_is_cached_and_stages_the_backdrop(tmp_path, monkeypatch
     assert motion.render_end_card(tmp_path, props, frame, timeout_s=60) != first
     clean = motion.render_end_card(tmp_path, {**props, "style": "clean"}, None, timeout_s=60)
     assert "backdrop" not in rendered[-1][1] and clean.is_file() and len(rendered) == 3
+    assert len(motion.endcards_hash()) == 12  # the real motion/src/endcards
+    monkeypatch.setattr(motion, "endcards_hash", lambda: "edited")  # the cards' code changed
+    assert motion.render_end_card(tmp_path, {**props, "style": "clean"}, None,
+                                  timeout_s=60) != clean and len(rendered) == 4
 
 
 @needs_ffmpeg

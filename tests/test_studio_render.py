@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from src import scheduler, worker
 from src.api.app import create_app
 from src.config import InstagramMCPSettings
-from src.store import utcnow
+from src.store import parse_iso, utcnow
 from src.studio import ffmpeg, power, render
 from src.studio.assets import transition
 from src.studio.ffmpeg import MediaInfo
@@ -113,6 +113,9 @@ def test_failure_retries_then_fails_the_asset(store, tmp_path):
         assert job["attempts"] == attempt
         assert job["failure"] == "RuntimeError: ffmpeg exited with code 1"
         assert job["state"] == ("failed" if attempt == render.MAX_ATTEMPTS else "queued")
+        if job["state"] == "queued":  # a tool error that will likely repeat: backoff first
+            minutes = render.MACHINE_BACKOFF_MIN[attempt - 1]
+            assert parse_iso(job["not_before"]) > utcnow() + timedelta(minutes=minutes - 1)
     assert len(calls) == render.MAX_ATTEMPTS and job["finished_at"]
     a = store.get_asset(a["id"])
     assert a["status"] == "failed" and a["qc"]["passed"] is False
@@ -299,3 +302,15 @@ async def test_worker_cli_runs_renders_in_setup_mode(tmp_path, monkeypatch, caps
     assert await scheduler._run(args) == 0
     assert ran == [settings]
     assert "renders run" in capsys.readouterr().err
+
+
+def test_a_rerender_never_queues_a_source_of_unknown_rights(store, tmp_path):
+    """2026-11-25: the re-render paths took any recipe; GOAL.md §5: unknown is never queued."""
+    store.add_source("instagram", rights_basis="unknown", local_path="src/clip.mp4")
+    failed = _asset(store, status="failed")
+    sneaky = {**FFMPEG, "inputs": {"source": "./src/clip.mp4"}}  # another spelling, same file
+    with pytest.raises(ValueError, match="rights_basis unknown"):
+        render.rerender(store, tmp_path, failed["id"], sneaky)
+    assert store.get_asset(failed["id"])["status"] == "failed"  # nothing changed
+    own = {**FFMPEG, "inputs": {"source": "films/1/video.mp4"}}  # no source row: the studio's
+    assert render.rerender(store, tmp_path, failed["id"], own)["job"]["state"] == "queued"

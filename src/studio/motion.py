@@ -345,6 +345,7 @@ def bundle_dir() -> Path:
     with _bundle_lock:
         if _bundle is None or not (_bundle / "index.html").is_file():
             path = Path(tempfile.gettempdir()) / f"growth-studio-motion-{os.getpid()}"
+            prune_bundles(path.parent)
             find_node()  # clear error before touching node_modules/
             # Another process may be bundling: wait for it (up to one bundle's time).
             try:
@@ -356,6 +357,17 @@ def bundle_dir() -> Path:
             atexit.register(shutil.rmtree, path, True)
             _bundle = path
         return _bundle
+
+
+def prune_bundles(folder: Path) -> None:
+    """Delete the bundles in `folder` of processes gone without their atexit (killed, a crash,
+    a power cut: 28 of them held 1.8 GB of %TEMP%, 2026-11-25)."""
+    from ..agent import proc  # stdlib only
+
+    for old in folder.glob("growth-studio-motion-*"):
+        pid = old.name.rsplit("-", 1)[1]
+        if pid.isdigit() and int(pid) != os.getpid() and proc.started(int(pid)) is None:
+            shutil.rmtree(old, ignore_errors=True)
 
 
 def _stage_audio(bundle: Path, props: Dict[str, Any], media_root: PathLike) -> Dict[str, Any]:
@@ -490,14 +502,28 @@ def render_motion_asset(template: str, props: Dict[str, Any], out: PathLike,
             recipe.compress_timeline(v["events"]), v.get("voiceParts") or listen.VOICE_FROM_START)
 
 
+@functools.lru_cache(maxsize=1)
+def endcards_hash() -> str:
+    """The end cards' code (motion/src/endcards): an edit renders the cards again, like
+    troupe.engine_hash. Read once per process, like the bundle it renders with (bundle_dir).
+    ponytail: the shared motion/src code they import (brand.ts, components) is not hashed."""
+    h = hashlib.sha256()
+    for f in sorted((MOTION_DIR / "src" / "endcards").rglob("*")):
+        if f.is_file():
+            h.update(f.name.encode() + f.read_bytes())
+    return h.hexdigest()[:12]
+
+
 def render_end_card(media_root: PathLike, props: Dict[str, Any], backdrop: Optional[Path] = None,
                     *, timeout_s: float) -> Path:
     """The animated end card (motion `EndCard`, step 137) as a clip, rendered once and cached
-    as `<media root>/endcards/<key>.mp4`, the key hashing the props and the backdrop's bytes
-    (the live card animates over `backdrop`, the video's last frame). MotionError when Node or
-    Remotion fails (the recipe then draws the static card)."""
+    as `<media root>/endcards/<key>.mp4`, the key hashing the props, the backdrop's bytes
+    (the live card animates over `backdrop`, the video's last frame) and the cards' code
+    (endcards_hash). MotionError when Node or Remotion fails (the recipe then draws the static
+    card)."""
     picture = hashlib.sha256(backdrop.read_bytes()).hexdigest()[:16] if backdrop else None
-    out = Path(media_root) / "endcards" / f"{render.recipe_hash([props, picture])}.mp4"
+    key = render.recipe_hash([props, picture, endcards_hash()])
+    out = Path(media_root) / "endcards" / f"{key}.mp4"
     if out.is_file():
         return out
     out.parent.mkdir(parents=True, exist_ok=True)

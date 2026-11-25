@@ -1,6 +1,7 @@
 """
 Housekeeping the worker runs once a day (GOAL.md §3.2, §4.3, §7): archive stale `ready`
-assets, delete the files of long-archived ones, back up the database, thin old insight
+assets, delete the files of long-archived ones (and the renders' leftovers and old cache files,
+prune_leftovers), back up the database, thin old insight
 snapshots (VACUUM weekly). Plus the disk floor the render loop checks before it starts a
 render, and the restore from a backup (`ig-campaign restore`, step 097).
 
@@ -15,6 +16,7 @@ import json
 import os
 import shutil
 import sqlite3
+from contextlib import suppress
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -33,6 +35,12 @@ logger = structlog.get_logger(__name__)
 ALL = -1  # SQLite LIMIT -1: no limit
 PATH_FIELDS = ("file_path", "preview_path", "poster_path", "thumbnail_path")
 BACKUP_PREFIX = "studio-"  # studio-YYYY-MM-DD.db: names sort by date
+# prune_leftovers (2026-11-25): the renders' temporary folders (tempfile prefixes in
+# cinematic.py, motion.py, troupe.py, macro3d.py) and the media caches that grew forever
+WORK_DIRS = ("*/*/cinematic-*", "*/*/motion-*", "troupe/troupe-*", "macro3d/macro3d-*",
+             "previews/*/tmp*", "endcards/endcard-*")
+CACHES = ("troupe", "macro3d", "voice", "previews", "endcards")
+CACHE_KEEP_DAYS = 30
 
 
 def archive_stale(store: CampaignStore, settings: InstagramMCPSettings, today: date) -> List[int]:
@@ -80,7 +88,34 @@ def purge_archived_files(store: CampaignStore, settings: InstagramMCPSettings,
         if cleared:
             store.update_asset(a["id"], **cleared)
             purged.append(a["id"])
+    logger.info("pruned_leftovers", deleted=prune_leftovers(store, settings, today))
     return purged
+
+
+def prune_leftovers(store: CampaignStore, settings: InstagramMCPSettings, today: date) -> int:
+    """Delete the work folders a killed or crashed render left (WORK_DIRS, older than a day)
+    and the cache files (CACHES) older than CACHE_KEEP_DAYS, except a file an asset that is
+    not archived still names (a voice its recipe plays). Run by purge_archived_files. Returns
+    how many went. ponytail: by mtime, so a shot still reused after 30 days renders again once."""
+    root = Path(settings.media_root)
+    midnight = datetime.combine(today, datetime.min.time()).timestamp()
+    with store._tx() as c:
+        refs = "\n".join(" ".join(map(str, r)) for r in c.execute(
+            f"SELECT recipe, {', '.join(PATH_FIELDS)} FROM assets WHERE status <> 'archived'"))
+    gone = 0
+    for pattern in WORK_DIRS:
+        for d in root.glob(pattern):
+            if d.is_dir() and d.stat().st_mtime < midnight - 86400:
+                shutil.rmtree(d, ignore_errors=True)
+                gone += 1
+    for cache in CACHES:
+        for f in (root / cache).rglob("*"):
+            if (f.is_file() and f.stat().st_mtime < midnight - CACHE_KEEP_DAYS * 86400
+                    and media.relative(root, f) not in refs):
+                with suppress(OSError):  # in use: next time
+                    f.unlink()
+                    gone += 1
+    return gone
 
 
 def backup_database(store: CampaignStore, settings: InstagramMCPSettings, now: datetime) -> str:
