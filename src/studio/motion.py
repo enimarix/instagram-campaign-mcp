@@ -532,11 +532,26 @@ def queue_motion_render(store: CampaignStore, settings: InstagramMCPSettings, *,
     `plan` (188b): a new asset `planned` with its recipe, caption and description, and no
     job (job None): nothing renders or is voiced until the owner releases it
     (src/studio/planned.py); refused past the places left for Claude's ideas in its batch
-    (planned.take_place, 188c)."""
+    (planned.take_place, 188c). The night run (packet.RUNS kind `produce`, running) renders
+    only the owner's items: a new video of an idea no work order made is refused unless
+    planned (the owner reviews Claude's own ideas before anything renders)."""
     if (idea_id is None) == (asset_id is None):
         raise ValueError("give exactly one of idea_id (new asset) or asset_id (re-render)")
     if plan and asset_id is not None:
         raise ValueError("plan a new video (idea_id), not a re-render")
+    if not plan and asset_id is None and actor == "agent":
+        from ..agent.packet import RUNS  # here: the packet imports most of the studio
+
+        night = [p for p, (kind, _) in RUNS.items() if kind == "produce"]
+        with store._tx() as c:
+            own = c.execute(
+                "SELECT NOT EXISTS (SELECT 1 FROM work_orders WHERE idea_id = ?) AND EXISTS"
+                " (SELECT 1 FROM agent_runs WHERE status = 'running' AND playbook IN"
+                f" ({','.join('?' * len(night))}))", (idea_id, *night)).fetchone()[0]
+        if own:
+            raise ValueError(f"idea {idea_id} is your own idea and this is the night run: it"
+                             " only writes ideas; render_motion(..., plan=True,"
+                             " description=...) puts it on the owner's Planning page")
     # 193: the description is stored for every video; a queued one's caption is written
     # again at submit_asset
     fields = checked_fields("planned" if plan else "rendering", **{k: x for k, x in (
