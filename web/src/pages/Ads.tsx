@@ -16,32 +16,49 @@ import { dateTime, humanize, num, pct, useLoad } from './load'
 
 // Steps 094 (API), 094b (this page), 095b (results), 126 and 128 (the AI proposes, you launch).
 const VARIABLES: { id: AdVariable; label: string }[] = [
-  { id: 'creative', label: 'Video' }, { id: 'audience', label: 'Audience' }, { id: 'placement', label: 'Placement' },
+  { id: 'creative', label: 'Vidéo' }, { id: 'audience', label: 'Public' }, { id: 'placement', label: 'Emplacement' },
 ]
-const STATUS_TONE: Record<AdTestStatus, Tone> = {
-  proposed: 'info', approved: 'accent', running: 'success', finished: 'neutral', cancelled: 'neutral',
+const STATUS: Record<AdTestStatus, [Tone, string]> = {
+  proposed: ['info', 'proposé'], approved: ['accent', 'approuvé'], running: ['success', 'en cours'],
+  finished: ['neutral', 'terminé'], cancelled: ['neutral', 'annulé'],
 }
+// The audit log's actions and detail keys (src/ads/*.py audit() calls); unknown ones are humanized.
+const ACTION: Record<string, string> = {
+  kill: 'Arrêt de toutes les pubs', kill_enforced: 'Arrêt appliqué', unkill: 'Pubs réautorisées', propose: 'Test proposé',
+  approve: 'Test approuvé', activate: 'Pub lancée', cancel: 'Test annulé', cancel_failed: 'Échec de l’annulation',
+  release: 'Budget libéré', finish: 'Test terminé', finish_failed: 'Échec de la fin du test', settings: 'Réglages changés',
+}
+const DETAIL: Record<string, string> = {
+  reason: 'Raison', paused: 'En pause', failed: 'Échecs', list_error: 'Erreur de liste', spent: 'Dépensé', stop: 'Arrêt',
+  pause_failed: 'Pause échouée', winner: 'Gagnante', needed: 'Nécessaire', budget: 'Budget', per_variant: 'Par version',
+  end_date: 'Fin', underpowered: 'Trop petit', media_id: 'Publication', campaign: 'Campagne', adset: 'Ensemble de pubs',
+  changes: 'Changements',
+}
+const ACTOR: Record<string, string> = { owner: 'toi', agent: 'l’IA', system: 'le système' }
 const REAUTH: Record<string, string> = {
-  password_not_set: 'Set UI_PASSWORD in .env first: money actions need the website password.',
-  password_required: 'Type your website password.',
-  bad_password: 'Wrong password.',
+  password_not_set: 'Mets d’abord UI_PASSWORD dans .env : les actions qui dépensent demandent le mot de passe du site.',
+  password_required: 'Tape le mot de passe du site.',
+  bad_password: 'Mauvais mot de passe.',
 }
-const H6_NOTE = 'Ads are not set up yet. Setup step H6: put INSTAGRAM_ACCESS_TOKEN (with ads_read and ' +
-  'ads_management) and META_AD_ACCOUNT_ID in .env, and set a spending limit on the ad account in Meta.'
+const H6_NOTE = 'Les pubs ne sont pas encore configurées. Étape H6 : mets INSTAGRAM_ACCESS_TOKEN (avec ads_read et ' +
+  'ads_management) et META_AD_ACCOUNT_ID dans .env, puis fixe une limite de dépense sur le compte pub dans Meta.'
 const PAGE = 20
 // Per metric (src/ads/abtest.py METRICS): its name, what "more" counts, what a version's sample counts.
 const METRIC: Record<AdMetric, [string, string, string]> = {
-  ctr: ['CTR', 'clicks', 'views'], result_rate: ['Result rate', 'results', 'views'],
-  conversion_rate: ['Conversion rate', 'results', 'clicks'],
+  ctr: ['CTR', 'clics', 'vues'], result_rate: ['Taux de résultat', 'résultats', 'vues'],
+  conversion_rate: ['Taux de conversion', 'résultats', 'clics'],
 }
 
 const money = (v: string | number, currency: string) => {
   try {
-    return new Intl.NumberFormat('en', { style: 'currency', currency }).format(Number(v))
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(Number(v))
   } catch {
     return `${v} ${currency}` // not an ISO currency code
   }
 }
+/** 1.2345 → "1,23" (2 digits). */
+const decimal = (n: number, digits: number) =>
+  n.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 const notConfigured = (e: unknown) =>
   e instanceof ApiError && (e.code === 'ads_not_configured' || e.code === 'not_configured')
 
@@ -49,15 +66,15 @@ const notConfigured = (e: unknown) =>
 function adsError(e: unknown) {
   if (e instanceof ApiError && e.code === 'locked') {
     const s = (e.body as { retry_after?: number } | null)?.retry_after ?? 60
-    return `Too many wrong passwords: try again in ${Math.ceil(s / 60)} min.`
+    return `Trop de mauvais mots de passe : réessaie dans ${Math.ceil(s / 60)} min.`
   }
   if (e instanceof ApiError && REAUTH[e.code]) return REAUTH[e.code]
   return errorMessage(e)
 }
 
-/** "To see a 20 % lift you need about €84.00 over 7 days". */
+/** "Pour voir une hausse de 20 %, il faut environ 84,00 € sur 7 jours". */
 const needSentence = (t: AdTest) =>
-  `To see a ${pct(t.min_lift)} lift you need about ${money(t.needed.total, t.currency)} over ${t.spec.min_days} days`
+  `Pour voir une hausse de ${pct(t.min_lift)}, il faut environ ${money(t.needed.total, t.currency)} sur ${t.spec.min_days} jours`
 
 type Act = (fn: () => Promise<unknown>) => Promise<string | null>
 
@@ -74,15 +91,15 @@ function UnkillSheet({ act, onClose }: { act: Act; onClose: () => void }) {
     else onClose()
   }
   return (
-    <Sheet title="Allow ads again" onClose={onClose}>
+    <Sheet title="Réautoriser les pubs" onClose={onClose}>
       <form onSubmit={(e) => void submit(e)} className="mt-3 grid gap-3 text-sm">
-        <p className="text-muted">New spend becomes possible again, within the caps. Type your website password.</p>
-        <label>Password
+        <p className="text-muted">Les nouvelles dépenses redeviennent possibles, dans les plafonds. Tape le mot de passe du site.</p>
+        <label>Mot de passe
           <input type="password" value={password} required autoComplete="current-password"
             onChange={(e) => setPassword(e.target.value)} className={`${field} mt-1 block w-full`} />
         </label>
         {error && <p role="alert" className="text-danger">{error}</p>}
-        <Button type="submit" variant="primary" loading={busy}>Allow ads again</Button>
+        <Button type="submit" variant="primary" loading={busy}>Réautoriser les pubs</Button>
       </form>
     </Sheet>
   )
@@ -92,8 +109,8 @@ function Scope({ label, s, currency }: { label: string; s: BudgetScope; currency
   return (
     <div>
       <dt className="text-xs font-medium text-muted">{label}</dt>
-      <dd className="mt-1 font-semibold tabular-nums">{money(s.remaining, currency)} left</dd>
-      <dd className="text-xs text-muted">{money(s.used, currency)} used of {money(s.cap, currency)}</dd>
+      <dd className="mt-1 font-semibold tabular-nums">{money(s.remaining, currency)} restants</dd>
+      <dd className="text-xs text-muted">{money(s.used, currency)} utilisés sur {money(s.cap, currency)}</dd>
     </div>
   )
 }
@@ -113,42 +130,42 @@ function BudgetCard({ b, act }: { b?: AdsBudget; act: Act }) {
     <Card as="section" aria-label="Budget">
       <h2 className="font-semibold">Budget</h2>
       <p className="mt-1 text-sm text-muted">
-        A test spends only once you approve it, within these caps. <Link to="/settings#ads" className="text-accent underline">Change them in Settings, Ads</Link>.
+        Un test ne dépense qu’une fois que tu l’approuves, dans ces plafonds. <Link to="/settings#ads" className="text-accent underline">Les changer dans Réglages, Pubs</Link>.
       </p>
       {b.killed && (
         <div role="status" className="mt-2 rounded-control bg-danger/12 p-3 text-sm text-danger">
-          All ads are stopped{b.killed_reason ? `: ${b.killed_reason}` : ''}
-          {b.killed_at && ` (since ${dateTime(b.killed_at)})`}. No new spend until you allow ads again.
+          Toutes les pubs sont arrêtées{b.killed_reason ? ` : ${b.killed_reason}` : ''}
+          {b.killed_at && ` (depuis le ${dateTime(b.killed_at)})`}. Aucune nouvelle dépense tant que tu ne réautorises pas les pubs.
         </div>
       )}
       {zero && (
         <p className="mt-2 text-sm text-muted">
-          A cap at 0 allows no spend: raise it in Settings, Ads.
+          Un plafond à 0 n’autorise aucune dépense : monte-le dans Réglages, Pubs.
         </p>
       )}
       <dl className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
-        <Scope label={`Today (${b.day})`} s={b.daily} currency={c} />
-        <Scope label="Lifetime" s={b.lifetime} currency={c} />
+        <Scope label={`Aujourd’hui (${b.day})`} s={b.daily} currency={c} />
+        <Scope label="Au total" s={b.lifetime} currency={c} />
         <div>
-          <dt className="text-xs font-medium text-muted">Per test</dt>
-          <dd className="mt-1 font-semibold tabular-nums">{money(b.test_cap, c)} at most</dd>
+          <dt className="text-xs font-medium text-muted">Par test</dt>
+          <dd className="mt-1 font-semibold tabular-nums">{money(b.test_cap, c)} au maximum</dd>
         </div>
       </dl>
       {b.tests.length > 0 && (
         <ul className="mt-3 text-sm text-muted">
           {b.tests.map((t) => (
-            <li key={t.test_id}>Test #{t.test_id}: {money(t.used, c)} used, {money(t.remaining, c)} left</li>
+            <li key={t.test_id}>Test #{t.test_id} : {money(t.used, c)} utilisés, {money(t.remaining, c)} restants</li>
           ))}
         </ul>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {b.killed ? (
-          <Button variant="primary" onClick={() => setUnkill(true)}>Allow ads again</Button>
+          <Button variant="primary" onClick={() => setUnkill(true)}>Réautoriser les pubs</Button>
         ) : (
           <>
-            <input aria-label="Reason (optional)" value={reason} maxLength={200} placeholder="reason (optional)"
+            <input aria-label="Raison (facultatif)" value={reason} maxLength={200} placeholder="raison (facultatif)"
               onChange={(e) => setReason(e.target.value)} className={`${field} min-w-0 flex-1 md:flex-none`} />
-            <Button variant="danger" size="lg" onClick={() => void kill()}>Stop all ads</Button>
+            <Button variant="danger" size="lg" onClick={() => void kill()}>Arrêter toutes les pubs</Button>
           </>
         )}
       </div>
@@ -193,23 +210,23 @@ function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act
 
   if (done)
     return (
-      <Sheet title="Test proposed" onClose={onClose}>
+      <Sheet title="Test proposé" onClose={onClose}>
         <p className="mt-3 font-medium">{needSentence(done)}.</p>
-        {done.underpowered && <p role="alert" className="mt-2 text-sm text-warn">Too small: {done.underpowered}.</p>}
-        <p className="mt-2 text-sm text-muted">Nothing is spent until you approve it in the tests list.</p>
-        <Button variant="primary" className="mt-4 w-full" onClick={onClose}>Done</Button>
+        {done.underpowered && <p role="alert" className="mt-2 text-sm text-warn">Trop petit : {done.underpowered}.</p>}
+        <p className="mt-2 text-sm text-muted">Rien n’est dépensé tant que tu ne l’approuves pas dans la liste des tests.</p>
+        <Button variant="primary" className="mt-4 w-full" onClick={onClose}>OK</Button>
       </Sheet>
     )
   return (
-    <Sheet title="Propose a test" onClose={onClose}>
+    <Sheet title="Proposer un test" onClose={onClose}>
       <form onSubmit={(e) => void submit(e)} className="mt-3 grid gap-3 text-sm">
-        <Tabs label="What to vary" tabs={VARIABLES} value={variable}
+        <Tabs label="Ce qui change" tabs={VARIABLES} value={variable}
           onChange={(v) => { setVariable(v); setMedias([]); setCompared([]) }} />
         <fieldset>
-          <legend className="font-medium">{creative ? 'Pick 2 to 4 winners' : 'Pick one winner'}</legend>
+          <legend className="font-medium">{creative ? 'Choisis 2 à 4 gagnantes' : 'Choisis une gagnante'}</legend>
           {winners.error && <p role="alert" className="text-danger">{winners.error}</p>}
           {!winners.data ? !winners.error && <Skeleton className="h-12" /> : winners.data.length === 0 ? (
-            <p className="text-muted">No winners yet: a Reel becomes one when it beats the account once it matures.</p>
+            <p className="text-muted">Pas encore de gagnante : un Reel le devient quand il bat le compte, une fois ses chiffres mûrs.</p>
           ) : (
             <ul className="mt-1 grid gap-1">
               {winners.data.map((w) => (
@@ -218,7 +235,7 @@ function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act
                     <input type={creative ? 'checkbox' : 'radio'} name="winner" checked={medias.includes(w.media_id)}
                       onChange={() => setMedias(creative ? toggle(medias, w.media_id) : [w.media_id])} />
                     {w.thumbnail_url && <img src={w.thumbnail_url} alt="" className="h-10 w-6 shrink-0 rounded object-cover" />}
-                    <span className="min-w-0 truncate">{w.caption || `Post ${w.media_id}`}</span>
+                    <span className="min-w-0 truncate">{w.caption || `Publication ${w.media_id}`}</span>
                     <span className="ml-auto shrink-0 text-muted">{dateTime(w.posted_at)}</span>
                   </label>
                 </li>
@@ -227,14 +244,14 @@ function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act
           )}
         </fieldset>
         {creative ? (
-          <label>Who sees it
+          <label>Qui le voit
             <select value={preset} onChange={(e) => setPicked(e.target.value)} className={`${field} mt-1 block w-full`}>
               {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </label>
         ) : (
           <fieldset>
-            <legend className="font-medium">Compare</legend>
+            <legend className="font-medium">Comparer</legend>
             <div className="mt-1 flex flex-wrap gap-2">
               {presets.filter((p) => p.varies.includes(variable)).map((p) => (
                 <Chip key={p.id} pressed={compared.includes(p.id)} onClick={() => setCompared(toggle(compared, p.id))}>
@@ -244,16 +261,16 @@ function ProposeSheet({ presets, act, onClose }: { presets: AdPreset[]; act: Act
             </div>
           </fieldset>
         )}
-        <label>What you expect
+        <label>Ce que tu attends
           <textarea value={hypothesis} required maxLength={500} rows={2} onChange={(e) => setHypothesis(e.target.value)}
-            placeholder="the boss-fight video gets more clicks" className={`${field} mt-1 block w-full py-2`} />
+            placeholder="la vidéo du boss fait plus de clics" className={`${field} mt-1 block w-full py-2`} />
         </label>
-        <label>Smallest difference worth seeing (%)
+        <label>Plus petit écart qui vaut la peine (%)
           <input type="number" min={1} max={500} value={lift} required onChange={(e) => setLift(e.target.value)}
             className={`${field} mt-1 block w-full`} />
         </label>
         {error && <p role="alert" className="text-danger">{error}</p>}
-        <Button type="submit" variant="primary" loading={busy} disabled={!ready}>Work out the budget</Button>
+        <Button type="submit" variant="primary" loading={busy} disabled={!ready}>Calculer le budget</Button>
       </form>
     </Sheet>
   )
@@ -265,7 +282,7 @@ function ApproveSheet({ t, act, onClose }: { t: AdTest; act: Act; onClose: () =>
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const short = t.underpowered
-    ?? (Number(budget) < t.needed.total ? `the budget is below the ${money(t.needed.total, t.currency)} the test needs` : null)
+    ?? (Number(budget) < t.needed.total ? `le budget est sous les ${money(t.needed.total, t.currency)} dont le test a besoin` : null)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -276,64 +293,64 @@ function ApproveSheet({ t, act, onClose }: { t: AdTest; act: Act; onClose: () =>
     else onClose()
   }
   return (
-    <Sheet title="Approve and start" onClose={onClose}>
+    <Sheet title="Approuver et lancer" onClose={onClose}>
       <form onSubmit={(e) => void submit(e)} className="mt-3 grid gap-3 text-sm">
         <p>{t.hypothesis}</p>
-        <p className="text-muted">{needSentence(t)}. The ads start as soon as you approve.</p>
+        <p className="text-muted">{needSentence(t)}. Les pubs démarrent dès que tu approuves.</p>
         <label>Budget ({t.currency})
           <input type="number" min={0.01} step={0.01} value={budget} required onChange={(e) => setBudget(e.target.value)}
             className={`${field} mt-1 block w-full`} />
         </label>
         {short && (
           <div role="alert" className="rounded-control bg-warn/12 p-3 text-warn">
-            <p>Too small to trust: {short}. You may spend this money and learn nothing.</p>
+            <p>Trop petit pour s’y fier : {short}. Tu risques de dépenser cet argent sans rien apprendre.</p>
             <label className="mt-2 flex min-h-11 items-center gap-2 font-medium">
               <input type="checkbox" checked={anyway} onChange={(e) => setAnyway(e.target.checked)} />
-              Run underpowered anyway
+              Lancer quand même
             </label>
           </div>
         )}
         {error && <p role="alert" className="text-danger">{error}</p>}
         <Button type="submit" variant="primary" loading={busy} disabled={Boolean(short) && !anyway}>
-          Approve and spend
+          Approuver et dépenser
         </Button>
       </form>
     </Sheet>
   )
 }
 
-/** The latest verdict in plain words: "B gets 24 % more clicks than A (between 10 % and 38 %), 95 % sure". */
+/** The latest verdict in plain words: "B fait 24 % de clics de plus que A (entre 10 % et 38 %), sûr à 95 %". */
 function verdict(t: AdTest) {
   const e = t.result?.evaluation
-  if (!e) return 'No numbers yet: the first ones come within an hour of the start'
+  if (!e) return 'Pas encore de chiffres : les premiers arrivent dans l’heure qui suit le lancement'
   const [, more, unit] = METRIC[t.spec.primary_metric]
   const days = Math.floor(e.days)
   switch (e.status) {
     case 'winner': {
       const l = e.lift
-      return l ? `${e.winner} gets ${pct(l.value)} more ${more} than ${l.vs} (between ${pct(l.ci_low)} and ` +
-        `${pct(l.ci_high)}), ${pct(l.confidence)} sure` : `${e.winner} gets clearly more ${more} than the others`
+      return l ? `${e.winner} fait ${pct(l.value)} de ${more} de plus que ${l.vs} (entre ${pct(l.ci_low)} et ` +
+        `${pct(l.ci_high)}), sûr à ${pct(l.confidence)}` : `${e.winner} fait nettement plus de ${more} que les autres`
     }
     case 'too_early': {
       const seen = Math.min(...Object.values(e.variants).map((v) => v.trials))
-      return `Too early: ${days < t.spec.min_days ? `day ${days} of ${t.spec.min_days}, ` : ''}` +
-        `${num(seen)} of ${num(t.spec.min_sample)} ${unit} per version`
+      return `Trop tôt : ${days < t.spec.min_days ? `jour ${days} sur ${t.spec.min_days}, ` : ''}` +
+        `${num(seen)} ${unit} sur ${num(t.spec.min_sample)} par version`
     }
-    case 'running': return 'No clear difference yet'
-    case 'no_difference': return `No clear difference after ${days} days`
-    default: return `The numbers could not be judged: ${e.error}`
+    case 'running': return 'Pas encore de différence nette'
+    case 'no_difference': return `Pas de différence nette après ${days} jours`
+    default: return `Les chiffres n’ont pas pu être jugés : ${e.error}`
   }
 }
 
 /** What each version shows: the post for a video test, the audience or placement otherwise. */
 const versionLabel = (t: AdTest, v: { media_id: string; preset: string }, labels: Labels) =>
-  t.variable === 'creative' ? `Post ${v.media_id}` : labels[v.preset] ?? v.preset
+  t.variable === 'creative' ? `Publication ${v.media_id}` : labels[v.preset] ?? v.preset
 
 function Issues({ issues }: { issues: AdReviewIssue[] }) {
   return issues.map((i) => (
     <p key={i.ad_id} className="mt-1 flex flex-wrap items-center gap-2">
       <Chip tone={i.effective_status === 'DISAPPROVED' ? 'danger' : 'warn'}>
-        {i.effective_status === 'DISAPPROVED' ? 'Meta rejected' : 'Meta limits'}
+        {i.effective_status === 'DISAPPROVED' ? 'Refusée par Meta' : 'Limitée par Meta'}
       </Chip>
       <span className="break-words text-muted">{i.reason}</span>
     </p>
@@ -348,7 +365,7 @@ function ResultsSheet({ id, labels, onClose }: { id: number; labels: Labels; onC
   const total = Number(d?.spend.budget ?? 0)
   const pv = Object.entries(res?.evaluation.p_values ?? {})
   return (
-    <Sheet title={`Test #${id} results`} onClose={onClose}>
+    <Sheet title={`Résultats du test #${id}`} onClose={onClose}>
       {r.error && <p role="alert" className="mt-3 text-sm text-danger">{r.error}</p>}
       {!d ? !r.error && <Skeleton className="mt-3 h-24" /> : (
         <div className="mt-3 grid gap-3 text-sm">
@@ -356,8 +373,8 @@ function ResultsSheet({ id, labels, onClose }: { id: number; labels: Labels; onC
           <p className="font-medium">{verdict(d)}.</p>
           <Issues issues={res?.review ?? []} />
           <div>
-            <p>{money(spent, d.currency)} spent of {d.spend.budget ? money(d.spend.budget, d.currency) : 'no budget'}</p>
-            <div role="progressbar" aria-label="Spend" aria-valuemin={0} aria-valuemax={100}
+            <p>{money(spent, d.currency)} dépensés sur {d.spend.budget ? money(d.spend.budget, d.currency) : 'aucun budget'}</p>
+            <div role="progressbar" aria-label="Dépense" aria-valuemin={0} aria-valuemax={100}
               aria-valuenow={total ? Math.min(100, Math.round((spent / total) * 100)) : 0}
               className="mt-1 h-2 overflow-hidden rounded-full bg-surface-2">
               <div className="h-full rounded-full bg-accent" style={{ width: `${total ? Math.min(100, (spent / total) * 100) : 0}%` }} />
@@ -366,7 +383,7 @@ function ResultsSheet({ id, labels, onClose }: { id: number; labels: Labels; onC
           {res && (
             <table className="w-full text-left tabular-nums">
               <thead className="text-xs text-muted">
-                <tr><th>Version</th><th>{METRIC[d.spec.primary_metric][0]}</th><th>Views</th><th>Spend</th></tr>
+                <tr><th>Version</th><th>{METRIC[d.spec.primary_metric][0]}</th><th>Vues</th><th>Dépense</th></tr>
               </thead>
               <tbody>
                 {Object.entries(res.variants).map(([name, v]) => {
@@ -374,7 +391,7 @@ function ResultsSheet({ id, labels, onClose }: { id: number; labels: Labels; onC
                   return (
                     <tr key={name}>
                       <td>{name} · {versionLabel(d, v, labels)}</td>
-                      <td>{rate == null ? '–' : `${(rate * 100).toFixed(2)} %`}</td>
+                      <td>{rate == null ? '–' : `${decimal(rate * 100, 2)} %`}</td>
                       <td>{num(v.impressions)}</td>
                       <td>{money(v.spend, d.currency)}</td>
                     </tr>
@@ -385,13 +402,13 @@ function ResultsSheet({ id, labels, onClose }: { id: number; labels: Labels; onC
           )}
           {res && (
             <details className="text-muted">
-              <summary className="cursor-pointer">Details</summary>
+              <summary className="cursor-pointer">Détails</summary>
               {pv.length ? (
                 <ul className="mt-1">
-                  {pv.map(([name, p]) => <li key={name}>{name} vs the leader: p = {p.toFixed(4)}</li>)}
+                  {pv.map(([name, p]) => <li key={name}>{name} vs le meneur : p = {decimal(p, 4)}</li>)}
                 </ul>
-              ) : <p className="mt-1">No p-values before the planned sample is reached.</p>}
-              <p className="mt-1">Last update {dateTime(res.synced_at)}.</p>
+              ) : <p className="mt-1">Pas de p-values avant d’atteindre l’échantillon prévu.</p>}
+              <p className="mt-1">Dernière mise à jour : {dateTime(res.synced_at)}.</p>
             </details>
           )}
         </div>
@@ -405,40 +422,40 @@ function TestRow({ t, labels, act }: { t: AdTest; labels: Labels; act: Act }) {
   const [approving, setApproving] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const budget = t.budget_total ? money(t.budget_total, t.currency) : `needs about ${money(t.needed.total, t.currency)}`
+  const budget = t.budget_total ? money(t.budget_total, t.currency) : `il faut environ ${money(t.needed.total, t.currency)}`
   const winner = t.status === 'finished' ? t.result?.evaluation.winner : null
   const won = winner && t.result?.variants[winner]
   return (
     <li className="py-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <Chip tone={STATUS_TONE[t.status]}>{t.status}</Chip>
+        <Chip tone={STATUS[t.status][0]}>{STATUS[t.status][1]}</Chip>
         {t.status === 'proposed' && <Chip tone="warn">
-          {t.proposed_by === 'agent' ? 'Proposed by the AI' : 'Proposed by you'}, waiting for you
+          {t.proposed_by === 'agent' ? 'Proposé par l’IA' : 'Proposé par toi'}, t’attend
         </Chip>}
         {t.launched_by && <Chip tone={t.launched_by === 'agent' ? 'accent' : 'neutral'}>
-          {t.launched_by === 'agent' ? 'Launched by the AI' : 'Launched by you'}
+          {t.launched_by === 'agent' ? 'Lancé par l’IA' : 'Lancé par toi'}
         </Chip>}
-        {winner && <Chip tone="success">Winner: {winner}{won && ` (${versionLabel(t, won, labels)})`}</Chip>}
+        {winner && <Chip tone="success">Gagnante : {winner}{won && ` (${versionLabel(t, won, labels)})`}</Chip>}
         <span className="font-medium break-words">{t.hypothesis}</span>
       </div>
       <p className="mt-1 text-muted">
-        {humanize(t.variable)} · {t.variants.length} versions · {budget}{t.end_date && ` · ends ${t.end_date}`}
+        {VARIABLES.find((v) => v.id === t.variable)?.label ?? humanize(t.variable)} · {t.variants.length} versions · {budget}{t.end_date && ` · fin le ${t.end_date}`}
       </p>
       {t.reason && <p className="mt-1 text-muted">{t.reason}</p>}
       <Issues issues={t.result?.review ?? []} />
       <div className="mt-2 flex flex-wrap gap-2">
         {t.status === 'proposed'
-          ? <Button size="sm" variant="primary" onClick={() => setApproving(true)}>Approve</Button>
-          : <Button size="sm" onClick={() => setShowing(true)}>Results</Button>}
+          ? <Button size="sm" variant="primary" onClick={() => setApproving(true)}>Approuver</Button>
+          : <Button size="sm" onClick={() => setShowing(true)}>Résultats</Button>}
         {(t.status === 'proposed' || t.status === 'running') && (confirm ? (
           <>
-            <span className="self-center">Cancel this test? Its ads stop.</span>
+            <span className="self-center">Annuler ce test ? Ses pubs s’arrêtent.</span>
             <Button size="sm" variant="danger" onClick={() => void act(() => cancelAdTest(t.id)).then(setError)}>
-              Yes, cancel it
+              Oui, l’annuler
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>Keep it</Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>Le garder</Button>
           </>
-        ) : <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>Cancel</Button>)}
+        ) : <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>Annuler</Button>)}
       </div>
       {error && <p role="alert" className="mt-1 text-danger">{error}</p>}
       {approving && <ApproveSheet t={t} act={act} onClose={() => setApproving(false)} />}
@@ -452,21 +469,21 @@ function AuditLog({ version }: { version: number }) {
   const log = useLoad(() => getAdsAudit(offset, PAGE), `${version}:${offset}`)
   const d = log.data
   return (
-    <Card as="section" aria-label="Audit log">
-      <h2 className="font-semibold">What happened</h2>
+    <Card as="section" aria-label="Ce qui s’est passé">
+      <h2 className="font-semibold">Ce qui s’est passé</h2>
       {log.error && <p role="alert" className="mt-2 text-sm text-danger">{log.error}</p>}
       {!d ? !log.error && <Skeleton className="mt-3 h-12" /> : d.rows.length === 0 ? (
-        <p className="mt-2 text-sm text-muted">No ad actions yet.</p>
+        <p className="mt-2 text-sm text-muted">Pas encore d’action sur les pubs.</p>
       ) : (
         <ul className="mt-2 divide-y divide-line/60 text-sm">
           {d.rows.map((r) => (
             <li key={r.id} className="py-2">
-              <span className="font-medium">{humanize(r.action)}</span>
+              <span className="font-medium">{ACTION[r.action] ?? humanize(r.action)}</span>
               {r.test_id != null && ` · test #${r.test_id}`}
-              <span className="text-muted"> · {r.actor} · {dateTime(r.at)}</span>
+              <span className="text-muted"> · {ACTOR[r.actor] ?? r.actor} · {dateTime(r.at)}</span>
               {Object.keys(r.detail).length > 0 && (
                 <p className="text-muted break-words">
-                  {Object.entries(r.detail).map(([k, v]) => `${humanize(k)}: ${String(v)}`).join(' · ')}
+                  {Object.entries(r.detail).map(([k, v]) => `${DETAIL[k] ?? humanize(k)} : ${String(v)}`).join(' · ')}
                 </p>
               )}
             </li>
@@ -475,22 +492,22 @@ function AuditLog({ version }: { version: number }) {
       )}
       {d && d.total > PAGE && (
         <div className="mt-2 flex items-center gap-2 text-sm">
-          <Button size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Newer</Button>
-          <Button size="sm" disabled={offset + PAGE >= d.total} onClick={() => setOffset(offset + PAGE)}>Older</Button>
-          <span className="text-muted">{offset + 1}–{Math.min(offset + PAGE, d.total)} of {d.total}</span>
+          <Button size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Plus récentes</Button>
+          <Button size="sm" disabled={offset + PAGE >= d.total} onClick={() => setOffset(offset + PAGE)}>Plus anciennes</Button>
+          <span className="text-muted">{offset + 1}–{Math.min(offset + PAGE, d.total)} sur {d.total}</span>
         </div>
       )}
     </Card>
   )
 }
 
-/** src/ads/sync.py near_caps() in words: "Today's ad spend is at 85 % of the daily cap". */
+/** src/ads/sync.py near_caps() in words: "La dépense pub du jour est à 85 % du plafond quotidien". */
 function nearCaps(b: AdsBudget) {
   const share = (s: BudgetScope) => pct(Number(s.used) / Number(s.cap))
   const out = []
-  if (b.near_cap.daily) out.push(`Today's ad spend is at ${share(b.daily)} of the daily cap`)
-  if (b.near_cap.lifetime) out.push(`Total ad spend is at ${share(b.lifetime)} of the lifetime cap`)
-  for (const t of b.tests) if (b.near_cap.tests.includes(t.test_id)) out.push(`Test #${t.test_id} is at ${share(t)} of its cap`)
+  if (b.near_cap.daily) out.push(`La dépense pub du jour est à ${share(b.daily)} du plafond quotidien`)
+  if (b.near_cap.lifetime) out.push(`La dépense pub totale est à ${share(b.lifetime)} du plafond total`)
+  for (const t of b.tests) if (b.near_cap.tests.includes(t.test_id)) out.push(`Le test #${t.test_id} est à ${share(t)} de son plafond`)
   return out
 }
 
@@ -520,8 +537,8 @@ export default function Ads() {
 
   return (
     <>
-      <PageHeader title="Ads" actions={<Button variant="primary" onClick={() => setProposing(true)}>Propose a test</Button>}>
-        Paid A/B tests on your proven winners. The AI proposes them; nothing spends until you approve it.
+      <PageHeader title="Pubs" actions={<Button variant="primary" onClick={() => setProposing(true)}>Proposer un test</Button>}>
+        Des tests A/B payants sur tes gagnantes confirmées. L’IA les propose ; rien n’est dépensé tant que tu n’approuves pas.
       </PageHeader>
       <div className="grid gap-4">
         {unset && <p role="status" className="rounded-card bg-info/12 p-4 text-sm text-info">{H6_NOTE}</p>}
@@ -534,12 +551,12 @@ export default function Ads() {
           <h2 className="font-semibold">Tests</h2>
           {waiting > 0 && (
             <p role="status" className="mt-1 text-sm text-warn">
-              {waiting === 1 ? '1 proposal waits' : `${waiting} proposals wait`} for you: Approve launches it, Cancel drops it.
+              {waiting === 1 ? '1 proposition t’attend' : `${waiting} propositions t’attendent`} : Approuver la lance, Annuler l’abandonne.
             </p>
           )}
           {tests.error && <p role="alert" className="mt-2 text-sm text-danger">{tests.error}</p>}
           {!tests.data ? !tests.error && <Skeleton className="mt-3 h-12" /> : tests.data.length === 0 ? (
-            <div className="mt-3"><EmptyState title="No tests yet">Propose one from your winners.</EmptyState></div>
+            <div className="mt-3"><EmptyState title="Pas encore de test">Propose-en un à partir de tes gagnantes.</EmptyState></div>
           ) : (
             <ul className="mt-2 divide-y divide-line/60">{tests.data.map((t) => <TestRow key={t.id} t={t} labels={labels} act={act} />)}</ul>
           )}

@@ -558,7 +558,7 @@ Source: `docs/ui-audit/2026-11-25/REPORT.md` (every correction ticked `[x] DO`; 
 - [x] 214 — Video page: the Inbox's four decisions (UI-017) — https://github.com/enimarix/instagram-campaign-mcp/pull/225 (2026-11-25) — Approuver · Changer · Refuser · Garder with the Inbox's sheets, calls and toasts (no undo window), 2 × 2 on the phone; Dislike / Like / Archive and « Ask for changes » gone; Programmer / Retirer l'approbation; « Enregistrer » secondary
 - [x] 215 — French part 1 (UI-013) — https://github.com/enimarix/instagram-campaign-mcp/pull/226 (2026-11-25) — lang="fr", fr-FR dates everywhere, nav (Calendrier, Statistiques, Apprentissages, Pubs, Réglages, Plus), shell, Inbox, video page, sheets, toasts, e2e in French; archiveAsset removed; DECISIONS « The website is in French »
 - [x] 216 — French part 2 (UI-013) — https://github.com/enimarix/instagram-campaign-mcp/pull/227 (2026-11-25) — Calendrier (shared French rights confirmation), Statistiques, Publications, Ce qui marche, Rapport du jour, Tendances; French number format
-- [ ] 217 — French part 3 (UI-013): Apprentissages, Pubs, Agent — done when: no English left there
+- [x] 217 — French part 3 (UI-013) — https://github.com/enimarix/instagram-campaign-mcp/pull/228 (2026-11-25) — Apprentissages, Pubs (fr-FR money, French audit log), Agent, Nouveaux styles demandés
 - [ ] 218 — French part 4 (UI-013): Réglages, every section — done when: no English left there
 - [ ] 219 — French part 5 (UI-013): last sweep (Créer, Planning, Trending, Styles, Voix leftovers) + grep for English labels — done when: UI-013 acceptance holds
 

@@ -49,20 +49,20 @@ describe('Agent', () => {
   it('lists runs and shows a log tail on demand', async () => {
     stubApi()
     render(<Agent />)
-    const runs = await screen.findByRole('region', { name: 'Runs' })
+    const runs = await screen.findByRole('region', { name: 'Runs de l’IA' })
     expect(await within(runs).findByText('Vidéos du jour')).toBeTruthy()
-    expect(within(runs).getByText('succeeded')).toBeTruthy()
-    expect(within(runs).getByText('42 min 10 s · 41 turns · $1.23')).toBeTruthy()
+    expect(within(runs).getByText('réussi')).toBeTruthy()
+    expect(within(runs).getByText('42 min 10 s · 41 tours · 1,23 $US')).toBeTruthy()
     expect(within(runs).getByText('Made 10 ideas, 8 renders ready.')).toBeTruthy()
-    fireEvent.click(within(runs).getByRole('button', { name: 'Log' }))
+    fireEvent.click(within(runs).getByRole('button', { name: 'Journal' }))
     expect((await within(runs).findByText(/--- succeeded/)).tagName).toBe('PRE')
   })
 
   it('shows the empty-playbooks state', async () => {
     stubApi({ 'GET /api/agent/playbooks': [200, []], 'GET /api/agent/runs?limit=50': [200, []] })
     render(<Agent />)
-    expect(await screen.findByText('No playbooks yet')).toBeTruthy()
-    expect(await screen.findByText('No runs yet')).toBeTruthy()
+    expect(await screen.findByText('Pas encore de playbooks')).toBeTruthy()
+    expect(await screen.findByText('Pas encore de runs')).toBeTruthy()
   })
 
   it('confirms before Lancer', async () => {
@@ -84,13 +84,13 @@ describe('Agent', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<Agent />)
     fireEvent.click(await screen.findByRole('button', { name: 'Lancer\u00a0: Vidéos du jour' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('Vidéos du jour is already running')
+    expect((await screen.findByRole('alert')).textContent).toBe('Vidéos du jour tourne déjà')
   })
 
-  it('disables Run now while that playbook runs', async () => {
+  it('disables Lancer while that playbook runs', async () => {
     stubApi({ 'GET /api/agent/runs?limit=50': [200, [{ ...RUN, status: 'running', finished_at: null }]] })
     render(<Agent />)
-    await screen.findByText('running')
+    await screen.findByText('en cours')
     expect((screen.getByRole('button', { name: 'Lancer\u00a0: Vidéos du jour' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -100,7 +100,7 @@ describe('Agent', () => {
       'PATCH /api/style-requests/3': [200, { ...REQUEST, status: 'accepted', owner_note: 'go' }],
     })
     render(<MemoryRouter><Agent /></MemoryRouter>)
-    const box = await screen.findByRole('region', { name: 'Style requests' })
+    const box = await screen.findByRole('region', { name: 'Nouveaux styles demandés' })
     expect(await within(box).findByText('Néon nuit')).toBeTruthy()
     expect(within(box).getByText('inventé')).toBeTruthy()
     expect(within(box).getByText('synthwave')).toBeTruthy()

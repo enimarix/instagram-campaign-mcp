@@ -40,7 +40,7 @@ function RequestCard({ request: r, onDecided }: { request: StyleRequest; onDecid
     <Card as="li" className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{r.name}</span>
-        <Chip tone={r.kind === 'invented' ? 'explore' : 'accent'}>{r.kind === 'invented' ? 'inventé' : "d'après une référence"}</Chip>
+        <Chip tone={r.kind === 'invented' ? 'explore' : 'accent'}>{r.kind === 'invented' ? 'inventé' : 'd’après une référence'}</Chip>
         <Chip tone={tone}>{label}</Chip>
       </div>
       <p className="mt-1">{r.concept.why}</p>
@@ -57,13 +57,13 @@ function RequestCard({ request: r, onDecided }: { request: StyleRequest; onDecid
       </ol>
       {r.unblocks.asset_ids.length > 0 && (
         <p className="mt-2 text-muted">
-          Débloque :{' '}
+          Débloque :{' '}
           {r.unblocks.asset_ids.map((id, i) => (
             <span key={id}>{i > 0 && ', '}<Link to={`/assets/${id}`} className={link}>vidéo {id}</Link></span>
           ))}
         </p>
       )}
-      {r.owner_note && <p className="mt-1 text-muted">Ta note : « {r.owner_note} »</p>}
+      {r.owner_note && <p className="mt-1 text-muted">Ta note : « {r.owner_note} »</p>}
       {open && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input aria-label={`Note pour ${r.name}`} placeholder="Une note (facultatif)" maxLength={300}
@@ -90,14 +90,14 @@ export default function StyleRequests() {
   const replace = (r: StyleRequest) => setRequests((rs) => rs && rs.map((x) => (x.id === r.id ? r : x)))
 
   return (
-    <section aria-label="Style requests" className="mt-8">
+    <section aria-label="Nouveaux styles demandés" className="mt-8">
       <h2 className="text-lg font-semibold">Nouveaux styles demandés</h2>
       {error ? (
         <p role="alert" className="mt-2 text-sm text-danger">{error}</p>
       ) : requests === null ? (
         <Skeleton className="mt-3 h-24" />
       ) : requests.length === 0 ? (
-        <p className="mt-2 text-sm text-muted">Aucune demande pour l'instant</p>
+        <p className="mt-2 text-sm text-muted">Aucune demande pour l’instant</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {requests.map((r) => <RequestCard key={r.id} request={r} onDecided={replace} />)}
