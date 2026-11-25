@@ -138,7 +138,7 @@ export default function Settings() {
   // React Router does not jump to a #section. Every section's root is there from the first render,
   // but the ones above it grow as their data comes in: follow it until the owner scrolls (or 5 s).
   useEffect(() => {
-    const el = hash && document.getElementById(decodeURIComponent(hash.slice(1)))
+    const el = hash && document.getElementById(hash.slice(1))
     if (!el) return
     const jump = () => el.scrollIntoView?.({ block: 'start' })
     jump()
