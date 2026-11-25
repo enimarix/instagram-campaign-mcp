@@ -321,7 +321,7 @@ describe('AssetPage', () => {
       })
       await show()
       fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
-      const box = await screen.findByRole('checkbox', { name: /mon avis en est une vraie part/ })
+      const box = await screen.findByRole('checkbox', { name: /mon avis en est une part importante/ })
       const accept = screen.getByRole('button', { name: 'Accepter' })
       expect(accept).toHaveProperty('disabled', true)
       fireEvent.click(box)

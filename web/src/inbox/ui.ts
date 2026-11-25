@@ -24,13 +24,13 @@ export const clock = (s: number) => `${Math.floor(s / 60)}:${pad(Math.floor(s % 
 export const AI_LABEL_LINE = 'Publiée avec l’étiquette IA d’Instagram'
 /** What the owner confirms before a `commentary` video is queued (GOAL.md §5.1). */
 export const COMMENTARY_CONFIRMATION =
-  'J’ai vérifié cette vidéo de réaction : mon avis en est une vraie part et le créateur est crédité.'
+  'J’ai vérifié cette vidéo de réaction : mon avis en est une part importante et le créateur est crédité.'
 
 /** A video's status, verdict and rights in the owner's words. */
 const STATUS: Record<string, string> = {
   rendering: 'en rendu', ready: 'à décider', failed: 'échouée', needs_reaction: 'réaction à faire',
   revision_requested: 'renvoyée pour changements', approved: 'approuvée', scheduled: 'programmée',
-  publish_check: 'vérifiée avant publication', published: 'publiée', archived: 'archivée',
+  publish_check: 'en vérification avant publication', published: 'publiée', archived: 'archivée',
 }
 const VERDICT: Record<string, string> = { liked: 'gardée', disliked: 'refusée' }
 const RIGHTS: Record<string, string> = {
@@ -41,7 +41,7 @@ const word = (map: Record<string, string>) => (v: string) => map[v] ?? v.replace
 export const statusLabel = word(STATUS)
 export const verdictLabel = word(VERDICT)
 export const rightsLabel = word(RIGHTS)
-/** "2026-11-30" → "lun. 30 nov." */
+/** "2026-11-30" → "à publier avant le lun. 30 nov." */
 export const bestBeforeLabel = (d: string) => `à publier avant le ${dayLabel(d)}`
 
 /** "Changé : « shorter hook »" on a revised video (133): the owner's own words, else the
