@@ -353,3 +353,6 @@ data/
 # Node and render output (web/, motion/)
 node_modules/
 motion/out/
+
+# UI audit evidence (screenshots stay local)
+docs/ui-audit/**/screenshots/

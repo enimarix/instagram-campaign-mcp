@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Asset, AssetContext, ReactionInfo } from '../api/client'
 import AssetPage from './AssetPage'
 
@@ -119,6 +119,41 @@ describe('AssetPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Not saved: caption has 31 hashtags')).toBeTruthy()
     expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ caption: '#a #b' })
+  })
+
+  describe('approve with a caption typed but not saved (UI-002)', () => {
+    const APPROVED = { ...ASSET, caption: 'NEW', status: 'approved' }
+    const typeAndApprove = async (text: string) => {
+      await show()
+      fireEvent.change(screen.getByLabelText('Caption'), { target: { value: text } })
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    }
+    // approving opens the schedule sheet (jsdom has no modal dialogs)
+    beforeEach(() => { HTMLDialogElement.prototype.showModal = function () { this.open = true } })
+    const sent = (calls: Call[]) => calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.url, c.body])
+
+    it('saves the caption first, then approves', async () => {
+      const calls = stubApi({
+        'PATCH /api/assets/7': [200, { ...ASSET, caption: 'NEW' }],
+        'POST /api/assets/7/approve': [200, APPROVED],
+      })
+      await typeAndApprove('NEW')
+      await waitFor(() => expect(sent(calls)).toEqual([
+        ['PATCH', '/api/assets/7', { caption: 'NEW' }], ['POST', '/api/assets/7/approve', undefined]]))
+    })
+
+    it('a refused caption shows the error and does not approve', async () => {
+      const calls = stubApi({ 'PATCH /api/assets/7': [422, { error: 'invalid', message: 'caption has 31 hashtags' }] })
+      await typeAndApprove('#a #b')
+      expect((await screen.findByRole('alert')).textContent).toBe('caption has 31 hashtags')
+      expect(sent(calls)).toEqual([['PATCH', '/api/assets/7', { caption: '#a #b' }]])
+    })
+
+    it('an unchanged caption makes no PATCH', async () => {
+      const calls = stubApi({ 'POST /api/assets/7/approve': [200, { ...ASSET, status: 'approved' }] })
+      await typeAndApprove('old caption')
+      await waitFor(() => expect(sent(calls)).toEqual([['POST', '/api/assets/7/approve', undefined]]))
+    })
   })
 
   describe('a reaction remix', () => {

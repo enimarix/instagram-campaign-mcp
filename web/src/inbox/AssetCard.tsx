@@ -14,6 +14,7 @@ type Props = {
   preload: boolean // the next card: its preview loads ahead
   muted: boolean
   showBestBefore?: boolean // bench cards
+  settling?: boolean // a decision was just taken: the decision buttons wait a moment (UI-001)
   change?: string | null // a revised video: "Changé : « … »", what the owner asked (133)
   onToggleSound: () => void
   onApprove: () => void
@@ -25,9 +26,9 @@ type Props = {
 const onVideo = 'rounded-full bg-black/55! text-white! backdrop-blur hover:bg-black/70!' // small buttons on the video
 
 // The rail's round buttons (Reels-like): white on the video, the theme's beside it (desktop).
-function RailButton({ label, icon, onClick, primary }: { label: string; icon: ReactNode; onClick: () => void; primary?: boolean }) {
+function RailButton({ label, icon, onClick, primary, disabled }: { label: string; icon: ReactNode; onClick: () => void; primary?: boolean; disabled?: boolean }) {
   return (
-    <button type="button" onClick={onClick}
+    <button type="button" onClick={onClick} disabled={disabled}
       className="group flex min-w-14 flex-col items-center gap-1 text-xs font-medium text-white lg:text-fg">
       <span aria-hidden className={`grid size-12 place-items-center rounded-full shadow-overlay transition group-active:scale-95 ${
         primary ? 'bg-accent text-on-accent' : 'bg-black/55 backdrop-blur group-hover:bg-black/70 lg:bg-surface-2 lg:text-fg lg:group-hover:bg-line'}`}>
@@ -40,7 +41,7 @@ function RailButton({ label, icon, onClick, primary }: { label: string; icon: Re
 
 /** One screen of the review feed: the video, an overlay of what the agent says about it,
  * and the decision rail (Approve, Change, Decline). */
-export default function AssetCard({ asset: a, index, active, preload, muted, showBestBefore, change, onToggleSound, onApprove, onDecline, onChange, onSave }: Props) {
+export default function AssetCard({ asset: a, index, active, preload, muted, showBestBefore, settling, change, onToggleSound, onApprove, onDecline, onChange, onSave }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const [expanded, setExpanded] = useState(false)
 
@@ -63,7 +64,8 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
         <div className="absolute top-3 right-3 flex gap-2">
           <IconButton label={muted ? 'Sound on' : 'Mute'} icon={muted ? <SoundOffIcon /> : <SoundOnIcon />}
             onClick={onToggleSound} className={onVideo} />
-          {onSave && <IconButton label="Save for later" icon={<BookmarkIcon />} onClick={onSave} className={onVideo} />}
+          {onSave && <IconButton label="Save for later" icon={<BookmarkIcon />} onClick={onSave} disabled={settling}
+            className={`${onVideo} disabled:pointer-events-auto! disabled:opacity-100!`} />}
           <Link to={`/assets/${a.id}`} aria-label="Details" title="Details"
             className={`${buttonClass('secondary')} w-11 px-0! ${onVideo}`}>
             <InfoIcon />
@@ -96,9 +98,9 @@ export default function AssetCard({ asset: a, index, active, preload, muted, sho
       </div>
       {/* Phone: above the trial Reel choice and the undo toast, which would cover it for 5 s. */}
       <div className="absolute right-2 bottom-38 flex flex-col items-center gap-4 lg:static lg:justify-end lg:pb-6">
-        <RailButton label="Approve" icon={<CheckIcon />} onClick={onApprove} primary />
-        <RailButton label="Change" icon={<EditIcon />} onClick={onChange} />
-        <RailButton label="Decline" icon={<CloseIcon />} onClick={onDecline} />
+        <RailButton label="Approve" icon={<CheckIcon />} onClick={onApprove} disabled={settling} primary />
+        <RailButton label="Change" icon={<EditIcon />} onClick={onChange} disabled={settling} />
+        <RailButton label="Decline" icon={<CloseIcon />} onClick={onDecline} disabled={settling} />
       </div>
     </article>
   )

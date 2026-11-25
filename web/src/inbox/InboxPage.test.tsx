@@ -189,6 +189,45 @@ describe('InboxPage feed', () => {
         ['/api/assets/1/approve-and-queue', { confirmed: false }]]))
     })
 
+    it('a double-tap does not decide the next video too; a tap after 600 ms does (UI-001)', async () => {
+      const calls = stubApi({
+        'POST /api/assets/1/approve-and-queue': [200, { asset: asset(1, { status: 'scheduled' }), slot: SLOT }],
+        'POST /api/assets/2/approve-and-queue': [200, { asset: asset(2, { status: 'scheduled' }), slot: SLOT }],
+      })
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      vi.useFakeTimers() // fakes Date.now too
+      press(1, 'Approve')
+      await act(() => vi.advanceTimersByTimeAsync(100))
+      expect(cards()).toEqual(['Video 2'])
+      const rail = () => ['Approve', 'Change', 'Decline', 'Save for later'].map((name) =>
+        (within(card(2)).getByRole('button', { name }) as HTMLButtonElement).disabled)
+      expect(rail()).toEqual([true, true, true, true]) // natively: Playwright waits, readers say so
+      press(2, 'Approve') // the second tap of the double-tap, on the card that slid in
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      expect(cards()).toEqual(['Video 2'])
+      await act(() => vi.advanceTimersByTimeAsync(500)) // 600 ms after the first tap
+      expect(rail()).toEqual([false, false, false, false])
+      press(2, 'Approve') // a deliberate tap after the lock
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      expect(cards()).toEqual([])
+      await closeUndoWindow()
+      await waitFor(() => expect(posts(calls).map(([url]) => url)).toEqual([
+        '/api/assets/1/approve-and-queue', '/api/assets/2/approve-and-queue']))
+    })
+
+    it('the keys are not held back after a tap (UI-001)', async () => {
+      stubApi()
+      renderPage()
+      await screen.findByText('1 of 3 decided')
+      vi.useFakeTimers()
+      press(1, 'Approve')
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      fireEvent.keyDown(window, { key: 'a' })
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      expect(cards()).toEqual([])
+    })
+
     it('without a free slot it says so', async () => {
       stubApi({
         'POST /api/assets/1/approve-and-queue': [200, { asset: asset(1, { status: 'approved' }), slot: null }],
