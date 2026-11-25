@@ -26,11 +26,14 @@ Modes:
 Lifecycle: needs_instruction (a DM order without a note) -> scheduled (set_instruction;
 an order with an instruction or a mode starts here) -> in_production
 (create_idea(work_order_id=...) links the idea) -> in_feed (submit_asset on an asset of
-that idea; asset_id = the newest one submitted) | analysed (analyse only: the agent's
-analysis, no video) | skipped with a reason. The owner may cancel one not started.
+that idea, asset_id = the newest one submitted; or the video approved, follow_video) |
+analysed (analyse only: the agent's analysis, no video) | skipped with a reason (also
+when its video is archived, or the owner skips its DM pick). The owner may cancel one not
+started.
 A scheduled order starts the light run at once (src/agent/schedule.py order_run);
 blocked_reason says why it still waits. One open order per Trending Reel; a DM Reel sent
-twice is two orders. A DM order's pick follows it (in_production, skipped).
+twice is two orders. A DM order's pick follows it (in_production, skipped, posted; a
+cancelled or analysed order's pick is skipped).
 """
 
 from __future__ import annotations
@@ -57,6 +60,7 @@ REASON_MAX = 300
 ANALYSIS_MAX = 600
 MAX_ITEMS = 20
 CAPTION_LINE = 120
+CANCELLED = "annulée par le propriétaire"  # a cancelled DM order's pick
 _UNMADE = "NOT EXISTS (SELECT 1 FROM assets a WHERE a.idea_id = w.idea_id)"  # nothing made
 TRENDING_PROVIDER = "instagram"  # research.PROVIDER (research imports this module)
 AGENT_KEYS = ("id", "source", "source_id", "pick_id", "mode", "style", "instruction", "status",
@@ -274,12 +278,14 @@ def restyle(store: CampaignStore, asset_id: int, style: Optional[str],
     text = (f"Même vidéo, autre style : refais la vidéo {asset_id} (même sujet, même script,"
             f" même message) {how}.")
     note = (note or "").strip()
+    if len(note) > INSTRUCTION_MAX:  # the owner's words alone; our prefix never counts
+        raise ValueError(f"the note is at most {INSTRUCTION_MAX} characters ({len(note)})")
     reasons = validate_many("feedback_reasons", reasons)  # before anything is written
     extra = " ".join(x for x in (
         f"Raisons : {', '.join(reasons)}." if reasons else "",
         f"Et aussi : {note}" if note else "") if x)
-    order = _insert_owner_order(store, "change", _instruction(f"{text} {extra}" if extra else text),
-                                style, asset_id)
+    order = _insert_owner_order(store, "change", f"{text} {extra}" if extra else text, style,
+                                asset_id)
     if retire:
         if note or reasons:
             store.add_feedback(asset_id, text=note or None, reason_codes=reasons)
@@ -301,7 +307,7 @@ def refilm(store: CampaignStore, asset_id: int, why: str) -> Dict[str, Any]:
     text = (f"Même film, refait : refais la vidéo {asset_id} (même sujet, même message) dans"
             f" son style « {lemo.style_info(style)['label']} » ({style}), en changeant ce que"
             f" le propriétaire a demandé : {' '.join(why.split())}")
-    return _insert_owner_order(store, "change", text[:INSTRUCTION_MAX], style, asset_id)
+    return _insert_owner_order(store, "change", text, style, asset_id)  # never cut
 
 
 def drop_unmade(store: CampaignStore, order_id: int, reason: str) -> bool:
@@ -323,7 +329,21 @@ def recover(store: CampaignStore, stale_before: datetime) -> Dict[str, List[int]
     change order whose video got another decision since (sent back or archived meanwhile)
     is skipped: that decision replaced it. Lemo orders are the film runner's
     (film.close_orphans). ponytail: "another decision" = the video's latest agent_decision
-    names another order; an owner's change order (no agent decision) comes back."""
+    names another order; an owner's change order (no agent decision) comes back.
+    Orders a video already decided, from before follow_video: in_feed when one is approved
+    or further, skipped when all its videos are archived."""
+    with store._tx() as c:
+        done = c.execute(
+            "SELECT w.id, (SELECT a.id FROM assets a WHERE a.idea_id = w.idea_id AND a.status IN"
+            " ('approved','scheduled','publish_check','published') ORDER BY a.id DESC LIMIT 1)"
+            " AS asset_id, NOT EXISTS (SELECT 1 FROM assets a WHERE a.idea_id = w.idea_id"
+            " AND a.status <> 'archived') AS dead FROM work_orders w"
+            f" WHERE w.status='in_production' AND NOT {_UNMADE}").fetchall()
+    for r in done:
+        if r["asset_id"]:
+            mark_in_feed(store, store.get_asset(r["asset_id"]))
+        elif r["dead"]:
+            skip_order(store, r["id"], "toutes ses vidéos ont été archivées")
     with store._tx() as c:
         rows = [dict(r) for r in c.execute(
             "SELECT w.* FROM work_orders w WHERE w.status='in_production' AND w.updated_at < ?"
@@ -353,14 +373,18 @@ def remade_idea(store: CampaignStore, order: Dict[str, Any]) -> Optional[int]:
 
 def delete_order(store: CampaignStore, order_id: int) -> Dict[str, Any]:
     """The owner cancels an order not started yet (needs_instruction or scheduled; a DM
-    order's pick stays); KeyError when there is none."""
+    order's pick is skipped with it, else for_agent would list it again); KeyError when
+    there is none."""
     order = get_order(store, order_id)
     if order["status"] not in NOT_STARTED:
         raise ValueError(f"work order {order_id} is {order['status']}: only one not started"
                          " can be cancelled")
     with store._tx() as c:
-        c.execute("DELETE FROM work_orders WHERE id=? AND status IN"
-                  " ('needs_instruction','scheduled')", (order_id,))
+        if c.execute("DELETE FROM work_orders WHERE id=? AND status IN"
+                     " ('needs_instruction','scheduled')", (order_id,)).rowcount:
+            c.execute("UPDATE dm_picks SET status='skipped', skip_reason=?, updated_at=?"
+                      " WHERE id=? AND status <> 'posted'",
+                      (CANCELLED, to_iso(utcnow()), order["pick_id"]))
     return order
 
 
@@ -404,6 +428,8 @@ def analyse(store: CampaignStore, order_id: int, source_id: int, why: str) -> Di
                              "blocked_reason": None,
                              "analysis": {"why": why, "summary": stats.get("summary"),
                                           "timeline": stats["timeline"]}})
+    if order["pick_id"]:  # done, no video (a pick has no `analysed`): closed as skipped
+        dm_picks.mark_pick(store, order["pick_id"], "skipped", "analysée, pas de vidéo")
     return get_order(store, order_id)
 
 
@@ -489,6 +515,23 @@ def mark_in_feed(store: CampaignStore, asset: Dict[str, Any]) -> None:
             transition(store, asset_id, "archived", actor="system")
         except InvalidTransition:  # the owner moved it meanwhile
             pass
+
+
+def follow_video(store: CampaignStore, asset: Dict[str, Any], status: str) -> None:
+    """assets.transition, the one place a video's status changes: an order still
+    in_production follows its idea's video. Approved, scheduled or published -> in_feed
+    (mark_in_feed: submit_asset is not the only way to the Inbox); archived from ready
+    with no other version of the idea left (all archived) -> skipped. A video
+    sent back for changes keeps its order as it is."""
+    if status in ("approved", "scheduled", "published"):
+        mark_in_feed(store, asset)
+    elif status == "archived":
+        with store._tx() as c:
+            ids = [r[0] for r in c.execute(
+                "SELECT id FROM work_orders WHERE idea_id=? AND status='in_production'"
+                " AND NOT EXISTS (SELECT 1 FROM assets WHERE idea_id=? AND status <> 'archived')", (asset["idea_id"], asset["idea_id"]))]
+        for order_id in ids:
+            skip_order(store, order_id, f"la vidéo {asset['id']} a été archivée")
 
 
 def open_by_source(store: CampaignStore, source_ids: Sequence[int]) -> Dict[int, Dict]:

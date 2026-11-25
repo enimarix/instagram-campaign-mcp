@@ -76,6 +76,7 @@ def transition(
     # approved from scheduled / publish_check keeps the original approval time.
     stamp: Dict[str, Any] = {}
     if (frm, to_status) == ("ready", "approved"):
+        _no_newer_decided(store, asset_id)
         stamp["approved_at"] = to_iso(utcnow())
     elif (frm, to_status) == ("approved", "ready"):
         stamp["approved_at"] = None
@@ -86,9 +87,27 @@ def transition(
         )
     if to_status == "published":  # every publish path (run_due, reconcile) passes here
         mark_posted(store, asset_id)
+    if to_status in ("approved", "scheduled", "published") or (frm, to_status) == (
+            "ready", "archived"):
+        from .work_orders import follow_video  # here: work_orders imports this module
+
+        follow_video(store, asset, to_status)
     if actor == "owner" and frm == "ready" and asset["parent_asset_id"]:
         _change_decided(store, asset["parent_asset_id"])
     return store.get_asset(asset_id)
+
+
+def _no_newer_decided(store: CampaignStore, asset_id: int) -> None:
+    """Never two versions of one video approved: InvalidTransition when a newer version of
+    it (a child, parent_asset_id) is approved or further. ponytail: direct children only."""
+    with store._tx() as c:
+        row = c.execute("SELECT id, status FROM assets WHERE parent_asset_id = ? AND status IN"
+                        " ('approved','scheduled','publish_check','published')"
+                        " ORDER BY id DESC LIMIT 1", (asset_id,)).fetchone()
+    if row:
+        raise InvalidTransition(
+            f"la vidéo {asset_id} a une version plus récente (vidéo {row[0]}, {row[1]}) :"
+            " une seule version d'une vidéo est approuvée")
 
 
 def _change_decided(store: CampaignStore, before_id: int) -> None:
