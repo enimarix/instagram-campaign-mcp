@@ -67,31 +67,31 @@ describe('Analytics', () => {
   it('renders the KPIs, trends, posts and studio numbers', async () => {
     stubApi()
     show()
-    const kpis = screen.getByRole('region', { name: 'This week' })
-    expect(await within(kpis).findByText('3 d')).toBeTruthy() // streak
-    expect(within(kpis).getByText('1,080')).toBeTruthy()
-    expect(within(kpis).getByText('+20 in 7 d')).toBeTruthy()
+    const kpis = screen.getByRole('region', { name: 'Cette semaine' })
+    expect(await within(kpis).findByText('3 j')).toBeTruthy() // streak
+    expect(within(kpis).getByText('1 080')).toBeTruthy()
+    expect(within(kpis).getByText('+20 en 7 j')).toBeTruthy()
     expect(within(kpis).getByText('200')).toBeTruthy() // reach: two days in the last 7
     expect(within(kpis).getByText('60 %')).toBeTruthy()
-    expect(within(kpis).getByText('1 winner')).toBeTruthy()
-    expect(screen.getByRole('link', { name: /^Trends/ }).getAttribute('href')).toBe('/trends')
+    expect(within(kpis).getByText('1 gagnante')).toBeTruthy()
+    expect(screen.getByRole('link', { name: /^Tendances/ }).getAttribute('href')).toBe('/trends')
 
-    expect(screen.getByRole('img', { name: 'Followers: 1,080, +80 over the range' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Abonnés : 1 080, +80 sur la période' })).toBeTruthy()
 
-    const posts = screen.getByRole('region', { name: "This week's posts" })
+    const posts = screen.getByRole('region', { name: 'Publications de la semaine' })
     expect(within(posts).getAllByRole('listitem')).toHaveLength(3)
-    expect(within(posts).getByText('winner')).toBeTruthy()
-    expect(within(posts).getAllByRole('link', { name: 'Details' })[0].getAttribute('href')).toBe('/analytics/posts/m0')
+    expect(within(posts).getByText('gagnante')).toBeTruthy()
+    expect(within(posts).getAllByRole('link', { name: 'Détails' })[0].getAttribute('href')).toBe('/analytics/posts/m0')
     // ours shows the row's thumbnail (no per-card asset fetch), the others link to Instagram
     expect(posts.querySelector('img')?.getAttribute('src')).toBe('/api/media/7/thumb.jpg')
-    expect(within(posts).getAllByRole('link', { name: 'Open on Instagram' })).toHaveLength(2)
+    expect(within(posts).getAllByRole('link', { name: 'Ouvrir sur Instagram' })).toHaveLength(2)
 
-    const funnel = within(screen.getByRole('list', { name: 'Funnel' })).getAllByRole('listitem')
+    const funnel = within(screen.getByRole('list', { name: 'Entonnoir' })).getAllByRole('listitem')
     expect(funnel.map((li) => li.textContent)).toEqual(
-      ['produced12', 'reviewed10', 'liked6', 'approved3', 'published2', 'winner1'])
-    expect(screen.getByRole('img', { name: 'Like-rate, 7-day: 60 %, +20 % over the range' })).toBeTruthy()
+      ['Produites12', 'Revues10', 'Gardées6', 'Approuvées3', 'Publiées2', 'Gagnantes1'])
+    expect(screen.getByRole('img', { name: 'Taux de like sur 7 jours : 60 %, +20 % sur la période' })).toBeTruthy()
     expect(screen.queryByText('Calibration')).toBeNull() // 189: the agent no longer scores itself
-    expect(screen.getByText('2 liked videos expired unapproved · 1.5 render minutes')).toBeTruthy()
+    expect(screen.getByText('2 vidéos gardées expirées sans approbation · 1,5 minutes de rendu')).toBeTruthy()
     expect(screen.getByText('Too long ×4')).toBeTruthy()
   })
 
@@ -103,44 +103,44 @@ describe('Analytics', () => {
       '/api/analytics/taste?days=30': EMPTY_TASTE,
     })
     show()
-    expect(await screen.findByText(/No account data yet/)).toBeTruthy()
-    expect(await screen.findByText('No posts in the last 7 days.')).toBeTruthy()
-    expect(await screen.findByText('No videos in the last 30 days yet.')).toBeTruthy()
-    expect(screen.getByText('Nothing reviewed in the last 30 days yet.')).toBeTruthy()
-    expect(screen.getByText('No feedback reasons yet.')).toBeTruthy()
-    expect(screen.getByText('0 d')).toBeTruthy()
-    expect(await screen.findByText(/No report yet: the nightly analysis runs at 02:00/)).toBeTruthy()
+    expect(await screen.findByText(/Pas encore de données du compte/)).toBeTruthy()
+    expect(await screen.findByText('Aucune publication ces 7 derniers jours.')).toBeTruthy()
+    expect(await screen.findByText('Pas encore de vidéos ces 30 derniers jours.')).toBeTruthy()
+    expect(screen.getByText('Rien de revu ces 30 derniers jours.')).toBeTruthy()
+    expect(screen.getByText('Pas encore de raisons de retour.')).toBeTruthy()
+    expect(screen.getByText('0 j')).toBeTruthy()
+    expect(await screen.findByText(/Pas encore de rapport : l’analyse de nuit tourne à 02:00/)).toBeTruthy()
   })
 
   it('shows an error line instead of crashing', async () => {
     stubApi({ '/api/analytics/funnel?days=30': undefined })
     show()
     expect(await screen.findByRole('alert')).toBeTruthy()
-    expect(await screen.findByText('2 liked videos expired unapproved · 1.5 render minutes')).toBeTruthy()
+    expect(await screen.findByText('2 vidéos gardées expirées sans approbation · 1,5 minutes de rendu')).toBeTruthy()
   })
 
   it('refetches the account series when the range changes', async () => {
     const fetchMock = stubApi()
     show()
-    await screen.findByRole('img', { name: /^Followers: 1,080/ })
-    fireEvent.click(screen.getByRole('button', { name: '90 d' }))
+    await screen.findByRole('img', { name: /^Abonnés : 1 080/ })
+    fireEvent.click(screen.getByRole('button', { name: '90 j' }))
     expect(fetchMock).toHaveBeenCalledWith('/api/analytics/account?days=90', expect.anything())
-    expect(await screen.findByRole('img', { name: 'Followers: 1,080, +180 over the range' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '90 d' }).getAttribute('aria-pressed')).toBe('true')
+    expect(await screen.findByRole('img', { name: 'Abonnés : 1 080, +180 sur la période' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '90 j' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   it('toggles the definitions', async () => {
     stubApi()
     show()
-    const help = screen.getByRole('button', { name: 'About Studio funnel' })
-    expect(screen.queryByText(/Like-rate = liked \/ reviewed/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'About Like-rate' }))
-    expect(screen.getByText(/Like-rate = liked \/ reviewed/)).toBeTruthy()
+    const help = screen.getByRole('button', { name: 'Aide : Entonnoir du studio' })
+    expect(screen.queryByText(/Taux de like = gardées \/ revues/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Aide : Taux de like' }))
+    expect(screen.getByText(/Taux de like = gardées \/ revues/)).toBeTruthy()
     fireEvent.click(help)
     expect(help.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByText(/Produced: rendered and checked/)).toBeTruthy()
+    expect(screen.getByText(/Produites : rendues et vérifiées/)).toBeTruthy()
     fireEvent.click(help)
-    expect(screen.queryByText(/Produced: rendered and checked/)).toBeNull()
-    await screen.findByText('2 liked videos expired unapproved · 1.5 render minutes') // let the fetches settle
+    expect(screen.queryByText(/Produites : rendues et vérifiées/)).toBeNull()
+    await screen.findByText('2 vidéos gardées expirées sans approbation · 1,5 minutes de rendu') // let the fetches settle
   })
 })

@@ -23,20 +23,22 @@ function DownloadButton({ target }: { target: { source_id: number } | { url: str
       const r = await downloadReel(target)
       const by = r.source?.author ? ` (@${r.source.author})` : ''
       toast({ message: r.status === 'downloaded' || r.status === 'exists'
-        ? `Downloaded for reaction${by}` : `Not downloaded: ${r.reason ?? r.status}` })
+        ? `Téléchargé pour une réaction${by}` : `Pas téléchargé : ${r.reason ?? r.status}` })
     } catch (e) {
-      toast({ message: `Not downloaded: ${errorMessage(e)}` })
+      toast({ message: `Pas téléchargé : ${errorMessage(e)}` })
     } finally {
       setBusy(false)
     }
   }
   return (
-    // Phones show "Download" only: the full label pushed the row's other buttons to a second line.
-    <Button size="sm" variant="ghost" loading={busy} aria-label="Download for reaction" onClick={() => void download()}>
-      Download<span className="hidden sm:inline">&nbsp;for reaction</span>
+    // Phones show "Télécharger" only: the full label pushed the row's other buttons to a second line.
+    <Button size="sm" variant="ghost" loading={busy} aria-label="Télécharger pour une réaction" onClick={() => void download()}>
+      Télécharger<span className="hidden sm:inline">&nbsp;pour une réaction</span>
     </Button>
   )
 }
+
+const METRIC: Record<string, string> = { views: 'vues', likes: 'likes' }
 
 // Captions are other accounts' words: rendered as quoted text only, never as HTML.
 function TrendCard({ item }: { item: TrendItem }) {
@@ -48,11 +50,11 @@ function TrendCard({ item }: { item: TrendItem }) {
           {item.account ? `@${item.account}` : `#${item.hashtag}`}
         </span>
         {item.outlier !== null ? (
-          <Chip tone="accent">×{item.outlier} {item.metric}</Chip>
+          <Chip tone="accent">×{item.outlier} {METRIC[item.metric ?? ''] ?? item.metric}</Chip>
         ) : (
-          <Chip title={item.outlier_note ?? undefined}>no score</Chip>
+          <Chip title={item.outlier_note ?? undefined}>pas de score</Chip>
         )}
-        <span className="text-muted">posted {String(item.hour).padStart(2, '0')}:00</span>
+        <span className="text-muted">publié à {String(item.hour).padStart(2, '0')}:00</span>
         {item.duration_s !== null && <span className="text-muted">{Math.round(item.duration_s)} s</span>}
       </div>
       {item.outlier === null && item.outlier_note && (
@@ -66,7 +68,7 @@ function TrendCard({ item }: { item: TrendItem }) {
         {href && (
           <a href={href} target="_blank" rel="noopener noreferrer"
             className={`mr-auto inline-flex min-h-11 items-center ${link}`}>
-            Open on Instagram
+            Ouvrir sur Instagram
           </a>
         )}
         {href && <DownloadButton target={{ source_id: item.source_id }} />}
@@ -99,6 +101,7 @@ function useEditableList<T>(fetchAll: () => Promise<T[]>) {
 }
 
 const STATUS_TONE: Record<Inspiration['status'], Tone> = { new: 'info', used: 'success', dismissed: 'neutral' }
+const STATUS: Record<Inspiration['status'], string> = { new: 'nouvelle', used: 'utilisée', dismissed: 'écartée' }
 
 // Reels the owner pastes from the phone (step 051b); the agent reads the new ones.
 function Inspirations() {
@@ -119,23 +122,23 @@ function Inspirations() {
   return (
     <Card as="section" aria-label="Inspirations">
       <h2 className="font-semibold">Inspirations</h2>
-      <p className="text-xs text-muted">Paste a Reel link and say what you like about it. The agent learns the format, never copies it.</p>
+      <p className="text-xs text-muted">Colle un lien de Reel et dis ce qui te plaît. L’agent apprend le format, il ne le copie jamais.</p>
       <form onSubmit={submit} className="mt-3 flex flex-col gap-2">
-        <input aria-label="Reel link" type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)}
+        <input aria-label="Lien du Reel" type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)}
           placeholder="https://www.instagram.com/reel/…"
           className={`${field} min-w-0`} />
         <div className="flex gap-2">
           <input aria-label="Note" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)}
-            placeholder="this format is funny"
+            placeholder="ce format est drôle"
             className={`${field} min-w-0 flex-1`} />
-          <Button type="submit" variant="primary">Add</Button>
+          <Button type="submit" variant="primary">Ajouter</Button>
         </div>
       </form>
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       {items === null ? (
         !error && <Skeleton className="mt-3 h-12" />
       ) : items.length === 0 ? (
-        <p className="mt-3 text-sm text-muted">No inspirations yet</p>
+        <p className="mt-3 text-sm text-muted">Pas encore d’inspirations</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {items.map((i) => {
@@ -143,25 +146,25 @@ function Inspirations() {
             return (
               <li key={i.id} className="rounded-control bg-surface-2 p-3 text-sm">
                 <div className="flex items-start gap-2">
-                  <p className="min-w-0 flex-1 break-words">{i.note ?? <span className="text-muted">No note</span>}</p>
-                  <Chip tone={STATUS_TONE[i.status]}>{i.status}</Chip>
+                  <p className="min-w-0 flex-1 break-words">{i.note ?? <span className="text-muted">Pas de note</span>}</p>
+                  <Chip tone={STATUS_TONE[i.status]}>{STATUS[i.status]}</Chip>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   {href && (
                     <a href={href} target="_blank" rel="noopener noreferrer"
                       className={`mr-auto inline-flex min-h-11 items-center ${link}`}>
-                      Open
+                      Ouvrir
                     </a>
                   )}
                   {href && <DownloadButton target={{ url: i.url }} />}
                   {href && <AskPermissionButton target={{ url: i.url }} />}
                   {i.status !== 'dismissed' && (
                     <Button size="sm" variant="ghost" onClick={() => void act(() => setInspirationStatus(i.id, 'dismissed'))}>
-                      Dismiss
+                      Écarter
                     </Button>
                   )}
                   <Button size="sm" variant="ghost" className="text-danger!" onClick={() => void act(() => deleteInspiration(i.id))}>
-                    Delete
+                    Supprimer
                   </Button>
                 </div>
               </li>
@@ -184,25 +187,25 @@ export default function Trends() {
   const tags = report ? Object.entries(report.hashtags) : []
   return (
     <section>
-      <PageHeader title="Trends" back={{ to: '/trending', label: 'Trending' }}>
-        Last 14 days. ×N = the post against its account's (or hashtag's) median. The watched topics are edited on Trending.
+      <PageHeader title="Tendances" back={{ to: '/trending', label: 'Trending' }}>
+        14 derniers jours. ×N = la publication face à la médiane de son compte (ou de son hashtag). Les sujets suivis se modifient sur Trending.
       </PageHeader>
       <Inspirations />
-      <section aria-label="Trend report" className="mt-8">
+      <section aria-label="Rapport des tendances" className="mt-8">
         {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
         {report === null ? (
           !error && <Skeleton className="h-32" />
         ) : report.accounts.length === 0 && tags.length === 0 ? (
-          <EmptyState title="No trends yet">Add topics on Trending, then refresh.</EmptyState>
+          <EmptyState title="Pas encore de tendances">Ajoute des sujets sur Trending, puis actualise.</EmptyState>
         ) : (
           <>
-            {report.accounts.length > 0 && <h2 className="text-lg font-semibold">Watched accounts</h2>}
+            {report.accounts.length > 0 && <h2 className="text-lg font-semibold">Comptes suivis</h2>}
             <ul className="mt-3 grid gap-3 md:grid-cols-2">
               {report.accounts.map((i) => <TrendCard key={i.source_id} item={i} />)}
             </ul>
             {tags.map(([tag, items]) => (
               <section key={tag} aria-label={`#${tag}`} className="mt-6">
-                <h2 className="text-lg font-semibold">#{tag} <span className="text-xs font-normal text-muted">ranked within the hashtag</span></h2>
+                <h2 className="text-lg font-semibold">#{tag} <span className="text-xs font-normal text-muted">classés dans le hashtag</span></h2>
                 <ul className="mt-3 grid gap-3 md:grid-cols-2">
                   {items.map((i) => <TrendCard key={i.source_id} item={i} />)}
                 </ul>

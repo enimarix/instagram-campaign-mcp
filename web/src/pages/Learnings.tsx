@@ -15,7 +15,7 @@ import { Sheet } from '../ui/Sheet'
 import { field, link, type Tone } from '../ui/styles'
 import { useToast } from '../ui/useToast'
 import { Body } from './Analytics'
-import { humanize, TAGS, useLoad } from './load'
+import { humanize, tagName, TAGS, useLoad } from './load'
 
 const KIND: Record<LearningKind, [Tone, string]> = { do: ['success', 'Do'], dont: ['danger', "Don't"], hypothesis: ['info', 'Idea'] }
 const ORIGIN: Record<Learning['origin'], string> = { taste: 'Your taste', audience: 'Audience', ads: 'Ads' }
@@ -40,7 +40,6 @@ const FIXED: Record<string, string[]> = {
   hour: Array.from({ length: 24 }, (_, h) => String(h)),
   duration: ['<15 s', '15–30 s', '30–60 s', '60 s+'], // breakdowns.duration_bucket
 }
-const tagName = (tag: string) => TAGS.find(([t]) => t === tag)?.[1] ?? humanize(tag)
 const values = (tag: string, tax?: Taxonomy | null): [string, string][] =>
   VOCAB[tag]
     ? (tax?.[VOCAB[tag]]?.values ?? []).map((v) => [v.id, v.label])

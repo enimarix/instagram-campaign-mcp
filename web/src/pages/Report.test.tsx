@@ -60,28 +60,28 @@ describe('ReportPage', () => {
     expect(screen.getByText(/See hook_type and/)).toBeTruthy() // no italics inside a word
     expect(screen.getByText('code').tagName).toBe('CODE')
 
-    const best = screen.getByRole('region', { name: 'Best' })
+    const best = screen.getByRole('region', { name: 'Meilleures' })
     expect(within(best).getByRole('link', { name: 'The quiz' }).getAttribute('href')).toBe('/analytics/posts/m1')
     expect(best.querySelector('img')?.getAttribute('src')).toBe('/api/media/7/thumb.jpg')
     expect(within(best).getByText(/hook holds/)).toBeTruthy()
-    const worst = screen.getByRole('region', { name: 'Worst' })
-    expect(within(worst).getByRole('link', { name: 'Untitled post' }).getAttribute('href')).toBe('/analytics/posts/m%2F2')
-    expect(within(worst).getByText('Exit · 0:06')).toBeTruthy()
+    const worst = screen.getByRole('region', { name: 'Moins bonnes' })
+    expect(within(worst).getByRole('link', { name: 'Publication sans titre' }).getAttribute('href')).toBe('/analytics/posts/m%2F2')
+    expect(within(worst).getByText('Sortie · 0:06')).toBeTruthy()
     expect(within(worst).getByText(/The average viewer leaves/)).toBeTruthy()
 
-    const ideas = screen.getByRole('region', { name: 'Ideas to try next' })
+    const ideas = screen.getByRole('region', { name: 'Idées à tester ensuite' })
     expect(within(ideas).getByText('Question hooks keep viewers')).toBeTruthy()
-    expect(within(ideas).getByText(/Change hook type/)).toBeTruthy()
+    expect(within(ideas).getByText(/Changer hook type/)).toBeTruthy()
     expect(within(ideas).getByText('pov')).toBeTruthy()
 
-    const numbers = screen.getByRole('region', { name: "The day's numbers" })
-    expect(within(numbers).getByText('Old enough to judge').nextElementSibling?.textContent).toBe('1')
-    expect(within(numbers).getByText('Videos made').nextElementSibling?.textContent).toBe('9')
+    const numbers = screen.getByRole('region', { name: 'Les chiffres du jour' })
+    expect(within(numbers).getByText('Assez anciennes pour être jugées').nextElementSibling?.textContent).toBe('1')
+    expect(within(numbers).getByText('Vidéos faites').nextElementSibling?.textContent).toBe('9')
 
-    const viewers = screen.getByRole('region', { name: 'From viewers' })
-    expect(viewers.querySelector('blockquote')?.textContent).toBe('“so funny <b>lol</b>”') // text, not markup
-    expect(within(viewers).getByText(/from viewers · 12 likes/)).toBeTruthy()
-    expect(within(viewers).getByRole('link', { name: 'the post' }).getAttribute('href')).toBe('https://www.instagram.com/reel/1/')
+    const viewers = screen.getByRole('region', { name: 'Ce que disent les spectateurs' })
+    expect(viewers.querySelector('blockquote')?.textContent).toBe('« so funny <b>lol</b> »') // text, not markup
+    expect(within(viewers).getByText(/des spectateurs · 12 likes/)).toBeTruthy()
+    expect(within(viewers).getByRole('link', { name: 'la publication' }).getAttribute('href')).toBe('https://www.instagram.com/reel/1/')
   })
 
   it('shows raw HTML in the summary as text and never runs it', async () => {
@@ -96,25 +96,25 @@ describe('ReportPage', () => {
   it('shows the empty and quiet states', async () => {
     stubApi({ '/api/reports?limit=60': [] })
     show('/reports')
-    expect(await screen.findByText('No report yet')).toBeTruthy()
-    expect(screen.getByText(/runs at 02:00/)).toBeTruthy()
+    expect(await screen.findByText('Pas encore de rapport')).toBeTruthy()
+    expect(screen.getByText(/tourne à 02:00/)).toBeTruthy()
     cleanup()
 
     stubApi({ '/api/reports/2026-11-17': { ...REPORT, report_date: '2026-11-17', summary: null, analysis: {}, posts: {}, facts: { yesterday: {} } }, '/api/reports?limit=60': ARCHIVE })
     show('/reports/2026-11-17')
-    expect(await screen.findByText(/Quiet day: nothing was published/)).toBeTruthy()
-    expect(screen.queryByRole('region', { name: 'Best' })).toBeNull()
+    expect(await screen.findByText(/Journée calme : rien n’a été publié/)).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Meilleures' })).toBeNull()
     cleanup()
 
     // facts stored, the analysis not run yet: not a quiet day
     stubApi({ '/api/reports/2026-11-17': { ...REPORT, summary: null, analysis: {}, posts: {} }, '/api/reports?limit=60': ARCHIVE })
     show('/reports/2026-11-17')
-    expect(await screen.findByText(/Not analysed yet/)).toBeTruthy()
+    expect(await screen.findByText(/Pas encore analysé/)).toBeTruthy()
     cleanup()
 
     stubApi({ '/api/reports?limit=60': ARCHIVE })
     show('/reports/2020-01-01')
-    expect(await screen.findByText('No report for this day.')).toBeTruthy()
+    expect(await screen.findByText('Pas de rapport pour ce jour.')).toBeTruthy()
   })
 
   it('moves between days with older / newer and the archive', async () => {
@@ -124,14 +124,14 @@ describe('ReportPage', () => {
     })
     show('/reports/2026-11-16')
     await screen.findByRole('heading', { name: 'Good day' })
-    const nav = screen.getByRole('navigation', { name: 'Other days' })
-    expect(await within(nav).findByRole('link', { name: 'Newer →' })).toHaveProperty('href', expect.stringMatching(/\/reports\/2026-11-17$/))
-    const archive = screen.getByRole('region', { name: 'All reports' })
+    const nav = screen.getByRole('navigation', { name: 'Autres jours' })
+    expect(await within(nav).findByRole('link', { name: 'Plus récent →' })).toHaveProperty('href', expect.stringMatching(/\/reports\/2026-11-17$/))
+    const archive = screen.getByRole('region', { name: 'Tous les rapports' })
     expect(within(archive).getByRole('link', { current: 'page' }).textContent).toContain('2026-11-16')
-    expect(within(archive).getByText('Quiet day')).toBeTruthy()
-    fireEvent.click(within(nav).getByRole('link', { name: '← Older' }))
+    expect(within(archive).getByText('Journée calme')).toBeTruthy()
+    fireEvent.click(within(nav).getByRole('link', { name: '← Plus ancien' }))
     expect(await screen.findByText('Older day', { selector: 'p' })).toBeTruthy()
-    expect(within(screen.getByRole('navigation', { name: 'Other days' })).getByRole('link', { name: 'Newer →' }))
+    expect(within(screen.getByRole('navigation', { name: 'Autres jours' })).getByRole('link', { name: 'Plus récent →' }))
       .toHaveProperty('href', expect.stringMatching(/\/reports\/2026-11-16$/))
   })
 })
@@ -140,15 +140,15 @@ describe('TodayReport (Analytics card)', () => {
   it('shows the newest report and links to it', async () => {
     stubApi({ '/api/reports/latest': REPORT })
     show('/today')
-    const card = screen.getByRole('region', { name: "Today's report" })
-    expect(await within(card).findByRole('link', { name: 'Read the report' })).toHaveProperty('href', expect.stringMatching(/\/reports\/2026-11-16$/))
+    const card = screen.getByRole('region', { name: 'Rapport du jour' })
+    expect(await within(card).findByRole('link', { name: 'Lire le rapport' })).toHaveProperty('href', expect.stringMatching(/\/reports\/2026-11-16$/))
     expect(within(card).getByText(/Good day/)).toBeTruthy()
-    expect(within(card).getByText('1 best · 1 worst · 1 ideas to try')).toBeTruthy()
+    expect(within(card).getByText('1 meilleures · 1 moins bonnes · 1 idées à tester')).toBeTruthy()
   })
 
   it('says when the first report will come', async () => {
     stubApi({})
     show('/today')
-    expect(await screen.findByText('No report yet: the nightly analysis runs at 02:00.')).toBeTruthy()
+    expect(await screen.findByText('Pas encore de rapport : l’analyse de nuit tourne à 02:00.')).toBeTruthy()
   })
 })

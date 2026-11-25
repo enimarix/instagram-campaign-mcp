@@ -11,7 +11,7 @@ import {
   type CalendarPost,
   type Slot,
 } from '../api/client'
-import { localDate } from '../inbox/ui'
+import { COMMENTARY_CONFIRMATION, localDate } from '../inbox/ui'
 import { Button } from '../ui/Button'
 import { Card, EmptyState } from '../ui/Card'
 import { Chip } from '../ui/Chip'
@@ -23,9 +23,10 @@ import { dayLabel, slotLabel } from './when'
 const STATUS_TONE: Record<CalendarPost['status'], Tone> = {
   pending: 'info', publishing: 'warn', published: 'success', failed: 'danger', cancelled: 'neutral',
 }
-const RELEASE_CONFIRM = 'I checked: it is not on Instagram. Release this video so it can be queued again?'
-const RIGHTS_CONFIRM =
-  'I checked this reaction video: my own take is a substantial part and the creator is credited.'
+const STATUS_LABEL: Record<CalendarPost['status'], string> = {
+  pending: 'en attente', publishing: 'en cours', published: 'publiée', failed: 'échouée', cancelled: 'annulée',
+}
+const RELEASE_CONFIRM = 'J’ai vérifié : elle n’est pas sur Instagram. Libérer cette vidéo pour qu’elle puisse être reprogrammée ?'
 
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
 const monday = (d: Date) => addDays(d, -((d.getDay() + 6) % 7))
@@ -40,7 +41,7 @@ async function replan(id: number) {
   try {
     return await replanPost(id)
   } catch (e) {
-    if (!(e instanceof ApiError && e.code === 'rights' && window.confirm(`${errorMessage(e)}\n\n${RIGHTS_CONFIRM}`)))
+    if (!(e instanceof ApiError && e.code === 'rights' && window.confirm(`${errorMessage(e)}\n\n${COMMENTARY_CONFIRMATION}`)))
       throw e
     return replanPost(id, true)
   }
@@ -83,11 +84,11 @@ export default function CalendarPage() {
   const page: Page = { act, show, replanned: setNotice, pick: setPicking }
   return (
     <div className="space-y-4">
-      <PageHeader title="Calendar" actions={
-        <div className="flex gap-1">
-          <Button size="sm" onClick={() => setWeek(addDays(week, -7))}>Previous week</Button>
-          <Button size="sm" onClick={() => setWeek(monday(new Date()))}>This week</Button>
-          <Button size="sm" onClick={() => setWeek(addDays(week, 7))}>Next week</Button>
+      <PageHeader title="Calendrier" actions={
+        <div className="flex flex-wrap gap-1">
+          <Button size="sm" onClick={() => setWeek(addDays(week, -7))}>Semaine précédente</Button>
+          <Button size="sm" onClick={() => setWeek(monday(new Date()))}>Cette semaine</Button>
+          <Button size="sm" onClick={() => setWeek(addDays(week, 7))}>Semaine suivante</Button>
         </div>
       }>
         {cal && `${dayLabel(cal.days[0].date)} – ${dayLabel(cal.days.at(-1)!.date)}`}
@@ -95,10 +96,9 @@ export default function CalendarPage() {
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {notice && (
         <p role="status" className="rounded-card border border-line/60 bg-surface-2 p-3 text-sm">
-          Re-planned for <strong>{slotLabel(notice.local)}</strong> —{' '}
-          <button type="button" className={link} onClick={() => show(notice.local)}>show it</button> or{' '}
-          <button type="button" className={link} onClick={() => setPicking(notice)}>reschedule it</button>{' '}
-          to pick another time.
+          Reprogrammée le <strong>{slotLabel(notice.local)}</strong> —{' '}
+          <button type="button" className={link} onClick={() => show(notice.local)}>la voir</button> ou{' '}
+          <button type="button" className={link} onClick={() => setPicking(notice)}>changer l’heure</button>.
         </p>
       )}
       {picking && (
@@ -107,18 +107,18 @@ export default function CalendarPage() {
       )}
       {cal && cal.publish_check.length > 0 && (
         <section aria-labelledby="check-title" className="rounded-card border border-warn/30 bg-warn/12 p-4 text-sm">
-          <h2 id="check-title" className="font-semibold">Did these reach Instagram?</h2>
+          <h2 id="check-title" className="font-semibold">Ces vidéos sont-elles arrivées sur Instagram ?</h2>
           <p className="mt-1">
-            The publish may have gone through. The worker looks for them on the account; if a video is
-            not there, release it so it can be queued again.
+            La publication est peut-être passée. Le Worker les cherche sur le compte ; si une vidéo
+            n’y est pas, libère-la pour qu’elle puisse être reprogrammée.
           </p>
           <ul className="mt-2 space-y-2">
             {cal.publish_check.map((a) => (
-              <li key={a.id} aria-label={`Video ${a.id}`} className="flex flex-wrap items-center gap-2">
-                <Link to={`/assets/${a.id}`} className={`font-medium ${link}`}>Video {a.id}</Link>
+              <li key={a.id} aria-label={`Vidéo ${a.id}`} className="flex flex-wrap items-center gap-2">
+                <Link to={`/assets/${a.id}`} className={`font-medium ${link}`}>Vidéo {a.id}</Link>
                 <span className="min-w-0 flex-1 truncate">{a.caption}</span>
                 <Button size="sm" onClick={() => window.confirm(RELEASE_CONFIRM) && act(() => releaseAsset(a.id))}>
-                  Not on Instagram → release
+                  Pas sur Instagram → libérer
                 </Button>
               </li>
             ))}
@@ -140,7 +140,7 @@ export default function CalendarPage() {
         </ol>
       )}
       {cal?.days.every((d) => !d.posts.length) && (
-        <EmptyState title="Nothing queued this week.">Approved videos land here once they are scheduled.</EmptyState>
+        <EmptyState title="Rien de programmé cette semaine.">Les vidéos approuvées arrivent ici une fois programmées.</EmptyState>
       )}
     </div>
   )
@@ -149,17 +149,17 @@ export default function CalendarPage() {
 function PostCard({ post: p, page: { act, show, replanned, pick } }: { post: CalendarPost; page: Page }) {
   const moved = p.moved_to
   return (
-    <Card as="li" aria-label={`Post ${p.id}`} className="p-3! text-sm">
+    <Card as="li" aria-label={`Publication ${p.id}`} className="p-3! text-sm">
       <div className="flex flex-wrap items-center gap-1.5">
         <strong className="tabular-nums">{p.local.slice(11, 16)}</strong>
-        <Chip tone={STATUS_TONE[p.status]}>{p.status}</Chip>
-        {p.replanned && <Chip tone="warn">re-planned</Chip>}
+        <Chip tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Chip>
+        {p.replanned && <Chip tone="warn">reprogrammée</Chip>}
       </div>
       {p.caption && <p className="mt-1 line-clamp-3 break-words">{p.caption}</p>}
       {p.error && <p className={`mt-1 text-xs ${p.status === 'failed' ? 'text-danger' : 'text-muted'}`}>{p.error}</p>}
       {moved && (
         <p className="mt-1 text-xs text-muted">
-          Re-planned →{' '}
+          Reprogrammée →{' '}
           <button type="button" className={`inline-flex min-h-11 items-center ${link}`} onClick={() => show(moved.local)}>
             {slotLabel(moved.local)}
           </button>
@@ -167,22 +167,22 @@ function PostCard({ post: p, page: { act, show, replanned, pick } }: { post: Cal
       )}
       <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
         {p.asset_id !== null && (
-          <Link to={`/assets/${p.asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Video {p.asset_id}</Link>
+          <Link to={`/assets/${p.asset_id}`} className={`inline-flex min-h-11 items-center ${link}`}>Vidéo {p.asset_id}</Link>
         )}
         {p.permalink?.startsWith('https://') && (
-          <a href={p.permalink} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>On Instagram</a>
+          <a href={p.permalink} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center ${link}`}>Sur Instagram</a>
         )}
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
-        {p.status === 'pending' && <Button size="sm" onClick={() => pick(p)}>Reschedule</Button>}
+        {p.status === 'pending' && <Button size="sm" onClick={() => pick(p)}>Changer l’heure</Button>}
         {p.status === 'failed' && (
           <Button size="sm" variant="primary" onClick={() => act(async () => replanned(await replan(p.id)))}>
-            Re-plan
+            Reprogrammer
           </Button>
         )}
         {(p.status === 'pending' || p.status === 'failed') && (
-          <Button size="sm" variant="ghost" onClick={() => window.confirm('Cancel this post?') && act(() => cancelPost(p.id))}>
-            Cancel
+          <Button size="sm" variant="ghost" onClick={() => window.confirm('Annuler cette publication ?') && act(() => cancelPost(p.id))}>
+            Annuler
           </Button>
         )}
       </div>
