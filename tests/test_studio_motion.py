@@ -67,14 +67,15 @@ def test_validate_props_uses_the_templates_own_message():
 @needs_motion
 @pytest.mark.parametrize("template", ["FactQuest", "BossBattle", "QuizChest", "DialogStory",
                                       "PixelSkit", "VoxelQuest", "PaperStory", "Editorial", "PixelCinema",
-                                      "Macro3D", "SitcomSkit"])
+                                      "Macro3D", "SitcomSkit", "OpenWorld"])
 def test_schema_events_give_every_template_a_timeline(template):
     v = motion.validate_props(template, _example(template.lower()))
     timeline = recipe.compress_timeline(v["events"])
     total = v["durationInFrames"] / v["fps"]
     assert timeline[0]["t"] == 0 and timeline[0]["e"].startswith("hook card: '")
     assert all(e["t"] + e["d"] <= total + 0.1 for e in timeline)
-    assert any(e["e"].startswith("music bed") for e in timeline)
+    # OpenWorld has no bed of its own (owner 2026-11-25): an Instagram track rides along
+    assert template == "OpenWorld" or any(e["e"].startswith("music bed") for e in timeline)
     assert len(json.dumps(timeline)) <= recipe.TIMELINE_BYTES
 
 
@@ -152,14 +153,15 @@ def test_schema_export_gives_every_template_a_style():
     styles = {s["id"]: s["label"] for s in out["styles"]}
     assert styles == {"pixel": "Pixel 8-bit", "voxel": "3D 8-bit", "paper": "Papier",
                       "cutaway": "Pixel explicatif", "editorial": "Éditorial", "cinema": "Pixel ciné",
-                      "macro3d": "Macro 3D", "sitcom": "Sitcom 3D", "physique": "Physique Scan"}
+                      "macro3d": "Macro 3D", "sitcom": "Sitcom 3D", "physique": "Physique Scan",
+                      "gta6": "GTA 6"}
     by_id = {t["id"]: t["style"] for t in out["templates"]}
     assert set(by_id.values()) <= set(styles)
     assert by_id["VoxelQuest"] == "voxel" and by_id["FactQuest"] == "pixel"
     assert by_id["PaperStory"] == "paper"
     assert by_id["Cutaway"] == "cutaway" and by_id["Editorial"] == "editorial"
     assert by_id["PixelCinema"] == "cinema" and by_id["Macro3D"] == "macro3d"
-    assert by_id["SitcomSkit"] == "sitcom"
+    assert by_id["SitcomSkit"] == "sitcom" and by_id["OpenWorld"] == "gta6"
 
 
 @needs_motion

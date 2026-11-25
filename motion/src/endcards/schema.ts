@@ -48,7 +48,7 @@ export const DEFAULT_TAGLINE = {
 } as const;
 
 /** One card per style; a template ends on its style's card. */
-export const END_CARD_STYLES = ["voxel", "paper", "clean", "pixel", "live", "cutaway", "editorial", "cinema", "macro3d", "sitcom", "physique"] as const;
+export const END_CARD_STYLES = ["voxel", "paper", "clean", "pixel", "live", "cutaway", "editorial", "cinema", "macro3d", "sitcom", "physique", "gta6"] as const;
 export type EndCardStyle = (typeof END_CARD_STYLES)[number];
 
 /**
@@ -60,7 +60,8 @@ export type EndCardStyle = (typeof END_CARD_STYLES)[number];
  * cinema the pixel set the card's beam and rain play over (src/cinema/scenes.ts),
  * macro3d Marco, the coach of the Macro 3D videos (src/macro3d/Presenter.tsx),
  * sitcom the studio sign « APPLAUDISSEZ » lighting up over the sunburst (SitcomEndCard),
- * physique a band of type rolling round the tile (PhysiqueEndCard).
+ * physique a band of type rolling round the tile (PhysiqueEndCard),
+ * gta6 the duo of the GTA 6 videos at the sunset (Gta6EndCard).
  */
 export const CAMEOS = {
   voxel: [...FORM_IDS, ...FOOD_IDS],
@@ -74,6 +75,7 @@ export const CAMEOS = {
   macro3d: ["marco"],
   sitcom: ["applause"],
   physique: ["band"],
+  gta6: ["duo"],
 } as const satisfies Record<EndCardStyle, readonly string[]>;
 
 /** The cameo a card shows: the one asked for, else its style's first. */
@@ -83,8 +85,8 @@ export const cameoOf = (style: EndCardStyle, cameo?: string): string => cameo ??
  * Each card's own length (a standalone clip, e.g. Track A recipes) and when its choreography
  * has settled: every card then holds at least 1 s on the finished picture.
  */
-export const CARD_S = { voxel: 3.5, paper: 3.5, clean: 3.5, pixel: 4, live: 4, cutaway: 4, editorial: 3.5, cinema: 3.5, macro3d: 3.5, sitcom: 3.5, physique: 3.5 } as const satisfies Record<EndCardStyle, number>;
-export const SETTLE_S = { voxel: 2.3, paper: 2.3, clean: 2.1, pixel: 2.8, live: 2.6, cutaway: 2.8, editorial: 2.3, cinema: 2.3, macro3d: 2.4, sitcom: 2.3, physique: 2.3 } as const satisfies Record<EndCardStyle, number>;
+export const CARD_S = { voxel: 3.5, paper: 3.5, clean: 3.5, pixel: 4, live: 4, cutaway: 4, editorial: 3.5, cinema: 3.5, macro3d: 3.5, sitcom: 3.5, physique: 3.5, gta6: 3.5 } as const satisfies Record<EndCardStyle, number>;
+export const SETTLE_S = { voxel: 2.3, paper: 2.3, clean: 2.1, pixel: 2.8, live: 2.6, cutaway: 2.8, editorial: 2.3, cinema: 2.3, macro3d: 2.4, sitcom: 2.3, physique: 2.3, gta6: 2.3 } as const satisfies Record<EndCardStyle, number>;
 
 export { SFX_PEAK_LUFS } from "../lib/duck.ts";
 /**

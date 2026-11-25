@@ -144,6 +144,13 @@ SCRIPTS = {
                           for s in (p["hook"], *p["beats"], p["payoff"])]
                          + ([p["outro"]] if p.get("outro") else []),
     "Editorial": _editorial_script,
+    # = openWorldScript in motion/src/templates/OpenWorld/schema.ts
+    "OpenWorld": lambda p: [_editorial_line(p["hook"]["lead"], p["hook"]["key"]),
+                            _editorial_line(p["mission"]["title"], p["mission"]["objective"]),
+                            p["chase"]["line"], p["loot"]["line"], p["clear"]["line"],
+                            _editorial_line(p["passed"].get("title", "Mission réussie"),
+                                            p["passed"]["reward"]),
+                            *([p["outro"]] if p.get("outro") else [])],
     "PixelCinema": lambda p: [_cinema_line([p["hook"].get("strike", ""), p["hook"]["line"]]),
                               *(_cinema_beat(b) for b in p["beats"]),
                               *([p["outro"]] if p.get("outro") else [])],

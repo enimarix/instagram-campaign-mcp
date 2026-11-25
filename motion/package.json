@@ -26,6 +26,7 @@
     "still:editorial": "node render.mjs --template Editorial --props props/editorial.json --out out/editorial.png --still --frame 278 && node render.mjs --template EndCard --props props/editorial-endcard.json --out out/editorial-endcard.png --still --frame 90",
     "still:pixelcinema": "node render.mjs --template PixelCinema --props props/pixelcinema.json --out out/pixelcinema.png --still --frame 330",
     "still:macro3d": "node render.mjs --template Macro3D --props props/macro3d.json --out out/macro3d.png --still --frame 400 && node render.mjs --template EndCard --props props/macro3d-endcard.json --out out/macro3d-endcard.png --still --frame 90",
+    "still:openworld": "node render.mjs --template OpenWorld --props props/openworld.json --out out/openworld.png --still --frame 14 && node render.mjs --template EndCard --props props/gta6-endcard.json --out out/gta6-endcard.png --still --frame 90",
     "still:sitcom": "node render.mjs --template SitcomSkit --props props/sitcomskit.json --out out/sitcom.png --still --frame 120 && node render.mjs --template EndCard --props props/sitcom-endcard.json --out out/sitcom-endcard.png --still --frame 90"
   },
   "dependencies": {

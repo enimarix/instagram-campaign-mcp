@@ -79,6 +79,14 @@
       "end_card": "physique",
       "address": "tu",
       "enabled": true
+    },
+    "gta6": {
+      "label": "GTA 6",
+      "description": "Mission de jeu en monde ouvert au coucher de soleil : écran de chargement, Muscle Beach, néons, étoiles de recherche, objets à ramasser et « Mission réussie ».",
+      "preview": {"still": "gta6/gta6-cover.png", "clip": "gta6/gta6-phone.mp4"},
+      "end_card": "gta6",
+      "address": "vous",
+      "enabled": true
     }
   }
 }

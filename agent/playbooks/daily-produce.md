@@ -443,7 +443,7 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    mB tile, macroBody, « 7 jours gratuits », macrobody.fr are drawn by the studio: never
    write them, never a price anywhere). Adapt it to this video's story:
    - **tagline**: one short line tied to the payoff, in the video's address (e.g. « Fini
-     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D, SitcomSkit, PhysiqueScan), `cta`
+     les 308 kcal de trop à 21 h. »). The prop is `outro` (FactQuest, VoxelQuest, PaperStory, Cutaway, Editorial, PixelCinema, Macro3D, SitcomSkit, PhysiqueScan, OpenWorld), `cta`
      (QuizChest) or `tagline` (BossBattle, DialogStory, PixelSkit); no line = the app's own.
    - **accent**: the macro colour of the topic: `protein`, `carbs`, `fat`, `kcal`, or
      `brand` (emerald) when none fits; on the templates that take an `accent` prop.
@@ -505,6 +505,18 @@ Keep it short: the aim is enough material for the missing ideas, not a report.
    themselves (orbit, push in, down into the cut, along the muscle): only the scene's first
    `camera` may be set. A stated number needs its source in `citations`. One preview of at
    most 3 frames is enough.
+   **OpenWorld (« GTA 6 »)**: the topic told as a mission in an open-world crime game at
+   sunset. One voice line per scene, in this order: the `hook` (lead in white, key in the
+   sunset gradient: the craving, the habit, the myth), the `mission` (a short title + the
+   objective, « Objectif : … »), the `chase` (what hunts the viewer, shown as a wanted level:
+   `label` under 1-5 `stars`; the line says when and where, the `sign` neon shows that time or
+   number, the small `side` neon the temptation), the `loot` (1-3 pickups, `item` egg, skyr,
+   chicken, shaker or bowl, each with its real `grams` and `kcal`; `goal` = their total grams,
+   `kcal` = the counter before them), the `clear` (the chase shaken off; its `label` replaces
+   the stars'), `passed` (« Mission réussie » + the `reward`, a `detail` line), `outro` = the
+   tagline. `highlight` = the words drawn in yellow, a part of the line. The two characters,
+   the sets and the cameras are the studio's: never describe them. Pick an Instagram track
+   with an open-world mood (G-funk, West Coast, trap, phonk) for `music_audio_id`.
 4. Send them in parallel, each with a `caption` (1–3 short lines in the video's
    language, adds something the video does not say, at most 5 hashtags; sources as
    "Source: <site name>"):

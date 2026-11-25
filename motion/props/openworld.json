@@ -1,0 +1,57 @@
+{
+ "hook": {
+  "lead": "Votre fringale de 23 h",
+  "key": "ce n'est pas la volonté"
+ },
+ "sign": "23:00",
+ "side": "SNACK",
+ "mission": {
+  "title": "Sèche sans fringale",
+  "objective": "Objectif : moins de 1 800 kcal par jour"
+ },
+ "chase": {
+  "line": "Une fringale vous traque. 23 h, le snack d'en bas est ouvert.",
+  "highlight": "fringale",
+  "label": "Fringale",
+  "stars": 3
+ },
+ "loot": {
+  "line": "Au dîner, prenez 30 g de protéines.",
+  "highlight": "30 g de protéines",
+  "items": [
+   {
+    "item": "egg",
+    "grams": 13,
+    "kcal": 140
+   },
+   {
+    "item": "skyr",
+    "grams": 17,
+    "kcal": 90
+   }
+  ],
+  "goal": 30,
+  "bar": "Protéines",
+  "kcal": 1800
+ },
+ "clear": {
+  "line": "Fringale semée. Rien à grignoter à 23 h.",
+  "highlight": "Rien",
+  "label": "Fringale semée"
+ },
+ "passed": {
+  "title": "Mission réussie",
+  "reward": "+30 g de protéines au dîner",
+  "detail": "0 fringale · 230 kcal"
+ },
+ "outro": "Chaque repas, une mission.",
+ "address": "vous",
+ "accent": "brand",
+ "citations": [
+  {
+   "url": "https://pubmed.ncbi.nlm.nih.gov/25926512/",
+   "title": "Leidy et al. 2015, Am J Clin Nutr: higher protein intake increases satiety and reduces appetite"
+  }
+ ],
+ "music": "none"
+}

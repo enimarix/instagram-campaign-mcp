@@ -34,13 +34,15 @@ import { SitcomSkit } from "./templates/SitcomSkit/SitcomSkit";
 import { coverOf as sitcomCover, layoutOf as sitcomLayout, type Part, sitcomSchema } from "./templates/SitcomSkit/schema";
 import { PhysiqueScan } from "./templates/PhysiqueScan/PhysiqueScan";
 import { coverOf as physiqueCover, layoutOf as physiqueLayout, physiqueSchema, type Shot as PhysiqueShot } from "./templates/PhysiqueScan/schema";
+import { OpenWorld } from "./templates/OpenWorld/OpenWorld";
+import { COVER_FRAME as openWorldCover, openWorldSchema, pickupFrames, timelineOf as openWorldTimeline } from "./templates/OpenWorld/schema";
 
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
 
 /** Visual styles, id -> button label (step 138 lists them; a new style = a new entry here). */
-export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné", macro3d: "Macro 3D", sitcom: "Sitcom 3D", physique: "Physique Scan" } as const;
+export const STYLES = { pixel: "Pixel 8-bit", voxel: "3D 8-bit", paper: "Papier", cutaway: "Pixel explicatif", editorial: "Éditorial", cinema: "Pixel ciné", macro3d: "Macro 3D", sitcom: "Sitcom 3D", physique: "Physique Scan", gta6: "GTA 6" } as const;
 export type Style = keyof typeof STYLES;
 
 export type Template<S extends z.ZodType> = {
@@ -568,6 +570,47 @@ export const templates = {
       events.push({ t: 0, d: total, e: `music bed (${p.music}), the cuts on its beat; a whoosh as the bands fly in each shot` });
       events.push({ t: cardStart, d: total - cardStart, e: "end card (physique): bands roll across the drafting grid, the mB tile drops onto an orange measuring ring, macroBody, 7 jours gratuits, macrobody.fr" });
       return events;
+    },
+  }),
+  OpenWorld: template({
+    style: "gta6",
+    component: OpenWorld,
+    schema: openWorldSchema,
+    defaultProps: {
+      hook: { lead: "Votre fringale de 23 h", key: "ce n'est pas la volonté" },
+      sign: "23:00",
+      side: "SNACK",
+      mission: { title: "Sèche sans fringale", objective: "Objectif : moins de 1 800 kcal par jour" },
+      chase: { line: "Une fringale vous traque. 23 h, le snack d'en bas est ouvert.", highlight: "fringale", label: "Fringale", stars: 3 },
+      loot: { line: "Au dîner, prenez 30 g de protéines.", highlight: "30 g de protéines", items: [{ item: "egg", grams: 13, kcal: 140 }, { item: "skyr", grams: 17, kcal: 90 }], goal: 30, bar: "Protéines", kcal: 1800 },
+      clear: { line: "Fringale semée. Rien à grignoter à 23 h.", highlight: "Rien", label: "Fringale semée" },
+      passed: { title: "Mission réussie", reward: "+30 g de protéines au dîner", detail: "0 fringale · 230 kcal" },
+      outro: "Chaque repas, une mission.",
+      address: "vous",
+      accent: "brand",
+      citations: [{ url: "https://pubmed.ncbi.nlm.nih.gov/25926512/", title: "Leidy et al. 2015, Am J Clin Nutr: higher protein intake increases satiety and reduces appetite" }],
+      music: "none",
+    },
+    durationInFrames: (p) => openWorldTimeline(p, FPS).timeline.totalFrames,
+    coverFrame: () => openWorldCover,
+    events: (p) => {
+      const { timeline, endStart } = openWorldTimeline(p, FPS);
+      const loot = timeline.scenes[3];
+      const pickups = pickupFrames(p.loot.items.length, timeline.scenes[4].startFrame - loot.startFrame)
+        .map((f, k) => ({ t: (loot.startFrame + f) / FPS, d: 0.4, e: `pickup: ${p.loot.items[k].item} +${p.loot.items[k].grams} g, -${p.loot.items[k].kcal} kcal (coin)` }));
+      return [
+        ...scriptEvents(timeline, FPS, [
+          "hook card",
+          "mission card at Muscle Beach, letterboxed, the duo",
+          `chase: ${p.chase.stars} wanted stars « ${p.chase.label} », police flashes, him shocked under the neon`,
+          `loot on the neon grid: kcal counter, ${p.loot.bar} bar to ${p.loot.goal} g`,
+          `clear: the stars go grey, « ${p.clear.label} »`,
+          `« ${p.passed.title} » at Muscle Beach, the duo cheering`,
+          "end card tagline",
+        ], p).filter((e) => !e.e.startsWith("end hold")),
+        ...pickups,
+        { t: endStart / FPS, d: (timeline.totalFrames - endStart) / FPS, e: "end card (gta6): sunset beach, the mB tile in a yellow waypoint ring, macroBody, 7 jours gratuits, macrobody.fr, the duo" },
+      ];
     },
   }),
 };
