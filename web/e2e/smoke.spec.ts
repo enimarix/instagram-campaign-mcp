@@ -131,9 +131,9 @@ test('decide in the feed, see the slot, publish against the stub', async ({ page
 
   // 4. The slot is in the Calendar.
   await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Calendrier' }).click()
-  const slot = page.getByRole('listitem', { name: `Post ${post.id}` })
-  await expect(slot).toContainText('pending')
-  await expect(slot.getByRole('link', { name: `Video ${saved}`, exact: true })).toBeVisible()
+  const slot = page.getByRole('listitem', { name: `Publication ${post.id}` })
+  await expect(slot).toContainText('en attente')
+  await expect(slot.getByRole('link', { name: `Vidéo ${saved}`, exact: true })).toBeVisible()
 
   // 5. The wake task's publish run: waits for the slot, then publishes through the stub.
   const { stdout } = await run(PYTHON, ['-m', 'src.scheduler', 'run-due', '--wait-until-next'],
@@ -144,6 +144,6 @@ test('decide in the feed, see the slot, publish against the stub', async ({ page
 
   // 6. Published.
   await page.reload()
-  await expect(slot).toContainText('published')
+  await expect(slot).toContainText('publiée')
   expect((await asset(saved)).status).toBe('published')
 })

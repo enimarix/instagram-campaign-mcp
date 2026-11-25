@@ -56,7 +56,7 @@ describe('Learnings', () => {
     show()
     const taste = within(await waitFor(() => card('Slow starts lose me')))
     for (const text of ["Don't", 'Your taste', 'Fairly sure']) expect(taste.getByText(text)).toBeTruthy()
-    expect(await taste.findByText('When Hook type = Question')).toBeTruthy()
+    expect(await taste.findByText('When Type d’accroche = Question')).toBeTruthy()
     expect(taste.getByText(/Your comment: “too slow”/)).toBeTruthy()
     expect(taste.getByRole('link', { name: 'the video' }).getAttribute('href')).toBe('/assets/7')
     expect(taste.getByText(/9 posts · \+23 % vs typical · the numbers disagree/)).toBeTruthy()

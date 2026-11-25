@@ -271,7 +271,7 @@ describe('Ads page', () => {
       expect(within(sheet).getByText('B gets 24 % more clicks than A (between 10 % and 38 %), 95 % sure.')).toBeTruthy()
       expect(within(sheet).getByRole('progressbar', { name: 'Spend' }).getAttribute('aria-valuenow')).toBe('51')
       const row = within(sheet).getByText('B · Post 2').closest('tr') as HTMLElement
-      expect(row.textContent).toBe('B · Post 21.24 %6,000€21.50')
+      expect(row.textContent).toBe('B · Post 21.24 %6 000€21.50')
     })
 
     it('keeps the p-values in a details disclosure', async () => {
@@ -284,7 +284,7 @@ describe('Ads page', () => {
     it.each([
       [{ status: 'too_early', days: 3, winner: null, lift: null, p_values: {},
         variants: { A: { successes: 9, trials: 1200, rate: 0.0075 }, B: { successes: 9, trials: 1300, rate: 0.007 } } },
-      'Too early: day 3 of 7, 1,200 of 5,000 views per version.'],
+      'Too early: day 3 of 7, 1 200 of 5 000 views per version.'],
       [{ status: 'running', winner: null, lift: null }, 'No clear difference yet.'],
       [{ status: 'no_difference', days: 30, winner: null, lift: null }, 'No clear difference after 30 days.'],
     ] as [Partial<AdEvaluation>, string][])('says %j in plain words', async (evaluation, text) => {

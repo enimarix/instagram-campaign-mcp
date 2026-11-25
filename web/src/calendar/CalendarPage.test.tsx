@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Calendar, CalendarPost, HotHours } from '../api/client'
+import { COMMENTARY_CONFIRMATION } from '../inbox/ui'
 import CalendarPage from './CalendarPage'
 import { dayLabel, slotLabel } from './when'
 
@@ -51,7 +52,7 @@ const posts = (calls: Call[]) => calls.filter((c) => c.method === 'POST')
 
 async function page() {
   render(<CalendarPage />, { wrapper: MemoryRouter })
-  return screen.findByRole('listitem', { name: 'Post 5' })
+  return screen.findByRole('listitem', { name: 'Publication 5' })
 }
 
 beforeEach(() => {
@@ -72,25 +73,26 @@ describe('CalendarPage', () => {
     expect(calls[0].url).toBe('/api/calendar?from=2026-11-16&to=2026-11-22')
     for (const d of DAYS) expect(screen.getByRole('listitem', { name: d })).toBeTruthy()
 
-    const pending = screen.getByRole('listitem', { name: 'Post 5' })
+    const pending = screen.getByRole('listitem', { name: 'Publication 5' })
     expect(within(pending).getByText('11:00')).toBeTruthy()
-    expect(within(pending).getByRole('link', { name: 'Video 3' }).getAttribute('href')).toBe('/assets/3')
-    expect(within(pending).getByRole('button', { name: 'Reschedule' })).toBeTruthy()
+    expect(within(pending).getByText('en attente')).toBeTruthy()
+    expect(within(pending).getByRole('link', { name: 'Vidéo 3' }).getAttribute('href')).toBe('/assets/3')
+    expect(within(pending).getByRole('button', { name: 'Changer l’heure' })).toBeTruthy()
 
-    const published = screen.getByRole('listitem', { name: 'Post 6' })
-    expect(within(published).getByRole('link', { name: 'On Instagram' }).getAttribute('href'))
+    const published = screen.getByRole('listitem', { name: 'Publication 6' })
+    expect(within(published).getByRole('link', { name: 'Sur Instagram' }).getAttribute('href'))
       .toBe('https://instagram.com/p/x')
     expect(within(published).queryByRole('button')).toBeNull()
 
-    const failed = screen.getByRole('listitem', { name: 'Post 7' })
+    const failed = screen.getByRole('listitem', { name: 'Publication 7' })
     expect(within(failed).getByText('boom')).toBeTruthy()
-    expect(within(failed).getByRole('button', { name: 'Re-plan' })).toBeTruthy()
+    expect(within(failed).getByRole('button', { name: 'Reprogrammer' })).toBeTruthy()
 
-    const late = screen.getByRole('listitem', { name: 'Post 8' })
-    expect(within(late).getByText('re-planned')).toBeTruthy()
+    const late = screen.getByRole('listitem', { name: 'Publication 8' })
+    expect(within(late).getByText('reprogrammée')).toBeTruthy()
     expect(within(late).getByText('Re-planned: 40 min late')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Semaine suivante' }))
     await waitFor(() => expect(calls.at(-1)?.url).toBe('/api/calendar?from=2026-11-23&to=2026-11-29'))
   })
 
@@ -107,12 +109,12 @@ describe('CalendarPage', () => {
     render(<CalendarPage />, { wrapper: MemoryRouter })
     const range = (a: string, b: string) => screen.findByText(`${dayLabel(a)} – ${dayLabel(b)}`)
     await range('2026-11-16', '2026-11-22')
-    fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Semaine suivante' }))
     await range('2026-11-23', '2026-11-29')
-    fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Semaine précédente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Semaine précédente' }))
     await range('2026-11-09', '2026-11-15')
-    fireEvent.click(screen.getByRole('button', { name: 'This week' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cette semaine' }))
     await range('2026-11-16', '2026-11-22')
     // Day headings sit right under the page's h1 (axe heading-order).
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(7)
@@ -123,7 +125,7 @@ describe('CalendarPage', () => {
     const confirm = vi.fn(() => true)
     vi.stubGlobal('confirm', confirm)
     const card = await page()
-    fireEvent.click(within(card).getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Annuler' }))
     await waitFor(() => expect(calls.filter((c) => c.method === 'GET')).toHaveLength(2))
     expect(posts(calls)).toEqual([{ method: 'POST', url: '/api/posts/5/cancel', body: undefined }])
     expect(confirm).toHaveBeenCalledOnce()
@@ -132,9 +134,9 @@ describe('CalendarPage', () => {
   it('a re-planned card says where the video went and shows that week', async () => {
     const calls = stubApi()
     await page()
-    const card = screen.getByRole('listitem', { name: 'Post 1' })
-    expect(card.textContent).toContain('Re-planned →')
-    expect(within(card).queryByRole('button', { name: /Re-plan$|Reschedule|Cancel/ })).toBeNull()
+    const card = screen.getByRole('listitem', { name: 'Publication 1' })
+    expect(card.textContent).toContain('Reprogrammée →')
+    expect(within(card).queryByRole('button', { name: /Reprogrammer|Changer l’heure|Annuler/ })).toBeNull()
     fireEvent.click(within(card).getByRole('button', { name: slotLabel(MOVED.local) }))
     expect(slotLabel(MOVED.local)).toMatch(/24.*11:54$/)
     await waitFor(() => expect(calls.at(-1)?.url).toBe('/api/calendar?from=2026-11-23&to=2026-11-29'))
@@ -152,28 +154,28 @@ describe('CalendarPage', () => {
     HTMLDialogElement.prototype.showModal = function () { this.open = true }
     const calls = stubApi({ 'GET /api/calendar/hot-hours': [[200, grid]] })
     const card = await page()
-    fireEvent.click(within(card).getByRole('button', { name: 'Reschedule' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Reschedule' })
+    fireEvent.click(within(card).getByRole('button', { name: 'Changer l’heure' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Changer l’heure' })
     expect(calls.map((c) => c.url)).toContain('/api/calendar/hot-hours?days=14')
-    expect(within(dialog).getByText(/most followers online/)).toBeTruthy()
-    const hot = await within(dialog).findByRole('button', { name: '18:00 hot' })
+    expect(within(dialog).getByText(/le plus d’abonnés en ligne/)).toBeTruthy()
+    const hot = await within(dialog).findByRole('button', { name: '18:00 chaude' })
     expect(hot.textContent).toContain('🔥')
     expect(within(dialog).getByRole('button', { name: '17:00' }).textContent).not.toContain('🔥')
-    expect((within(dialog).getByRole('button', { name: '19:00 taken' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(dialog).getByRole('button', { name: '19:00 prise' }) as HTMLButtonElement).disabled).toBe(true)
     // its own slot is not "taken" for the post being moved
     expect((within(dialog).getByRole('button', { name: '20:00' }) as HTMLButtonElement).disabled).toBe(false)
 
     fireEvent.click(hot)
-    const input = within(dialog).getByLabelText('New time') as HTMLInputElement
+    const input = within(dialog).getByLabelText('Nouvelle heure') as HTMLInputElement
     expect(input.value).toBe('2026-11-20T18:00')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
     await waitFor(() => expect(posts(calls)).toEqual([{ method: 'POST', url: '/api/posts/5/reschedule',
       body: { publish_at: new Date('2026-11-20T18:00').toISOString() } }]))
 
-    fireEvent.click(within(card).getByRole('button', { name: 'Reschedule' }))
-    const again = await screen.findByRole('dialog', { name: 'Reschedule' })
-    fireEvent.change(within(again).getByLabelText('New time'), { target: { value: '2026-11-20T18:35' } })
-    fireEvent.click(within(again).getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Changer l’heure' }))
+    const again = await screen.findByRole('dialog', { name: 'Changer l’heure' })
+    fireEvent.change(within(again).getByLabelText('Nouvelle heure'), { target: { value: '2026-11-20T18:35' } })
+    fireEvent.click(within(again).getByRole('button', { name: 'Enregistrer' }))
     await waitFor(() => expect(posts(calls).at(-1)?.body).toEqual({ publish_at: new Date('2026-11-20T18:35').toISOString() }))
   })
 
@@ -181,27 +183,29 @@ describe('CalendarPage', () => {
     HTMLDialogElement.prototype.showModal = function () { this.open = true }
     stubApi({ 'GET /api/calendar/hot-hours': [[200, { has_data: false, posting_windows: '11:00-13:00', days: [] }]] })
     const card = await page()
-    fireEvent.click(within(card).getByRole('button', { name: 'Reschedule' }))
-    expect(await screen.findByText(/No audience data yet.*11:00-13:00/)).toBeTruthy()
+    fireEvent.click(within(card).getByRole('button', { name: 'Changer l’heure' }))
+    expect(await screen.findByText(/Pas encore de données d’audience.*11:00-13:00/)).toBeTruthy()
   })
 
   it('tells where a re-planned video went', async () => {
     stubApi({ 'POST /api/posts/7/replan': [[200, { status: 'pending', ...MOVED }]] })
     await page()
-    fireEvent.click(screen.getByRole('button', { name: 'Re-plan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reprogrammer' }))
     const status = await screen.findByRole('status')
-    expect(status.textContent).toContain(`Re-planned for ${slotLabel(MOVED.local)}`)
-    expect(status.textContent).toContain('to pick another time')
+    expect(status.textContent).toContain(`Reprogrammée le ${slotLabel(MOVED.local)}`)
+    expect(status.textContent).toContain('changer l’heure')
   })
 
   it('re-plans a commentary clip after the rights check', async () => {
     const calls = stubApi({
       'POST /api/posts/7/replan': [[409, { error: 'rights', message: 'needs your check' }], [200, { status: 'pending', ...MOVED }]],
     })
-    vi.stubGlobal('confirm', vi.fn(() => true))
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirm)
     await page()
-    fireEvent.click(screen.getByRole('button', { name: 'Re-plan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reprogrammer' }))
     await waitFor(() => expect(posts(calls).map((c) => c.body)).toEqual([{ confirmed: false }, { confirmed: true }]))
+    expect(confirm).toHaveBeenCalledWith(`needs your check\n\n${COMMENTARY_CONFIRMATION}`)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -210,10 +214,10 @@ describe('CalendarPage', () => {
     const confirm = vi.fn(() => false)
     vi.stubGlobal('confirm', confirm)
     await page()
-    const row = screen.getByRole('listitem', { name: 'Video 9' })
-    const release = within(row).getByRole('button', { name: 'Not on Instagram → release' })
+    const row = screen.getByRole('listitem', { name: 'Vidéo 9' })
+    const release = within(row).getByRole('button', { name: 'Pas sur Instagram → libérer' })
     fireEvent.click(release)
-    expect(confirm.mock.calls[0]).toEqual([expect.stringContaining('I checked: it is not on Instagram')])
+    expect(confirm.mock.calls[0]).toEqual([expect.stringContaining('J’ai vérifié : elle n’est pas sur Instagram')])
     expect(posts(calls)).toEqual([])
     confirm.mockReturnValue(true)
     fireEvent.click(release)
@@ -223,7 +227,7 @@ describe('CalendarPage', () => {
   it("shows the server's refusal", async () => {
     stubApi({ 'POST /api/posts/7/replan': [[409, { error: 'not_approved', message: 'asset 3 is publish_check' }]] })
     await page()
-    fireEvent.click(screen.getByRole('button', { name: 'Re-plan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reprogrammer' }))
     expect((await screen.findByRole('alert')).textContent).toBe('asset 3 is publish_check')
   })
 })

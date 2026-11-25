@@ -65,7 +65,7 @@ describe('Posts', () => {
   it('lists posts as cards and a table, and refetches on sort and filters', async () => {
     const fetchMock = stubApi()
     show('/analytics/posts')
-    const cards = await screen.findByRole('list', { name: 'Posts' })
+    const cards = await screen.findByRole('list', { name: 'Publications' })
     expect(within(cards).getAllByRole('listitem')).toHaveLength(20)
     expect(lastUrl(fetchMock)).toBe('/api/analytics/posts?sort=-posted_at&offset=0&limit=20')
     const row = within(screen.getByRole('table')).getAllByRole('row')[1]
@@ -73,38 +73,38 @@ describe('Posts', () => {
     expect(row.querySelector('img')?.getAttribute('src')).toBe('/api/media/7/thumb.jpg')
     expect(within(row).getByText('35 %')).toBeTruthy()
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Sort by' }), { target: { value: 'watch_ratio' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Trier par' }), { target: { value: 'watch_ratio' } })
     expect(lastUrl(fetchMock)).toBe('/api/analytics/posts?sort=-watch_ratio&offset=0&limit=20')
-    fireEvent.click(screen.getByRole('button', { name: 'High to low' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Du plus haut au plus bas' }))
     expect(lastUrl(fetchMock)).toBe('/api/analytics/posts?sort=watch_ratio&offset=0&limit=20')
     fireEvent.change(screen.getByRole('combobox', { name: 'Tags' }), { target: { value: 'false' } })
     expect(lastUrl(fetchMock)).toBe('/api/analytics/posts?sort=watch_ratio&tagged=false&offset=0&limit=20')
     fireEvent.change(screen.getByRole('combobox', { name: 'Verdict' }), { target: { value: 'winner' } })
     expect(lastUrl(fetchMock)).toBe('/api/analytics/posts?sort=watch_ratio&verdict=winner&tagged=false&offset=0&limit=20')
-    expect(await screen.findByText('No posts match.')).toBeTruthy()
+    expect(await screen.findByText('Aucune publication ne correspond.')).toBeTruthy()
   })
 
   it('marks trial Reels with a chip in the cards and the table', async () => {
     stubApi()
     show('/analytics/posts')
-    const cards = within(await screen.findByRole('list', { name: 'Posts' })).getAllByRole('listitem')
-    expect(within(cards[1]).getByText('trial')).toBeTruthy()
-    expect(within(cards[0]).queryByText('trial')).toBeNull()
+    const cards = within(await screen.findByRole('list', { name: 'Publications' })).getAllByRole('listitem')
+    expect(within(cards[1]).getByText('essai')).toBeTruthy()
+    expect(within(cards[0]).queryByText('essai')).toBeNull()
     const rows = within(screen.getByRole('table')).getAllByRole('row')
-    expect(within(rows[2]).getByText('trial')).toBeTruthy()
-    expect(within(rows[1]).queryByText('trial')).toBeNull()
-    expect(within(screen.getByRole('combobox', { name: 'Type' })).getByRole('option', { name: 'Trial Reels' })).toBeTruthy()
+    expect(within(rows[2]).getByText('essai')).toBeTruthy()
+    expect(within(rows[1]).queryByText('essai')).toBeNull()
+    expect(within(screen.getByRole('combobox', { name: 'Type' })).getByRole('option', { name: 'Reels d’essai' })).toBeTruthy()
   })
 
   it('loads more with the next offset', async () => {
     const fetchMock = stubApi()
     show('/analytics/posts')
-    await screen.findByText('20 of 25')
-    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    await screen.findByText('20 sur 25')
+    fireEvent.click(screen.getByRole('button', { name: 'Charger plus' }))
     expect(lastUrl(fetchMock)).toBe('/api/analytics/posts?sort=-posted_at&offset=20&limit=20')
-    expect(await screen.findByText('25 of 25')).toBeTruthy()
-    expect(within(screen.getByRole('list', { name: 'Posts' })).getAllByRole('listitem')).toHaveLength(25)
-    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+    expect(await screen.findByText('25 sur 25')).toBeTruthy()
+    expect(within(screen.getByRole('list', { name: 'Publications' })).getAllByRole('listitem')).toHaveLength(25)
+    expect(screen.queryByRole('button', { name: 'Charger plus' })).toBeNull()
   })
 })
 
@@ -112,66 +112,66 @@ describe('PostPage', () => {
   it('renders the growth series, tags, feedback and the studio video', async () => {
     stubApi()
     show('/analytics/posts/m0')
-    expect(await screen.findByRole('img', { name: 'Views: 300, +200 over the range' })).toBeTruthy()
-    expect(screen.getByRole('img', { name: 'Reach: 150, +100 over the range' })).toBeTruthy()
-    const snaps = within(screen.getByRole('table', { name: 'Snapshots' })).getAllByRole('row')
-    expect(snaps.slice(1).map((r) => r.textContent)).toEqual(['1 h10050', '24 h200100', '3 d300150'])
+    expect(await screen.findByRole('img', { name: 'Vues : 300, +200 sur la période' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Portée : 150, +100 sur la période' })).toBeTruthy()
+    const snaps = within(screen.getByRole('table', { name: 'Relevés' })).getAllByRole('row')
+    expect(snaps.slice(1).map((r) => r.textContent)).toEqual(['1 h10050', '24 h200100', '3 j300150'])
     expect(within(screen.getByRole('list', { name: 'Tags' })).getAllByRole('listitem').map((li) => li.textContent))
-      .toEqual(['Track: Motion', 'Pillar: Myths', 'Hook type: Question', 'Template: FactQuest'])
-    expect(screen.getByText('Hypothesis: questions hook better')).toBeTruthy()
+      .toEqual(['Piste : Motion', 'Pilier : Myths', 'Type d’accroche : Question', 'Modèle : FactQuest'])
+    expect(screen.getByText('Hypothèse : questions hook better')).toBeTruthy()
     expect(screen.getByText('love the ending')).toBeTruthy()
-    expect(screen.getByLabelText('Studio video').getAttribute('src')).toBe('/api/media/7/preview.mp4')
-    expect(screen.getByRole('link', { name: 'Open in the studio' }).getAttribute('href')).toBe('/assets/7')
-    expect(screen.queryByRole('link', { name: 'Open on Instagram' })).toBeNull()
+    expect(screen.getByLabelText('Vidéo du studio').getAttribute('src')).toBe('/api/media/7/preview.mp4')
+    expect(screen.getByRole('link', { name: 'Ouvrir dans le studio' }).getAttribute('href')).toBe('/assets/7')
+    expect(screen.queryByRole('link', { name: 'Ouvrir sur Instagram' })).toBeNull()
   })
 
   it('links a post made outside the studio to Instagram', async () => {
     stubApi()
     show('/analytics/posts/m1')
-    const ig = await screen.findByRole('link', { name: 'Open on Instagram' })
+    const ig = await screen.findByRole('link', { name: 'Ouvrir sur Instagram' })
     expect(ig.getAttribute('href')).toBe('https://www.instagram.com/reel/1/')
     expect(ig.getAttribute('target')).toBe('_blank')
     expect(ig.getAttribute('rel')).toBe('noopener noreferrer')
-    expect(screen.queryByLabelText('Studio video')).toBeNull()
-    expect(screen.getByText('No tags: made outside the studio.')).toBeTruthy()
-    expect(screen.getByText('No feedback.')).toBeTruthy()
-    expect(screen.getByText('trial')).toBeTruthy() // a trial Reel
+    expect(screen.queryByLabelText('Vidéo du studio')).toBeNull()
+    expect(screen.getByText('Pas de tags : faite hors du studio.')).toBeTruthy()
+    expect(screen.getByText('Pas de retours.')).toBeTruthy()
+    expect(screen.getByText('essai')).toBeTruthy() // a trial Reel
   })
 
   it('shows why viewers left on the timeline, with confidence chips', async () => {
     stubApi()
     show('/analytics/posts/m0')
-    const card = await screen.findByRole('region', { name: 'Why viewers left' })
+    const card = await screen.findByRole('region', { name: 'Pourquoi les spectateurs sont partis' })
     expect(within(card).getByText('A pixel knight busts three water myths.')).toBeTruthy()
     expect(within(card).getAllByRole('listitem').length).toBe(7) // 4 events + 3 findings
-    expect(within(within(card).getByRole('list', { name: 'Timeline events' })).getAllByRole('listitem').map((li) => li.textContent))
+    expect(within(within(card).getByRole('list', { name: 'Moments de la vidéo' })).getAllByRole('listitem').map((li) => li.textContent))
       .toEqual(['0:00–0:03 hook: myth card', '0:03–0:15 fact 1', '0:15–0:30 fact 2: water', '+2 more'])
     // a capped timeline's untimed tail is listed but not drawn
     expect(within(card).queryByTitle('+2 more')).toBeNull()
     expect(within(card).getByTitle('fact 1')).toBeTruthy()
     // markers sit at at_s / duration; a finding without at_s has none
-    expect((within(card).getByTitle('Hook at 0:00') as HTMLElement).style.left).toBe('0%')
-    expect(parseFloat((within(card).getByTitle('Exit at 0:15') as HTMLElement).style.left)).toBeCloseTo(50.67, 1)
-    expect(within(card).queryByTitle(/^Payoff/)).toBeNull()
-    const rows = within(within(card).getByRole('list', { name: 'Findings' })).getAllByRole('listitem')
+    expect((within(card).getByTitle('Accroche à 0:00') as HTMLElement).style.left).toBe('0%')
+    expect(parseFloat((within(card).getByTitle('Sortie à 0:15') as HTMLElement).style.left)).toBeCloseTo(50.67, 1)
+    expect(within(card).queryByTitle(/^Chute/)).toBeNull()
+    const rows = within(within(card).getByRole('list', { name: 'Constats' })).getAllByRole('listitem')
     expect(rows.map((r) => r.textContent)).toEqual([
-      'Hook · 0:00medium confidence60% skipped in the first 3 s.',
-      'Exit · 0:15low confidenceThe average viewer leaves around 0:15.',
-      'Payoffhigh confidenceViewers stay but do not share.',
+      'Accroche · 0:00confiance moyenne60% skipped in the first 3 s.',
+      'Sortie · 0:15confiance faibleThe average viewer leaves around 0:15.',
+      'Chuteconfiance forteViewers stay but do not share.',
     ])
   })
 
   it('says no findings yet and draws no bar without a timeline', async () => {
     stubApi()
     show('/analytics/posts/m1')
-    const card = await screen.findByRole('region', { name: 'Why viewers left' })
-    expect(within(card).getByText('No findings yet: they come once the Reel has matured.')).toBeTruthy()
-    expect(within(card).queryByRole('list', { name: 'Timeline events' })).toBeNull()
+    const card = await screen.findByRole('region', { name: 'Pourquoi les spectateurs sont partis' })
+    expect(within(card).getByText('Pas encore de constats : ils arrivent quand le Reel a mûri.')).toBeTruthy()
+    expect(within(card).queryByRole('list', { name: 'Moments de la vidéo' })).toBeNull()
   })
 
   it('says not found on a 404', async () => {
     stubApi()
     show('/analytics/posts/gone')
-    expect(await screen.findByText('Post not found.')).toBeTruthy()
+    expect(await screen.findByText('Publication introuvable.')).toBeTruthy()
   })
 })
