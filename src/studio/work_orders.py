@@ -128,7 +128,9 @@ def list_orders(store: CampaignStore, status: Optional[str] = None, limit: int =
     order = "w.id DESC" if newest else "w.id"
     filters = {"w.status": status, "w.origin": source if source in ORIGINS else None,
                _MINE: 1 if source == "mine" else None}
-    return [_view(r) for r in store._select(_ROWS, filters, order, limit)]
+    waiting = held_by_style(store)  # the owner sees a wait, never a silent « Lancé »
+    return [{**_view(r), "waits_for_style": waiting.get(r["id"])}
+            for r in store._select(_ROWS, filters, order, limit)]
 
 
 def _style(store: CampaignStore, style: Optional[str], mode: str) -> Optional[str]:
@@ -136,6 +138,9 @@ def _style(store: CampaignStore, style: Optional[str], mode: str) -> Optional[st
     Lemo-Opuscar library for an owner-mode order (ValueError otherwise)."""
     if not lemo.is_lemo(style):
         return styles.check_style(store, style)
+    if style == lemo.REA_FILM:  # confirm() gives it, with the Reel it copies; never asked for
+        raise ValueError(f"{style} is the « rea-video » route on Auto: confirm a received Reel"
+                         " with method rea and no style")
     if mode != "owner":
         raise ValueError(f"a Lemo-Opuscar style ({style}) is for your own orders only, not"
                          f" mode {mode}")
@@ -227,6 +232,8 @@ def confirm(store: CampaignStore, order_id: int, method: str, style: Optional[st
     if method == "new_style" and style is not None:
         raise ValueError("a new style is built for this Reel: pick no existing style")
     style = _style(store, style, "owner")  # a Lemo style too: its film gets the Reel (film.py)
+    if method == "rea" and style is None:  # Auto: copied shot by shot in code, no style asked
+        style = lemo.REA_FILM
     text = _instruction(instruction)
     if text in METHOD_TEXT.values():  # a route's default sent back: not the owner's words
         text = None
@@ -275,9 +282,9 @@ def set_instruction(store: CampaignStore, order_id: int, instruction: str,
     if mode is not None and mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
     order = get_order(store, order_id)
-    if style is ...:  # kept; a Lemo style still needs mode owner
+    if style is ... or style == order["style"]:  # kept; a Lemo style still needs mode owner
         style = order["style"]
-        if lemo.is_lemo(style):
+        if lemo.is_lemo(style) and style != lemo.REA_FILM:
             _style(store, style, mode or order["mode"])
     else:
         style = _style(store, style, mode or order["mode"])

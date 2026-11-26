@@ -13,5 +13,9 @@ export function useStyles() {
   return { styles, error }
 }
 
+/** lemo.REA_FILM: the « rea-video » route on Auto, a copy in no catalog style. */
+export const REA_FILM = 'lemo:rea-video'
+
 export const styleLabel = (styles: Style[] | undefined, id: string | null | undefined) =>
-  id ? (styles?.find((s) => s.id === id)?.label ?? id) : "Auto (l'IA choisit)"
+  id === REA_FILM ? 'Copie plan par plan (rea-video)'
+    : id ? (styles?.find((s) => s.id === id)?.label ?? id) : "Auto (l'IA choisit)"

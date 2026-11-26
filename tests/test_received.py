@@ -55,7 +55,7 @@ def test_lancer_on_planning_schedules_the_confirmed_order(store):
     oid = _received(store)
     with pytest.raises(ValueError):
         work_orders.launch(store, oid)  # received: confirm it first
-    work_orders.confirm(store, oid, "rea")
+    work_orders.confirm(store, oid, "rea", "pixel")  # Auto: a film (lemo.REA_FILM)
     out = planning.launch(store, cfg(), [{"kind": "work_order", "id": oid}], NOW)
     assert out["requested"] == [{"kind": "work_order", "id": oid}] and not out["refused"]
     assert work_orders.get_order(store, oid)["status"] == "scheduled"
@@ -128,6 +128,8 @@ def test_a_route_reuses_nothing_and_new_style_waits_for_its_style(store, setting
     req = style_requests.request_style(store, "reference", "Scan", "the Reel's look",
                                        ["a", "b", "c"], reference="the Reel",
                                        unblocks_order_ids=[oid])
+    # « Reçus » says what it waits for, not a bare « Lancé »
+    assert work_orders.list_orders(store, "scheduled")[0]["waits_for_style"] == "Scan"
     style_requests.mark(store, req["id"], "building")
     style_requests.mark(store, req["id"], "live")
     assert work_orders.check_idea(store, oid, "motion", None)["id"] == oid

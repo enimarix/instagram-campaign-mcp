@@ -4,6 +4,7 @@ that delivers a tiny film."""
 
 import json
 import os
+import re
 import sys
 from datetime import timedelta
 from pathlib import Path
@@ -554,14 +555,14 @@ def test_a_failed_refilm_leaves_the_video_waiting_and_wakes_the_light_run(
         assert c.execute(schedule._NEWEST_WORK).fetchone()[0] == d["at"]
 
 
-def _dm_film(store, cfg, tmp_path, monkeypatch, download):
+def _dm_film(store, cfg, tmp_path, monkeypatch, download, style="lemo:watercolor"):
     """A « Reçus » Reel confirmed in a Lemo style on the rea route, launched from Planning."""
     from src.studio import downloader, planning, rea
 
     from .test_dm_work_orders import _received
 
     oid = _received(store, "garde la chute")
-    work_orders.confirm(store, oid, "rea", "lemo:watercolor", "garde la chute")
+    work_orders.confirm(store, oid, "rea", style, "garde la chute")
     out = planning.launch(store, cfg, [{"kind": "work_order", "id": oid}], utcnow())
     assert out["front"] == [{"kind": "work_order", "id": oid}] and not out["refused"]
     assert work_orders.get_order(store, oid)["status"] == "scheduled"
@@ -589,6 +590,27 @@ def test_a_reel_sent_by_dm_is_filmed_from_its_reel(store, cfg, judged, tmp_path,
     assert "reference/reel.mp4" in brief and "reference/rea/VIDEO.md" in brief
     assert "garde la chute" in brief and "Not everything" not in brief
     assert work_orders.get_order(store, oid)["status"] == "in_feed"
+
+def test_rea_on_auto_copies_the_reel_shot_by_shot_with_no_style(store, cfg, judged, tmp_path,
+                                                                monkeypatch):
+    """Owner 2026-11-26: « j'avais sélectionné rea-video [...] ça recopie juste »: no
+    style to wait for, the film runner copies the Reel in code."""
+    oid = _dm_film(store, cfg, tmp_path, monkeypatch, lambda *a, **k: {
+        "status": "exists", "source": {"id": 9, "local_path": "sources/9/clip.mp4"}},
+        style=None)
+    assert work_orders.get_order(store, oid)["style"] == lemo.REA_FILM
+    assert film.run_film(store, cfg, oid)["status"] == "succeeded"
+    brief = json.loads((tmp_path / "seen.json").read_text())["brief"]
+    assert "shot by shot" in brief and "reference/rea/VIDEO.md" in brief
+    assert "styles/None" not in brief and not re.search(r"\$(style|length|slug)", brief) and "Pas fait comme demandé" in brief
+    assert "amine" in brief and "the Reel's length" in brief
+    # sent back for changes: the remake copies the same Reel again
+    asset = work_orders.get_order(store, oid)["asset_id"]
+    remake = work_orders.refilm(store, asset, "plus court")
+    assert film._reel_order(store, remake)["id"] == oid
+    # never asked for directly: it has no Reel of its own
+    with pytest.raises(ValueError, match="rea-video"):
+        work_orders.restyle(store, asset, lemo.REA_FILM)
 
 
 def test_a_reel_that_cannot_be_fetched_is_said_in_the_brief(store, cfg, judged, tmp_path,

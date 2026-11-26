@@ -4,7 +4,7 @@ import { cancelWorkOrder, confirmWorkOrder, errorMessage, listStyleCatalog, list
 import { stage } from '../create/prompt'
 import { safeUrl } from '../inbox/ui'
 import { StylePicker } from '../launch/StylePicker'
-import { styleLabel, useStyles } from '../launch/useStyles'
+import { REA_FILM, styleLabel, useStyles } from '../launch/useStyles'
 import { ago, embedSrc } from '../trending/format'
 import { Embed } from '../trending/shared'
 import { Button } from '../ui/Button'
@@ -19,14 +19,15 @@ const CANCELLED = 'annulée par le propriétaire' // work_orders.CANCELLED: « R
 const ROUTES: { id: OrderMethod; label: string; hint: string }[] = [
   { id: 'style', label: 'Même vidéo, style existant', hint: "L'IA refait la même vidéo (idée, rythme, fin) dans le style choisi, sans rien reprendre du Reel." },
   { id: 'new_style', label: 'Nouveau style', hint: "L'IA décrit le style de ce Reel, il est construit pour cette vidéo, puis elle la fait dedans." },
-  { id: 'rea', label: 'rea-video', hint: "Le Reel est décomposé plan par plan (rea-video : durée, cadrage, textes, son), puis refait dans le style choisi." },
+  { id: 'rea', label: 'rea-video', hint: "Le Reel est décomposé plan par plan (rea-video : durée, cadrage, textes, son). Sur Auto, il est recopié plan par plan en code, avec macroBody, sans attendre de style ; un style choisi : refait dans ce style." },
 ]
 
 /** Each card stays where it is, its chip following it, until its video is in the Inbox. */
 const SHOWN: WorkOrderStatus[] = ['received', 'confirmed', 'scheduled', 'in_production', 'skipped']
 // before « Lancer » the words of this page; after, the stage « Créer » shows (create/prompt.ts)
 const chip = (o: WorkOrder): [string, 'warn' | 'info' | ReturnType<typeof stage>[1]] =>
-  o.status === 'received' ? ['À confirmer', 'warn'] : o.status === 'confirmed' ? ['Dans le Planning', 'info'] : stage(o)
+  o.status === 'received' ? ['À confirmer', 'warn'] : o.status === 'confirmed' ? ['Dans le Planning', 'info']
+    : o.waits_for_style ? ['Attend son nouveau style', 'warn'] : stage(o)
 
 /** What a launched order is being made with (read only). lemo: the Lemo catalog, for names. */
 function Made({ order: o, lemo }: { order: WorkOrder; lemo?: CatalogStyle[] }) {
@@ -40,6 +41,12 @@ function Made({ order: o, lemo }: { order: WorkOrder; lemo?: CatalogStyle[] }) {
   ]
   return (
     <div className="space-y-1">
+      {o.waits_for_style && (
+        <p role="status" className="text-warn">
+          Aucun style actuel ne sait faire cette vidéo : l'IA a demandé le style « {o.waits_for_style} ».
+          Elle la fera dès que ce style sera construit.
+        </p>
+      )}
       <dl className="space-y-1">
         {rows.filter(([, v]) => v).map(([k, v]) => (
           <div key={k}><dt className="inline font-medium">{k} : </dt><dd className="inline">{v}</dd></div>
@@ -58,7 +65,7 @@ function ReceivedCard({ order: o, lemo, onChanged }: { order: WorkOrder; lemo?: 
   const failed = o.status === 'skipped'
   const launched = o.status === 'scheduled' || o.status === 'in_production'
   const [method, setMethod] = useState<OrderMethod>(o.method ?? 'style')
-  const [style, setStyle] = useState<string | null>(o.style)
+  const [style, setStyle] = useState<string | null>(o.style === REA_FILM ? null : o.style) // its Auto
   const [text, setText] = useState(o.instruction ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

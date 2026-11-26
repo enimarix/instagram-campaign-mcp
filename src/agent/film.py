@@ -244,13 +244,17 @@ def _reel(store: CampaignStore, settings: InstagramMCPSettings, order: Dict[str,
     """A « Reçus » order (a DM'd Reel): its video copied to `reference/reel.mp4` and, on the
     rea route, its rea-video breakdown to `reference/rea/`, for the film to watch.
     {video, breakdown, why (what failed, else None)}; None for any other order. A failure
-    is said in the brief: the film goes on from the link and the owner's words."""
+    is said in the brief: the film goes on from the link and the owner's words. A copy
+    (lemo.REA_FILM) sent back for changes gets the Reel of the DM order it came from."""
+    order = _reel_order(store, order)
     if not order.get("pick_id"):
         return None
     ref = ws / "reference"
     shutil.rmtree(ref, ignore_errors=True)
     ref.mkdir(parents=True)
-    out: Dict[str, Any] = {"video": False, "breakdown": False, "why": None}
+    out: Dict[str, Any] = {"video": False, "breakdown": False, "why": None,
+                           "sender": order.get("sender_username"),
+                           "permalink": order.get("permalink")}
     try:
         got = downloader.download_reel(store, settings, order["permalink"], now=utcnow())
         source = got.get("source") or {}
@@ -264,6 +268,21 @@ def _reel(store: CampaignStore, settings: InstagramMCPSettings, order: Dict[str,
     except Exception as e:  # noqa: BLE001 - said in the brief, never silent
         out["why"] = str(e)[:300]
     return out
+
+
+def _reel_order(store: CampaignStore, order: Dict[str, Any]) -> Dict[str, Any]:
+    """The order itself, or for a copy remade with no Reel of its own (a refilm: no pick),
+    back along from_asset_id to the DM order whose Reel it copies. ponytail: 10 hops."""
+    for _ in range(10):
+        if (order.get("pick_id") or order.get("style") != lemo.REA_FILM
+                or not order.get("from_asset_id")):
+            break
+        idea_id = store.get_asset(order["from_asset_id"])["idea_id"]
+        made = [o for o in work_orders.list_orders(store, None, 500) if o["idea_id"] == idea_id]
+        if not made:
+            break
+        order = made[0]
+    return order
 
 
 def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int

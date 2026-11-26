@@ -65,7 +65,8 @@ fits, `create_idea(style=…)`.
   (`create_idea` refuses until that style is live; declined: `skip_work_order`).
 - `rea`: `download_reel(<permalink>)`, then `breakdown_reel(<its source_id>)`: rea-video's
   shot-by-shot breakdown (what each shot shows, its timing, camera, on-screen text, sound,
-  how it was made). Remake the video from it in the order's `style` (null = Auto): same
+  how it was made). Remake the video from it in the order's `style` (the owner picked it:
+  on Auto the film runner copies the Reel in code, you never see that order): same
   shot structure, timing and beats, our own picture, words, voice and music (nothing of
   the Reel reused). A shot no template can make: `request_style` as below. The breakdown
   failed or rea-video is missing: make it as `style` and say so in the `description`.

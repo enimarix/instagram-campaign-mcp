@@ -4,7 +4,7 @@ import { StyleGallery } from '../styles/StyleGallery'
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { Sheet } from '../ui/Sheet'
-import { useStyles } from './useStyles'
+import { styleLabel, useStyles } from './useStyles'
 
 /** What a style looks like: its sample clip (muted, looping) or still, and its one line. */
 function StylePreview({ style, small }: { style: Style; small?: boolean }) {
@@ -65,7 +65,7 @@ export function StylePicker({ value, onChange, autoLabel = "Auto (l'IA choisit)"
         {studio?.map((s) => (
           <Chip key={s.id} pressed={value === s.id} onClick={() => onChange(s.id)}>{s.label}</Chip>
         ))}
-        {outside && <Chip pressed onClick={() => onChange(value)}>{picked?.id === value ? picked.label : (shown?.label ?? value)}</Chip>}
+        {outside && <Chip pressed onClick={() => onChange(value)}>{picked?.id === value ? picked.label : styleLabel(styles, value)}</Chip>}
         {all && <Button onClick={() => setGallery(true)}>Tous les styles</Button>}
       </div>
       {error && <p role="alert" className="mt-1 text-xs text-danger">Styles indisponibles : {error}</p>}

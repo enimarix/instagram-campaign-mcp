@@ -8,6 +8,19 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-26: The « rea-video » route on Auto copies the Reel shot by shot in code
+A « Reçus » order confirmed on the rea route with no style gets the style `lemo:rea-video`
+(lemo.REA_FILM): the film runner (src/agent/film.py) makes it from the Reel and its rea-video
+breakdown, in the Reel's own look (no library style), the same shots, framing, effects,
+timing and ending, changing only what the owner's instruction changes. It never waits for a
+new style. Nothing of the Reel is reused as it is (every shot redrawn in code); a shot code
+cannot make (live footage, photoreal people) gets its closest coded version, and the video's
+description starts « Pas fait comme demandé : ». A rea order with a style the owner picked
+is still remade in that style by the light run. Orders 76 and 77 (parked on style requests
+21 and 22) moved to this route.
+Reason: owner 2026-11-26, after both rea orders waited for styles nobody built: « j'avais
+sélectionné rea-video, normalement ça ne dépend pas du style mais ça recopie juste ! »
+
 ## 2026-11-25: Winners and learnings need more than one event (pipeline audit)
 Scoring (`src/scoring.py`): a count signal (shares, saves, follows, ...) is no longer the
 post's rate over the baseline's median rate (+0.0005, capped at 5x). It is observed events

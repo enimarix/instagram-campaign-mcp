@@ -40,6 +40,11 @@ SCRIPT_CHARS = 8000
 # Normalise to our spec (1080x1920, 30 fps, H.264 + AAC) and loudness; a film is already
 # vertical, so the crop cuts nothing.
 RECIPE = {"version": 1, "ops": [{"op": "fit_vertical", "mode": "crop"}]}
+# The « rea-video » route on Auto (owner 2026-11-26: « ça recopie juste »): a film in no
+# library style, the Reel's own look copied shot by shot from its breakdown and frames.
+REA_FILM = PREFIX + "rea-video"
+REA_INFO = {"id": REA_FILM, "slug": None, "label": "Copie plan par plan (rea-video)",
+            "line": "the Reel's own look, copied shot by shot"}
 
 
 def is_lemo(style: Optional[str]) -> bool:
@@ -48,8 +53,10 @@ def is_lemo(style: Optional[str]) -> bool:
 
 def style_info(style: str, settings: Optional[InstagramMCPSettings] = None
                ) -> Dict[str, Any]:
-    """{id, slug, label, line} of a selectable `lemo:<slug>` style of the catalog;
-    ValueError when there is no such style or it cannot be made here."""
+    """{id, slug, label, line} of a selectable `lemo:<slug>` style of the catalog (or
+    REA_FILM, slug None); ValueError when there is no such style or it cannot be made here."""
+    if style == REA_FILM:
+        return dict(REA_INFO)
     entries = style_catalog.lemo_styles(settings or get_settings()) if is_lemo(style) else []
     entry = next((e for e in entries if e["id"] == style), None)
     if entry is None:
@@ -77,8 +84,8 @@ def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dic
     (the order's instruction is only the AI's one-line summary of them). reel: a « Reçus »
     order's Reel as film.py fetched it into the workspace (film._reel)."""
     remake = _reel_text(order, reel) if reel else ""
-    if from_video:
-        remake = ("This order remakes one of our videos in this style: keep its topic, "
+    if from_video:  # after the Reel: a copy sent back keeps the Reel it copies
+        remake += ("This order remakes one of our videos in this style: keep its topic, "
                   "message and facts.\n"
                   f"- Its hook: {from_video.get('hook') or '-'}\n"
                   f"- Its script: {from_video.get('script') or '-'}\n")
@@ -91,9 +98,14 @@ def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dic
                    " instruction's summary:\n"
                    + "".join("  > " + " ".join(a.split()) + "\n" for a in asked if a))
     text = re.sub(r"<!--.*?-->\n*", "", TEMPLATE.read_text(encoding="utf-8"), flags=re.S)
+    slug = style["slug"]
     return Template(text).safe_substitute(
-        order_id=order["id"], style_id=style["id"], slug=style["slug"],
+        order_id=order["id"], style_id=style["id"], slug=slug,
         style_label=style["label"], style_line=style["line"],
+        style_ref=(f"`{slug}` (« {style['label']} »: {style['line']}) (`styles/{slug}/STYLE.md`)."
+                   if slug else "none from the library: the Reel's own look (below)."),
+        style_read=f" and `styles/{slug}/STYLE.md`" if slug else "",
+        length="30–45 s, the style's fps" if slug else "the Reel's length (at most 90 s), 30 fps",
         instruction=order.get("instruction") or "(none: pick a useful macroBody topic)",
         remake=remake, film_dir=FILM_DIR,
         library=Path(settings.lemo_library).expanduser().as_posix(),
@@ -103,9 +115,20 @@ def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dic
 
 def _reel_text(order: Dict[str, Any], reel: Dict[str, Any]) -> str:
     text = (f"This order remakes a Reel the owner received by DM from"
-            f" @{order.get('sender_username') or '?'} ({order.get('permalink') or '-'}):"
+            f" @{reel.get('sender') or '?'} ({reel.get('permalink') or '-'}):"
             " make the same video (its idea, its rhythm, its ending) in this style, for"
             " macroBody, and reuse none of its footage, sound or text as it is.\n")
+    if order.get("style") == REA_FILM:
+        text = (f"This order copies a Reel the owner received by DM from"
+                f" @{reel.get('sender') or '?'} ({reel.get('permalink') or '-'})"
+                " **shot by shot**, in its own look: the same shots, framing, camera moves,"
+                " effects, transitions, timing and ending; change only what the owner's"
+                " instruction changes (macroBody in place of their product). Redraw every"
+                " shot in code: reuse none of its footage, sound or text as it is. A shot"
+                " code cannot make (live footage, photoreal people or places): its closest"
+                " coded version. What you could not do as asked (his music, a photoreal"
+                " shot): post.json's description starts « Pas fait comme demandé : » and"
+                " says what and why.\n")
     if reel["video"]:
         text += ("- Its video: `reference/reel.mp4` in this folder. Watch it before"
                  " TREATMENT.md: pull frames with ffmpeg (through the GPU lock), read them, and"

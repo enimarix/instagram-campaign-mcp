@@ -25,7 +25,7 @@ it('keeps every Reel in the order it came until its video is in the Inbox', asyn
     received: [order(9)],
     confirmed: [order(4, { status: 'confirmed' })],
     scheduled: [order(2, { status: 'scheduled', style: 'lemo:pictogram' })],
-    in_production: [],
+    in_production: [order(6, { status: 'scheduled', style: 'lemo:rea-video', waits_for_style: 'Phone UI 3D' })],
     skipped: [order(7, { status: 'skipped', skip_reason: 'le rendu a échoué' }),
       order(5, { status: 'skipped', skip_reason: 'annulée par le propriétaire' }), // « Retirer »
       order(3, { status: 'skipped', method: null, skip_reason: 'vieux' })], // never confirmed here
@@ -38,9 +38,12 @@ it('keeps every Reel in the order it came until its video is in the Inbox', asyn
     return new Response(JSON.stringify(status ? byStatus[status] : []))
   }))
   render(<MemoryRouter><ToastProvider><Received /></ToastProvider></MemoryRouter>)
-  await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4))
+  await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(5))
   expect(screen.getAllByRole('listitem').map((li) => li.getAttribute('aria-label')))
-    .toEqual(['Reel reçu 2', 'Reel reçu 4', 'Reel reçu 7', 'Reel reçu 9'])
+    .toEqual(['Reel reçu 2', 'Reel reçu 4', 'Reel reçu 6', 'Reel reçu 7', 'Reel reçu 9'])
+  expect(screen.getByText('Attend son nouveau style')).toBeTruthy() // never a silent « Lancé »
+  expect(screen.getByText('Copie plan par plan (rea-video)')).toBeTruthy() // a copy: its name, not its id
+  expect(screen.getByText(/l'IA a demandé le style « Phone UI 3D »/)).toBeTruthy()
   expect(await screen.findByText('Pictogram Motion')).toBeTruthy() // a launched film: its name
   expect(screen.getByText('le rendu a échoué')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Relancer → Planning' })).toBeTruthy()
