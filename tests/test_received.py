@@ -170,11 +170,24 @@ def test_migration_30_moves_what_a_draft_of_29_left(tmp_path, monkeypatch):
     new.close()
 
 
-def test_a_dm_route_refuses_a_lemo_film(store):
+def test_a_failed_reel_stays_to_retry_or_take_off(store):
     oid = _received(store)
-    with pytest.raises(ValueError, match="Lemo"):
-        work_orders.confirm(store, oid, "rea", "lemo:watercolor")
-    assert work_orders.get_order(store, oid)["status"] == "received"
+    work_orders.confirm(store, oid, "style")
+    work_orders.launch(store, oid)
+    work_orders.skip_order(store, oid, "le rendu a échoué")
+    pick = work_orders.get_order(store, oid)["pick_id"]
+    assert store._get("dm_picks", pick)["status"] == "skipped"
+    o = work_orders.confirm(store, oid, "rea")  # « Relancer »
+    assert (o["status"], o["skip_reason"], o["scheduled_at"]) == ("confirmed", None, None)
+    assert (store._get("dm_picks", pick)["status"], store._get("dm_picks", pick)["skip_reason"]
+            ) == ("new", None)  # its pick lives again with it
+    work_orders.launch(store, oid)
+    work_orders.skip_order(store, oid, "encore")
+    work_orders.delete_order(store, oid)  # « Retirer »: kept, off the page
+    o = work_orders.get_order(store, oid)
+    assert (o["status"], o["skip_reason"]) == ("skipped", work_orders.CANCELLED)
+    with pytest.raises(work_orders.InvalidTransition):
+        work_orders.confirm(store, oid, "style")
 
 
 def test_the_style_built_for_it_is_the_only_one_it_is_made_in(store, monkeypatch):

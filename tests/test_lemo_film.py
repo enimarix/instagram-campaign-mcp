@@ -552,3 +552,49 @@ def test_a_failed_refilm_leaves_the_video_waiting_and_wakes_the_light_run(
     assert "le film n'a pas abouti" in d["text"]
     with store._tx() as c:
         assert c.execute(schedule._NEWEST_WORK).fetchone()[0] == d["at"]
+
+
+def _dm_film(store, cfg, tmp_path, monkeypatch, download):
+    """A « Reçus » Reel confirmed in a Lemo style on the rea route, launched from Planning."""
+    from src.studio import downloader, planning, rea
+
+    from .test_dm_work_orders import _received
+
+    oid = _received(store, "garde la chute")
+    work_orders.confirm(store, oid, "rea", "lemo:watercolor", "garde la chute")
+    out = planning.launch(store, cfg, [{"kind": "work_order", "id": oid}], utcnow())
+    assert out["front"] == [{"kind": "work_order", "id": oid}] and not out["refused"]
+    assert work_orders.get_order(store, oid)["status"] == "scheduled"
+    clip = tmp_path / "media" / "sources" / "9" / "clip.mp4"
+    clip.parent.mkdir(parents=True)
+    clip.write_bytes(b"reel")
+    shots = tmp_path / "rea9"
+    (shots / "video").mkdir(parents=True)
+    (shots / "VIDEO.md").write_text("# shots", encoding="utf-8")
+    monkeypatch.setattr(downloader, "download_reel", download)
+    monkeypatch.setattr(rea, "breakdown", lambda store, s, sid: {"folder": str(shots)})
+    return oid
+
+
+def test_a_reel_sent_by_dm_is_filmed_from_its_reel(store, cfg, judged, tmp_path, monkeypatch):
+    def download(store, *a, **k):  # the fetch may take minutes: the order is made already
+        assert work_orders.get_order(store, oid)["status"] == "in_production"
+        return {"status": "exists", "source": {"id": 9, "local_path": "sources/9/clip.mp4"}}
+
+    oid = _dm_film(store, cfg, tmp_path, monkeypatch, download)
+    assert film.run_film(store, cfg, oid)["status"] == "succeeded"
+    ref = tmp_path / "ws" / "films" / str(oid) / "reference"
+    assert (ref / "reel.mp4").read_bytes() == b"reel" and (ref / "rea" / "VIDEO.md").is_file()
+    brief = json.loads((tmp_path / "seen.json").read_text())["brief"]
+    assert "reference/reel.mp4" in brief and "reference/rea/VIDEO.md" in brief
+    assert "garde la chute" in brief and "Not everything" not in brief
+    assert work_orders.get_order(store, oid)["status"] == "in_feed"
+
+
+def test_a_reel_that_cannot_be_fetched_is_said_in_the_brief(store, cfg, judged, tmp_path,
+                                                             monkeypatch):
+    oid = _dm_film(store, cfg, tmp_path, monkeypatch, lambda *a, **k: {
+        "status": "refused", "reason": "daily cap reached"})
+    assert film.run_film(store, cfg, oid)["status"] == "succeeded"
+    brief = json.loads((tmp_path / "seen.json").read_text())["brief"]
+    assert "daily cap reached" in brief and "reference/reel.mp4" not in brief

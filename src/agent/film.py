@@ -47,7 +47,7 @@ from dotenv import dotenv_values
 
 from ..config import ENV_FILE, InstagramMCPSettings
 from ..store import CampaignStore, parse_iso, utcnow
-from ..studio import feedback, lemo, render, sfx, voices, work_orders
+from ..studio import downloader, feedback, lemo, media, rea, render, sfx, voices, work_orders
 from ..studio.production import qc_summary
 from ..studio.seed import local_today
 from .film_voice import VoiceDoor
@@ -239,6 +239,33 @@ def _from_video(store: CampaignStore, order: Dict[str, Any]) -> Optional[Dict[st
     return store.get_idea(store.get_asset(order["from_asset_id"])["idea_id"])
 
 
+def _reel(store: CampaignStore, settings: InstagramMCPSettings, order: Dict[str, Any],
+          ws: Path) -> Optional[Dict[str, Any]]:
+    """A « Reçus » order (a DM'd Reel): its video copied to `reference/reel.mp4` and, on the
+    rea route, its rea-video breakdown to `reference/rea/`, for the film to watch.
+    {video, breakdown, why (what failed, else None)}; None for any other order. A failure
+    is said in the brief: the film goes on from the link and the owner's words."""
+    if not order.get("pick_id"):
+        return None
+    ref = ws / "reference"
+    shutil.rmtree(ref, ignore_errors=True)
+    ref.mkdir(parents=True)
+    out: Dict[str, Any] = {"video": False, "breakdown": False, "why": None}
+    try:
+        got = downloader.download_reel(store, settings, order["permalink"], now=utcnow())
+        source = got.get("source") or {}
+        if got["status"] not in ("downloaded", "exists") or not source.get("local_path"):
+            raise ValueError(f"the Reel's download: {got.get('reason') or got['status']}")
+        shutil.copy2(media.resolve(settings.media_root, source["local_path"]), ref / "reel.mp4")
+        out["video"] = True
+        if order["method"] == "rea":
+            shutil.copytree(rea.breakdown(store, settings, source["id"])["folder"], ref / "rea")
+            out["breakdown"] = True
+    except Exception as e:  # noqa: BLE001 - said in the brief, never silent
+        out["why"] = str(e)[:300]
+    return out
+
+
 def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
              ) -> Dict[str, Any]:
     """One film for a scheduled Lemo order; returns the finished `agent_runs` row. Raises
@@ -262,13 +289,15 @@ def run_film(store: CampaignStore, settings: InstagramMCPSettings, order_id: int
         # order) at the voice door this process serves while the film runs: no key in the film
         with VoiceDoor(settings, store=store,  # the Voix page's voices; takes for the badge
                        takes_path=films_dir(settings) / str(order_id) / lemo.VOICE_TAKES) as door:
-            ws = prepare_workspace(settings, order_id, lemo.film_brief(
-                settings, order, style, _from_video(store, order), tts_url=door.url,
-                store=store))
-            voices.agent_copy(store, ws / "voices.json")  # the voices the owner keeps on
+            # in_production first: a DM Reel's fetch below may take minutes (rea-video)
             idea = store.add_idea("motion", hook=(order["instruction"] or style["label"])[:200],
                                   style=order["style"], batch_date=local_today(settings.timezone))
             work_orders.start(store, order_id, idea)
+            ws = prepare_workspace(settings, order_id, "")
+            (ws / "BRIEF.md").write_text(lemo.film_brief(
+                settings, order, style, _from_video(store, order), tts_url=door.url,
+                store=store, reel=_reel(store, settings, order, ws)), encoding="utf-8")
+            voices.agent_copy(store, ws / "voices.json")  # the voices the owner keeps on
             cmd = [exe, *build_command(settings, ws)[1:]]
             timeout_s = settings.lemo_film_max_min * 60
             code, stdout = run_cli(cmd, ws, film_env(settings), log, timeout_s,

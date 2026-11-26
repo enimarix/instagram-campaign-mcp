@@ -1142,7 +1142,11 @@ it from that breakdown in the chosen style), then « Confirmer » -> `confirmed`
 page, no time, « attend ton « Lancer » ». His « Lancer » schedules it (the light run on that
 order); « Écarter » / « Retirer » drop it. A DM order still waiting for an instruction
 (needs_instruction) moves to « Reçus »; one already scheduled keeps its old path. A route takes
-our styles only: a Lemo-Opuscar film cannot watch the Reel. The agent never sees, skips,
+any style of the catalog: a Lemo-Opuscar film gets the Reel in its workspace (`reference/reel.mp4`,
+and on the rea route its breakdown in `reference/rea/`; owner 2026-11-26: « I don't see all the
+styles »). A card stays on « Reçus », in the order the Reels came, until its video is in the Inbox;
+one that failed after « Lancer » shows why, with « Relancer » (back to confirmed) or « Retirer »
+(marked cancelled). The agent never sees, skips,
 marks or holds a received / confirmed order; for `new_style`, the lead marks the request
 live with the style id it became (`style-requests mark <id> live --style <id>`) and the
 order is then made in that style only.

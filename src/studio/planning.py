@@ -773,6 +773,15 @@ def _order_ids(store: CampaignStore, kind: str, item_id: int, sent_back: Callabl
     return {"order_ids": [], "asset_ids": [item_id]}
 
 
+def _confirmed_film(store: CampaignStore, order_id: int) -> bool:
+    """A confirmed « Reçus » order in a Lemo style: launched (scheduled) for the film line."""
+    o = work_orders.get_order(store, order_id)
+    if o["status"] != "confirmed" or not lemo.is_lemo(o["style"]):
+        return False
+    work_orders.launch(store, order_id)
+    return True
+
+
 def _playbook(store: CampaignStore, name: Any) -> str:
     """A playbook the owner may launch, or the refusal (AgentError, ValueError)."""
     from ..agent.runner import _playbook_file
@@ -822,6 +831,10 @@ def launch(store: CampaignStore, settings: InstagramMCPSettings, items: List[Dic
                 planned.release(store, settings, item_id, now=True)
             elif kind in HEAVY:
                 line.start_now(store, kind, item_id)
+            elif kind == "work_order" and _confirmed_film(store, item_id):
+                line.start_now(store, "film", item_id)  # launched: a film, at the head
+                front.append({"kind": kind, "id": item_id})
+                continue
             else:
                 for k, ids in _order_ids(store, kind, item_id, sent_back).items():
                     orders[k] += ids

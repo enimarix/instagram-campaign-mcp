@@ -219,16 +219,14 @@ def confirm(store: CampaignStore, order_id: int, method: str, style: Optional[st
     """« Reçus »: the owner confirms a received DM order with its route (METHODS), its style
     (None: Auto; new_style: none, the style is built for it) and his instruction (empty:
     the route's default text). It goes to the Planning page, `confirmed`: nothing starts
-    until his « Lancer » (launch). Again while confirmed: the choice is rewritten.
-    InvalidTransition once launched; KeyError when there is none."""
+    until his « Lancer » (launch). Again while confirmed: the choice is rewritten; on one
+    that failed after « Lancer » (skipped, not dismissed): back to confirmed, to retry.
+    InvalidTransition while it is being made or once made; KeyError when there is none."""
     if method not in METHODS:
         raise ValueError(f"method must be one of {', '.join(METHODS)}")
     if method == "new_style" and style is not None:
         raise ValueError("a new style is built for this Reel: pick no existing style")
-    if lemo.is_lemo(style):  # its film runner gets no Reel and no breakdown to remake
-        raise ValueError("a Lemo-Opuscar film cannot watch the Reel: pick one of our styles"
-                         " (or Auto)")
-    style = _style(store, style, "owner")
+    style = _style(store, style, "owner")  # a Lemo style too: its film gets the Reel (film.py)
     text = _instruction(instruction)
     if text in METHOD_TEXT.values():  # a route's default sent back: not the owner's words
         text = None
@@ -237,9 +235,15 @@ def confirm(store: CampaignStore, order_id: int, method: str, style: Optional[st
     with store._tx() as c:
         moved = c.execute(
             "UPDATE work_orders SET method=?, style=?, instruction=?, status='confirmed',"
-            " blocked_reason=NULL, updated_at=? WHERE id=? AND origin='dm'"
-            " AND status IN ('received','confirmed')",
-            (method, style, text, to_iso(utcnow()), order_id)).rowcount
+            " blocked_reason=NULL, skip_reason=NULL, idea_id=NULL, asset_id=NULL,"
+            " scheduled_at=NULL, updated_at=? WHERE id=? AND origin='dm'"
+            " AND (status IN ('received','confirmed') OR status='skipped' AND method IS NOT"
+            " NULL AND skip_reason IS NOT ?)",
+            (method, style, text, to_iso(utcnow()), order_id, CANCELLED)).rowcount
+        if moved and order["status"] == "skipped" and order["pick_id"]:  # « Relancer »
+            c.execute("UPDATE dm_picks SET status=CASE WHEN source_id IS NULL THEN 'new'"
+                      " ELSE 'downloaded' END, skip_reason=NULL, updated_at=? WHERE id=?"
+                      " AND status='skipped'", (to_iso(utcnow()), order["pick_id"]))
     if not moved:
         raise InvalidTransition(f"work order {order_id} is {order['status']}: only a received"
                                 " DM Reel is confirmed here")
@@ -248,7 +252,7 @@ def confirm(store: CampaignStore, order_id: int, method: str, style: Optional[st
 
 def launch(store: CampaignStore, order_id: int) -> Dict[str, Any]:
     """The owner's « Lancer » on a confirmed order: scheduled now, the light run takes it
-    (confirm never takes a Lemo style). ValueError when it is not confirmed."""
+    (a Lemo style: the film line). ValueError when it is not confirmed."""
     now = to_iso(utcnow())
     with store._tx() as c:
         moved = c.execute("UPDATE work_orders SET status='scheduled', scheduled_at=?,"
@@ -433,8 +437,12 @@ def remade_idea(store: CampaignStore, order: Dict[str, Any]) -> Optional[int]:
 def delete_order(store: CampaignStore, order_id: int) -> Dict[str, Any]:
     """The owner cancels an order not started yet (NOT_STARTED, « Écarter » on Reçus; a DM
     order's pick is skipped with it, else for_agent would list it again); KeyError when
-    there is none."""
+    there is none. A « Reçus » order that failed (skipped, method set) is kept, marked
+    CANCELLED: « Retirer » takes it off the page."""
     order = get_order(store, order_id)
+    if order["status"] == "skipped" and order["method"]:
+        store._update("work_orders", ("skip_reason",), order_id, {"skip_reason": CANCELLED})
+        return order
     if order["status"] not in NOT_STARTED:
         raise ValueError(f"work order {order_id} is {order['status']}: only one not started"
                          " can be cancelled")

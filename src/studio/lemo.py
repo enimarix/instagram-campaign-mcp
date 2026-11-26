@@ -68,13 +68,15 @@ def check_style(style: str) -> str:
 def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dict[str, Any],
                from_video: Optional[Dict[str, Any]] = None,
                tts_url: Optional[str] = None, *,
-               store: Optional[CampaignStore] = None) -> str:
+               store: Optional[CampaignStore] = None,
+               reel: Optional[Dict[str, Any]] = None) -> str:
     """The film's BRIEF.md: the template (minus its comments) with this order filled in.
     Placeholders are `$name`; the owner's words are data inside it. tts_url: the film
     runner's voice door (agent/film_voice.py, 207), else the local voice service. store:
     a remake's brief quotes the owner's own change requests on the old video, verbatim
-    (the order's instruction is only the AI's one-line summary of them)."""
-    remake = ""
+    (the order's instruction is only the AI's one-line summary of them). reel: a « Reçus »
+    order's Reel as film.py fetched it into the workspace (film._reel)."""
+    remake = _reel_text(order, reel) if reel else ""
     if from_video:
         remake = ("This order remakes one of our videos in this style: keep its topic, "
                   "message and facts.\n"
@@ -97,6 +99,25 @@ def film_brief(settings: InstagramMCPSettings, order: Dict[str, Any], style: Dic
         library=Path(settings.lemo_library).expanduser().as_posix(),
         gpu_run=f'"{Path(sys.executable).as_posix()}" "{GPU_RUN.as_posix()}" --',
         tts_url=tts_url or settings.tts_http_url or DEFAULT_TTS)
+
+
+def _reel_text(order: Dict[str, Any], reel: Dict[str, Any]) -> str:
+    text = (f"This order remakes a Reel the owner received by DM from"
+            f" @{order.get('sender_username') or '?'} ({order.get('permalink') or '-'}):"
+            " make the same video (its idea, its rhythm, its ending) in this style, for"
+            " macroBody, and reuse none of its footage, sound or text as it is.\n")
+    if reel["video"]:
+        text += ("- Its video: `reference/reel.mp4` in this folder. Watch it before"
+                 " TREATMENT.md: pull frames with ffmpeg (through the GPU lock), read them, and"
+                 " write its shots down.\n")
+    if reel["breakdown"]:
+        text += ("- Its shot-by-shot breakdown (rea-video): `reference/rea/VIDEO.md` first,"
+                 " then `reference/rea/video/` (timeline, rhythm, packaging, sound). Follow"
+                 " its shots and timings.\n")
+    if reel["why"]:
+        text += (f"- Not everything could be fetched ({reel['why']}): work from what is"
+                 " here and the owner's words, and say so in NOTES.md and your report.\n")
+    return text
 
 
 def _post(film: Path) -> Dict[str, Any]:

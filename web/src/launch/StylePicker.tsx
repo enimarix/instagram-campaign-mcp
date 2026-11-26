@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { CatalogStyle, Style } from '../api/client'
+import { useEffect, useState } from 'react'
+import { listStyleCatalog, type CatalogStyle, type Style } from '../api/client'
 import { StyleGallery } from '../styles/StyleGallery'
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Chip'
@@ -42,6 +42,16 @@ export function StylePicker({ value, onChange, autoLabel = "Auto (l'IA choisit)"
   const { styles, error } = useStyles()
   const [gallery, setGallery] = useState(false)
   const [picked, setPicked] = useState<CatalogStyle | null>(null) // the last gallery pick, for its name
+  const lemoId = value?.startsWith('lemo:') && picked?.id !== value ? value : null
+  useEffect(() => { // a Lemo style saved before this mount: its name from the catalog
+    if (!lemoId) return
+    let live = true
+    listStyleCatalog({ family: 'lemo' }).then((all) => {
+      const s = all.find((x) => x.id === lemoId)
+      if (live && s) setPicked(s)
+    }, () => {}) // failed: the id stays
+    return () => { live = false }
+  }, [lemoId])
   const studio = styles?.filter((s) => s.enabled && s.id !== exclude)
   const shown = styles?.find((s) => s.id === value)
   const lemo = picked?.id === value && !shown ? picked : null
