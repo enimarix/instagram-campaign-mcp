@@ -97,6 +97,23 @@ def test_live_viral_hooks_skill_beats_the_snapshot(cfg, agent_dir, tmp_path):
     assert (got / "references" / "examples.md").is_file()
 
 
+def test_every_run_has_the_hook_skill_in_its_system_prompt(cfg, agent_dir, tmp_path):
+    live = tmp_path / "live"
+    live.mkdir()
+    (live / "SKILL.md").write_text("---\nname: viral-hooks\n---\n\n# Rules\nlive rules\n")
+    cfg.hook_skill_dir = str(live)
+    config = runner.prepare_workspace(cfg, "hello", agent_dir=agent_dir)
+    prompt = Path(_flag(runner.build_command(cfg, "hello", config), "--append-system-prompt-file"))
+    text = prompt.read_text(encoding="utf-8")
+    assert prompt.parent == config.parent and "live rules" in text
+    assert text.startswith(runner.HOOK_HEADER) and "name: viral-hooks" not in text
+
+
+def test_no_hook_skill_means_no_prompt_flag(cfg, agent_dir):
+    config = runner.prepare_workspace(cfg, "hello", agent_dir=agent_dir)  # cfg: none at all
+    assert "--append-system-prompt-file" not in runner.build_command(cfg, "hello", config)
+
+
 def test_missing_live_skill_falls_back_to_the_snapshot(cfg, agent_dir, tmp_path):
     (agent_dir / "skills" / "viral-hooks").mkdir()
     (agent_dir / "skills" / "viral-hooks" / "SKILL.md").write_text("snapshot")

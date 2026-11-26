@@ -54,6 +54,12 @@ DISALLOWED_TOOLS = ("Bash", "PowerShell", "Monitor", "Edit", "Write", "NotebookE
                     "Agent", "Workflow", "Artifact", "CronCreate", "RemoteTrigger",
                     "SendMessage", "SendUserFile", "PushNotification", "EnterWorktree")
 HOOK_SKILL = "viral-hooks"  # the live copy (copy_hook_skill) beats the snapshot in skills/
+HOOK_PROMPT = "viral-hooks.md"  # in <ws>/.claude: the skill, appended to every run's system prompt
+HOOK_HEADER = ("# Required in this run: the viral-hooks skill\n\n"
+               "Every hook, script, spoken line and on-screen text you write or change in this"
+               " run follows the skill below (its files: .claude/skills/viral-hooks/, examples in"
+               " references/examples.md). The owner's own words win: a line he wrote is used as"
+               " written.\n\n")
 MARKER = ".ig-campaign-agent"  # in <ws>/.claude: the runner made it and may replace it
 PLAYBOOK_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 DEAD_RUN = "le studio a redémarré pendant la tâche"  # its runner process is gone (155)
@@ -152,11 +158,21 @@ def prepare_workspace(settings: InstagramMCPSettings, playbook: str, *,
 def copy_hook_skill(settings: InstagramMCPSettings, skills: Path,
                     agent_dir: Path = AGENT_DIR) -> None:
     """Every hook and script is written with the viral-hooks skill: the live one
-    (HOOK_SKILL_DIR, which keeps learning from videos), else the snapshot in agent/skills."""
+    (HOOK_SKILL_DIR, which keeps learning from videos), else the snapshot in agent/skills.
+    Its text also goes next to skills/ as HOOK_PROMPT, appended to the system prompt."""
     live = Path(settings.hook_skill_dir).expanduser() if settings.hook_skill_dir else None
     source = live if live and (live / "SKILL.md").is_file() else agent_dir / "skills" / HOOK_SKILL
     if (source / "SKILL.md").is_file():
         shutil.copytree(source, skills / HOOK_SKILL)
+        text = (source / "SKILL.md").read_text(encoding="utf-8")
+        body = text.split("---", 2)[2] if text.startswith("---") else text  # no frontmatter
+        (skills.parent / HOOK_PROMPT).write_text(HOOK_HEADER + body.lstrip(), encoding="utf-8")
+
+
+def hook_prompt_flag(claude: Path) -> List[str]:
+    """The skill in the system prompt (copy_hook_skill wrote it): the agent can't skip it."""
+    path = claude / HOOK_PROMPT
+    return ["--append-system-prompt-file", str(path)] if path.is_file() else []
 
 
 def prompt(playbook: str, *, dry_run: bool = False) -> str:
@@ -183,6 +199,7 @@ def build_command(settings: InstagramMCPSettings, playbook: str, mcp_config_path
         "--tools", ",".join(BUILTIN_TOOLS),
         "--allowedTools", ",".join(ALLOWED_TOOLS),
         "--disallowedTools", ",".join(DISALLOWED_TOOLS),
+        *hook_prompt_flag(mcp_config_path.parent),
         "--no-session-persistence",
     ]
 

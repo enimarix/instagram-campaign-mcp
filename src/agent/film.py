@@ -63,6 +63,7 @@ from .runner import (
     check_lock,
     close_log,
     copy_hook_skill,
+    hook_prompt_flag,
     preflight,
     run_cli,
     workspace_settings,
@@ -142,6 +143,7 @@ def build_command(settings: InstagramMCPSettings, ws: Path) -> List[str]:
         "--tools", ",".join(TOOLS),
         "--allowedTools", ",".join(allowed),
         "--disallowedTools", ",".join(DISALLOWED_TOOLS),
+        *hook_prompt_flag(ws / ".claude"),
         "--no-session-persistence",
     ]
 
