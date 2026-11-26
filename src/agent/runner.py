@@ -58,8 +58,9 @@ HOOK_PROMPT = "viral-hooks.md"  # in <ws>/.claude: the skill, appended to every 
 HOOK_HEADER = ("# Required in this run: the viral-hooks skill\n\n"
                "Every hook, script, spoken line and on-screen text you write or change in this"
                " run follows the skill below (its files: .claude/skills/viral-hooks/, examples in"
-               " references/examples.md). The owner's own words win: a line he wrote is used as"
-               " written.\n\n")
+               " references/examples.md). It is for the text you write or change only: the"
+               " owner's own words, and anything the playbook or the brief says to keep as it"
+               " is (the lines a fix leaves alone), stay exactly as they are.\n\n")
 MARKER = ".ig-campaign-agent"  # in <ws>/.claude: the runner made it and may replace it
 PLAYBOOK_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 DEAD_RUN = "le studio a redémarré pendant la tâche"  # its runner process is gone (155)
@@ -164,8 +165,9 @@ def copy_hook_skill(settings: InstagramMCPSettings, skills: Path,
     source = live if live and (live / "SKILL.md").is_file() else agent_dir / "skills" / HOOK_SKILL
     if (source / "SKILL.md").is_file():
         shutil.copytree(source, skills / HOOK_SKILL)
-        text = (source / "SKILL.md").read_text(encoding="utf-8")
-        body = text.split("---", 2)[2] if text.startswith("---") else text  # no frontmatter
+        text = (source / "SKILL.md").read_text(encoding="utf-8", errors="replace")
+        parts = text.split("---", 2)  # a learning round may leave it malformed: never crash
+        body = parts[2] if text.startswith("---") and len(parts) == 3 else text
         (skills.parent / HOOK_PROMPT).write_text(HOOK_HEADER + body.lstrip(), encoding="utf-8")
 
 

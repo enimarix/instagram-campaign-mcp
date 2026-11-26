@@ -109,6 +109,15 @@ def test_every_run_has_the_hook_skill_in_its_system_prompt(cfg, agent_dir, tmp_p
     assert text.startswith(runner.HOOK_HEADER) and "name: viral-hooks" not in text
 
 
+def test_a_malformed_hook_skill_still_reaches_the_prompt(cfg, agent_dir, tmp_path):
+    live = tmp_path / "live"
+    live.mkdir()
+    (live / "SKILL.md").write_bytes(b"---\nname: viral-hooks\nunclosed \xff rules\n")
+    cfg.hook_skill_dir = str(live)
+    config = runner.prepare_workspace(cfg, "hello", agent_dir=agent_dir)
+    assert "unclosed" in (config.parent / runner.HOOK_PROMPT).read_text(encoding="utf-8")
+
+
 def test_no_hook_skill_means_no_prompt_flag(cfg, agent_dir):
     config = runner.prepare_workspace(cfg, "hello", agent_dir=agent_dir)  # cfg: none at all
     assert "--append-system-prompt-file" not in runner.build_command(cfg, "hello", config)
