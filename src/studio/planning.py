@@ -422,6 +422,13 @@ def chain(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         why, newest = schedule.order_wait(store, settings, now, gained)
         if why == "nothing":
             return
+        scoped = set(store.get_state(packet.SCOPED_RUNS_KEY) or ())
+        if why == "seen" and any(  # the run that has them is running: it writes them now
+                r["playbook"] in schedule.ORDER_READERS and r["id"] not in scoped
+                and parse_iso(r["started_at"]) >= newest for r in store.running_agent_runs()):
+            requests(agent, "agent_running",
+                     "L'IA l'écrit dans le run en cours, puis son rendu suit.")
+            return
         if why == "seen":  # this run had them: the next run that reads them writes them
             nxt = [r["next_at"] for r in schedule.next_runs(settings, now)
                    if r["playbook"] in schedule.ORDER_READERS]
