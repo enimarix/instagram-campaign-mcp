@@ -145,6 +145,8 @@ def test_workspace_holds_brief_skill_and_deny_rules(cfg, tmp_path):
     skills = ws / ".claude" / "skills"
     assert sorted(p.name for p in skills.iterdir()) == ["lemo-opuscar", "viral-hooks"]
     assert (skills / "lemo-opuscar" / "scripts" / "setup.sh").is_file()
+    prompt = _flag(film.build_command(cfg, ws), "--append-system-prompt-file")
+    assert prompt == str(ws / ".claude" / runner.HOOK_PROMPT)  # the hook skill, always read
     deny = json.loads((ws / ".claude" / "settings.json").read_text())["permissions"]["deny"]
     assert "Read(//**/.env)" in deny
 
