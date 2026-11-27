@@ -219,6 +219,7 @@ def build_planning(store: CampaignStore, settings: InstagramMCPSettings, now: da
     those functions."""
     items = chain(store, settings, now)
     return {"now": to_iso(now), "items": items, "paused": line.paused(store),
+            "paused_why": line.paused_why(store),
             "strip": strip(store, now, items), "supply": supply(store, settings, now, items),
             "history": history(store, settings, now)}
 

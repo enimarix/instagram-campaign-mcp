@@ -326,6 +326,12 @@ describe('Planning', () => {
       return calls
     }
 
+    it('a studio paused by a failed film says why and how to start it again', async () => {
+      stubPlanning(extras({ paused: soon(0), paused_why: 'Le film de la commande 90 n\'a pas abouti (timed out).' }))
+      show()
+      expect(await screen.findByText(/commande 90 n'a pas abouti \(timed out\)\. Décoche/)).toBeTruthy()
+    })
+
     it('the 24 h strip: a block per lane, a late one in orange, the posts as ticks, scrolls on a phone', async () => {
       stubPlanning(extras({
         items: [item({})],

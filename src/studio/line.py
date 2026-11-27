@@ -20,7 +20,8 @@ gets line_pos 1..n, so new arrivals, NULL, still go behind it and « start now �
 hold() is a timer with no end (not_before = HELD) until released; remove() takes a waiting
 item out for good (the page's 5 s undo sends nothing before it ends, like the Inbox): a
 render job fails with REMOVED and its asset is archived, an order is skipped with REMOVED.
-pause() stops everything heavy from starting (worker_state PAUSE_KEY): the render loop
+pause() stops everything heavy from starting (worker_state PAUSE_KEY; a failed film turns it on
+with its reason, film._failed, PAUSE_WHY_KEY): the render loop
 claims nothing, the catch-up and `agent run-due` start nothing; what runs finishes. A
 running film's own render (film_renders: the film waits for it) is part of what runs: the
 pause lets it through (once its machine timer is past), and hold / timer / remove refuse it.
@@ -41,6 +42,7 @@ REMOVABLE = (*KINDS, "order")  # order: an owner order / change request for the 
 HELD = "9999-12-31T00:00:00+00:00"  # not_before of a held item: a timer with no end
 REMOVED = "retiré du planning"
 PAUSE_KEY = "studio_paused"  # worker_state: since when (UTC ISO), None = not paused
+PAUSE_WHY_KEY = "studio_paused_why"  # who paused it when not the owner (a failed film)
 # Old rows have no line_pos (pos 0): they keep the order they had (oldest id / oldest
 # scheduled first), behind « start now » (< 0) and the placed ones (move: 1..n). Ties
 # between a render and a film queued the same second: renders first. A Lemo style is the
@@ -264,7 +266,9 @@ def remove(store: CampaignStore, kind: str, item_id: int) -> Dict[str, Any]:
         if status not in ("scheduled", "confirmed"):  # confirmed: from « Reçus »
             raise ValueError(f"Cette commande ne peut plus être retirée (statut {status}) :"
                              " seule une commande en attente peut l'être.")
-        work_orders.skip_order(store, item_id, REMOVED)
+        from ..agent import film  # here: film imports this module
+
+        film._skip(store, work_orders.get_order(store, item_id), REMOVED)  # never parked
         return {"kind": kind, "id": item_id, "removed": True}
     _not_film_render(store, kind, item_id)
     now = to_iso(utcnow())
@@ -301,8 +305,15 @@ def paused(store: CampaignStore) -> Optional[str]:
     return store.get_state(PAUSE_KEY)
 
 
-def pause(store: CampaignStore, on: bool) -> Dict[str, Any]:
-    """« Tout mettre en pause »: nothing heavy starts until it is off (see module doc)."""
+def paused_why(store: CampaignStore) -> Optional[str]:
+    """Why the studio paused itself (a failed film), None when the owner paused it."""
+    return store.get_state(PAUSE_WHY_KEY) if paused(store) else None
+
+
+def pause(store: CampaignStore, on: bool, *, why: Optional[str] = None) -> Dict[str, Any]:
+    """« Tout mettre en pause »: nothing heavy starts until it is off (see module doc).
+    why: the studio paused itself (a failed film); turning it off clears it."""
     since = (paused(store) or to_iso(utcnow())) if on else None
     store.set_state(PAUSE_KEY, since)
+    store.set_state(PAUSE_WHY_KEY, why if on else None)
     return {"paused": since}

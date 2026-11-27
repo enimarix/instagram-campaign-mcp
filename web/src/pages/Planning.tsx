@@ -891,7 +891,9 @@ export default function Planning() {
       </PageHeader>
       {paused && (
         <p role="status" className="mb-3 rounded-card border border-line bg-surface-2 p-3 text-sm">
-          Studio en pause depuis {at(paused)} : rien ne démarre (rendus, films, runs de l'IA). Ce qui tournait finit.
+          {extras.paused_why
+            ? <>{extras.paused_why} Décoche « Tout mettre en pause » pour relancer.</>
+            : <>Studio en pause depuis {at(paused)} : rien ne démarre (rendus, films, runs de l'IA). Ce qui tournait finit.</>}
         </p>
       )}
       {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}

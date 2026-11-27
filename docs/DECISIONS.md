@@ -8,6 +8,18 @@ One entry per decision, newest first:
 Reason: <why>
 ```
 
+## 2026-11-28: A failed film pauses the studio and keeps its work
+A Lemo film that fails, times out or is interrupted (src/agent/film.py `_failed`) turns on
+« Tout mettre en pause » with its reason (line.PAUSE_WHY_KEY, shown on Planning): nothing
+heavy starts until the owner switches it off. When its folder holds work, its order goes
+back to the head of the line (not skipped) and the next try continues that work (the brief
+ends with the reason, LAST_TRY.md); with nothing made it is skipped as before. The film's
+90 min clock (LEMO_FILM_MAX_MIN) stops while its gpu_run waits for the GPU lock, RAM or
+VRAM (heartbeat file, at most 6 h in all).
+Reason: owner 2026-11-28, after run 93 waited 75 of its 90 min for 8 GB of free RAM, was
+killed and its order skipped with an hour of work in its folder: « when it fails, it just
+stops the planning and waits for me to launch again ».
+
 ## 2026-11-26: The « rea-video » route on Auto copies the Reel shot by shot in code
 A « Reçus » order confirmed on the rea route with no style gets the style `lemo:rea-video`
 (lemo.REA_FILM): the film runner (src/agent/film.py) makes it from the Reel and its rea-video

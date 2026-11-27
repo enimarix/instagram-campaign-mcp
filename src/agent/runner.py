@@ -28,10 +28,11 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pydantic import SecretStr
 
@@ -46,6 +47,7 @@ from .proc import started as process_started
 REPO = Path(__file__).resolve().parents[2]
 AGENT_DIR = REPO / "agent"  # playbooks/ and skills/
 VOICES = REPO / "brand" / "voices" / "voices.json"  # copied: the agent picks a voice (038)
+PAUSE_POLL_S = 5.0  # run_cli: how often a pausable run looks at its pause
 SERVER = "studio"  # MCP server key: its tools are mcp__studio__<tool>
 BUILTIN_TOOLS = ("Read", "Glob", "Grep", "WebSearch", "WebFetch", "Skill", "ToolSearch")
 ALLOWED_TOOLS = (f"mcp__{SERVER}__*", "WebSearch", "WebFetch")
@@ -242,9 +244,12 @@ def _kill_tree(proc: subprocess.Popen) -> None:
 
 
 def run_cli(cmd: List[str], cwd: Path, env: Dict[str, str], log: Path, timeout_s: float,
-            title: str) -> Tuple[Optional[int], str]:
+            title: str, *, paused: Optional[Callable[[], bool]] = None,
+            max_pause_s: float = 0.0) -> Tuple[Optional[int], str]:
     """Run the CLI in `cwd` at low priority, its stderr into `log` (made here), killed with
-    its children after timeout_s. Returns (exit code, None on timeout; stdout)."""
+    its children after timeout_s. While paused() is true the clock stops (a film waiting
+    for the machine), for max_pause_s in all at most. Returns (exit code, None on timeout;
+    stdout)."""
     with log.open("w", encoding="utf-8") as err, tempfile.TemporaryFile() as out:
         err.write(f"{title}\ncwd {cwd}\ncommand {json.dumps(cmd)}\n--- stderr\n")
         err.flush()
@@ -252,13 +257,34 @@ def run_cli(cmd: List[str], cwd: Path, env: Dict[str, str], log: Path, timeout_s
             proc = subprocess.Popen(cmd, **guard.low_priority(dict(  # 166
                 cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env,
                 start_new_session=sys.platform != "win32")))
-            try:
-                code: Optional[int] = proc.wait(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
+            code = _wait(proc, timeout_s, paused, max_pause_s)
+            if code is None:
                 _kill_tree(proc)
-                code = None
         out.seek(0)
         return code, out.read().decode("utf-8", "replace")
+
+
+def _wait(proc: subprocess.Popen, timeout_s: float, paused: Optional[Callable[[], bool]],
+          max_pause_s: float) -> Optional[int]:
+    """proc's exit code, or None once timeout_s ran out; time while paused() is true is
+    added back to the deadline (up to max_pause_s in all)."""
+    if paused is None:
+        try:
+            return proc.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            return None
+    deadline, left = time.monotonic() + timeout_s, max_pause_s
+    while True:
+        t0 = time.monotonic()
+        try:
+            return proc.wait(timeout=max(0.0, min(PAUSE_POLL_S, deadline - t0)))
+        except subprocess.TimeoutExpired:
+            pass
+        if left > 0 and paused():
+            extra = min(time.monotonic() - t0, left)
+            deadline, left = deadline + extra, left - extra
+        elif time.monotonic() >= deadline:
+            return None
 
 
 def close_log(settings: InstagramMCPSettings, log: Path, status: str, summary: str,
