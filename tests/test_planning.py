@@ -189,6 +189,25 @@ def test_an_order_the_last_run_left_waits_for_the_next_run(store, agent_dir, mon
     assert parse_iso(order["est_start"]) == datetime(2026, 11, 18, 2, tzinfo=UTC)
 
 
+def test_an_order_the_running_run_writes_is_not_put_off_to_tomorrow(
+        store, agent_dir, monkeypatch):
+    # 2026-11-26: the light run writing it showed it at tomorrow's 03:00 run
+    s = cfg(agent_schedule="daily-produce@03:00")
+    _run(store, "daily-produce", NOW - timedelta(hours=7), minutes=20)
+    mine = _order(store, monkeypatch, "Maintenant", minutes_ago=60)
+    run = _run(store, "daily-revise", NOW - timedelta(minutes=2))  # running, has it
+    items = planning.build_planning(store, s, NOW)["items"]
+    order = next(i for i in items if i["ids"].get("order_id") == mine)
+    assert order["waits_on"] == "agent_running"
+    running = next(i for i in items if i["section"] == "running")
+    assert order["est_start"] == running["est_ready"]
+    assert any(b["kind"] == "work_order" and b["start"] == running["est_ready"]
+               for b in planning.strip(store, NOW, items)["blocks"])
+    store.set_state("scoped_light_runs", [run])  # it runs on another selection: a new run follows
+    items = planning.build_planning(store, s, NOW)["items"]
+    assert any(i["section"] == "next" and i["kind"] == "order_run" for i in items)
+
+
 def _checkable(store, minutes_ago):
     """A video whose render finished `minutes_ago`, waiting for its check (188c)."""
     asset = _job(store, "FactQuest", "done",
