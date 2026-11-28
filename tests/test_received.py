@@ -11,7 +11,7 @@ from src import store as store_mod
 from src.agent import schedule
 from src.api.app import create_app
 from src.store import MIGRATIONS, CampaignStore
-from src.studio import dm_picks, planning, rea, style_requests, work_orders
+from src.studio import dm_picks, motion, planning, rea, style_requests, work_orders
 
 from .conftest import LOCAL
 from .test_api_assets import _settings
@@ -51,7 +51,8 @@ def test_api_confirm_and_discard(store):
 
 
 @pytest.mark.usefixtures("agent_dir")
-def test_lancer_on_planning_schedules_the_confirmed_order(store):
+def test_lancer_on_planning_schedules_the_confirmed_order(store, monkeypatch):
+    monkeypatch.setattr(motion, "list_templates", lambda: [{"id": "FactQuest", "style": "pixel"}])
     oid = _received(store)
     with pytest.raises(ValueError):
         work_orders.launch(store, oid)  # received: confirm it first

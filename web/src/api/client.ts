@@ -1287,6 +1287,7 @@ export type Planning = {
   now: string
   items: PlanningItem[]
   paused: string | null
+  paused_why?: string | null // the studio paused itself: a film failed (it waits for the owner to switch the pause off)
   strip: PlanningStrip
   supply: PlanningSupply
   history: PlanningHistory[]

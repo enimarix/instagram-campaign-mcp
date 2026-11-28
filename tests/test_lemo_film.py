@@ -14,7 +14,7 @@ import pytest
 from src.agent import film, runner, schedule
 from src.config import InstagramMCPSettings
 from src.store import to_iso, utcnow
-from src.studio import feedback, gpu_run, lemo, media, production, work_orders
+from src.studio import feedback, gpu_run, lemo, line, media, production, work_orders
 from src.studio.assets import transition
 from src.studio.feedback import add_comment
 
@@ -263,18 +263,37 @@ def test_a_film_without_post_json_still_carries_the_ai_label(store, cfg, judged,
 
 
 @pytest.mark.parametrize("mode, why", [("fail", "error_max_turns"),
-                                       ("nothing", "delivered no film/final.mp4"),
-                                       ("QC", "QC")])
-def test_a_failed_film_skips_the_order_with_the_reason(store, cfg, judged, monkeypatch,
-                                                       mode, why):
+                                       ("nothing", "delivered no film/final.mp4")])
+def test_a_failed_film_with_nothing_made_skips_the_order_and_pauses_the_studio(
+        store, cfg, judged, monkeypatch, mode, why):
     monkeypatch.setenv("FAKE_CLAUDE", mode)
-    if mode == "QC":
-        judged["status"] = "failed"
     order = _order(store)
     run = film.run_film(store, cfg, order["id"])
     assert run["status"] == "failed" and why in run["summary"]
     done = work_orders.get_order(store, order["id"])
     assert done["status"] == "skipped" and why in done["skip_reason"]
+    assert line.paused(store) and why in line.paused_why(store)
+
+
+def test_a_failed_film_with_work_goes_back_to_the_head_and_its_next_try_continues_it(
+        store, cfg, judged, monkeypatch, tmp_path):
+    """Was: a film killed after an hour of work was skipped, its folder never used again."""
+    monkeypatch.setenv("FAKE_CLAUDE", "QC")
+    judged["status"] = "failed"
+    other, order = _order(store, text="avant"), _order(store)
+    assert film.run_film(store, cfg, order["id"])["status"] == "failed"
+    back = work_orders.get_order(store, order["id"])
+    assert back["status"] == "scheduled" and back["idea_id"] is None
+    assert "QC" in back["blocked_reason"]
+    assert line.waiting(store)[0]["id"] == order["id"]  # ahead of the older order
+    assert line.paused(store) and "reprendra son travail" in line.paused_why(store)
+    line.pause(store, False)  # the owner resumes the studio
+    assert line.paused_why(store) is None
+    judged["status"] = "ready"
+    assert film.run_film(store, cfg, order["id"])["status"] == "succeeded"
+    brief = json.loads((tmp_path / "seen.json").read_text())["brief"]
+    assert "continue it" in brief and "QC" in brief
+    assert work_orders.get_order(store, other["id"])["status"] == "scheduled"
 
 
 def test_timeout_kills_the_film(store, cfg, judged, monkeypatch):
@@ -285,6 +304,32 @@ def test_timeout_kills_the_film(store, cfg, judged, monkeypatch):
     assert run["status"] == "failed" and "timed out" in run["summary"]
     assert work_orders.get_order(store, order["id"])["status"] == "skipped"
     assert store.running_agent_run(film.PLAYBOOK) is None
+
+
+def test_the_clock_stops_while_the_film_waits_for_the_machine(tmp_path, monkeypatch):
+    """Was: a film waited 75 of its 90 min for free RAM and was killed."""
+    monkeypatch.setattr(runner, "PAUSE_POLL_S", 0.1)
+    cmd = [sys.executable, "-c", "import time; time.sleep(1.5)"]
+    log = tmp_path / "x.log"
+
+    def run(paused, max_pause_s):
+        return runner.run_cli(cmd, tmp_path, dict(os.environ), log, 0.5, "t",
+                              paused=paused, max_pause_s=max_pause_s)[0]
+
+    assert run(lambda: True, 10) == 0  # waiting the whole time: never killed
+    assert run(lambda: False, 10) is None  # not waiting: killed at 0.5 s
+    assert run(lambda: True, 0.2) is None  # past the most it may wait, the wait counts
+
+
+def test_gpu_run_says_the_film_waits_until_it_gets_the_machine(tmp_path, monkeypatch):
+    wait = tmp_path / film.WAIT_FILE
+    monkeypatch.setenv(gpu_run.WAIT_FILE_ENV, str(wait))
+    assert gpu_run.main(["--", sys.executable, "-c", "pass"]) == 0
+    assert wait.is_file() and film.waiting_for_machine(tmp_path)
+    os.utime(wait, (0, 0))
+    assert not film.waiting_for_machine(tmp_path)
+    assert film.film_env(film.InstagramMCPSettings(_env_file=None), tmp_path)[
+        gpu_run.WAIT_FILE_ENV] == str(wait)
 
 
 def test_one_film_at_a_time_and_a_daily_cap(store, cfg, judged):
@@ -348,7 +393,19 @@ def test_an_order_a_dead_film_left_is_skipped(store, cfg):
     store.set_state("order_preflight_failed_at", to_iso(utcnow()))  # nothing new starts
     assert schedule.film_run(store, cfg, utcnow(), start=None) is None
     done = work_orders.get_order(store, order["id"])
-    assert done["status"] == "skipped" and done["skip_reason"] == film.INTERRUPTED
+    assert done["status"] == "skipped" and film.INTERRUPTED in done["skip_reason"]
+    assert line.paused(store)
+
+
+def test_a_dead_film_with_work_in_its_folder_comes_back_to_the_line(store, cfg):
+    order = _order(store)
+    work_orders.start(store, order["id"], store.add_idea("motion", style="lemo:watercolor"))
+    made = film.films_dir(cfg) / str(order["id"]) / "film" / "TREATMENT.md"
+    made.parent.mkdir(parents=True)
+    made.write_text("# plan", encoding="utf-8")
+    assert film.close_orphans(store, cfg) == 1
+    assert work_orders.get_order(store, order["id"])["status"] == "scheduled"
+    assert film.INTERRUPTED in film.resume_note(made.parents[1])
 
 
 def test_the_film_brief_is_not_an_agent_playbook(cfg):
@@ -456,7 +513,7 @@ def test_a_video_restyled_into_a_film_is_made_by_the_film_runner(store, cfg, jud
     with pytest.raises(ValueError, match="film runner makes it"):
         work_orders.skip_for_agent(store, order["id"], "doublon")
     assert work_orders.get_order(store, order["id"])["status"] == "scheduled"
-    assert film.close_orphans(store) == 0  # nothing to mistake for a dead film
+    assert film.close_orphans(store, cfg) == 0  # nothing to mistake for a dead film
     assert film.next_order(store)["id"] == order["id"]
     assert film.run_film(store, cfg, order["id"])["status"] == "succeeded"
     assert store.get_asset(aid)["status"] == "archived"  # the film replaced it

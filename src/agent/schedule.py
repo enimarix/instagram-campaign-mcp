@@ -401,7 +401,7 @@ def film_run(store: CampaignStore, settings: InstagramMCPSettings, now: datetime
         if film.next_order(store):
             work_orders.set_blocked(store, str(e), films=True)
         return None
-    film.close_orphans(store)
+    film.close_orphans(store, settings)
     first = line.next_in_line(store, settings, now)  # None too while the preflight fails
     if not first or first["kind"] != "film":
         return None
